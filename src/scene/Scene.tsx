@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { CameraRig } from './CameraRig'
 import { ClickMarker } from './ClickMarker'
+import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
 import { Floors } from './Floors'
 import { GameClock } from './GameClock'
@@ -35,6 +36,7 @@ export function Scene() {
       <DebugGrid />
       <ClickMarker />
       <Player />
+      <Customers />
     </>
   )
 }

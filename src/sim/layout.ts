@@ -10,6 +10,18 @@ export const GRID_WIDTH = 40
 export const GRID_HEIGHT = 30
 export const SPAWN_TILE: Tile = { tx: 18, tz: 25 }
 export const DEALERSHIP_NAME = 'Summit Motors'
+/** Where customers appear and leave: both ends of the sidewalk, both lanes. */
+export const SIDEWALK_ENDS: Tile[] = [
+  { tx: 0, tz: 25 },
+  { tx: 0, tz: 26 },
+  { tx: GRID_WIDTH - 1, tz: 25 },
+  { tx: GRID_WIDTH - 1, tz: 26 },
+]
+/** Just inside the driveway gate. A customer has arrived once they reach one. */
+export const LOT_ENTRY_TILES: Tile[] = [
+  { tx: 18, tz: 23 },
+  { tx: 19, tz: 23 },
+]
 
 export interface Rect {
   tx: number

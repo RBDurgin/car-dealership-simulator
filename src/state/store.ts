@@ -1,9 +1,22 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
-import { startOfDay, toStep, type GameTime } from '../sim/clock'
+import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
+import {
+  generateCustomer,
+  reduceCustomers,
+  type Customer,
+  type CustomerEvent,
+} from '../sim/customers'
 import type { ActionId } from '../sim/interactables'
-import { buildInventory, restock, sellCar as markSold, type InventoryCar } from '../sim/inventory'
-import { createRng } from '../sim/rng'
+import {
+  availableCars,
+  buildInventory,
+  restock,
+  sellCar as markSold,
+  type InventoryCar,
+} from '../sim/inventory'
+import { createRng, type Rng } from '../sim/rng'
+import { planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 
 export interface MoveOrder {
@@ -26,6 +39,9 @@ export interface Notice {
 
 export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
+const CUSTOMER_SEED = 7_000
+/** Dev-only game speeds, cycled with a key. 1 is normal. */
+export const DEV_TIME_SCALES = [1, 4, 16] as const
 
 // Discrete events only. Per-frame values live in refs / scene/runtime.ts.
 interface GameState {
@@ -46,6 +62,12 @@ interface GameState {
   cash: number
   /** Changes only when a car is sold or restocked. */
   inventory: InventoryCar[]
+  /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
+  customers: Customer[]
+  /** Today's arrival times and how many have shown up. */
+  arrivals: ArrivalSchedule
+  /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
+  timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
   clearMoveOrder: () => void
   toggleGrid: () => void
@@ -68,11 +90,18 @@ interface GameState {
   sellCar: (id: string, price?: number) => boolean
   /** Dev cheat: refills sold spaces, skipping any `canPlace` vetoes. */
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
+  /** Progress reported by the world (or, from 2e, the player) for one customer. */
+  dispatchCustomer: (ev: CustomerEvent) => void
+  cycleTimeScale: () => void
 }
 
 let nextOrderId = 1
 let nextActionId = 1
 let nextNoticeId = 1
+let nextCustomerId = 1
+
+/** Arrivals and new customers. Seeded per day; starting the next day re-seeds it (2e). */
+const customerRng: Rng = createRng(CUSTOMER_SEED + 1)
 
 export const useGame = create<GameState>((set, get) => {
   const dispatch = (ev: ActionEvent) => {
@@ -96,6 +125,9 @@ export const useGame = create<GameState>((set, get) => {
     clock: startOfDay(1),
     cash: STARTING_CASH,
     inventory: buildInventory(createRng(INVENTORY_SEED)),
+    customers: [],
+    arrivals: planArrivals(customerRng),
+    timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
       set({ moveOrder: { id: nextOrderId++, tx, tz }, menu: null })
@@ -131,8 +163,21 @@ export const useGame = create<GameState>((set, get) => {
     },
     tickClock: (t) => {
       const step = toStep(t)
-      const { clock } = get()
-      if (step.day !== clock.day || step.minute !== clock.minute) set({ clock: step })
+      const s = get()
+      if (step.day === s.clock.day && step.minute === s.clock.minute) return
+      // Waiting customers lose patience, new ones arrive, and at closing everyone heads out.
+      const minutes = step.day === s.clock.day ? step.minute - s.clock.minute : 0
+      let customers = reduceCustomers(s.customers, { type: 'tick', minutes })
+      const { schedule, count } = takeDue(s.arrivals, step.minute)
+      if (count > 0) {
+        const stock = availableCars(s.inventory)
+        const arrived = Array.from({ length: count }, () =>
+          generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
+        )
+        customers = [...customers, ...arrived]
+      }
+      if (isClosed(step)) customers = reduceCustomers(customers, { type: 'close' })
+      set({ clock: step, customers, arrivals: schedule })
     },
     sellCar: (id, price) => {
       const s = get()
@@ -154,5 +199,14 @@ export const useGame = create<GameState>((set, get) => {
       const inventory = restock(get().inventory, canPlace)
       if (inventory !== get().inventory) set({ inventory })
     },
+    dispatchCustomer: (ev) => {
+      const customers = reduceCustomers(get().customers, ev)
+      if (customers !== get().customers) set({ customers })
+    },
+    cycleTimeScale: () =>
+      set((s) => {
+        const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])
+        return { timeScale: DEV_TIME_SCALES[(i + 1) % DEV_TIME_SCALES.length] }
+      }),
   }
 })

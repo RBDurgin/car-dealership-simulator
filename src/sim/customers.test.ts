@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
   acceptChance,
+  bubbleOf,
   BUDGET_FACTOR,
   chooseTarget,
   currentBrowseCarId,
@@ -311,5 +312,24 @@ describe('reduceCustomers', () => {
     expect(reduceCustomers(crowd, { type: 'seat', id: 'c1' })).toBe(crowd)
     expect(reduceCustomers(crowd, { type: 'greet', id: 'nobody', carId: 'x' })).toBe(crowd)
     expect(reduceCustomers([], { type: 'close' })).toEqual([])
+  })
+})
+
+describe('bubbleOf', () => {
+  it('shows what the customer is up to', () => {
+    expect(bubbleOf(at('arriving'))).toBeNull()
+    expect(bubbleOf(at('browsing'))).toBeNull()
+    expect(bubbleOf(at('waiting'))).toBe('waiting')
+    expect(bubbleOf(at('waiting', { patienceLeft: 10 }))).toBe('impatient')
+    expect(bubbleOf(at('considering'))).toBe('considering')
+    expect(bubbleOf(at('following'))).toBeNull()
+  })
+
+  it('shows how the visit ended', () => {
+    const left = (leaveReason: Customer['leaveReason']) => bubbleOf(at('leaving', { leaveReason }))
+    expect(left('bought')).toBe('bought')
+    expect(left('refused')).toBe('upset')
+    expect(left('impatient')).toBe('upset')
+    expect(left('closing')).toBeNull()
   })
 })

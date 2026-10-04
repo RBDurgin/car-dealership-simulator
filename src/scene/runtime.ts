@@ -1,3 +1,4 @@
+import type { Vec2 } from '../sim/grid'
 import { buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { buildLayout, createGrid, SPAWN_TILE, type Rect } from '../sim/layout'
@@ -29,6 +30,12 @@ useGame.subscribe((s, prev) => {
 
 const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
 export const playerPos = { x: spawn.x, z: spawn.z }
+
+/**
+ * Where each customer in the world is standing, by customer id. Owned and moved by
+ * scene/Customers; the store never sees positions.
+ */
+export const customerPos = new Map<string, Vec2>()
 
 /** Current (eased) camera yaw in radians. 0 = camera on +z looking toward -z. */
 export const cameraState = { yaw: useGame.getState().viewYaw }

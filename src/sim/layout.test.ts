@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLayout,
   createGrid,
+  LOT_ENTRY_TILES,
   OPENINGS,
   PARKING_SPACES,
   parkedCarRect,
+  SIDEWALK_ENDS,
   SPAWN_TILE,
   wallAt,
   zoneAt,
@@ -29,6 +31,17 @@ function tiles(r: Rect): [number, number][] {
 describe('dealership layout', () => {
   it('spawns the player on a walkable tile', () => {
     expect(grid.isWalkable(SPAWN_TILE.tx, SPAWN_TILE.tz)).toBe(true)
+  })
+
+  it('lets customers walk from either end of the sidewalk into the lot and back', () => {
+    for (const end of SIDEWALK_ENDS) {
+      expect(zoneAt(layout, end.tx, end.tz)).toBe('sidewalk')
+      for (const entry of LOT_ENTRY_TILES) {
+        expect(zoneAt(layout, entry.tx, entry.tz)).toBe('asphalt')
+        expect(findPath(grid, end, entry), `${end.tx},${end.tz}`).not.toBeNull()
+        expect(findPath(grid, entry, end)).not.toBeNull()
+      }
+    }
   })
 
   it('keeps every opening walkable', () => {

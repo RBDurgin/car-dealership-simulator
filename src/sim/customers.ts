@@ -226,6 +226,28 @@ export function moodOf(c: Customer): Mood {
   }
 }
 
+/** The icon above a customer's head, if any. */
+export type Bubble = 'waiting' | 'impatient' | 'considering' | 'bought' | 'upset'
+
+export function bubbleOf(c: Customer): Bubble | null {
+  switch (c.phase) {
+    case 'waiting':
+      return moodOf(c) === 'impatient' ? 'impatient' : 'waiting'
+    case 'considering':
+      return 'considering'
+    case 'leaving':
+      if (c.leaveReason === 'bought') return 'bought'
+      return moodOf(c) === 'unhappy' ? 'upset' : null
+    default:
+      return null
+  }
+}
+
+/** Walking speed in the world, units per second (the walk clip's natural pace). */
+export const CUSTOMER_SPEED = 1.6
+/** Game minutes spent looking at each car while browsing. */
+export const LINGER_MINUTES = { min: 8, max: 20 }
+
 export type CustomerEvent =
   /** Reached the lot. */
   | { type: 'arrive'; id: string }

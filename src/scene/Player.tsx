@@ -3,11 +3,12 @@ import { Suspense, useEffect, useRef } from 'react'
 import type { Group } from 'three'
 import { useWasd } from '../input/useWasd'
 import { isTimedActionDone, type ActiveAction } from '../sim/actions'
+import { angleDiff, dampAngle, stepAlongPath, toWaypoints } from '../sim/agent'
 import type { CharacterAnim } from '../sim/characters'
-import type { Tile, Vec2 } from '../sim/grid'
+import type { Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
-import { hasLineOfSight, moveWithCollision, PLAYER_RADIUS, PLAYER_SPEED } from '../sim/movement'
-import { findPath, smoothPath } from '../sim/pathfinding'
+import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
+import { findPath } from '../sim/pathfinding'
 import { useGame, type MoveOrder } from '../state/store'
 import { Character } from './Character'
 import { cameraState, grid, interactables, playerPos } from './runtime'
@@ -17,21 +18,6 @@ const TURN_RATE = 14
 const FACE_TOLERANCE = 0.15
 const ARRIVE_EPSILON = 0.05
 const SEAT_HEIGHT = 0.28
-
-function angleDiff(a: number, b: number): number {
-  return Math.atan2(Math.sin(b - a), Math.cos(b - a))
-}
-
-function dampAngle(current: number, target: number, lambda: number, dt: number): number {
-  return current + angleDiff(current, target) * (1 - Math.exp(-lambda * dt))
-}
-
-/** Tile path → world waypoints, skipping the start tile's center when it's not needed. */
-function toWaypoints(tiles: Tile[]): Vec2[] {
-  const wps = smoothPath(grid, tiles).map((t) => grid.tileToWorld(t.tx, t.tz))
-  if (wps.length > 1 && hasLineOfSight(grid, playerPos, wps[1], PLAYER_RADIUS)) wps.shift()
-  return wps
-}
 
 interface Approach {
   actionId: number
@@ -92,7 +78,7 @@ export function Player() {
         return
       }
       const last = tiles[tiles.length - 1]
-      waypoints.current = toWaypoints(tiles)
+      waypoints.current = toWaypoints(grid, tiles, playerPos)
       approach.current = {
         actionId: activeAction.id,
         goal: grid.tileToWorld(last.tx, last.tz),
@@ -104,16 +90,16 @@ export function Player() {
         game.clearMoveOrder()
         return
       }
-      waypoints.current = toWaypoints(tiles)
+      waypoints.current = toWaypoints(grid, tiles, playerPos)
     }
   }, [moveOrder, activeAction])
 
   useFrame((_, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
-    const step = PLAYER_SPEED * dt
     const game = useGame.getState()
     let dx = 0
     let dz = 0
+    let moved = 0
 
     const { forward, right } = axes.current
     if (forward !== 0 || right !== 0) {
@@ -131,35 +117,24 @@ export function Player() {
       const vx = -s * forward + c * right
       const vz = -c * forward - s * right
       const len = Math.hypot(vx, vz)
+      const step = PLAYER_SPEED * dt
       dx = (vx / len) * step
       dz = (vz / len) * step
-    } else if (waypoints.current.length > 0) {
-      const wp = waypoints.current[0]
-      const tx = wp.x - playerPos.x
-      const tz = wp.z - playerPos.z
-      const dist = Math.hypot(tx, tz)
-      if (dist <= step) {
-        dx = tx
-        dz = tz
-        waypoints.current.shift()
-      } else {
-        dx = (tx / dist) * step
-        dz = (tz / dist) * step
-      }
-    }
-
-    let moved = 0
-    if (dx !== 0 || dz !== 0) {
       const next = moveWithCollision(grid, playerPos, dx, dz)
       moved = Math.hypot(next.x - playerPos.x, next.z - playerPos.z)
       playerPos.x = next.x
       playerPos.z = next.z
-      if (moved > 1e-6) {
-        heading.current = dampAngle(heading.current, Math.atan2(dx, dz), TURN_RATE, dt)
-      } else if (waypoints.current.length > 0) {
-        // Pinned against geometry while following a path: give up rather than get stuck.
-        waypoints.current = []
-      }
+    } else if (waypoints.current.length > 0) {
+      // Gives up on the path by itself if pinned against geometry.
+      const s = stepAlongPath(grid, playerPos, waypoints.current, PLAYER_SPEED, dt)
+      dx = s.dx
+      dz = s.dz
+      moved = s.moved
+      playerPos.x = s.x
+      playerPos.z = s.z
+    }
+    if (moved > 1e-6) {
+      heading.current = dampAngle(heading.current, Math.atan2(dx, dz), TURN_RATE, dt)
     }
 
     const idle = waypoints.current.length === 0 && dx === 0 && dz === 0

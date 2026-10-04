@@ -6,12 +6,14 @@ import { formatMoney } from './format'
 export function TopBar() {
   const clock = useGame((s) => s.clock)
   const cash = useGame((s) => s.cash)
+  const timeScale = useGame((s) => s.timeScale)
   return (
     <div className="panel topbar">
       <span>Day {clock.day}</span>
       <span className="topbar-sep">·</span>
       <span className="topbar-time">{formatTime(clock.minute)}</span>
       {isClosed(clock) && <span className="topbar-closed">Closed</span>}
+      {timeScale !== 1 && <span className="topbar-speed">×{timeScale}</span>}
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
     </div>

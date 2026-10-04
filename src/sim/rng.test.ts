@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRng } from './rng'
+import { createRng, hashSeed } from './rng'
 
 describe('createRng', () => {
   it('repeats the same sequence for the same seed', () => {
@@ -25,5 +25,14 @@ describe('createRng', () => {
     const seen = new Set<string>()
     for (let i = 0; i < 100; i++) seen.add(rng.pick(['a', 'b', 'c']))
     expect(seen).toEqual(new Set(['a', 'b', 'c']))
+  })
+})
+
+describe('hashSeed', () => {
+  it('is stable and spreads similar strings apart', () => {
+    expect(hashSeed('customer-1')).toBe(hashSeed('customer-1'))
+    expect(hashSeed('customer-1')).not.toBe(hashSeed('customer-2'))
+    expect(Number.isInteger(hashSeed(''))).toBe(true)
+    expect(hashSeed('abc')).toBeGreaterThanOrEqual(0)
   })
 })

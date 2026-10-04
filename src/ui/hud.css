@@ -1,6 +1,8 @@
 .hud {
   position: fixed;
   inset: 0;
+  /* Above the in-world customer bubbles (drei Html). */
+  z-index: 10;
   pointer-events: none;
   color: #e8ecf2;
   font-size: 13px;
@@ -223,10 +225,77 @@ kbd {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+.topbar-speed {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #2563eb;
+  font-size: 11px;
+}
 .topbar-cash {
   color: #86efac;
   font-variant-numeric: tabular-nums;
 }
 .price {
   font-weight: 600;
+}
+
+/* Customer bubbles are drei <Html> overlays, rendered outside .hud. */
+.bubble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  color: #1f2937;
+  font:
+    800 16px/1 system-ui,
+    sans-serif;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  user-select: none;
+  animation: bubble-in 0.2s ease-out;
+}
+.bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  border: 5px solid transparent;
+  border-top-color: #fff;
+  border-bottom: 0;
+}
+.bubble-waiting {
+  background: #fde047;
+}
+.bubble-waiting::after {
+  border-top-color: #fde047;
+}
+.bubble-impatient {
+  background: #ef4444;
+  color: #fff;
+  animation: bubble-pulse 0.8s ease-in-out infinite alternate;
+}
+.bubble-impatient::after {
+  border-top-color: #ef4444;
+}
+.bubble-bought {
+  background: #86efac;
+  color: #14532d;
+}
+.bubble-bought::after {
+  border-top-color: #86efac;
+}
+.bubble-upset {
+  color: #b91c1c;
+}
+@keyframes bubble-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+@keyframes bubble-pulse {
+  to {
+    transform: scale(1.18);
+  }
 }

@@ -108,6 +108,17 @@ Rules carried over: per-frame positions in `runtime.ts` maps/refs (`customerPos:
 - Customers don't collide with each other or the player for now (note it as a known limitation).
 - **Done when:** over a day, customers visibly arrive, browse cars, wait with a `!`, give up after their patience runs out and leave by closing time.
 
+**2d notes (implemented):**
+
+- `sim/agent.ts`: `stepAlongPath` (mutates the waypoint array, drops it when pinned), `toWaypoints(grid, tiles, from)`, `angleDiff` / `dampAngle` / `headingTo`. Player's WASD branch still calls `moveWithCollision` directly; its click-path branch uses `stepAlongPath`. Behaviour unchanged (checked move order, sit, coffee in the browser).
+- Store owns the customer list and the day's `arrivals`. `tickClock` does all the clock-driven work on each 10-minute step: patience `tick`, spawning due arrivals (`customer-N` ids, generated from today's stock), and `close` at 18:00. Arrivals are therefore up to 10 game minutes late, which is invisible. `dispatchCustomer(ev)` is the single entry for world (and later player) events. The customer rng is seeded `CUSTOMER_SEED + day`; 2e's "Start Day N+1" must re-seed it and re-plan `arrivals`.
+- `scene/Customers.tsx`: one `useFrame` drives a module-level `walkers` map (position, heading, waypoints, task key, linger timer, per-customer rng seeded by `hashSeed(id)`). A walker re-plans whenever its task key changes (`arrive`, `browse:N`, `leave`, or the phase name for standing still), so the store's phase is the only thing it reacts to. Positions are published in `runtime.customerPos` (a `Map<id, Vec2>`) for 2e. No separate heading map yet; add one if 2e needs it.
+- Route: spawn at a random end of the sidewalk (`SIDEWALK_ENDS` in `layout.ts`), path to `LOT_ENTRY_TILES` just inside the gate → `arrive`; for each browse car, path to a random approach tile (falling back to any), face it and linger 8–20 game minutes → `browsed`. A sold or unreachable browse car is skipped. The last browse car is the target, so waiting customers stand by the car they want. `leaving` walks back to the same side of the sidewalk, then `despawn`.
+- `CUSTOMER_SPEED` 1.6 u/s matches the walk clip. Movement is substepped (≤0.05s) and the frame clamp matches `GameClock` (0.25s), so walking and game-minute timers keep pace even at a low frame rate or sped up.
+- `CustomerBubble` is a drei `<Html>` overlay (no font download, crisp emoji/text): `!` yellow while waiting, red and pulsing once `impatient`, `…` considering, `$` bought, `☹` leaving refused/impatient. `bubbleOf(c)` in `sim/customers.ts` picks it. `.hud` now has `z-index: 10` so menus stay above bubbles.
+- Dev: `T` cycles game speed ×1/×4/×16 (`timeScale` in the store, shown in the top bar). It scales the clock and customers, not the player. At ×16 a day takes ~25s. `R` restock now also skips spaces a customer is standing in.
+- **Known limitations:** customers don't collide with each other or the player and can overlap at a car; the player can walk through them. Bubbles show through walls (handy for spotting a waiting customer).
+
 ### 2e — Selling & the day loop
 
 - Customers become interactables: generalise `Interactable` targets so the approach for a customer is computed from their **current** tile (1×1 rect via `approachTilesFor`) and the customer freezes (`engaged`) once the player is heading to them. Menu actions depend on customer phase (`actionsFor(customer)`).

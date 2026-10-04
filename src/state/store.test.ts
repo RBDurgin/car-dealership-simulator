@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { OPEN_MINUTE } from '../sim/clock'
-import { STARTING_CASH, useGame } from './store'
+import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
+import { LAST_ARRIVAL_MINUTE } from '../sim/spawner'
+import { DEV_TIME_SCALES, STARTING_CASH, useGame } from './store'
 
 const initial = useGame.getState()
 const game = () => useGame.getState()
@@ -102,5 +103,72 @@ describe('clock, cash and inventory', () => {
     game().devRestock((c) => c.id !== 'lot-car-2')
     expect(car('lot-car-1').status).toBe('available')
     expect(car('lot-car-2').status).toBe('sold')
+  })
+})
+
+describe('customers', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  const tickTo = (minute: number) => game().tickClock({ day: 1, minute })
+
+  it('plans the day with arrivals before the last arrival time', () => {
+    const { minutes, spawned } = game().arrivals
+    expect(minutes.length).toBeGreaterThan(0)
+    expect(spawned).toBe(0)
+    expect(Math.max(...minutes)).toBeLessThanOrEqual(LAST_ARRIVAL_MINUTE)
+  })
+
+  it('spawns arrivals as the clock reaches them, once each', () => {
+    const first = game().arrivals.minutes[0]
+    tickTo(first - 10)
+    const before = game().customers.length
+    tickTo(first + 10)
+    expect(game().customers.length).toBeGreaterThan(before)
+    const ids = game().customers.map((c) => c.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(game().customers.every((c) => c.phase === 'arriving')).toBe(true)
+  })
+
+  it('takes patience off waiting customers on each clock step', () => {
+    tickTo(LAST_ARRIVAL_MINUTE)
+    const c = game().customers[0]
+    game().dispatchCustomer({ type: 'arrive', id: c.id })
+    for (let i = 0; i < c.browseCarIds.length; i++) {
+      game().dispatchCustomer({ type: 'browsed', id: c.id })
+    }
+    const waiting = game().customers.find((x) => x.id === c.id)!
+    expect(waiting.phase).toBe('waiting')
+    tickTo(LAST_ARRIVAL_MINUTE + 20)
+    expect(game().customers.find((x) => x.id === c.id)!.patienceLeft).toBe(
+      waiting.patienceLeft - 20,
+    )
+  })
+
+  it('sends everyone home at closing', () => {
+    tickTo(LAST_ARRIVAL_MINUTE)
+    expect(game().customers.length).toBe(game().arrivals.minutes.length)
+    tickTo(CLOSE_MINUTE)
+    expect(game().customers.every((c) => c.phase === 'leaving')).toBe(true)
+  })
+
+  it('removes a customer when they despawn after leaving', () => {
+    tickTo(CLOSE_MINUTE)
+    const c = game().customers[0]
+    game().dispatchCustomer({ type: 'despawn', id: c.id })
+    expect(game().customers.some((x) => x.id === c.id)).toBe(false)
+  })
+
+  it('ignores events for unknown customers without a store update', () => {
+    const before = game().customers
+    game().dispatchCustomer({ type: 'arrive', id: 'nobody' })
+    expect(game().customers).toBe(before)
+  })
+
+  it('cycles the dev time scale', () => {
+    expect(game().timeScale).toBe(1)
+    for (const scale of [...DEV_TIME_SCALES.slice(1), 1]) {
+      game().cycleTimeScale()
+      expect(game().timeScale).toBe(scale)
+    }
   })
 })
