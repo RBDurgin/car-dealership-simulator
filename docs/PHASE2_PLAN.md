@@ -89,6 +89,17 @@ Rules carried over: per-frame positions in `runtime.ts` maps/refs (`customerPos:
 - Spawner: per-day arrival times (e.g. 6–10 visitors, weighted to midday), none after ~17:00; at close, all non-signing customers head out.
 - **Done when:** Vitest covers state transitions, decisions, spawn schedule, stale-event handling.
 
+**2c notes (implemented):**
+
+- `sim/customers.ts`: `reduceCustomer(c, ev)` per customer, `reduceCustomers(list, ev)` for the store (returns the same array when nothing changed). Events carry the customer id; anything that doesn't fit the current phase is ignored, which is how stale world/player events are dropped. `tick {minutes}` and `close` apply to everyone. `despawn` removes a `leaving` customer.
+- Extra phase edges beyond the plan's list: a customer can be greeted while still browsing; `cancel` from talking, considering, following or signing returns them to `waiting` with the offer cleared and patience where it was; `greet` with `carId: null` (nothing left for sale) sends them off as `refused`. `close` spares only `signing`.
+- Patience is `patience` (total) + `patienceLeft`, game minutes, 45–120 in steps of 5, and only drops in `waiting`. At 1.5 game min per real second that's 30–80 real seconds.
+- `mood` is derived (`moodOf`), not stored: `impatient` once a waiting customer is under a third of their patience, `happy` while following/signing/bought, `unhappy` after refused/impatient, `neutral` otherwise (including closing). 2d's bubbles can read it directly.
+- Generator (`generateCustomer(id, availableCars, rng)`): 1–2 preferred body types, budget = priciest preferred base MSRP × 0.85–1.3 rounded to $500, and 1–3 cars to browse (preferred types 4× likelier). Browse order ends at their favourite, which becomes `targetCarId`, so a waiting customer stands by the car they want. `chooseTarget` re-picks on greet if that car has sold. With the 2b stock, ~75% target a preferred type and ~30% can't afford their target.
+- `decide` uses `acceptChance`: 0 over budget, else 35% + 35% if preferred + up to 30% for headroom (full at 25% under budget), capped at 95%. The reducer takes the answer (`respond {accepted}`) rather than calling `decide` itself, so the store owns the rng.
+- `sim/spawner.ts`: `planArrivals(rng)` gives 6–10 arrival minutes, each the mean of two uniforms over 9:00–17:00 (triangular, peaks ~13:00). `takeDue(schedule, minute)` releases arrivals once each and catches up after a long frame.
+- Ids, rng seeding per day and linger durations are left to the store/world in 2d.
+
 ### 2d — Customers in the world
 
 - Extract path-following from `Player.tsx` into `sim/agent.ts` (`stepAlongPath(grid, pos, waypoints, speed, dt)`) and reuse it for player and customers; Player behaviour must not change.
