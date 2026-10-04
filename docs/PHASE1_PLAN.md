@@ -1,6 +1,6 @@
 # Phase 1 Plan — Walkable Dealership (Car Dealership Simulator)
 
-**Status:** 1a done (commit `3fd163d`). 1b implemented, pending review. Next up: 1c. Implement one sub-phase per session, stop for review after each.
+**Status:** 1a done (commit `3fd163d`). 1b done (commit `b22c077`). 1c implemented, pending review. Next up: 1d. Implement one sub-phase per session, stop for review after each.
 
 ## Context
 
@@ -23,13 +23,15 @@ src/
     grid.ts                    # Grid class: size, walkable[], tile<->world helpers
     pathfinding.ts             # A* (8-dir, no corner-cutting), path smoothing
     layout.ts                  # Dealership layout data: zones, walls, doors, props → builds Grid
+    walls.ts                   # Wall pieces (per-tile arms) and the cutaway rule
     interactables.ts           # Interactable defs: id, kind, tile, approachTiles, actions[]
   state/store.ts               # zustand: player target/path, hovered/selected id, pending action, wallMode
   scene/
     CameraRig.tsx              # Ortho iso camera; follow player, Q/E rotate 90° (eased), wheel zoom
     Ground.tsx                 # Ground plane; raycast click → tile → path request
-    Building.tsx               # Walls/floors from layout; cutaway logic
-    Lot.tsx, Office.tsx        # Props (cars, desk, chair, plants…)
+    Floors.tsx                 # Zone floors, parking stripes, road markings
+    Walls.tsx                  # Instanced walls + fence; Up/Cutaway/Down modes (V)
+    Props.tsx                  # GLB props (cars, furniture), display platforms, sign
     Player.tsx                 # Follows path in useFrame (mutates refs, not store), faces direction
     Interactable.tsx           # Wrapper: hover Outlines + cursor, click → action menu
     ClickMarker.tsx, DebugGrid.tsx
@@ -53,6 +55,14 @@ Rules to keep it clean:
 - One world unit = one grid tile. The ground is 40×30 units, centered on the origin.
 - Headless Chromium is not installed in the container, so verify visuals manually in the browser.
 
+## Implementation notes from 1c
+
+- A Playwright headless shell is cached under `~/.cache/ms-playwright`, so screenshots work with `executablePath` pointed at it plus `--use-angle=swiftshader`. Frame rates are low under SwiftShader, so give walks plenty of time.
+- To drive the game from a script, import the store in the page through the URL Vite actually served (look it up in `performance.getEntriesByType('resource')`; after HMR it carries a `?t=` suffix).
+- Kenney cars and furniture both face +z. Props are recentered on their bounding box, so footprints in `layout.ts` stay the single placement source.
+- Kenney car GLBs reference `Textures/colormap.png` externally, which is why `public/models/cars/Textures/` exists.
+- Wall tiles are labelled with the zone of the room they enclose. The cutaway rule ("drop the wall if the tile behind it, away from the camera, is indoors") depends on that.
+
 ## Sub-phases
 
 ### 1a — Scaffold & first scene (DONE)
@@ -63,7 +73,7 @@ Rules to keep it clean:
 - Update `CLAUDE.md` with the stack, folder conventions and commands.
 - **Done when:** `npm run dev` shows the lit iso scene, and `npm test` and `npm run lint` pass.
 
-### 1b — Movement & camera (IMPLEMENTED, pending review)
+### 1b — Movement & camera (DONE)
 
 - Add `Grid` and A* in `sim/` with Vitest tests covering a straight path, a path around obstacles, an unreachable target, no corner cutting and path smoothing.
 - Player capsule: clicking the ground raycasts to a tile, A* runs, a click marker appears and the player walks the path at constant speed and rotates to face where it's going.
@@ -72,7 +82,7 @@ Rules to keep it clean:
 - Debug grid overlay toggled with `G`, showing walkable and blocked tiles.
 - **Done when:** the player can click or WASD around an obstacle field and never clips into blocked tiles.
 
-### 1c — Dealership environment
+### 1c — Dealership environment (IMPLEMENTED, pending review)
 
 - `layout.ts` sets out about 40×30 tiles. An outdoor **lot** has striped parking spaces, a sidewalk, a perimeter fence and a sign. A **showroom** has glass walls and 2–3 display cars. The **office** is a private room with a doorway into the showroom. A small reception area is optional.
 - Walls sit on blocked tiles and are rendered as thin wall meshes, with doorways as gaps. The layout is the source of truth for the grid.

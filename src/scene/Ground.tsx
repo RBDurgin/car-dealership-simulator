@@ -1,7 +1,9 @@
 import type { ThreeEvent } from '@react-three/fiber'
-import { GRID_HEIGHT, GRID_WIDTH } from '../sim/world'
 import { useGame } from '../state/store'
 import { grid } from './runtime'
+
+// Larger than the grid so the world's edge stays off screen; clicks outside the grid are ignored.
+const SIZE = 160
 
 export function Ground() {
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -12,7 +14,7 @@ export function Ground() {
 
   return (
     <mesh rotation-x={-Math.PI / 2} receiveShadow onPointerDown={onPointerDown}>
-      <planeGeometry args={[GRID_WIDTH, GRID_HEIGHT]} />
+      <planeGeometry args={[SIZE, SIZE]} />
       <meshStandardMaterial color="#6f8f5a" />
     </mesh>
   )

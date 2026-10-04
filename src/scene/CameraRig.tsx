@@ -2,6 +2,7 @@ import { OrthographicCamera } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { MathUtils, type OrthographicCamera as OrthoCamera } from 'three'
+import { useGame } from '../state/store'
 import { cameraState, playerPos } from './runtime'
 
 // Classic isometric pitch (~35°); yaw starts at 45° and rotates in 90° steps.
@@ -23,6 +24,8 @@ export function CameraRig() {
       if (e.repeat) return
       if (e.code === 'KeyQ') yawTarget.current += Math.PI / 2
       else if (e.code === 'KeyE') yawTarget.current -= Math.PI / 2
+      else return
+      useGame.getState().setViewYaw(yawTarget.current)
     }
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()

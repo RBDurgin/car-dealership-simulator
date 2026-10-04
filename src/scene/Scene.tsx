@@ -1,9 +1,12 @@
+import { Suspense } from 'react'
 import { CameraRig } from './CameraRig'
 import { ClickMarker } from './ClickMarker'
 import { DebugGrid } from './DebugGrid'
+import { Floors } from './Floors'
 import { Ground } from './Ground'
-import { Obstacles } from './Obstacles'
 import { Player } from './Player'
+import { Props } from './Props'
+import { Walls } from './Walls'
 
 export function Scene() {
   return (
@@ -14,14 +17,19 @@ export function Scene() {
         position={[12, 20, 8]}
         intensity={1.8}
         castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-25}
-        shadow-camera-right={25}
-        shadow-camera-top={25}
-        shadow-camera-bottom={-25}
+        shadow-mapSize={[4096, 4096]}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+        shadow-normalBias={0.03}
       />
       <Ground />
-      <Obstacles />
+      <Floors />
+      <Walls />
+      <Suspense fallback={null}>
+        <Props />
+      </Suspense>
       <DebugGrid />
       <ClickMarker />
       <Player />
