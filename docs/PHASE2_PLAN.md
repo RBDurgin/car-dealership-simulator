@@ -67,6 +67,18 @@ Rules carried over: per-frame positions in `runtime.ts` maps/refs (`customerPos:
 - UI: `TopBar` (day, time, cash); car `InfoPanel` shows MSRP and status.
 - **Done when:** clock runs, top bar updates, Inspect shows MSRP, `sellCar` from the console removes the car and its tiles become walkable.
 
+**2b notes (implemented):**
+
+- `sim/rng.ts` (mulberry32) landed here rather than in 2c, since MSRP variation needs it. 2c reuses it.
+- Clock: 9:00–18:00 in 6 real minutes (`DEFAULT_DAY_MS`, so 1.5 game minutes per real second). `advance` stops at closing and never rolls the day over; starting the next day is the day summary's job (2e). Because the clock is already stopped at closing, the summary needs no separate pause flag.
+- The precise running time lives in `runtime.gameTime`; the store's `clock` is snapped to 10-minute steps. `GameClock` resyncs `gameTime` when the store's day changes, so 2e only has to set `clock: startOfDay(n + 1)`. Its frame delta is clamped to 0.25s (not 0.05s like movement) so a low frame rate doesn't slow the day.
+- Showroom cars moved from the fixed props to `DISPLAY_CARS` in `layout.ts`; `PROPS` / `createGrid` now cover fixed props only. `buildInventory(rng)` keeps the old ids (`display-N`, `lot-car-N`).
+- Base MSRPs: hatchback $24k, sedan $28k, van $36k, SUV $39k, sports sedan $44k, truck $52k, luxury SUV $68k, each car ±5% rounded to $100. The store seed is fixed (`INVENTORY_SEED`), so prices are the same every load.
+- `runtime.ts` subscribes to the store: when `inventory` changes it re-applies car footprints to the grid (`applyToGrid`, using the new `Grid.setRectBlocked`) and rebuilds **all** interactables, since a freed footprint can add approach tiles to its neighbours. The subscription runs inside the store update, before React re-renders.
+- `sellCar(id, price = msrp)` credits cash and drops the menu / hover / inspect panel / action aimed at that car. It takes a price so Phase 5 negotiation can reuse it.
+- Dev: `R` restocks sold cars, skipping any space the player is standing in (otherwise they'd be stuck inside the footprint). `window.game` is the store in dev builds, e.g. `game.getState().sellCar('lot-car-1')`.
+- Starting cash is $25,000 (`STARTING_CASH`).
+
 ### 2c — Customer simulation (pure TS)
 
 - `sim/rng.ts`, `sim/customers.ts`, `sim/spawner.ts` — no React/three, fully unit-tested.

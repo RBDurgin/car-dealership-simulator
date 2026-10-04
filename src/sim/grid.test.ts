@@ -25,5 +25,8 @@ describe('Grid', () => {
     expect(grid.isWalkable(3, 3)).toBe(true)
     grid.setBlocked(1, 1, false)
     expect(grid.isWalkable(1, 1)).toBe(true)
+    grid.setRectBlocked({ tx: 1, tz: 1, w: 2, h: 2 }, false)
+    expect(grid.isWalkable(2, 1)).toBe(true)
+    expect(grid.isWalkable(2, 2)).toBe(true)
   })
 })

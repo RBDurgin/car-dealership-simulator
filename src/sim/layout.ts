@@ -148,7 +148,7 @@ export const PARKING_SPACES: ParkingSpace[] = [
   ...spaceRow(6, { tx: 9, tz: 2 }, { tx: 0, tz: 2 }, { w: 4, h: 2 }, 1),
 ]
 
-/** Lot inventory: which spaces hold which car. */
+/** Opening lot stock: which spaces hold which car. Cars are inventory (`sim/inventory.ts`). */
 export const LOT_CARS: { space: number; model: CarModel }[] = [
   { space: 0, model: 'sedan' },
   { space: 1, model: 'suv' },
@@ -186,6 +186,13 @@ export function parkedCarRect(space: ParkingSpace): Rect {
   }
 }
 
+/** Opening showroom stock, displayed on platforms. */
+export const DISPLAY_CARS: { model: CarModel; rect: Rect; facing: Facing }[] = [
+  { model: 'suv-luxury', rect: { tx: 18, tz: 4, w: 3, h: 4 }, facing: 0 },
+  { model: 'sedan-sports', rect: { tx: 23, tz: 4, w: 3, h: 4 }, facing: 0 },
+  { model: 'hatchback-sports', rect: { tx: 24, tz: 9, w: 4, h: 3 }, facing: 3 },
+]
+
 // Heights (world units) that stacked props sit at.
 const DESK_TOP = 0.53
 const COUNTER_TOP = 0.63
@@ -193,28 +200,6 @@ const COUNTER_TOP = 0.63
 const FIXED_PROPS: Prop[] = [
   { id: 'sign', model: 'sign', rect: { tx: 21, tz: 23, w: 3, h: 1 }, facing: 0 },
 
-  // Showroom display cars
-  {
-    id: 'display-1',
-    model: 'suv-luxury',
-    rect: { tx: 18, tz: 4, w: 3, h: 4 },
-    facing: 0,
-    platform: true,
-  },
-  {
-    id: 'display-2',
-    model: 'sedan-sports',
-    rect: { tx: 23, tz: 4, w: 3, h: 4 },
-    facing: 0,
-    platform: true,
-  },
-  {
-    id: 'display-3',
-    model: 'hatchback-sports',
-    rect: { tx: 24, tz: 9, w: 4, h: 3 },
-    facing: 3,
-    platform: true,
-  },
   { id: 'reception-desk', model: 'deskCorner', rect: { tx: 17, tz: 9, w: 2, h: 2 }, facing: 1 },
   { id: 'showroom-plant-1', model: 'pottedPlant', rect: { tx: 17, tz: 3, w: 1, h: 1 }, facing: 0 },
   { id: 'showroom-plant-2', model: 'pottedPlant', rect: { tx: 17, tz: 12, w: 1, h: 1 }, facing: 0 },
@@ -264,13 +249,8 @@ const FIXED_PROPS: Prop[] = [
   { id: 'lounge-plant', model: 'pottedPlant', rect: { tx: 35, tz: 12, w: 1, h: 1 }, facing: 0 },
 ]
 
-export const PROPS: Prop[] = [
-  ...FIXED_PROPS,
-  ...LOT_CARS.map(({ space, model }, i): Prop => {
-    const s = PARKING_SPACES[space]
-    return { id: `lot-car-${i + 1}`, model, rect: parkedCarRect(s), facing: s.facing }
-  }),
-]
+/** Fixed furniture and fittings. Cars come from the inventory and can leave. */
+export const PROPS: Prop[] = FIXED_PROPS
 
 export interface Layout {
   width: number
@@ -312,7 +292,10 @@ export function isIndoor(layout: Layout, tx: number, tz: number): boolean {
   return z !== null && INDOOR.has(z)
 }
 
-/** Walkability grid: walls, the road and blocking prop footprints are blocked. */
+/**
+ * Walkability grid: walls, the road and blocking prop footprints are blocked. Car
+ * footprints are not included; the inventory blocks and frees them as cars come and go.
+ */
 export function createGrid(layout: Layout): Grid {
   const grid = new Grid(layout.width, layout.height)
   for (let tz = 0; tz < layout.height; tz++) {

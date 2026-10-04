@@ -196,3 +196,37 @@ kbd {
     scale: 0.8;
   }
 }
+
+/* Top bar: day, time, cash */
+.topbar {
+  left: 16px;
+  top: 16px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.topbar-sep {
+  opacity: 0.4;
+}
+.topbar-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 68px;
+}
+.topbar-closed {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #b4443a;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.topbar-cash {
+  color: #86efac;
+  font-variant-numeric: tabular-nums;
+}
+.price {
+  font-weight: 600;
+}

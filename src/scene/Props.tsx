@@ -1,10 +1,13 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Box3, CanvasTexture, SRGBColorSpace, Vector3, type Mesh, type Object3D } from 'three'
+import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { DEALERSHIP_NAME, PROPS, type Prop, type PropModel } from '../sim/layout'
+import { PLAYER_RADIUS } from '../sim/movement'
+import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
-import { interactables, rectBounds } from './runtime'
+import { interactables, playerPos, rectBounds } from './runtime'
 
 const BASE = `${import.meta.env.BASE_URL}models`
 const CAR_SCALE = 0.95
@@ -173,12 +176,47 @@ function PropContent({ prop }: { prop: Prop }) {
   )
 }
 
+/** Restocking a car on top of the player would trap them inside its footprint. */
+function playerClearOf(car: InventoryCar): boolean {
+  const b = rectBounds(car.rect)
+  return (
+    Math.abs(playerPos.x - b.x) >= b.w / 2 + PLAYER_RADIUS ||
+    Math.abs(playerPos.z - b.z) >= b.h / 2 + PLAYER_RADIUS
+  )
+}
+
+function useDevRestockKey() {
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'KeyR' && !e.repeat) useGame.getState().devRestock(playerClearOf)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+}
+
+/** Cars in stock. Re-renders only when the inventory changes (a sale or restock). */
+function Cars() {
+  const inventory = useGame((s) => s.inventory)
+  const props = useMemo(() => availableCars(inventory).map(carProp), [inventory])
+  useDevRestockKey()
+  return (
+    <>
+      {props.map((p) => (
+        <PropView key={p.id} prop={p} />
+      ))}
+    </>
+  )
+}
+
 export function Props() {
   return (
     <>
       {PROPS.map((p) => (
         <PropView key={p.id} prop={p} />
       ))}
+      <Cars />
     </>
   )
 }

@@ -5,6 +5,7 @@ import { useGame } from '../state/store'
 import { ActionMenu } from './ActionMenu'
 import { ControlsHint } from './ControlsHint'
 import { InfoPanel } from './InfoPanel'
+import { TopBar } from './TopBar'
 import './hud.css'
 
 const NOTICE_MS = 2200
@@ -62,6 +63,7 @@ export function HUD() {
 
   return (
     <div className="hud">
+      <TopBar />
       <ControlsHint />
       <ActionStatus />
       <NoticeToast />

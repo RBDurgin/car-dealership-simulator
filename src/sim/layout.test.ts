@@ -10,10 +10,14 @@ import {
   zoneAt,
   type Rect,
 } from './layout'
+import { applyToGrid, buildInventory, carProp } from './inventory'
 import { findPath } from './pathfinding'
+import { createRng } from './rng'
 
 const layout = buildLayout()
+const inventory = buildInventory(createRng(1))
 const grid = createGrid(layout)
+applyToGrid(grid, inventory)
 
 function tiles(r: Rect): [number, number][] {
   const out: [number, number][] = []
@@ -39,9 +43,9 @@ describe('dealership layout', () => {
     expect(grid.isWalkable(10, 28)).toBe(false) // road
   })
 
-  it('places props in bounds, off walls and without overlapping', () => {
+  it('places props and cars in bounds, off walls and without overlapping', () => {
     const owner = new Map<string, string>()
-    for (const p of layout.props) {
+    for (const p of [...layout.props, ...inventory.map(carProp)]) {
       for (const [tx, tz] of tiles(p.rect)) {
         expect(zoneAt(layout, tx, tz), `${p.id} out of bounds`).not.toBeNull()
         expect(wallAt(layout, tx, tz), `${p.id} on a wall`).toBeNull()

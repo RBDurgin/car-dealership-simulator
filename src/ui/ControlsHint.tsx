@@ -6,6 +6,7 @@ const CONTROLS: [string, string][] = [
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel'],
+  ...(import.meta.env.DEV ? ([['R', 'Restock (dev)']] as [string, string][]) : []),
 ]
 
 export function ControlsHint() {

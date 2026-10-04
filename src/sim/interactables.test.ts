@@ -6,8 +6,10 @@ import {
   pathToInteractable,
   type Interactable,
 } from './interactables'
+import { applyToGrid, buildInventory, carProp } from './inventory'
 import { buildLayout, createGrid, PROPS, SPAWN_TILE } from './layout'
 import { findPathToAny } from './pathfinding'
+import { createRng } from './rng'
 
 function fakeInteractable(grid: Grid, rect: Interactable['rect']): Interactable {
   return {
@@ -83,11 +85,14 @@ describe('findPathToAny', () => {
 
 describe('dealership interactables', () => {
   const grid = createGrid(buildLayout())
-  const all = buildInteractables(grid, PROPS)
+  const inventory = buildInventory(createRng(1))
+  applyToGrid(grid, inventory)
+  const all = buildInteractables(grid, [...PROPS, ...inventory.map(carProp)])
 
   it('registers every car, the desk chair and the coffee machine', () => {
-    const cars = PROPS.filter((p) => all.get(p.id)?.kind === 'car')
-    expect(cars.length).toBeGreaterThanOrEqual(3 + 16)
+    const cars = [...all.values()].filter((it) => it.kind === 'car')
+    expect(cars).toHaveLength(inventory.length)
+    expect(all.get('display-1')?.car?.location).toBe('Showroom display')
     expect(all.get('office-chair')?.actions).toEqual(['sit'])
     expect(all.get('coffee-machine')?.actions).toEqual(['getCoffee'])
     expect(all.has('office-desk')).toBe(false)

@@ -3,6 +3,7 @@ import { CameraRig } from './CameraRig'
 import { ClickMarker } from './ClickMarker'
 import { DebugGrid } from './DebugGrid'
 import { Floors } from './Floors'
+import { GameClock } from './GameClock'
 import { Ground } from './Ground'
 import { Player } from './Player'
 import { Props } from './Props'
@@ -12,6 +13,7 @@ export function Scene() {
   return (
     <>
       <CameraRig />
+      <GameClock />
       <hemisphereLight args={['#dfe9ff', '#5a4a3a', 0.6]} />
       <directionalLight
         position={[12, 20, 8]}

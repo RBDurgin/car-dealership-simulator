@@ -40,8 +40,12 @@ export class Grid {
   }
 
   blockRect(tx: number, tz: number, w: number, h: number): void {
-    for (let z = tz; z < tz + h; z++) {
-      for (let x = tx; x < tx + w; x++) this.setBlocked(x, z)
+    this.setRectBlocked({ tx, tz, w, h }, true)
+  }
+
+  setRectBlocked(r: { tx: number; tz: number; w: number; h: number }, blocked: boolean): void {
+    for (let z = r.tz; z < r.tz + r.h; z++) {
+      for (let x = r.tx; x < r.tx + r.w; x++) this.setBlocked(x, z, blocked)
     }
   }
 

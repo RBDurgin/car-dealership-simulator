@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
+import { startOfDay, toStep, type GameTime } from '../sim/clock'
 import type { ActionId } from '../sim/interactables'
+import { buildInventory, restock, sellCar as markSold, type InventoryCar } from '../sim/inventory'
+import { createRng } from '../sim/rng'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 
 export interface MoveOrder {
@@ -21,6 +24,9 @@ export interface Notice {
   text: string
 }
 
+export const STARTING_CASH = 25_000
+const INVENTORY_SEED = 2026
+
 // Discrete events only. Per-frame values live in refs / scene/runtime.ts.
 interface GameState {
   moveOrder: MoveOrder | null
@@ -35,6 +41,11 @@ interface GameState {
   /** Car whose info panel is open. */
   inspectedId: string | null
   notice: Notice | null
+  /** Game time in 10-minute steps; the precise running time lives in scene/runtime. */
+  clock: GameTime
+  cash: number
+  /** Changes only when a car is sold or restocked. */
+  inventory: InventoryCar[]
   issueMoveOrder: (tx: number, tz: number) => void
   clearMoveOrder: () => void
   toggleGrid: () => void
@@ -52,6 +63,11 @@ interface GameState {
   closeInspect: () => void
   showNotice: (text: string) => void
   clearNotice: (id: number) => void
+  tickClock: (t: GameTime) => void
+  /** Sells a car at `price` (default MSRP). False if it isn't for sale. */
+  sellCar: (id: string, price?: number) => boolean
+  /** Dev cheat: refills sold spaces, skipping any `canPlace` vetoes. */
+  devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
 }
 
 let nextOrderId = 1
@@ -77,6 +93,9 @@ export const useGame = create<GameState>((set, get) => {
     menu: null,
     inspectedId: null,
     notice: null,
+    clock: startOfDay(1),
+    cash: STARTING_CASH,
+    inventory: buildInventory(createRng(INVENTORY_SEED)),
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
       set({ moveOrder: { id: nextOrderId++, tx, tz }, menu: null })
@@ -109,6 +128,31 @@ export const useGame = create<GameState>((set, get) => {
     showNotice: (text) => set({ notice: { id: nextNoticeId++, text } }),
     clearNotice: (id) => {
       if (get().notice?.id === id) set({ notice: null })
+    },
+    tickClock: (t) => {
+      const step = toStep(t)
+      const { clock } = get()
+      if (step.day !== clock.day || step.minute !== clock.minute) set({ clock: step })
+    },
+    sellCar: (id, price) => {
+      const s = get()
+      const car = s.inventory.find((c) => c.id === id)
+      const inventory = markSold(s.inventory, id)
+      if (!car || inventory === s.inventory) return false
+      // The car is gone: drop anything that still points at it.
+      if (s.activeAction?.targetId === id) dispatch({ type: 'cancel' })
+      set({
+        inventory,
+        cash: s.cash + (price ?? car.msrp),
+        menu: s.menu?.targetId === id ? null : s.menu,
+        hoveredId: s.hoveredId === id ? null : s.hoveredId,
+        inspectedId: s.inspectedId === id ? null : s.inspectedId,
+      })
+      return true
+    },
+    devRestock: (canPlace) => {
+      const inventory = restock(get().inventory, canPlace)
+      if (inventory !== get().inventory) set({ inventory })
     },
   }
 })
