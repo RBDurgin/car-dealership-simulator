@@ -106,6 +106,8 @@ interface GameState {
   candidates: Employee[]
   /** The staff panel is open. */
   staffOpen: boolean
+  /** The how-to-play guide is open; the clock and the player wait while it is. */
+  helpOpen: boolean
   /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
   timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
@@ -145,6 +147,7 @@ interface GameState {
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
+  toggleHelp: (open?: boolean) => void
   cycleTimeScale: () => void
   /** From the title screen: plays the fresh day 1 the store starts with. */
   newGame: () => void
@@ -164,6 +167,11 @@ let customerRng: Rng = createRng(CUSTOMER_SEED + 1)
 let dealRng: Rng = createRng(DEAL_SEED + 1)
 /** Job applicants. */
 let staffRng: Rng = createRng(STAFF_SEED + 1)
+
+/** Time stands still and the player can't move behind the title screen or the guide. */
+export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen'>): boolean {
+  return s.screen === 'title' || s.helpOpen
+}
 
 export const useGame = create<GameState>((set, get) => {
   const notify = (text: string) => get().showNotice(text)
@@ -349,6 +357,7 @@ export const useGame = create<GameState>((set, get) => {
     roster: [],
     candidates: generateCandidates(staffRng, 1),
     staffOpen: false,
+    helpOpen: false,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
@@ -388,6 +397,7 @@ export const useGame = create<GameState>((set, get) => {
     cancelAction: () => dispatch({ type: 'cancel' }),
     cancelAll: () => {
       const s = get()
+      if (s.helpOpen) return set({ helpOpen: false })
       if (s.menu) return set({ menu: null })
       if (s.staffOpen) return set({ staffOpen: false })
       const busy = s.activeAction || s.moveOrder || s.inspectedId
@@ -493,12 +503,14 @@ export const useGame = create<GameState>((set, get) => {
     },
     dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
     toggleStaffPanel: (open) => set((s) => ({ staffOpen: open ?? !s.staffOpen })),
+    toggleHelp: (open) => set((s) => ({ helpOpen: open ?? !s.helpOpen })),
     cycleTimeScale: () =>
       set((s) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])
         return { timeScale: DEV_TIME_SCALES[(i + 1) % DEV_TIME_SCALES.length] }
       }),
-    newGame: () => set({ screen: 'playing' }),
+    // A new player gets the guide before day 1 starts.
+    newGame: () => set({ screen: 'playing', helpOpen: true }),
     loadGame: (save) => {
       // Only offered before the clock has run, so there are no customers,
       // actions or panels to clear.

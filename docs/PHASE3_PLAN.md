@@ -154,6 +154,7 @@ Rules carried over: positions stay in walkers and `runtime.ts` maps (`staffPos`,
 
 - `npm test`, `npm run lint` and `npm run build` are all clean. Every new `sim/` module has Vitest coverage: decisions, payroll, goals, occupancy and stale events.
 - Manual play in `npm run dev` against the sub-phase's "Done when". Headless Playwright checks follow the Phase 2 approach (swiftshader, driving the store via `window.game`), using ×16 days for the AI and NPC phases.
+- The how-to-play guide (`ui/HowToPlay.tsx`) and the controls list (`ui/controls.ts`) describe what the sub-phase adds: the finance manager in 3c, the salesperson and commissions in 3d, the porter and washing cars in 3e.
 - Robert reviews and approves each sub-phase before the next one starts.
 
 ## Out of scope / notes

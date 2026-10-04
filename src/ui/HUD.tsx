@@ -7,6 +7,7 @@ import { ActionMenu } from './ActionMenu'
 import { ControlsHint } from './ControlsHint'
 import { CustomerPanel } from './CustomerPanel'
 import { DaySummary } from './DaySummary'
+import { HowToPlay } from './HowToPlay'
 import { InfoPanel } from './InfoPanel'
 import { StaffPanel } from './StaffPanel'
 import { TitleScreen } from './TitleScreen'
@@ -65,9 +66,20 @@ function NoticeToast() {
 export function HUD() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (useGame.getState().screen === 'title') return
-      if (e.code === 'Escape') useGame.getState().cancelAll()
-      else if (e.code === 'KeyH' && !e.repeat) useGame.getState().toggleStaffPanel()
+      const game = useGame.getState()
+      // `?` or F1 opens the guide from anywhere, the title screen included.
+      if ((e.code === 'Slash' && e.shiftKey) || e.code === 'F1') {
+        e.preventDefault()
+        if (!e.repeat) game.toggleHelp()
+        return
+      }
+      if (game.helpOpen) {
+        if (e.code === 'Escape') game.toggleHelp(false)
+        return
+      }
+      if (game.screen === 'title') return
+      if (e.code === 'Escape') game.cancelAll()
+      else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -85,6 +97,7 @@ export function HUD() {
       <ActionMenu />
       <DaySummary />
       <TitleScreen />
+      <HowToPlay />
     </div>
   )
 }

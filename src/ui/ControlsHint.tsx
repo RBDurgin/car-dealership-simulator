@@ -1,19 +1,4 @@
-const CONTROLS: [string, string][] = [
-  ['Click', 'Move / interact / greet'],
-  ['WASD', 'Walk'],
-  ['Q / E', 'Rotate view'],
-  ['Wheel', 'Zoom'],
-  ['H', 'Staff'],
-  ['V', 'Wall mode'],
-  ['G', 'Debug grid'],
-  ['Esc', 'Cancel / walk away'],
-  ...(import.meta.env.DEV
-    ? ([
-        ['R', 'Restock (dev)'],
-        ['T', 'Game speed (dev)'],
-      ] as [string, string][])
-    : []),
-]
+import { CONTROLS } from './controls'
 
 export function ControlsHint() {
   return (

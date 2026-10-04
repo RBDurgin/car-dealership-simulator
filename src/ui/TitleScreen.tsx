@@ -35,6 +35,9 @@ export function TitleScreen() {
         <button className={save ? 'btn' : 'btn btn-primary'} autoFocus={!save} onClick={newGame}>
           New game
         </button>
+        <button className="btn" onClick={() => useGame.getState().toggleHelp(true)}>
+          How to play
+        </button>
       </div>
     </div>
   )

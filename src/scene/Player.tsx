@@ -10,7 +10,7 @@ import type { Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
 import { findPath } from '../sim/pathfinding'
-import { useGame, type MoveOrder } from '../state/store'
+import { isPaused, useGame, type MoveOrder } from '../state/store'
 import { Character } from './Character'
 import { cameraState, findInteractable, grid, playerPos } from './runtime'
 
@@ -104,8 +104,8 @@ export function Player() {
     let dz = 0
     let moved = 0
 
-    // Movement keys do nothing behind the title screen.
-    const { forward, right } = game.screen === 'title' ? { forward: 0, right: 0 } : axes.current
+    // Movement keys do nothing behind the title screen or the guide.
+    const { forward, right } = isPaused(game) ? { forward: 0, right: 0 } : axes.current
     if (forward !== 0 || right !== 0) {
       // Any movement key stands the player up and cancels a click path, an action
       // or a conversation.

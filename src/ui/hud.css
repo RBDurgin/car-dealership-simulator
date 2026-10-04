@@ -545,3 +545,32 @@ kbd {
   font-weight: normal;
   opacity: 0.75;
 }
+
+/* How to play */
+.how-to-play {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.how-to-play section {
+  margin: 0 0 12px;
+}
+.how-to-play h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.how-to-play p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+.how-to-play p kbd {
+  min-width: 0;
+}
+.how-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 12px;
+  font-size: 13px;
+}
