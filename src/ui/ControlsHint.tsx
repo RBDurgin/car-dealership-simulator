@@ -3,6 +3,7 @@ const CONTROLS: [string, string][] = [
   ['WASD', 'Walk'],
   ['Q / E', 'Rotate view'],
   ['Wheel', 'Zoom'],
+  ['H', 'Staff'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away'],

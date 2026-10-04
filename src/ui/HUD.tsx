@@ -8,6 +8,7 @@ import { ControlsHint } from './ControlsHint'
 import { CustomerPanel } from './CustomerPanel'
 import { DaySummary } from './DaySummary'
 import { InfoPanel } from './InfoPanel'
+import { StaffPanel } from './StaffPanel'
 import { TopBar } from './TopBar'
 import './hud.css'
 
@@ -21,7 +22,7 @@ function ActionStatus() {
 
   const def = ACTIONS[action.action]
   const performing = action.phase === 'performing'
-  const person = it.kind === 'customer'
+  const person = it.kind === 'customer' || it.kind === 'employee'
   let label: string
   if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
@@ -64,6 +65,7 @@ export function HUD() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Escape') useGame.getState().cancelAll()
+      else if (e.code === 'KeyH' && !e.repeat) useGame.getState().toggleStaffPanel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -77,6 +79,7 @@ export function HUD() {
       <NoticeToast />
       <InfoPanel />
       <CustomerPanel />
+      <StaffPanel />
       <ActionMenu />
       <DaySummary />
     </div>

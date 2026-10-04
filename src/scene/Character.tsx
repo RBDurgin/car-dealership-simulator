@@ -3,7 +3,12 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef, type RefObject } from 'react'
 import type { AnimationAction, Group, Mesh } from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
-import { CUSTOMER_VARIANTS, type CharacterAnim, type CharacterVariant } from '../sim/characters'
+import {
+  CUSTOMER_VARIANTS,
+  STAFF_VARIANTS,
+  type CharacterAnim,
+  type CharacterVariant,
+} from '../sim/characters'
 
 const BASE = `${import.meta.env.BASE_URL}models/characters`
 /** The Kenney Mini Characters are ~0.67 units tall; this brings them to ~1.2. */
@@ -17,7 +22,9 @@ const STRIDE: Partial<Record<CharacterAnim, number>> = { walk: 1.1, sprint: 1.28
 
 const FILES: Record<CharacterVariant, string> = {
   salesperson: 'character-male-d',
-  ...Object.fromEntries(CUSTOMER_VARIANTS.map((v) => [v, `character-${v}`])),
+  ...Object.fromEntries(
+    [...CUSTOMER_VARIANTS, ...STAFF_VARIANTS].map((v) => [v, `character-${v}`]),
+  ),
 } as Record<CharacterVariant, string>
 
 const urlFor = (variant: CharacterVariant) => `${BASE}/${FILES[variant]}.glb`

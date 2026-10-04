@@ -8,6 +8,7 @@ import { GameClock } from './GameClock'
 import { Ground } from './Ground'
 import { Player } from './Player'
 import { Props } from './Props'
+import { Staff } from './Staff'
 import { Walls } from './Walls'
 
 export function Scene() {
@@ -37,6 +38,7 @@ export function Scene() {
       <ClickMarker />
       <Player />
       <Customers />
+      <Staff />
     </>
   )
 }

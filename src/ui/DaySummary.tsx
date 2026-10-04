@@ -1,5 +1,5 @@
 import { formatTime, isClosed } from '../sim/clock'
-import { revenue, walkOuts } from '../sim/deal'
+import { netIncome, revenue, walkOuts } from '../sim/deal'
 import { carName } from '../sim/interactables'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -27,6 +27,12 @@ export function DaySummary() {
           <dd>{stats.sales.length}</dd>
           <dt>Revenue</dt>
           <dd className="price">{formatMoney(revenue(stats))}</dd>
+          <dt>Wages</dt>
+          <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
+          <dt>Commissions</dt>
+          <dd className="price">{formatMoney(-stats.commissions || 0)}</dd>
+          <dt>Net</dt>
+          <dd className="price">{formatMoney(netIncome(stats))}</dd>
           <dt>Walk-outs</dt>
           <dd>
             {walkOuts(stats)}

@@ -1,4 +1,4 @@
-import { CUSTOMER_VARIANTS, type CharacterVariant } from './characters'
+import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import type { Rng } from './rng'
@@ -33,7 +33,7 @@ export type CustomerPhase =
 
 export type LeaveReason = 'bought' | 'refused' | 'impatient' | 'closing'
 
-export type CustomerVariant = Exclude<CharacterVariant, 'salesperson'>
+export type { CustomerVariant }
 
 export interface Offer {
   carId: string
@@ -84,6 +84,11 @@ const FIRST_NAMES = [
 ]
 const LAST_INITIALS = 'ABCDEFGHJKLMNPRSTW'
 
+/** A random first name and last initial, e.g. "Alex B.". */
+export function randomName(rng: Rng): string {
+  return `${rng.pick(FIRST_NAMES)} ${rng.pick([...LAST_INITIALS])}.`
+}
+
 export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
 
 /** Budget is the priciest preferred model's base price times a factor in this range. */
@@ -128,7 +133,7 @@ export function generateCustomer(
   available: readonly InventoryCar[],
   rng: Rng,
 ): Customer {
-  const name = `${rng.pick(FIRST_NAMES)} ${rng.pick([...LAST_INITIALS])}.`
+  const name = randomName(rng)
   const variant = rng.pick(CUSTOMER_VARIANTS)
 
   const first = rng.pick(CAR_MODELS)

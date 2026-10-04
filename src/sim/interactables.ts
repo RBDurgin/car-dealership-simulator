@@ -43,7 +43,7 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
 }
 
-export type InteractableKind = 'car' | 'chair' | 'coffee' | 'customer'
+export type InteractableKind = 'car' | 'chair' | 'coffee' | 'customer' | 'employee'
 
 export interface CarInfo {
   name: string

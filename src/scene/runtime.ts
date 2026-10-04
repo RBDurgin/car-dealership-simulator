@@ -1,4 +1,4 @@
-import { customerInteractable } from '../sim/deal'
+import { customerInteractable, personInteractable } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
@@ -38,16 +38,26 @@ export const playerPos = { x: spawn.x, z: spawn.z }
  */
 export const customerPos = new Map<string, Vec2>()
 
+/** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
+export const staffPos = new Map<string, Vec2>()
+
 /**
- * An action target by id: a prop or car, or a customer approached from where
- * they're standing right now. Undefined if it's gone.
+ * An action target by id: a prop or car, or a customer or employee approached
+ * from where they're standing right now. Undefined if it's gone.
  */
 export function findInteractable(id: string): Interactable | undefined {
   const it = interactables.get(id)
   if (it) return it
-  const c = useGame.getState().customers.find((x) => x.id === id)
-  const pos = customerPos.get(id)
-  return c && pos ? customerInteractable(grid, c, grid.worldToTile(pos.x, pos.z)) : undefined
+  const game = useGame.getState()
+  const c = game.customers.find((x) => x.id === id)
+  const cPos = customerPos.get(id)
+  if (c && cPos) return customerInteractable(grid, c, grid.worldToTile(cPos.x, cPos.z))
+  const e = game.roster.find((x) => x.id === id)
+  const ePos = staffPos.get(id)
+  if (e && ePos) {
+    return personInteractable(grid, e, 'employee', grid.worldToTile(ePos.x, ePos.z), ['inspect'])
+  }
+  return undefined
 }
 
 /** Current (eased) camera yaw in radians. 0 = camera on +z looking toward -z. */

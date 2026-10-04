@@ -6,6 +6,8 @@ import {
   OPENINGS,
   PARKING_SPACES,
   parkedCarRect,
+  PROPS,
+  RECEPTION_CHAIR_ID,
   SIDEWALK_ENDS,
   SPAWN_TILE,
   wallAt,
@@ -13,7 +15,8 @@ import {
   type Rect,
 } from './layout'
 import { applyToGrid, buildInventory, carProp } from './inventory'
-import { findPath } from './pathfinding'
+import { approachTilesFor } from './interactables'
+import { findPath, findPathToAny } from './pathfinding'
 import { createRng } from './rng'
 
 const layout = buildLayout()
@@ -100,5 +103,12 @@ describe('dealership layout', () => {
     const path = findPath(grid, { tx: 26, tz: 14 }, { tx: 26, tz: 12 })
     expect(path).not.toBeNull()
     expect(path!.some((t) => t.tz === 13 && (t.tx === 21 || t.tx === 22))).toBe(true)
+  })
+
+  it('lets staff walk from the sidewalk to the reception chair', () => {
+    const chair = PROPS.find((p) => p.id === RECEPTION_CHAIR_ID)!
+    const approach = approachTilesFor(grid, chair.rect)
+    expect(approach.length).toBeGreaterThan(0)
+    for (const end of SIDEWALK_ENDS) expect(findPathToAny(grid, end, approach)).not.toBeNull()
   })
 })

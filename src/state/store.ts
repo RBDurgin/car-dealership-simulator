@@ -31,6 +31,16 @@ import {
 } from '../sim/inventory'
 import { createRng, type Rng } from '../sim/rng'
 import { planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
+import {
+  canHire,
+  generateCandidates,
+  patienceFactor,
+  payroll,
+  reduceStaff,
+  ROLE_LABELS,
+  type Employee,
+  type StaffEvent,
+} from '../sim/staff'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { formatMoney } from '../ui/format'
 
@@ -56,6 +66,7 @@ export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
 const CUSTOMER_SEED = 7_000
 const DEAL_SEED = 9_000
+const STAFF_SEED = 11_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -84,6 +95,12 @@ interface GameState {
   arrivals: ArrivalSchedule
   /** Today's visitors, sales and walk-outs, for the end-of-day summary. */
   dayStats: DayStats
+  /** Everyone on the payroll. Changes on hiring, firing and shift changes (arrived, left). */
+  roster: Employee[]
+  /** Today's applicants. */
+  candidates: Employee[]
+  /** The staff panel is open. */
+  staffOpen: boolean
   /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
   timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
@@ -116,6 +133,13 @@ interface GameState {
   answerOffer: (id: string) => void
   /** From the end-of-day summary: opens the doors on the next day. */
   startNextDay: () => void
+  /** Puts one of today's candidates on the payroll. */
+  hire: (id: string) => void
+  /** Lets an employee go. They walk out and aren't paid for the day. */
+  fire: (id: string) => void
+  /** Shift progress reported by the world for one employee. */
+  dispatchStaff: (ev: StaffEvent) => void
+  toggleStaffPanel: (open?: boolean) => void
   cycleTimeScale: () => void
 }
 
@@ -129,6 +153,8 @@ let nextCustomerId = 1
 let customerRng: Rng = createRng(CUSTOMER_SEED + 1)
 /** Customers' answers to offers. */
 let dealRng: Rng = createRng(DEAL_SEED + 1)
+/** Job applicants. */
+let staffRng: Rng = createRng(STAFF_SEED + 1)
 
 export const useGame = create<GameState>((set, get) => {
   const notify = (text: string) => get().showNotice(text)
@@ -155,6 +181,8 @@ export const useGame = create<GameState>((set, get) => {
       menu: gone(s.menu?.targetId ?? null) ? null : s.menu,
       hoveredId: gone(s.hoveredId) ? null : s.hoveredId,
     })
+    announceWaiting(s.customers, customers)
+    settleDay()
     // Aimed at a customer who left or moved on (e.g. ran out of patience on the
     // way), or a deal to close with nobody left to sign it.
     const a = get().activeAction
@@ -163,6 +191,50 @@ export const useGame = create<GameState>((set, get) => {
       dispatch({ type: 'cancel' })
       notify(blocker)
     }
+  }
+
+  /** The receptionist lets the player know when someone done browsing starts waiting. */
+  const announceWaiting = (prev: readonly Customer[], next: readonly Customer[]) => {
+    const s = get()
+    if (patienceFactor(s.roster) === 1) return
+    for (const c of next) {
+      if (c.phase !== 'waiting') continue
+      const was = prev.find((x) => x.id === c.id)?.phase
+      if (was !== 'arriving' && was !== 'browsing') continue
+      const carId = c.browseCarIds[c.browseCarIds.length - 1]
+      const car = s.inventory.find((x) => x.id === carId)
+      notify(`${c.name} is waiting ${car ? `by the ${carName(car.model)}` : 'out front'}.`)
+    }
+  }
+
+  /**
+   * Pays the day's staff once the doors are shut and the last customer has gone,
+   * before the summary shows, so it reports cash after payroll.
+   */
+  const settleDay = () => {
+    const s = get()
+    if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
+    const { wages, commissions } = payroll(s.roster)
+    set({
+      cash: s.cash - wages - commissions,
+      dayStats: { ...s.dayStats, wages, commissions, settled: true },
+    })
+  }
+
+  /** Stores a new roster, dropping hovers, menus and panels aimed at anyone who's gone. */
+  const setRoster = (roster: Employee[]) => {
+    const s = get()
+    if (roster === s.roster) return
+    const gone = (id: string | null) =>
+      !!id && s.roster.some((e) => e.id === id) && !roster.some((e) => e.id === id)
+    set({
+      roster,
+      menu: gone(s.menu?.targetId ?? null) ? null : s.menu,
+      hoveredId: gone(s.hoveredId) ? null : s.hoveredId,
+      inspectedId: gone(s.inspectedId) ? null : s.inspectedId,
+    })
+    const a = s.activeAction
+    if (a && gone(a.targetId)) dispatch({ type: 'cancel' })
   }
 
   /** Puts the deal customer back to waiting if they're in one of `phases`. */
@@ -249,6 +321,9 @@ export const useGame = create<GameState>((set, get) => {
     customers: [],
     arrivals: planArrivals(customerRng),
     dayStats: emptyStats(),
+    roster: [],
+    candidates: generateCandidates(staffRng, 1),
+    staffOpen: false,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
@@ -289,6 +364,7 @@ export const useGame = create<GameState>((set, get) => {
     cancelAll: () => {
       const s = get()
       if (s.menu) return set({ menu: null })
+      if (s.staffOpen) return set({ staffOpen: false })
       const busy = s.activeAction || s.moveOrder || s.inspectedId
       dispatch({ type: 'cancel' })
       set({ moveOrder: null, inspectedId: null })
@@ -314,8 +390,10 @@ export const useGame = create<GameState>((set, get) => {
       // Waiting customers lose patience, new ones arrive, and at closing everyone
       // heads out (`commit` applies the close).
       const minutes = step.day === s.clock.day ? step.minute - s.clock.minute : 0
+      // A receptionist keeps waiting customers company, so they last longer.
       const except = s.activeAction?.targetId
-      let customers = reduceCustomers(s.customers, { type: 'tick', minutes, except })
+      const drain = minutes * patienceFactor(s.roster)
+      let customers = reduceCustomers(s.customers, { type: 'tick', minutes: drain, except })
       const { schedule, count } = takeDue(s.arrivals, step.minute)
       if (count > 0) {
         const stock = availableCars(s.inventory)
@@ -329,7 +407,9 @@ export const useGame = create<GameState>((set, get) => {
         arrivals: schedule,
         dayStats: { ...s.dayStats, visitors: s.dayStats.visitors + count },
       })
+      if (isClosed(step)) setRoster(reduceStaff(get().roster, { type: 'close' }))
       commit(customers)
+      settleDay()
     },
     sellCar: (id, price) => {
       const s = get()
@@ -367,12 +447,38 @@ export const useGame = create<GameState>((set, get) => {
     startNextDay: () => {
       const s = get()
       if (!isClosed(s.clock) || s.customers.length > 0) return
+      settleDay()
       const day = s.clock.day + 1
       customerRng = createRng(CUSTOMER_SEED + day)
       dealRng = createRng(DEAL_SEED + day)
+      staffRng = createRng(STAFF_SEED + day)
       // GameClock picks up the new day and resyncs the running time.
-      set({ clock: startOfDay(day), arrivals: planArrivals(customerRng), dayStats: emptyStats() })
+      set({
+        clock: startOfDay(day),
+        arrivals: planArrivals(customerRng),
+        dayStats: emptyStats(),
+        candidates: generateCandidates(staffRng, day),
+      })
+      setRoster(reduceStaff(get().roster, { type: 'open' }))
     },
+    hire: (id) => {
+      const s = get()
+      const c = s.candidates.find((x) => x.id === id)
+      if (!c) return
+      const blocker = canHire(s.roster, c.role)
+      if (blocker) return notify(blocker)
+      set({ candidates: s.candidates.filter((x) => x !== c) })
+      setRoster(reduceStaff(s.roster, { type: 'hire', employee: c, open: !isClosed(s.clock) }))
+      notify(`${c.name} joins as ${ROLE_LABELS[c.role].toLowerCase()}.`)
+    },
+    fire: (id) => {
+      const e = get().roster.find((x) => x.id === id)
+      if (!e || e.fired) return
+      setRoster(reduceStaff(get().roster, { type: 'fire', id }))
+      notify(`You let ${e.name} go.`)
+    },
+    dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
+    toggleStaffPanel: (open) => set((s) => ({ staffOpen: open ?? !s.staffOpen })),
     cycleTimeScale: () =>
       set((s) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])

@@ -1,8 +1,8 @@
 import { useFrame } from '@react-three/fiber'
 import { memo, Suspense } from 'react'
 import type { Group } from 'three'
-import { dampAngle, headingTo, stepAlongPath, toWaypoints } from '../sim/agent'
-import { SEAT_HEIGHT, type CharacterAnim } from '../sim/characters'
+import { toWaypoints } from '../sim/agent'
+import type { CharacterAnim } from '../sim/characters'
 import {
   currentBrowseCarId,
   CUSTOMER_SPEED,
@@ -11,7 +11,7 @@ import {
   type CustomerVariant,
 } from '../sim/customers'
 import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
-import type { Tile, Vec2 } from '../sim/grid'
+import type { Tile } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
@@ -20,16 +20,20 @@ import { useGame } from '../state/store'
 import { Character } from './Character'
 import { CustomerBubble } from './CustomerBubble'
 import { Interactable } from './Interactable'
-import { customerPos, gameTime, grid, interactables, playerPos, rectBounds } from './runtime'
+import { customerPos, gameTime, grid, interactables, playerPos } from './runtime'
+import {
+  createWalker,
+  frameSeconds,
+  inwardHeading,
+  pathTo,
+  sitOn,
+  standUp,
+  syncGroups,
+  turnToward,
+  walk,
+  type Walker,
+} from './walker'
 
-const TURN_RATE = 10
-/** Movement is integrated in steps no longer than this, so a sped-up clock stays stable. */
-const MAX_STEP_S = 0.05
-/**
- * Real seconds per frame at most, before the dev time scale. Matches GameClock so
- * linger timers (game minutes) and walking (real seconds) keep pace at a low frame rate.
- */
-const MAX_FRAME_S = 0.25
 /** Real seconds a customer thinks over an offer before answering. */
 const CONSIDER_SECONDS = 1.5
 /** Real seconds of nodding or shaking their head after answering (two loops of the clip). */
@@ -38,8 +42,6 @@ const EMOTE_SECONDS = 1.3
 const FOLLOW_STOP = 1.3
 const FOLLOW_START = 2
 const GUEST_CHAIR = PROPS.find((p) => p.id === GUEST_CHAIR_ID)!
-/** How close to the guest chair a customer must get before sitting down on it. */
-const SIT_REACH = 1.6
 
 /** What the player is up to, as far as customers care. */
 interface PlayerIntent {
@@ -50,60 +52,44 @@ interface PlayerIntent {
 }
 
 /** A customer's body in the world. Positions and timers stay here, never in the store. */
-interface Walker {
-  pos: Vec2
-  heading: number
-  anim: { current: CharacterAnim }
+interface CustomerWalker extends Walker {
   /** World-side randomness (spawn side, which side of a car to stand on, linger time). */
   rng: Rng
   exit: Tile
   task: string | null
-  waypoints: Vec2[]
-  faceTo: Vec2 | null
-  /** No path to the current task's goal. */
-  unreachable: boolean
   /** Game minute they're done looking at the current car, once they're there. */
   lingerUntil: number | null
   /** Real seconds spent on the current task (for thinking over an offer). */
   timer: number
   /** A short nod or head shake that plays before anything else. */
   emote: { anim: CharacterAnim; left: number } | null
-  /** Sitting on the guest chair; `stand` is where they got on from. */
-  seat: { stand: Vec2 } | null
   /** The player's tile when a follower last planned a path to them. */
   followTile: Tile | null
 }
 
-const walkers = new Map<string, Walker>()
+const walkers = new Map<string, CustomerWalker>()
 const groups = new Map<string, Group>()
 
 /** The customer's walker, created at a sidewalk end on first sight. */
-function walkerFor(c: Customer): Walker {
+function walkerFor(c: Customer): CustomerWalker {
   let w = walkers.get(c.id)
   if (w) return w
   const rng = createRng(hashSeed(c.id))
   const spawn = rng.pick(SIDEWALK_ENDS)
   // They leave the way they came, on either lane.
   const exit = rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
-  const pos = grid.tileToWorld(spawn.tx, spawn.tz)
   w = {
-    pos,
-    heading: spawn.tx === 0 ? Math.PI / 2 : -Math.PI / 2,
-    anim: { current: 'idle' },
+    ...createWalker(spawn, inwardHeading(spawn)),
     rng,
     exit,
     task: null,
-    waypoints: [],
-    faceTo: null,
-    unreachable: false,
     lingerUntil: null,
     timer: 0,
     emote: null,
-    seat: null,
     followTile: null,
   }
   walkers.set(c.id, w)
-  customerPos.set(c.id, pos)
+  customerPos.set(c.id, w.pos)
   return w
 }
 
@@ -129,7 +115,7 @@ function taskKey(c: Customer, player: PlayerIntent): string {
 }
 
 /** Starts walking toward the goal for the customer's current task, from wherever they are. */
-function plan(c: Customer, w: Walker, task: string): void {
+function plan(c: Customer, w: CustomerWalker, task: string): void {
   // Just answered an offer: nod or shake their head first.
   if (w.task === 'considering' && c.phase === 'following') {
     w.emote = { anim: 'emote-yes', left: EMOTE_SECONDS }
@@ -142,11 +128,7 @@ function plan(c: Customer, w: Walker, task: string): void {
   w.lingerUntil = null
   w.timer = 0
   w.followTile = null
-  if (w.seat && c.phase !== 'signing') {
-    w.pos.x = w.seat.stand.x
-    w.pos.z = w.seat.stand.z
-    w.seat = null
-  }
+  if (c.phase !== 'signing') standUp(w)
 
   let goals: Tile[]
   switch (c.phase) {
@@ -173,10 +155,7 @@ function plan(c: Customer, w: Walker, task: string): void {
       w.faceTo = null
       if (task === 'follow') return // `follow` paths to the player as they move
       // To the guest chair, by whichever side is nearest.
-      const start = grid.worldToTile(w.pos.x, w.pos.z)
-      const tiles = findPathToAny(grid, start, approachTilesFor(grid, GUEST_CHAIR.rect))
-      if (tiles) w.waypoints = toWaypoints(grid, tiles, w.pos)
-      else w.unreachable = true
+      pathTo(w, approachTilesFor(grid, GUEST_CHAIR.rect))
       return
     }
     default:
@@ -184,10 +163,7 @@ function plan(c: Customer, w: Walker, task: string): void {
       // last thing they looked at.
       return
   }
-  const start = grid.worldToTile(w.pos.x, w.pos.z)
-  const tiles = findPathToAny(grid, start, goals.slice(0, 1)) ?? findPathToAny(grid, start, goals)
-  if (tiles) w.waypoints = toWaypoints(grid, tiles, w.pos)
-  else w.unreachable = true
+  pathTo(w, goals, true)
 }
 
 /**
@@ -195,7 +171,7 @@ function plan(c: Customer, w: Walker, task: string): void {
  * up on it). Called every frame while they stand still; phases with nothing to
  * report are ignored.
  */
-function onArrived(c: Customer, w: Walker): void {
+function onArrived(c: Customer, w: CustomerWalker): void {
   const game = useGame.getState()
   switch (c.phase) {
     case 'arriving':
@@ -212,13 +188,7 @@ function onArrived(c: Customer, w: Walker): void {
       }
       break
     case 'following': {
-      if (w.task !== 'toChair' || w.seat) break
-      const chair = rectBounds(GUEST_CHAIR.rect)
-      if (Math.hypot(chair.x - w.pos.x, chair.z - w.pos.z) > SIT_REACH) break
-      w.seat = { stand: { x: w.pos.x, z: w.pos.z } }
-      w.pos.x = chair.x
-      w.pos.z = chair.z
-      w.heading = (GUEST_CHAIR.facing * Math.PI) / 2
+      if (w.task !== 'toChair' || w.seat || !sitOn(w, GUEST_CHAIR)) break
       game.dispatchCustomer({ type: 'seat', id: c.id })
       break
     }
@@ -230,7 +200,7 @@ function onArrived(c: Customer, w: Walker): void {
 }
 
 /** Keeps a follower's path pointed at the player, stopping a short way off. */
-function follow(w: Walker): void {
+function follow(w: CustomerWalker): void {
   const d = Math.hypot(playerPos.x - w.pos.x, playerPos.z - w.pos.z)
   if (d <= FOLLOW_STOP) {
     w.waypoints = []
@@ -248,7 +218,7 @@ function follow(w: Walker): void {
 
 function update(
   c: Customer,
-  w: Walker,
+  w: CustomerWalker,
   seconds: number,
   realSeconds: number,
   player: PlayerIntent,
@@ -256,7 +226,6 @@ function update(
   const task = taskKey(c, player)
   if (task !== w.task) plan(c, w, task)
 
-  const turnDt = Math.min(seconds, MAX_STEP_S)
   if (w.emote) {
     w.anim.current = w.emote.anim
     w.emote.left -= realSeconds
@@ -269,7 +238,7 @@ function update(
   }
   // Being greeted, or talking: stand still and face the player.
   if (player.targetId === c.id || CONVERSATION_PHASES.includes(c.phase)) {
-    w.heading = dampAngle(w.heading, headingTo(w.pos, playerPos), TURN_RATE, turnDt)
+    turnToward(w, playerPos, seconds)
     w.anim.current = 'idle'
     w.timer += realSeconds
     if (c.phase === 'considering' && w.timer >= CONSIDER_SECONDS) {
@@ -278,27 +247,7 @@ function update(
     return
   }
   if (task === 'follow') follow(w)
-
-  let moved = 0
-  let dx = 0
-  let dz = 0
-  for (let left = seconds; left > 1e-9 && w.waypoints.length > 0; left -= MAX_STEP_S) {
-    const s = stepAlongPath(grid, w.pos, w.waypoints, CUSTOMER_SPEED, Math.min(left, MAX_STEP_S))
-    w.pos.x = s.x
-    w.pos.z = s.z
-    moved += s.moved
-    dx += s.dx
-    dz += s.dz
-  }
-
-  const faceTo = task === 'follow' ? playerPos : w.faceTo
-  if (moved > 1e-6) {
-    w.heading = dampAngle(w.heading, Math.atan2(dx, dz), TURN_RATE, turnDt)
-  } else if (faceTo) {
-    w.heading = dampAngle(w.heading, headingTo(w.pos, faceTo), TURN_RATE, turnDt)
-  }
-  w.anim.current = moved > 1e-6 ? 'walk' : 'idle'
-
+  walk(w, CUSTOMER_SPEED, seconds, task === 'follow' ? playerPos : w.faceTo)
   if (w.waypoints.length === 0) onArrived(c, w)
 }
 
@@ -309,7 +258,7 @@ const CustomerFigure = memo(function CustomerFigure({
 }: {
   id: string
   variant: CustomerVariant
-  anim: Walker['anim']
+  anim: CustomerWalker['anim']
 }) {
   // Clickable while there's something to do with them (greet, make an offer).
   const helpable = useGame((s) => {
@@ -345,8 +294,7 @@ export function Customers() {
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
-    const realSeconds = Math.min(rawDelta, MAX_FRAME_S)
-    const seconds = realSeconds * game.timeScale
+    const { realSeconds, seconds } = frameSeconds(rawDelta, game.timeScale)
     const player: PlayerIntent = {
       targetId: game.activeAction?.targetId ?? null,
       closingDeal: game.activeAction?.action === 'closeDeal',
@@ -358,13 +306,7 @@ export function Customers() {
     }
     // Anyone the store no longer knows about (despawned, or a new day) goes too.
     for (const id of walkers.keys()) if (!live.has(id)) removeWalker(id)
-
-    for (const [id, g] of groups) {
-      const w = walkers.get(id)
-      if (!w) continue
-      g.position.set(w.pos.x, w.seat ? SEAT_HEIGHT : 0, w.pos.z)
-      g.rotation.y = w.heading
-    }
+    syncGroups(groups, walkers)
   })
 
   return (

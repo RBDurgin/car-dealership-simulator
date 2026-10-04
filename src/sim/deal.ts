@@ -1,6 +1,11 @@
 import type { Customer, CustomerPhase } from './customers'
 import type { Grid, Tile } from './grid'
-import { approachTilesFor, type ActionId, type Interactable } from './interactables'
+import {
+  approachTilesFor,
+  type ActionId,
+  type Interactable,
+  type InteractableKind,
+} from './interactables'
 import type { CarModel } from './layout'
 
 /**
@@ -46,20 +51,30 @@ export function customerActions(c: Customer): ActionId[] {
 }
 
 /**
- * A customer as an action target, approached from the tile they stand on now.
- * Rebuilt on demand: unlike props, customers move.
+ * A person as an action target, approached from the tile they stand on now.
+ * Rebuilt on demand: unlike props, people move.
  */
-export function customerInteractable(grid: Grid, c: Customer, tile: Tile): Interactable {
+export function personInteractable(
+  grid: Grid,
+  person: { id: string; name: string },
+  kind: InteractableKind,
+  tile: Tile,
+  actions: ActionId[],
+): Interactable {
   const rect = { tx: tile.tx, tz: tile.tz, w: 1, h: 1 }
   return {
-    id: c.id,
-    kind: 'customer',
-    name: c.name,
+    id: person.id,
+    kind,
+    name: person.name,
     rect,
     facing: 0,
     approachTiles: approachTilesFor(grid, rect),
-    actions: customerActions(c),
+    actions,
   }
+}
+
+export function customerInteractable(grid: Grid, c: Customer, tile: Tile): Interactable {
+  return personInteractable(grid, c, 'customer', tile, customerActions(c))
 }
 
 const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'offer'])
@@ -110,14 +125,33 @@ export interface DayStats {
   refused: number
   impatient: number
   closing: number
+  /** Staff costs, paid once when the day is settled. */
+  wages: number
+  commissions: number
+  /** Payroll has been paid for the day. */
+  settled: boolean
 }
 
 export function emptyStats(): DayStats {
-  return { visitors: 0, sales: [], refused: 0, impatient: 0, closing: 0 }
+  return {
+    visitors: 0,
+    sales: [],
+    refused: 0,
+    impatient: 0,
+    closing: 0,
+    wages: 0,
+    commissions: 0,
+    settled: false,
+  }
 }
 
 export function revenue(stats: DayStats): number {
   return stats.sales.reduce((sum, s) => sum + s.price, 0)
+}
+
+/** Revenue less the day's staff costs. */
+export function netIncome(stats: DayStats): number {
+  return revenue(stats) - stats.wages - stats.commissions
 }
 
 export function walkOuts(stats: DayStats): number {

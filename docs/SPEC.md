@@ -25,3 +25,7 @@ Introduce sales negotiation with customers.
 Add the ability to spend money on marketing and improvements, which increases the liklihood of customers visiting. Improvements can also help with the ability to increase prices.
 
 Some examples of marketing improvements: Newspaper ads, TV Ads, Larger sign, Wacky Inflatable Tube Man. Improvements examples: waiting room improvements (tv, upgraded sofa/chairs, showroom improvements, et.q)
+
+## Phase 7
+
+Background music + sound effects. Talking between characters shoud be incomprehencible gibberish, similar to characters in the sims talking.
