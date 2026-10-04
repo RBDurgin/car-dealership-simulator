@@ -9,6 +9,7 @@ import { CustomerPanel } from './CustomerPanel'
 import { DaySummary } from './DaySummary'
 import { InfoPanel } from './InfoPanel'
 import { StaffPanel } from './StaffPanel'
+import { TitleScreen } from './TitleScreen'
 import { TopBar } from './TopBar'
 import './hud.css'
 
@@ -64,6 +65,7 @@ function NoticeToast() {
 export function HUD() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (useGame.getState().screen === 'title') return
       if (e.code === 'Escape') useGame.getState().cancelAll()
       else if (e.code === 'KeyH' && !e.repeat) useGame.getState().toggleStaffPanel()
     }
@@ -82,6 +84,7 @@ export function HUD() {
       <StaffPanel />
       <ActionMenu />
       <DaySummary />
+      <TitleScreen />
     </div>
   )
 }

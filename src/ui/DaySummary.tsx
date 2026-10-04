@@ -56,6 +56,7 @@ export function DaySummary() {
             ))}
           </ul>
         )}
+        <p className="muted summary-saved">Progress saved.</p>
         <button
           className="btn btn-primary"
           autoFocus

@@ -30,6 +30,7 @@ import {
   type InventoryCar,
 } from '../sim/inventory'
 import { createRng, type Rng } from '../sim/rng'
+import type { SaveData } from '../sim/save'
 import { planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
 import {
   canHire,
@@ -62,6 +63,8 @@ export interface Notice {
   text: string
 }
 
+export type Screen = 'title' | 'playing'
+
 export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
 const CUSTOMER_SEED = 7_000
@@ -72,6 +75,8 @@ export const DEV_TIME_SCALES = [1, 4, 16] as const
 
 // Discrete events only. Per-frame values live in refs / scene/runtime.ts.
 interface GameState {
+  /** The title screen is up: the clock and the player wait until a game is started. */
+  screen: Screen
   moveOrder: MoveOrder | null
   showGrid: boolean
   wallMode: WallMode
@@ -141,6 +146,10 @@ interface GameState {
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
   cycleTimeScale: () => void
+  /** From the title screen: plays the fresh day 1 the store starts with. */
+  newGame: () => void
+  /** From the title screen: resumes a saved game on the morning after its last day. */
+  loadGame: (save: SaveData) => void
 }
 
 let nextOrderId = 1
@@ -305,7 +314,23 @@ export const useGame = create<GameState>((set, get) => {
     notify(`Sold the ${carName(car.model)} to ${c.name} for ${formatMoney(sale.price)}!`)
   }
 
+  /** Opens the doors on `day`: its arrivals and applicants, and the staff head in. */
+  const beginDay = (day: number) => {
+    customerRng = createRng(CUSTOMER_SEED + day)
+    dealRng = createRng(DEAL_SEED + day)
+    staffRng = createRng(STAFF_SEED + day)
+    // GameClock picks up the new day and resyncs the running time.
+    set({
+      clock: startOfDay(day),
+      arrivals: planArrivals(customerRng),
+      dayStats: emptyStats(),
+      candidates: generateCandidates(staffRng, day),
+    })
+    setRoster(reduceStaff(get().roster, { type: 'open' }))
+  }
+
   return {
+    screen: 'title',
     moveOrder: null,
     showGrid: false,
     wallMode: 'cutaway',
@@ -448,18 +473,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       if (!isClosed(s.clock) || s.customers.length > 0) return
       settleDay()
-      const day = s.clock.day + 1
-      customerRng = createRng(CUSTOMER_SEED + day)
-      dealRng = createRng(DEAL_SEED + day)
-      staffRng = createRng(STAFF_SEED + day)
-      // GameClock picks up the new day and resyncs the running time.
-      set({
-        clock: startOfDay(day),
-        arrivals: planArrivals(customerRng),
-        dayStats: emptyStats(),
-        candidates: generateCandidates(staffRng, day),
-      })
-      setRoster(reduceStaff(get().roster, { type: 'open' }))
+      beginDay(s.clock.day + 1)
     },
     hire: (id) => {
       const s = get()
@@ -484,5 +498,12 @@ export const useGame = create<GameState>((set, get) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])
         return { timeScale: DEV_TIME_SCALES[(i + 1) % DEV_TIME_SCALES.length] }
       }),
+    newGame: () => set({ screen: 'playing' }),
+    loadGame: (save) => {
+      // Only offered before the clock has run, so there are no customers,
+      // actions or panels to clear.
+      set({ screen: 'playing', cash: save.cash, inventory: save.inventory, roster: save.roster })
+      beginDay(save.day + 1)
+    },
   }
 })

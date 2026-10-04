@@ -104,7 +104,8 @@ export function Player() {
     let dz = 0
     let moved = 0
 
-    const { forward, right } = axes.current
+    // Movement keys do nothing behind the title screen.
+    const { forward, right } = game.screen === 'title' ? { forward: 0, right: 0 } : axes.current
     if (forward !== 0 || right !== 0) {
       // Any movement key stands the player up and cancels a click path, an action
       // or a conversation.

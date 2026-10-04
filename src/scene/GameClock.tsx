@@ -9,7 +9,8 @@ const MAX_FRAME_S = 0.25
 /**
  * Runs the game clock. Accumulates real time every frame in `runtime.gameTime` and
  * tells the store only when a new 10-minute step starts. The clock stops by itself
- * at closing, so it stays paused while the end-of-day summary is up.
+ * at closing, so it stays paused while the end-of-day summary is up, and it
+ * doesn't start until the title screen is dismissed.
  */
 export function GameClock() {
   // Dev: T cycles the game speed so a whole day can be checked quickly.
@@ -24,6 +25,8 @@ export function GameClock() {
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
+    // Time stands still behind the title screen.
+    if (game.screen === 'title') return
     // A new day was started from outside (the day summary): jump to it.
     if (game.clock.day !== gameTime.day) Object.assign(gameTime, game.clock)
 

@@ -521,3 +521,27 @@ kbd {
 .day-summary .btn {
   width: 100%;
 }
+.summary-saved {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+/* Title screen */
+.title-screen {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+.title-screen h1 {
+  margin: 2px 0 8px;
+  font-size: 24px;
+}
+.title-screen .btn {
+  width: 100%;
+}
+.title-save {
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  opacity: 0.75;
+}
