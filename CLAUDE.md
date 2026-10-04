@@ -13,7 +13,7 @@ We can try using three.js, I'm open to alternatives if you think there's a reaso
 - `src/sim/` is pure TypeScript (no React or three.js imports) and unit tested with Vitest. Grid, pathfinding, layout and interactable definitions live here.
 - `src/scene/` holds R3F components, `src/ui/` holds DOM HUD, `src/state/` holds the zustand store, `src/input/` holds input hooks.
 - Per-frame values (player position, camera easing) live in refs or `useFrame`. Never call `setState` every frame. The store only holds discrete events.
-- Phase plan: see `docs/SPEC.md`. Phase 1 is split into 1a (scaffold), 1b (movement and camera), 1c (environment), 1d (interactables and HUD).
+- Phase plan: see `docs/SPEC.md` and the detailed `docs/PHASE1_PLAN.md`. Phase 1 is split into 1a (scaffold), 1b (movement and camera), 1c (environment), 1d (interactables and HUD).
 
 ### Commands
 
