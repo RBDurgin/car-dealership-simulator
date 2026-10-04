@@ -1,0 +1,198 @@
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: #e8ecf2;
+  font-size: 13px;
+  user-select: none;
+}
+
+.panel {
+  position: absolute;
+  background: rgba(20, 24, 32, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+/* Controls hint */
+.controls {
+  left: 16px;
+  bottom: 16px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+kbd {
+  min-width: 44px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+  font:
+    600 11px ui-monospace,
+    monospace;
+  text-align: center;
+}
+
+/* Current action */
+.status {
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  min-width: 220px;
+  padding: 10px 16px;
+  text-align: center;
+}
+.status-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+.status-hint {
+  margin-top: 4px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+.progress {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: #fde047;
+  transform-origin: left;
+  animation: progress-fill linear forwards;
+}
+@keyframes progress-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Toast */
+.notice {
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  animation: notice-in 0.2s ease-out;
+}
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+
+/* Car info */
+.info-panel {
+  right: 16px;
+  top: 16px;
+  width: 240px;
+  padding: 14px 16px;
+  pointer-events: auto;
+}
+.info-panel h2 {
+  margin: 2px 0 10px;
+  font-size: 18px;
+}
+.info-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+.info-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+}
+.info-panel dt {
+  opacity: 0.6;
+}
+.info-panel dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.muted {
+  opacity: 0.5;
+}
+.close {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.close:hover {
+  opacity: 1;
+}
+
+/* Pie menu: positioned at the click point; items are offset from its center. */
+.pie {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: auto;
+}
+.pie-title {
+  position: absolute;
+  transform: translate(-50%, 14px);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(20, 24, 32, 0.75);
+  font-size: 11px;
+  opacity: 0.85;
+}
+.pie-item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: #1f2a3c;
+  color: inherit;
+  font:
+    600 13px system-ui,
+    sans-serif;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  animation: pie-in 0.12s ease-out;
+}
+.pie-item:hover {
+  background: #2f4160;
+  border-color: #fde047;
+}
+@keyframes pie-in {
+  from {
+    opacity: 0;
+    scale: 0.8;
+  }
+}

@@ -1,0 +1,72 @@
+import { useEffect } from 'react'
+import { ACTIONS } from '../sim/interactables'
+import { interactables } from '../scene/runtime'
+import { useGame } from '../state/store'
+import { ActionMenu } from './ActionMenu'
+import { ControlsHint } from './ControlsHint'
+import { InfoPanel } from './InfoPanel'
+import './hud.css'
+
+const NOTICE_MS = 2200
+
+function ActionStatus() {
+  const action = useGame((s) => s.activeAction)
+  const it = action && interactables.get(action.targetId)
+  if (!action || !it) return null
+
+  const def = ACTIONS[action.action]
+  const performing = action.phase === 'performing'
+  const label = performing ? def.verb : `Heading to ${it.name.toLowerCase()}`
+  const hint = def.mode === 'hold' && performing ? 'Esc or move to stand up' : 'Esc to cancel'
+  return (
+    <div className="panel status">
+      <div className="status-label">{label}</div>
+      {performing && def.mode === 'timed' && (
+        <div className="progress">
+          {/* Keyed by action id so the CSS animation restarts for each run. */}
+          <div
+            key={action.id}
+            className="progress-fill"
+            style={{ animationDuration: `${def.durationMs}ms` }}
+          />
+        </div>
+      )}
+      <div className="status-hint">{hint}</div>
+    </div>
+  )
+}
+
+function NoticeToast() {
+  const notice = useGame((s) => s.notice)
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => useGame.getState().clearNotice(notice.id), NOTICE_MS)
+    return () => clearTimeout(t)
+  }, [notice])
+  if (!notice) return null
+  return (
+    <div key={notice.id} className="panel notice">
+      {notice.text}
+    </div>
+  )
+}
+
+export function HUD() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') useGame.getState().cancelAll()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  return (
+    <div className="hud">
+      <ControlsHint />
+      <ActionStatus />
+      <NoticeToast />
+      <InfoPanel />
+      <ActionMenu />
+    </div>
+  )
+}

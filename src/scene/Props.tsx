@@ -3,7 +3,8 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useMemo } from 'react'
 import { Box3, CanvasTexture, SRGBColorSpace, Vector3, type Mesh, type Object3D } from 'three'
 import { DEALERSHIP_NAME, PROPS, type Prop, type PropModel } from '../sim/layout'
-import { rectBounds } from './runtime'
+import { Interactable } from './Interactable'
+import { interactables, rectBounds } from './runtime'
 
 const BASE = `${import.meta.env.BASE_URL}models`
 const CAR_SCALE = 0.95
@@ -137,11 +138,20 @@ function Sign({ width }: { width: number }) {
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
 function PropView({ prop }: { prop: Prop }) {
+  const content = <PropContent prop={prop} />
+  return interactables.has(prop.id) ? (
+    <Interactable id={prop.id}>{content}</Interactable>
+  ) : (
+    <group onPointerDown={swallowClick}>{content}</group>
+  )
+}
+
+function PropContent({ prop }: { prop: Prop }) {
   const b = rectBounds(prop.rect)
   const turned = prop.facing % 2 === 1
   const y = (prop.elevation ?? 0) + (prop.platform ? PLATFORM_HEIGHT : 0)
   return (
-    <group position={[b.x, 0, b.z]} onPointerDown={swallowClick}>
+    <group position={[b.x, 0, b.z]}>
       {prop.platform && (
         <RoundedBox
           args={[b.w - 0.25, PLATFORM_HEIGHT, b.h - 0.25]}

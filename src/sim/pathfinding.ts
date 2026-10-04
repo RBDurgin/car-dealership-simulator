@@ -24,19 +24,35 @@ function octile(ax: number, az: number, bx: number, bz: number): number {
  * inclusive, or null if the goal is blocked or unreachable.
  */
 export function findPath(grid: Grid, start: Tile, goal: Tile): Tile[] | null {
-  if (!grid.inBounds(start.tx, start.tz) || !grid.isWalkable(goal.tx, goal.tz)) return null
+  return findPathToAny(grid, start, [goal])
+}
+
+/**
+ * A* to whichever goal is cheapest to reach. Blocked goals are ignored; returns
+ * null if no goal is reachable. The path ends on the chosen goal.
+ */
+export function findPathToAny(grid: Grid, start: Tile, goals: Tile[]): Tile[] | null {
+  const targets = goals.filter((t) => grid.isWalkable(t.tx, t.tz))
+  if (!grid.inBounds(start.tx, start.tz) || targets.length === 0) return null
 
   const n = grid.width * grid.height
   const g = new Float64Array(n).fill(Infinity)
   const f = new Float64Array(n)
   const parent = new Int32Array(n).fill(-1)
   const closed = new Uint8Array(n)
+  const isGoal = new Uint8Array(n)
+  for (const t of targets) isGoal[grid.index(t.tx, t.tz)] = 1
   const open: number[] = []
+  // Admissible with several goals: the distance to the closest one.
+  const h = (x: number, z: number) => {
+    let best = Infinity
+    for (const t of targets) best = Math.min(best, octile(x, z, t.tx, t.tz))
+    return best
+  }
 
   const s = grid.index(start.tx, start.tz)
-  const goalIdx = grid.index(goal.tx, goal.tz)
   g[s] = 0
-  f[s] = octile(start.tx, start.tz, goal.tx, goal.tz)
+  f[s] = h(start.tx, start.tz)
   open.push(s)
 
   while (open.length > 0) {
@@ -46,7 +62,7 @@ export function findPath(grid: Grid, start: Tile, goal: Tile): Tile[] | null {
     open[best] = open[open.length - 1]
     open.pop()
 
-    if (cur === goalIdx) {
+    if (isGoal[cur]) {
       const path: Tile[] = []
       for (let i = cur; i !== -1; i = parent[i]) {
         path.push({ tx: i % grid.width, tz: Math.floor(i / grid.width) })
@@ -69,7 +85,7 @@ export function findPath(grid: Grid, start: Tile, goal: Tile): Tile[] | null {
       const cost = g[cur] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1)
       if (cost < g[ni]) {
         g[ni] = cost
-        f[ni] = cost + octile(nx, nz, goal.tx, goal.tz)
+        f[ni] = cost + h(nx, nz)
         parent[ni] = cur
         if (!open.includes(ni)) open.push(ni)
       }

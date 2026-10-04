@@ -1,6 +1,6 @@
 # Phase 1 Plan — Walkable Dealership (Car Dealership Simulator)
 
-**Status:** 1a done (commit `3fd163d`). 1b done (commit `b22c077`). 1c implemented, pending review. Next up: 1d. Implement one sub-phase per session, stop for review after each.
+**Status:** 1a done (commit `3fd163d`). 1b done (commit `b22c077`). 1c done (commit `d63b5a3`). 1d implemented, pending review. Implement one sub-phase per session, stop for review after each.
 
 ## Context
 
@@ -63,6 +63,16 @@ Rules to keep it clean:
 - Kenney car GLBs reference `Textures/colormap.png` externally, which is why `public/models/cars/Textures/` exists.
 - Wall tiles are labelled with the zone of the room they enclose. The cutaway rule ("drop the wall if the tile behind it, away from the camera, is indoors") depends on that.
 
+## Implementation notes from 1d
+
+- `sim/actions.ts` is a pure reducer for the single action slot (`approaching → performing → done`, with `cancel` from any phase). Events carry the action id, so stale arrivals or completions are ignored. Actions come in three modes: `instant` (Inspect), `timed` (Get coffee) and `hold` (Sit, which ends only on cancel).
+- The store keeps `moveOrder` and `activeAction` mutually exclusive. `Player` plans a path for whichever one is set, using an owner key (`move:N` / `action:N`), so phase changes don't trigger a replan.
+- `findPathToAny` (multi-goal A*) picks the cheapest reachable approach tile. Approach tiles are the walkable orthogonal ring around a prop's footprint.
+- Sitting snaps the player onto the (blocked) chair tile and remembers the stand tile. Every path change, WASD press or Esc snaps them back first, so collision never starts from inside a blocked tile.
+- Timed actions use wall-clock `startedAt`. The HUD progress bar is a CSS animation keyed by action id, so nothing calls `setState` per frame.
+- Hover outlines portal drei `<Outlines>` into each mesh of the GLB. The meshes are collected on first hover, before any outline meshes exist.
+- Hover can show through a dropped wall, because R3F only stops propagation on `pointerdown` for walls. Clicks are still swallowed by the wall.
+
 ## Sub-phases
 
 ### 1a — Scaffold & first scene (DONE)
@@ -82,7 +92,7 @@ Rules to keep it clean:
 - Debug grid overlay toggled with `G`, showing walkable and blocked tiles.
 - **Done when:** the player can click or WASD around an obstacle field and never clips into blocked tiles.
 
-### 1c — Dealership environment (IMPLEMENTED, pending review)
+### 1c — Dealership environment (DONE)
 
 - `layout.ts` sets out about 40×30 tiles. An outdoor **lot** has striped parking spaces, a sidewalk, a perimeter fence and a sign. A **showroom** has glass walls and 2–3 display cars. The **office** is a private room with a doorway into the showroom. A small reception area is optional.
 - Walls sit on blocked tiles and are rendered as thin wall meshes, with doorways as gaps. The layout is the source of truth for the grid.
@@ -90,7 +100,7 @@ Rules to keep it clean:
 - Placeholders are swapped for Kenney CC0 models (cars, desk, chair, plants) loaded with `useGLTF` and preloaded. The props register their footprints as blocked tiles.
 - **Done when:** the player can walk lot → showroom → office through the doors but not through walls, and cutaway keeps the player visible from all 4 camera angles.
 
-### 1d — Interactables & HUD
+### 1d — Interactables & HUD (IMPLEMENTED, pending review)
 
 - `Interactable` wrapper: hovering shows an outline and a pointer cursor, and clicking opens a small **action menu** (Sims pie-menu style, done as a DOM menu at the cursor).
 - Choosing an action sets the pending action, paths the player to the nearest reachable approach tile, faces the object and then runs the action.
