@@ -1,8 +1,17 @@
+import { Reservations, type Agent } from '../sim/crowd'
 import { customerInteractable, personInteractable } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
-import { buildInteractables, type Interactable } from '../sim/interactables'
+import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
-import { buildLayout, createGrid, SPAWN_TILE, type Rect } from '../sim/layout'
+import {
+  buildLayout,
+  createGrid,
+  DESK_CHAIR_ID,
+  GUEST_CHAIR_ID,
+  SPAWN_TILE,
+  type Rect,
+} from '../sim/layout'
+import { POSTS } from '../sim/staff'
 import { useGame } from '../state/store'
 
 export const layout = buildLayout()
@@ -40,6 +49,35 @@ export const customerPos = new Map<string, Vec2>()
 
 /** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
 export const staffPos = new Map<string, Vec2>()
+
+export const PLAYER_ID = 'player'
+
+/**
+ * Everyone standing in the world (customers, staff, the player), for walkers to
+ * keep their distance from. Anyone seated is left out: chairs block their tile,
+ * so nobody can walk into them anyway.
+ */
+export function crowdAgents(): Agent[] {
+  const agents: Agent[] = []
+  const add = (id: string, pos: Vec2) => {
+    const t = grid.worldToTile(pos.x, pos.z)
+    if (grid.isWalkable(t.tx, t.tz)) agents.push({ id, pos })
+  }
+  add(PLAYER_ID, playerPos)
+  for (const [id, pos] of customerPos) add(id, pos)
+  for (const [id, pos] of staffPos) add(id, pos)
+  return agents
+}
+
+/** Goal tiles walkers have claimed, so they spread out around a car instead of stacking. */
+export const reservations = new Reservations()
+// The spots by the office chairs and staff posts are kept clear of browsers.
+for (const id of [GUEST_CHAIR_ID, DESK_CHAIR_ID, ...Object.values(POSTS)]) {
+  const chair = id && layout.props.find((p) => p.id === id)
+  if (!chair) continue
+  const tiles = approachTilesFor(grid, chair.rect).map((t) => grid.index(t.tx, t.tz))
+  reservations.hold(tiles, `seat:${id}`)
+}
 
 /**
  * An action target by id: a prop or car, or a customer or employee approached

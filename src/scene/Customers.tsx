@@ -23,9 +23,11 @@ import { Interactable } from './Interactable'
 import { customerPos, gameTime, grid, interactables, playerPos } from './runtime'
 import {
   createWalker,
+  crowdCost,
   frameSeconds,
   inwardHeading,
   pathTo,
+  releaseWalker,
   sitOn,
   standUp,
   syncGroups,
@@ -79,7 +81,7 @@ function walkerFor(c: Customer): CustomerWalker {
   // They leave the way they came, on either lane.
   const exit = rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
   w = {
-    ...createWalker(spawn, inwardHeading(spawn)),
+    ...createWalker(c.id, spawn, inwardHeading(spawn)),
     rng,
     exit,
     task: null,
@@ -96,6 +98,7 @@ function walkerFor(c: Customer): CustomerWalker {
 function removeWalker(id: string): void {
   walkers.delete(id)
   customerPos.delete(id)
+  releaseWalker(id)
 }
 
 /** What they're doing in the world. A new key means they need a new path. */
@@ -142,7 +145,7 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
         w.unreachable = true // sold before they got to it
         return
       }
-      // A random side of the car first, so a crowd spreads out a bit.
+      // A random free side of the car first, so a crowd spreads out.
       goals = it.approachTiles.length > 0 ? [w.rng.pick(it.approachTiles), ...it.approachTiles] : []
       w.faceTo = interactableCenter(grid, it)
       break
@@ -153,7 +156,10 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
       break
     case 'following': {
       w.faceTo = null
-      if (task === 'follow') return // `follow` paths to the player as they move
+      if (task === 'follow') {
+        releaseWalker(c.id) // `follow` paths to the player as they move
+        return
+      }
       // To the guest chair, by whichever side is nearest.
       pathTo(w, approachTilesFor(grid, GUEST_CHAIR.rect))
       return
@@ -212,7 +218,7 @@ function follow(w: CustomerWalker): void {
   w.followTile = tile
   // The player's own tile, or next to it if they're sitting on something.
   const goals = [tile, ...approachTilesFor(grid, { ...tile, w: 1, h: 1 })]
-  const tiles = findPathToAny(grid, grid.worldToTile(w.pos.x, w.pos.z), goals)
+  const tiles = findPathToAny(grid, grid.worldToTile(w.pos.x, w.pos.z), goals, crowdCost(w.id))
   w.waypoints = tiles ? toWaypoints(grid, tiles, w.pos) : []
 }
 
@@ -286,8 +292,8 @@ const CustomerFigure = memo(function CustomerFigure({
  * Every customer in the world, moved by one `useFrame`: they walk in from the
  * sidewalk, browse their cars, wait, stop to talk when the player comes over,
  * follow the player to the office to sign, and walk back out. Phase changes go
- * to the store; positions stay in the walkers. Customers don't collide with each
- * other or the player.
+ * to the store; positions stay in the walkers. Customers spread out around cars
+ * and step around each other, staff and the player (see `sim/crowd.ts`).
  */
 export function Customers() {
   const customers = useGame((s) => s.customers)

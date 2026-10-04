@@ -134,6 +134,8 @@ interface GameState {
   sellCar: (id: string, price?: number) => boolean
   /** Dev cheat: refills sold spaces, skipping any `canPlace` vetoes. */
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
+  /** Dev cheat: `n` customers turn up at once (for crowd checks). */
+  devSpawnCustomers: (n: number) => void
   /** Progress reported by the world (or the player) for one customer. */
   dispatchCustomer: (ev: CustomerEvent) => void
   /** A customer has thought over the offer on the table and answers it. */
@@ -465,6 +467,16 @@ export const useGame = create<GameState>((set, get) => {
     devRestock: (canPlace) => {
       const inventory = restock(get().inventory, canPlace)
       if (inventory !== get().inventory) set({ inventory })
+    },
+    devSpawnCustomers: (n) => {
+      const s = get()
+      if (isClosed(s.clock) || n <= 0) return
+      const stock = availableCars(s.inventory)
+      const arrived = Array.from({ length: n }, () =>
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
+      )
+      set({ dayStats: { ...s.dayStats, visitors: s.dayStats.visitors + n } })
+      commit([...s.customers, ...arrived])
     },
     dispatchCustomer: (ev) => commit(reduceCustomers(get().customers, ev)),
     answerOffer: (id) => {

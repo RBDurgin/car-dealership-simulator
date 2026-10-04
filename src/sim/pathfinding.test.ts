@@ -70,6 +70,26 @@ describe('findPath', () => {
   })
 })
 
+describe('findPath with extraCost', () => {
+  it('routes around a costly tile when there is a detour', () => {
+    const grid = new Grid(5, 3)
+    const costly = grid.index(2, 1)
+    const path = findPath(grid, { tx: 0, tz: 1 }, { tx: 4, tz: 1 }, (i) => (i === costly ? 4 : 0))!
+    assertValidSteps(grid, path)
+    expect(path.some((t) => t.tx === 2 && t.tz === 1)).toBe(false)
+  })
+
+  it('still goes through it when it is the only way', () => {
+    const grid = new Grid(5, 3)
+    grid.blockRect(2, 0, 1, 1)
+    grid.blockRect(2, 2, 1, 1)
+    const costly = grid.index(2, 1)
+    const path = findPath(grid, { tx: 0, tz: 1 }, { tx: 4, tz: 1 }, (i) => (i === costly ? 4 : 0))!
+    expect(path).not.toBeNull()
+    expect(path.some((t) => t.tx === 2 && t.tz === 1)).toBe(true)
+  })
+})
+
 describe('smoothPath', () => {
   it('collapses an open-field path to its endpoints', () => {
     const grid = new Grid(10, 10)

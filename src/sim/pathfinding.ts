@@ -23,15 +23,26 @@ function octile(ax: number, az: number, bx: number, bz: number): number {
  * neighbours are walkable (no corner cutting). Returns tiles from start to goal
  * inclusive, or null if the goal is blocked or unreachable.
  */
-export function findPath(grid: Grid, start: Tile, goal: Tile): Tile[] | null {
-  return findPathToAny(grid, start, [goal])
+export function findPath(
+  grid: Grid,
+  start: Tile,
+  goal: Tile,
+  extraCost?: (index: number) => number,
+): Tile[] | null {
+  return findPathToAny(grid, start, [goal], extraCost)
 }
 
 /**
  * A* to whichever goal is cheapest to reach. Blocked goals are ignored; returns
- * null if no goal is reachable. The path ends on the chosen goal.
+ * null if no goal is reachable. The path ends on the chosen goal. `extraCost`
+ * adds to the cost of stepping onto a tile (by index), e.g. to steer around people.
  */
-export function findPathToAny(grid: Grid, start: Tile, goals: Tile[]): Tile[] | null {
+export function findPathToAny(
+  grid: Grid,
+  start: Tile,
+  goals: Tile[],
+  extraCost?: (index: number) => number,
+): Tile[] | null {
   const targets = goals.filter((t) => grid.isWalkable(t.tx, t.tz))
   if (!grid.inBounds(start.tx, start.tz) || targets.length === 0) return null
 
@@ -82,7 +93,7 @@ export function findPathToAny(grid: Grid, start: Tile, goals: Tile[]): Tile[] | 
       }
       const ni = grid.index(nx, nz)
       if (closed[ni]) continue
-      const cost = g[cur] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1)
+      const cost = g[cur] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1) + (extraCost?.(ni) ?? 0)
       if (cost < g[ni]) {
         g[ni] = cost
         f[ni] = cost + h(nx, nz)

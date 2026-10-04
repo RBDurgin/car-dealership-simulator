@@ -1,10 +1,20 @@
 import type { Group } from 'three'
-import { dampAngle, headingTo, stepAlongPath, toWaypoints } from '../sim/agent'
+import { dampAngle, headingTo, toWaypoints } from '../sim/agent'
 import { SEAT_HEIGHT, type CharacterAnim } from '../sim/characters'
+import {
+  createStuckGuard,
+  crowdStep,
+  freeTiles,
+  occupancy,
+  occupiedCost,
+  rearm,
+  watchProgress,
+  type StuckGuard,
+} from '../sim/crowd'
 import type { Tile, Vec2 } from '../sim/grid'
 import type { Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
-import { grid, rectBounds } from './runtime'
+import { crowdAgents, grid, rectBounds, reservations } from './runtime'
 
 /**
  * The body of anyone walking around the world under the game's control
@@ -12,6 +22,8 @@ import { grid, rectBounds } from './runtime'
  * components that move them; each extends it with its own bookkeeping.
  */
 export interface Walker {
+  /** The customer's or employee's id, which is also their id in the crowd. */
+  id: string
   pos: Vec2
   heading: number
   anim: { current: CharacterAnim }
@@ -22,6 +34,7 @@ export interface Walker {
   unreachable: boolean
   /** Sitting on a chair; `stand` is where they got on from. */
   seat: { stand: Vec2 } | null
+  stuck: StuckGuard
 }
 
 export const TURN_RATE = 10
@@ -36,8 +49,9 @@ const MAX_FRAME_S = 0.25
 export const SIT_REACH = 1.6
 
 /** A new walker standing at `tile`, facing `heading`. */
-export function createWalker(tile: Tile, heading: number): Walker {
+export function createWalker(id: string, tile: Tile, heading: number): Walker {
   return {
+    id,
     pos: grid.tileToWorld(tile.tx, tile.tz),
     heading,
     anim: { current: 'idle' },
@@ -45,7 +59,18 @@ export function createWalker(tile: Tile, heading: number): Walker {
     faceTo: null,
     unreachable: false,
     seat: null,
+    stuck: createStuckGuard(),
   }
+}
+
+/** Gives up a walker's claimed goal tile, when they leave the world. */
+export function releaseWalker(id: string): void {
+  reservations.release(id)
+}
+
+/** A* step costs that steer `id` around everyone else standing in the world. */
+export function crowdCost(id: string) {
+  return occupiedCost(occupancy(grid, crowdAgents(), id))
 }
 
 /** Heading that walks into the lot from a sidewalk end. */
@@ -61,30 +86,66 @@ export function frameSeconds(rawDelta: number, timeScale: number) {
 
 /**
  * Plans a path to the first reachable of `goals`, trying `goals[0]` alone first
- * (so a randomly picked goal wins when it's reachable). Flags `unreachable` if none is.
+ * (so a randomly picked goal wins when it's reachable). Goals nobody else has
+ * claimed come first; the one picked is claimed, so the next walker goes
+ * elsewhere. The path steers around people. Flags `unreachable` if no goal is reachable.
  */
 export function pathTo(w: Walker, goals: Tile[], preferFirst = false): void {
   const start = grid.worldToTile(w.pos.x, w.pos.z)
+  const cost = crowdCost(w.id)
+  const find = (ts: Tile[]) => (ts.length > 0 ? findPathToAny(grid, start, ts, cost) : null)
+  const free = freeTiles(grid, reservations, goals, w.id)
   const tiles =
-    (preferFirst ? findPathToAny(grid, start, goals.slice(0, 1)) : null) ??
-    findPathToAny(grid, start, goals)
+    (preferFirst ? find(free.slice(0, 1)) : null) ??
+    find(free) ??
+    (preferFirst ? find(goals.slice(0, 1)) : null) ??
+    find(goals)
   w.waypoints = tiles ? toWaypoints(grid, tiles, w.pos) : []
   w.unreachable = !tiles
+  if (tiles) {
+    const goal = tiles[tiles.length - 1]
+    reservations.reserve(grid.index(goal.tx, goal.tz), w.id)
+  } else {
+    reservations.release(w.id)
+  }
 }
 
-/** Walks along the path for `seconds` in small substeps. Returns the distance and direction. */
+/** Stalled behind someone: a fresh path to the same goal, around whoever is in the way. */
+function replan(w: Walker): void {
+  const last = w.waypoints[w.waypoints.length - 1]
+  if (!last) return
+  const tiles = findPathToAny(
+    grid,
+    grid.worldToTile(w.pos.x, w.pos.z),
+    [grid.worldToTile(last.x, last.z)],
+    crowdCost(w.id),
+  )
+  if (!tiles) return
+  w.waypoints = toWaypoints(grid, tiles, w.pos)
+  rearm(w.stuck, w.waypoints)
+}
+
+/**
+ * Walks along the path for `seconds` in small substeps, kept apart from the
+ * crowd. Walkers stood still get nudged too, so people spread out. Returns the
+ * distance walked (pushes not included) and its direction.
+ */
 export function moveAlong(w: Walker, speed: number, seconds: number) {
   let moved = 0
   let dx = 0
   let dz = 0
-  for (let left = seconds; left > 1e-9 && w.waypoints.length > 0; left -= MAX_STEP_S) {
-    const s = stepAlongPath(grid, w.pos, w.waypoints, speed, Math.min(left, MAX_STEP_S))
-    w.pos.x = s.x
-    w.pos.z = s.z
+  const push = !w.seat
+  if (!push && w.waypoints.length === 0) return { moved, dx, dz }
+  const neighbours = crowdAgents()
+  for (let left = seconds; left > 1e-9; left -= MAX_STEP_S) {
+    const dt = Math.min(left, MAX_STEP_S)
+    const s = crowdStep(grid, w, w.waypoints, speed, dt, neighbours, push && !w.stuck.ghost)
     moved += s.moved
     dx += s.dx
     dz += s.dz
+    if (!push && w.waypoints.length === 0) break
   }
+  if (watchProgress(w.stuck, w.pos, w.waypoints, seconds) === 'replan') replan(w)
   return { moved, dx, dz }
 }
 

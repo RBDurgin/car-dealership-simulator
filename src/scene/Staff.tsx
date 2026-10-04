@@ -16,6 +16,7 @@ import {
   frameSeconds,
   inwardHeading,
   pathTo,
+  releaseWalker,
   sitOn,
   standUp,
   syncGroups,
@@ -52,7 +53,7 @@ function walkerFor(e: Employee): StaffWalker {
   const rng = createRng(hashSeed(e.id))
   const spawn = rng.pick(SIDEWALK_ENDS)
   const exit = rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
-  w = { ...createWalker(spawn, inwardHeading(spawn)), rng, exit, task: null }
+  w = { ...createWalker(e.id, spawn, inwardHeading(spawn)), rng, exit, task: null }
   walkers.set(e.id, w)
   staffPos.set(e.id, w.pos)
   return w
@@ -61,6 +62,7 @@ function walkerFor(e: Employee): StaffWalker {
 function removeWalker(id: string): void {
   walkers.delete(id)
   staffPos.delete(id)
+  releaseWalker(id)
 }
 
 const postChair = (role: Role) => PROPS.find((p) => p.id === POSTS[role])
