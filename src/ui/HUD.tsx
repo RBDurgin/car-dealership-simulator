@@ -1,9 +1,12 @@
 import { useEffect } from 'react'
+import { dealCustomer } from '../sim/deal'
 import { ACTIONS } from '../sim/interactables'
-import { interactables } from '../scene/runtime'
+import { findInteractable } from '../scene/runtime'
 import { useGame } from '../state/store'
 import { ActionMenu } from './ActionMenu'
 import { ControlsHint } from './ControlsHint'
+import { CustomerPanel } from './CustomerPanel'
+import { DaySummary } from './DaySummary'
 import { InfoPanel } from './InfoPanel'
 import { TopBar } from './TopBar'
 import './hud.css'
@@ -12,12 +15,17 @@ const NOTICE_MS = 2200
 
 function ActionStatus() {
   const action = useGame((s) => s.activeAction)
-  const it = action && interactables.get(action.targetId)
+  const dealName = useGame((s) => dealCustomer(s.customers)?.name)
+  const it = action && findInteractable(action.targetId)
   if (!action || !it) return null
 
   const def = ACTIONS[action.action]
   const performing = action.phase === 'performing'
-  const label = performing ? def.verb : `Heading to ${it.name.toLowerCase()}`
+  const person = it.kind === 'customer'
+  let label: string
+  if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
+  else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
+  else label = `Heading to ${person ? it.name : it.name.toLowerCase()}`
   const hint = def.mode === 'hold' && performing ? 'Esc or move to stand up' : 'Esc to cancel'
   return (
     <div className="panel status">
@@ -68,7 +76,9 @@ export function HUD() {
       <ActionStatus />
       <NoticeToast />
       <InfoPanel />
+      <CustomerPanel />
       <ActionMenu />
+      <DaySummary />
     </div>
   )
 }

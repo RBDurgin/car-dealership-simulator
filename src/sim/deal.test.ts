@@ -1,0 +1,144 @@
+import { describe, expect, it } from 'vitest'
+import type { Customer } from './customers'
+import {
+  actionBlocker,
+  budgetHint,
+  customerActions,
+  customerInteractable,
+  dealCustomer,
+  emptyStats,
+  inConversation,
+  recordDepartures,
+  revenue,
+  walkOuts,
+} from './deal'
+import { Grid } from './grid'
+
+const base: Customer = {
+  id: 'c1',
+  name: 'Alex B.',
+  variant: 'male-a',
+  budget: 41_500,
+  preferredModels: ['sedan'],
+  patience: 60,
+  patienceLeft: 60,
+  browseCarIds: ['lot-car-1'],
+  browsed: 0,
+  targetCarId: 'lot-car-1',
+  offer: null,
+  phase: 'waiting',
+  leaveReason: null,
+}
+
+const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({
+  ...base,
+  phase,
+  ...extra,
+})
+
+describe('customerActions', () => {
+  it('offers a greeting while browsing or waiting, an offer while talking', () => {
+    expect(customerActions(at('browsing'))).toEqual(['greet'])
+    expect(customerActions(at('waiting'))).toEqual(['greet'])
+    expect(customerActions(at('talking'))).toEqual(['offer'])
+  })
+
+  it('offers nothing while arriving, mid-deal or leaving', () => {
+    for (const phase of ['arriving', 'considering', 'following', 'signing', 'leaving'] as const) {
+      expect(customerActions(at(phase)), phase).toEqual([])
+    }
+  })
+})
+
+describe('dealCustomer', () => {
+  it('finds whoever the player is dealing with', () => {
+    const list = [at('waiting'), at('following', { id: 'c2' }), at('leaving', { id: 'c3' })]
+    expect(dealCustomer(list)?.id).toBe('c2')
+    expect(dealCustomer([at('waiting')])).toBeNull()
+  })
+
+  it('counts only talking and considering as a conversation', () => {
+    expect(inConversation([at('talking')])).toBe(true)
+    expect(inConversation([at('considering')])).toBe(true)
+    expect(inConversation([at('following')])).toBe(false)
+    expect(inConversation([])).toBe(false)
+  })
+})
+
+describe('customerInteractable', () => {
+  it('is approached from the tiles around where they stand', () => {
+    const grid = new Grid(5, 5)
+    grid.setBlocked(2, 1)
+    const it = customerInteractable(grid, at('waiting'), { tx: 2, tz: 2 })
+    expect(it).toMatchObject({ id: 'c1', kind: 'customer', name: 'Alex B.', actions: ['greet'] })
+    expect(it.rect).toEqual({ tx: 2, tz: 2, w: 1, h: 1 })
+    expect(it.approachTiles).toHaveLength(3)
+    expect(it.approachTiles).not.toContainEqual({ tx: 2, tz: 1 })
+  })
+})
+
+describe('actionBlocker', () => {
+  it('allows customer actions that fit their phase', () => {
+    expect(actionBlocker('greet', 'c1', [at('waiting')])).toBeNull()
+    expect(actionBlocker('offer', 'c1', [at('talking')])).toBeNull()
+  })
+
+  it('blocks customer actions once they have left or moved on', () => {
+    expect(actionBlocker('greet', 'c1', [])).toMatch(/left/)
+    expect(actionBlocker('greet', 'c1', [at('leaving')])).toMatch(/Alex B\. left/)
+    expect(actionBlocker('offer', 'c1', [at('waiting')])).toMatch(/busy/)
+  })
+
+  it('only allows closing a deal with a buyer following or seated', () => {
+    expect(actionBlocker('closeDeal', 'office-chair', [at('talking')])).not.toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [at('following')])).toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [at('signing')])).toBeNull()
+  })
+
+  it('never blocks the furniture actions', () => {
+    expect(actionBlocker('sit', 'office-chair', [])).toBeNull()
+    expect(actionBlocker('getCoffee', 'coffee-machine', [])).toBeNull()
+  })
+})
+
+describe('budgetHint', () => {
+  it('rounds the budget to the nearest $5k', () => {
+    expect(budgetHint(at('talking', { budget: 41_500 }))).toBe(40_000)
+    expect(budgetHint(at('talking', { budget: 43_000 }))).toBe(45_000)
+    expect(budgetHint(at('talking', { budget: 1_000 }))).toBe(5_000)
+  })
+})
+
+describe('day stats', () => {
+  it('counts each walk-out once, by reason, and leaves buyers to the sales log', () => {
+    const prev = [at('waiting'), at('waiting', { id: 'c2' }), at('signing', { id: 'c3' })]
+    const next = [
+      at('leaving', { leaveReason: 'impatient' }),
+      at('leaving', { id: 'c2', leaveReason: 'refused' }),
+      at('leaving', { id: 'c3', leaveReason: 'bought' }),
+    ]
+    const stats = recordDepartures(emptyStats(), prev, next)
+    expect(stats).toMatchObject({ impatient: 1, refused: 1, closing: 0 })
+    expect(walkOuts(stats)).toBe(2)
+    // Already leaving last time: not counted again.
+    expect(recordDepartures(stats, next, next)).toBe(stats)
+  })
+
+  it('counts customers who arrive already leaving', () => {
+    const stats = recordDepartures(emptyStats(), [], [at('leaving', { leaveReason: 'closing' })])
+    expect(stats.closing).toBe(1)
+  })
+
+  it('adds up revenue', () => {
+    const sale = { customerName: 'A', carId: 'x', model: 'sedan' as const, minute: 600 }
+    const stats = {
+      ...emptyStats(),
+      sales: [
+        { ...sale, price: 1000 },
+        { ...sale, price: 2500 },
+      ],
+    }
+    expect(revenue(stats)).toBe(3500)
+    expect(revenue(emptyStats())).toBe(0)
+  })
+})

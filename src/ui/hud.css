@@ -299,3 +299,127 @@ kbd {
     transform: scale(1.18);
   }
 }
+
+.pie-item-blocked {
+  opacity: 0.45;
+}
+.pie-item-blocked:hover {
+  background: #1f2a3c;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Buttons in panels */
+.btn {
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: #1f2a3c;
+  color: inherit;
+  font:
+    600 13px system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #2f4160;
+  border-color: #fde047;
+}
+.btn-primary {
+  background: #2563eb;
+  border-color: #3b82f6;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+/* Customer being helped */
+.customer-panel {
+  right: 16px;
+  bottom: 16px;
+  width: 270px;
+  padding: 14px 16px;
+  pointer-events: auto;
+}
+.customer-panel h2 {
+  margin: 2px 0 6px;
+  font-size: 18px;
+}
+.customer-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+.customer-panel dt {
+  opacity: 0.6;
+}
+.customer-panel dd {
+  margin: 0;
+}
+.customer-quote {
+  margin: 0 0 10px;
+  font-style: italic;
+  opacity: 0.85;
+  line-height: 1.4;
+}
+.customer-actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.customer-status {
+  margin-top: 12px;
+  line-height: 1.4;
+}
+
+/* End-of-day summary */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 14, 0.45);
+  pointer-events: auto;
+  animation: notice-fade 0.3s ease-out;
+}
+@keyframes notice-fade {
+  from {
+    opacity: 0;
+  }
+}
+.day-summary {
+  position: relative;
+  width: min(380px, calc(100vw - 32px));
+  padding: 20px 22px;
+  background: rgba(20, 24, 32, 0.96);
+}
+.day-summary h2 {
+  margin: 2px 0 14px;
+  font-size: 22px;
+}
+.summary-stats {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0 0 14px;
+  font-size: 14px;
+}
+.summary-stats dt {
+  opacity: 0.6;
+}
+.summary-stats dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.summary-sales {
+  margin: 0 0 16px;
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.day-summary .btn {
+  width: 100%;
+}

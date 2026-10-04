@@ -1,11 +1,11 @@
 const CONTROLS: [string, string][] = [
-  ['Click', 'Move / interact'],
+  ['Click', 'Move / interact / greet'],
   ['WASD', 'Walk'],
   ['Q / E', 'Rotate view'],
   ['Wheel', 'Zoom'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
-  ['Esc', 'Cancel'],
+  ['Esc', 'Cancel / walk away'],
   ...(import.meta.env.DEV
     ? ([
         ['R', 'Restock (dev)'],

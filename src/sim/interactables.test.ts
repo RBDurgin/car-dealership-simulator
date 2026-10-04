@@ -93,7 +93,7 @@ describe('dealership interactables', () => {
     const cars = [...all.values()].filter((it) => it.kind === 'car')
     expect(cars).toHaveLength(inventory.length)
     expect(all.get('display-1')?.car?.location).toBe('Showroom display')
-    expect(all.get('office-chair')?.actions).toEqual(['sit'])
+    expect(all.get('office-chair')?.actions).toEqual(['sit', 'closeDeal'])
     expect(all.get('coffee-machine')?.actions).toEqual(['getCoffee'])
     expect(all.has('office-desk')).toBe(false)
   })

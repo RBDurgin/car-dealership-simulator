@@ -4,20 +4,20 @@ import type { Group } from 'three'
 import { useWasd } from '../input/useWasd'
 import { isTimedActionDone, type ActiveAction } from '../sim/actions'
 import { angleDiff, dampAngle, stepAlongPath, toWaypoints } from '../sim/agent'
-import type { CharacterAnim } from '../sim/characters'
+import { SEAT_HEIGHT, type CharacterAnim } from '../sim/characters'
+import { inConversation } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
 import { findPath } from '../sim/pathfinding'
 import { useGame, type MoveOrder } from '../state/store'
 import { Character } from './Character'
-import { cameraState, grid, interactables, playerPos } from './runtime'
+import { cameraState, findInteractable, grid, playerPos } from './runtime'
 
 const TURN_RATE = 14
 /** How closely the player must face an object before the action starts. */
 const FACE_TOLERANCE = 0.15
 const ARRIVE_EPSILON = 0.05
-const SEAT_HEIGHT = 0.28
 
 interface Approach {
   actionId: number
@@ -45,6 +45,8 @@ export function Player() {
   const owner = useRef<string | null>(null)
   const approach = useRef<Approach | null>(null)
   const seat = useRef<Seat | null>(null)
+  /** Sat down to close a deal; the paperwork starts once the customer sits too. */
+  const awaitingSignature = useRef<number | null>(null)
   const anim = useRef<CharacterAnim>('idle')
   const axes = useWasd()
   const moveOrder = useGame((s) => s.moveOrder)
@@ -65,12 +67,13 @@ export function Player() {
     owner.current = key
     waypoints.current = []
     approach.current = null
+    awaitingSignature.current = null
     standUp()
 
     const game = useGame.getState()
     const start = grid.worldToTile(playerPos.x, playerPos.z)
     if (activeAction) {
-      const it = interactables.get(activeAction.targetId)
+      const it = findInteractable(activeAction.targetId)
       const tiles = it && pathToInteractable(grid, start, it)
       if (!it || !tiles) {
         game.cancelAction()
@@ -103,13 +106,14 @@ export function Player() {
 
     const { forward, right } = axes.current
     if (forward !== 0 || right !== 0) {
-      // Any movement key stands the player up and cancels a click path or action.
+      // Any movement key stands the player up and cancels a click path, an action
+      // or a conversation.
       standUp()
-      if (waypoints.current.length > 0 || game.moveOrder || game.activeAction) {
+      const talking = inConversation(game.customers)
+      if (waypoints.current.length > 0 || game.moveOrder || game.activeAction || talking) {
         waypoints.current = []
         approach.current = null
-        game.clearMoveOrder()
-        game.cancelAction()
+        game.walkAway()
       }
       const s = Math.sin(cameraState.yaw)
       const c = Math.cos(cameraState.yaw)
@@ -155,16 +159,21 @@ export function Player() {
         if (Math.abs(angleDiff(heading.current, face)) < FACE_TOLERANCE) {
           approach.current = null
           const a = game.activeAction
-          if (a?.action === 'sit') {
-            const it = interactables.get(a.targetId)!
+          if (a?.action === 'sit' || a?.action === 'closeDeal') {
+            const it = findInteractable(a.targetId)!
             seat.current = { stand: { x: playerPos.x, z: playerPos.z } }
             playerPos.x = ap.faceTo.x
             playerPos.z = ap.faceTo.z
             heading.current = (it.facing * Math.PI) / 2
           }
-          game.arriveAction(ap.actionId)
+          if (a?.action === 'closeDeal') awaitingSignature.current = ap.actionId
+          else game.arriveAction(ap.actionId)
         }
       }
+    }
+    if (awaitingSignature.current !== null && game.customers.some((c) => c.phase === 'signing')) {
+      game.arriveAction(awaitingSignature.current)
+      awaitingSignature.current = null
     }
 
     const a = game.activeAction

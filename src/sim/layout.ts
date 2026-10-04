@@ -205,6 +205,10 @@ export const DISPLAY_CARS: { model: CarModel; rect: Rect; facing: Facing }[] = [
   { model: 'hatchback-sports', rect: { tx: 24, tz: 9, w: 4, h: 3 }, facing: 3 },
 ]
 
+/** Where the player sits to close a deal, and where the customer sits opposite. */
+export const DESK_CHAIR_ID = 'office-chair'
+export const GUEST_CHAIR_ID = 'guest-chair'
+
 // Heights (world units) that stacked props sit at.
 const DESK_TOP = 0.53
 const COUNTER_TOP = 0.63
@@ -227,8 +231,8 @@ const FIXED_PROPS: Prop[] = [
     blocks: false,
     elevation: DESK_TOP,
   },
-  { id: 'office-chair', model: 'chairDesk', rect: { tx: 33, tz: 4, w: 1, h: 1 }, facing: 0 },
-  { id: 'guest-chair', model: 'chairCushion', rect: { tx: 32, tz: 6, w: 1, h: 1 }, facing: 2 },
+  { id: DESK_CHAIR_ID, model: 'chairDesk', rect: { tx: 33, tz: 4, w: 1, h: 1 }, facing: 0 },
+  { id: GUEST_CHAIR_ID, model: 'chairCushion', rect: { tx: 32, tz: 6, w: 1, h: 1 }, facing: 2 },
   {
     id: 'office-bookcase',
     model: 'bookcaseClosedWide',

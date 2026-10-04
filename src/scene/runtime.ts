@@ -1,3 +1,4 @@
+import { customerInteractable } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
@@ -36,6 +37,18 @@ export const playerPos = { x: spawn.x, z: spawn.z }
  * scene/Customers; the store never sees positions.
  */
 export const customerPos = new Map<string, Vec2>()
+
+/**
+ * An action target by id: a prop or car, or a customer approached from where
+ * they're standing right now. Undefined if it's gone.
+ */
+export function findInteractable(id: string): Interactable | undefined {
+  const it = interactables.get(id)
+  if (it) return it
+  const c = useGame.getState().customers.find((x) => x.id === id)
+  const pos = customerPos.get(id)
+  return c && pos ? customerInteractable(grid, c, grid.worldToTile(pos.x, pos.z)) : undefined
+}
 
 /** Current (eased) camera yaw in radians. 0 = camera on +z looking toward -z. */
 export const cameraState = { yaw: useGame.getState().viewYaw }

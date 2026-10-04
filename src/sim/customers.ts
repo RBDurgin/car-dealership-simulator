@@ -266,8 +266,11 @@ export type CustomerEvent =
   | { type: 'cancel'; id: string }
   /** Walked off the map. Removes them. */
   | { type: 'despawn'; id: string }
-  /** Game time passed. Applies to everyone. */
-  | { type: 'tick'; minutes: number }
+  /**
+   * Game time passed. Applies to everyone except `except`, the customer the
+   * player is on their way to help, who doesn't give up while being greeted.
+   */
+  | { type: 'tick'; minutes: number; except?: string }
   /** Closing time. Applies to everyone. */
   | { type: 'close' }
 
@@ -316,7 +319,7 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'despawn':
       return c.phase === 'leaving' ? null : c
     case 'tick': {
-      if (c.phase !== 'waiting' || ev.minutes <= 0) return c
+      if (c.phase !== 'waiting' || ev.minutes <= 0 || ev.except === c.id) return c
       const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes)
       return patienceLeft === 0
         ? leave({ ...c, patienceLeft }, 'impatient')

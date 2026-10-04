@@ -9,9 +9,18 @@ const OUTLINE_PX = 3
 
 /**
  * Makes its children hoverable and clickable. Hover draws an outline around every
- * mesh inside; a left click opens the action menu at the cursor.
+ * mesh inside; a left click opens the action menu at the cursor. While `disabled`
+ * (e.g. a customer walking out) clicks pass through to whatever is underneath.
  */
-export function Interactable({ id, children }: { id: string; children: ReactNode }) {
+export function Interactable({
+  id,
+  disabled = false,
+  children,
+}: {
+  id: string
+  disabled?: boolean
+  children: ReactNode
+}) {
   const highlighted = useGame((s) => s.hoveredId === id || s.menu?.targetId === id)
   const hovered = useGame((s) => s.hoveredId === id)
   const [meshes, setMeshes] = useState<Mesh[] | null>(null)
@@ -40,10 +49,16 @@ export function Interactable({ id, children }: { id: string; children: ReactNode
     useGame.getState().openMenu(id, e.nativeEvent.clientX, e.nativeEvent.clientY)
   }
 
+  // Same tree either way, so toggling `disabled` doesn't remount the children.
   return (
-    <group onPointerOver={onOver} onPointerOut={onOut} onPointerDown={onDown}>
+    <group
+      onPointerOver={disabled ? undefined : onOver}
+      onPointerOut={disabled ? undefined : onOut}
+      onPointerDown={disabled ? undefined : onDown}
+    >
       {children}
       {highlighted &&
+        !disabled &&
         meshes?.map((m) => (
           <Fragment key={m.uuid}>
             {createPortal(<Outlines color={HOVER_COLOR} thickness={OUTLINE_PX} />, m)}

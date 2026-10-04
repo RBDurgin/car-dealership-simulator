@@ -1,8 +1,8 @@
 import type { Grid, Tile, Vec2 } from './grid'
-import type { CarModel, Facing, Prop, Rect } from './layout'
+import { DESK_CHAIR_ID, type CarModel, type Facing, type Prop, type Rect } from './layout'
 import { findPathToAny } from './pathfinding'
 
-export type ActionId = 'inspect' | 'sit' | 'getCoffee'
+export type ActionId = 'inspect' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -31,9 +31,19 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     mode: 'timed',
     durationMs: 2500,
   },
+  greet: { id: 'greet', label: 'Greet', verb: 'Greeting', mode: 'timed', durationMs: 1500 },
+  offer: { id: 'offer', label: 'Offer at MSRP', verb: 'Making an offer', mode: 'instant' },
+  // Starts performing only once the customer is seated (see scene/Player).
+  closeDeal: {
+    id: 'closeDeal',
+    label: 'Close deal',
+    verb: 'Signing paperwork',
+    mode: 'timed',
+    durationMs: 4000,
+  },
 }
 
-export type InteractableKind = 'car' | 'chair' | 'coffee'
+export type InteractableKind = 'car' | 'chair' | 'coffee' | 'customer'
 
 export interface CarInfo {
   name: string
@@ -70,6 +80,11 @@ const CAR_MODELS = new Set(Object.keys(CARS))
 
 export function isCarModel(model: string): model is CarModel {
   return CAR_MODELS.has(model)
+}
+
+/** Display name of a car model, e.g. "Summit Ridge". */
+export function carName(model: CarModel): string {
+  return CARS[model].name
 }
 
 /** Walkable tiles orthogonally adjacent to a rect (corners excluded). */
@@ -118,8 +133,8 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         location: p.platform ? 'Showroom display' : 'Lot',
       }
       out.set(p.id, { ...base, kind: 'car', name, actions: ['inspect'], car })
-    } else if (p.id === 'office-chair') {
-      out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit'] })
+    } else if (p.id === DESK_CHAIR_ID) {
+      out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit', 'closeDeal'] })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })
     }

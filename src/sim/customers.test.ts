@@ -257,6 +257,12 @@ describe('reduceCustomer', () => {
     expect(moodOf(gone)).toBe('unhappy')
   })
 
+  it("doesn't wear down the customer the player is heading to", () => {
+    const c = at('waiting')
+    expect(reduceCustomer(c, { type: 'tick', minutes: 10, except: 'c1' })).toBe(c)
+    expect(reduceCustomer(c, { type: 'tick', minutes: 10, except: 'c2' })?.patienceLeft).toBe(50)
+  })
+
   it('sends everyone home at closing except a customer mid-signature', () => {
     for (const phase of ['arriving', 'browsing', 'waiting', 'talking', 'following'] as const) {
       const c = run(at(phase), { type: 'close' })!
