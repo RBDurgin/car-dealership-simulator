@@ -1,13 +1,15 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import type { Group } from 'three'
 import { useWasd } from '../input/useWasd'
 import { isTimedActionDone, type ActiveAction } from '../sim/actions'
+import type { CharacterAnim } from '../sim/characters'
 import type { Tile, Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { hasLineOfSight, moveWithCollision, PLAYER_RADIUS, PLAYER_SPEED } from '../sim/movement'
 import { findPath, smoothPath } from '../sim/pathfinding'
 import { useGame, type MoveOrder } from '../state/store'
+import { Character } from './Character'
 import { cameraState, grid, interactables, playerPos } from './runtime'
 
 const TURN_RATE = 14
@@ -15,7 +17,6 @@ const TURN_RATE = 14
 const FACE_TOLERANCE = 0.15
 const ARRIVE_EPSILON = 0.05
 const SEAT_HEIGHT = 0.28
-const SEATED_SCALE = 0.72
 
 function angleDiff(a: number, b: number): number {
   return Math.atan2(Math.sin(b - a), Math.cos(b - a))
@@ -58,6 +59,7 @@ export function Player() {
   const owner = useRef<string | null>(null)
   const approach = useRef<Approach | null>(null)
   const seat = useRef<Seat | null>(null)
+  const anim = useRef<CharacterAnim>('idle')
   const axes = useWasd()
   const moveOrder = useGame((s) => s.moveOrder)
   const activeAction = useGame((s) => s.activeAction)
@@ -146,9 +148,10 @@ export function Player() {
       }
     }
 
+    let moved = 0
     if (dx !== 0 || dz !== 0) {
       const next = moveWithCollision(grid, playerPos, dx, dz)
-      const moved = Math.hypot(next.x - playerPos.x, next.z - playerPos.z)
+      moved = Math.hypot(next.x - playerPos.x, next.z - playerPos.z)
       playerPos.x = next.x
       playerPos.z = next.z
       if (moved > 1e-6) {
@@ -198,24 +201,16 @@ export function Player() {
       g.rotation.y = heading.current
     }
     const b = body.current
-    if (b) {
-      b.position.y = seat.current ? SEAT_HEIGHT : 0
-      b.scale.y = seat.current ? SEATED_SCALE : 1
-    }
+    if (b) b.position.y = seat.current ? SEAT_HEIGHT : 0
+    anim.current = seat.current ? 'sit' : moved > 1e-6 ? 'sprint' : 'idle'
   })
 
   return (
     <group ref={group}>
       <group ref={body}>
-        <mesh position={[0, 0.6, 0]} castShadow>
-          <capsuleGeometry args={[PLAYER_RADIUS, 0.6, 6, 12]} />
-          <meshStandardMaterial color="#3b82f6" />
-        </mesh>
-        {/* nose so the facing direction is visible */}
-        <mesh position={[0, 0.8, PLAYER_RADIUS]} castShadow>
-          <boxGeometry args={[0.2, 0.15, 0.2]} />
-          <meshStandardMaterial color="#fde68a" />
-        </mesh>
+        <Suspense fallback={null}>
+          <Character variant="salesperson" anim={anim} moveSpeed={PLAYER_SPEED} />
+        </Suspense>
       </group>
     </group>
   )

@@ -14,6 +14,7 @@ We can try using three.js, I'm open to alternatives if you think there's a reaso
 - `src/scene/` holds R3F components, `src/ui/` holds DOM HUD, `src/state/` holds the zustand store, `src/input/` holds input hooks.
 - Per-frame values (player position, camera easing) live in refs or `useFrame`. Never call `setState` every frame. The store only holds discrete events.
 - Phase plan: see `docs/SPEC.md` and the detailed `docs/PHASE1_PLAN.md`. Phase 1 is split into 1a (scaffold), 1b (movement and camera), 1c (environment), 1d (interactables and HUD).
+- Phase 2 plan: `docs/PHASE2_PLAN.md`, split into 2a (character models), 2b (clock, money, inventory), 2c (customer sim), 2d (customers in the world), 2e (selling and day loop). Character GLBs are skinned: clone with `SkeletonUtils.clone`, drive clips through an `anim` ref (`scene/Character.tsx`).
 
 ### Commands
 
