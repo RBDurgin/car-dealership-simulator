@@ -1,6 +1,6 @@
 # Phase 1 Plan — Walkable Dealership (Car Dealership Simulator)
 
-**Status:** 1a done (commit `3fd163d`). Next up: 1b. Implement one sub-phase per session, stop for review after each.
+**Status:** 1a done (commit `3fd163d`). 1b implemented, pending review. Next up: 1c. Implement one sub-phase per session, stop for review after each.
 
 ## Context
 
@@ -63,7 +63,7 @@ Rules to keep it clean:
 - Update `CLAUDE.md` with the stack, folder conventions and commands.
 - **Done when:** `npm run dev` shows the lit iso scene, and `npm test` and `npm run lint` pass.
 
-### 1b — Movement & camera
+### 1b — Movement & camera (IMPLEMENTED, pending review)
 
 - Add `Grid` and A* in `sim/` with Vitest tests covering a straight path, a path around obstacles, an unreachable target, no corner cutting and path smoothing.
 - Player capsule: clicking the ground raycasts to a tile, A* runs, a click marker appears and the player walks the path at constant speed and rotates to face where it's going.

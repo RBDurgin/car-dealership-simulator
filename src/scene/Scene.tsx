@@ -1,5 +1,9 @@
 import { CameraRig } from './CameraRig'
+import { ClickMarker } from './ClickMarker'
+import { DebugGrid } from './DebugGrid'
 import { Ground } from './Ground'
+import { Obstacles } from './Obstacles'
+import { Player } from './Player'
 
 export function Scene() {
   return (
@@ -17,10 +21,10 @@ export function Scene() {
         shadow-camera-bottom={-25}
       />
       <Ground />
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#d9534f" />
-      </mesh>
+      <Obstacles />
+      <DebugGrid />
+      <ClickMarker />
+      <Player />
     </>
   )
 }
