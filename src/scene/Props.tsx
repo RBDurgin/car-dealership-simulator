@@ -13,7 +13,7 @@ import {
 } from 'three'
 import type { Vec2 } from '../sim/grid'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
-import { DEALERSHIP_NAME, PROPS, type Prop, type PropModel } from '../sim/layout'
+import { DEALERSHIP_NAME, FURNITURE_SCALE, PROPS, type Prop, type PropModel } from '../sim/layout'
 import { PLAYER_RADIUS } from '../sim/movement'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
@@ -21,7 +21,6 @@ import { customerPos, interactables, playerPos, rectBounds } from './runtime'
 
 const BASE = `${import.meta.env.BASE_URL}models`
 const CAR_SCALE = 0.95
-const FURNITURE_SCALE = 1.4
 const PLATFORM_HEIGHT = 0.12
 
 interface ModelDef {
@@ -29,13 +28,15 @@ interface ModelDef {
   scale: number
   /** Extra yaw so the model's front faces +z at facing 0. */
   yaw?: number
+  /** Shrink below `scale` where needed so the model stays inside its prop's footprint. */
+  fit?: boolean
 }
 
 const car = (name: string): ModelDef => ({ url: `${BASE}/cars/${name}.glb`, scale: CAR_SCALE })
-const furniture = (name: string, yaw = 0): ModelDef => ({
+const furniture = (name: string, opts: { yaw?: number; fit?: boolean } = {}): ModelDef => ({
   url: `${BASE}/furniture/${name}.glb`,
   scale: FURNITURE_SCALE,
-  yaw,
+  ...opts,
 })
 
 const MODELS: Record<Exclude<PropModel, 'sign'>, ModelDef> = {
@@ -47,14 +48,14 @@ const MODELS: Record<Exclude<PropModel, 'sign'>, ModelDef> = {
   van: car('van'),
   truck: car('truck'),
   desk: furniture('desk'),
-  deskCorner: furniture('deskCorner'),
+  deskCorner: furniture('deskCorner', { fit: true }),
   chairDesk: furniture('chairDesk'),
   chairCushion: furniture('chairCushion'),
   pottedPlant: furniture('pottedPlant'),
   plantSmall1: furniture('plantSmall1'),
   kitchenCoffeeMachine: furniture('kitchenCoffeeMachine'),
   kitchenCabinet: furniture('kitchenCabinet'),
-  loungeSofa: furniture('loungeSofa'),
+  loungeSofa: furniture('loungeSofa', { fit: true }),
   tableCoffeeSquare: furniture('tableCoffeeSquare'),
   computerScreen: furniture('computerScreen'),
   bookcaseClosedWide: furniture('bookcaseClosedWide'),
@@ -67,8 +68,9 @@ for (const def of Object.values(MODELS)) useGLTF.preload(def.url)
  * Clones a GLB scene and recenters it so its footprint is centered on x/z and it
  * rests on y=0. With `ownMaterials` the clone gets its own copies of the
  * materials (which clones otherwise share), so they can be tinted per copy.
+ * Also returns the model's unscaled size.
  */
-function useCenteredModel(url: string, ownMaterials = false): Object3D {
+function useCenteredModel(url: string, ownMaterials = false): { object: Object3D; size: Vector3 } {
   const { scene } = useGLTF(url)
   return useMemo(() => {
     const root = scene.clone(true)
@@ -83,7 +85,7 @@ function useCenteredModel(url: string, ownMaterials = false): Object3D {
     const box = new Box3().setFromObject(root)
     const c = box.getCenter(new Vector3())
     root.position.set(-c.x, -box.min.y, -c.z)
-    return root
+    return { object: root, size: box.getSize(new Vector3()) }
   }, [scene, ownMaterials])
 }
 
@@ -118,12 +120,34 @@ function useDirt(object: Object3D, cleanliness: number | undefined): void {
   }, [object, isCar])
 }
 
+/** Size of a footprint in the model's own frame (before its facing turns it). */
+interface Footprint {
+  w: number
+  h: number
+}
+
+/** `def.scale`, or less if that would push a `fit` model past its footprint. */
+function fitScale(size: Vector3, def: ModelDef, footprint: Footprint): number {
+  if (!def.fit) return def.scale
+  const quarterTurned = Math.round((def.yaw ?? 0) / (Math.PI / 2)) % 2 !== 0
+  const [w, h] = quarterTurned ? [size.z, size.x] : [size.x, size.z]
+  return Math.min(def.scale, footprint.w / w, footprint.h / h)
+}
+
 /** A prop's model; cars pass their `cleanliness` to look as dirty as they are. */
-function Model({ def, cleanliness }: { def: ModelDef; cleanliness?: number }) {
-  const object = useCenteredModel(def.url, cleanliness !== undefined)
+function Model({
+  def,
+  footprint,
+  cleanliness,
+}: {
+  def: ModelDef
+  footprint: Footprint
+  cleanliness?: number
+}) {
+  const { object, size } = useCenteredModel(def.url, cleanliness !== undefined)
   useDirt(object, cleanliness)
   return (
-    <group rotation-y={def.yaw ?? 0} scale={def.scale}>
+    <group rotation-y={def.yaw ?? 0} scale={fitScale(size, def, footprint)}>
       <primitive object={object} />
     </group>
   )
@@ -219,7 +243,11 @@ function PropContent({ prop, cleanliness }: { prop: Prop; cleanliness?: number }
         {prop.model === 'sign' ? (
           <Sign width={turned ? b.h : b.w} />
         ) : (
-          <Model def={MODELS[prop.model]} cleanliness={cleanliness} />
+          <Model
+            def={MODELS[prop.model]}
+            footprint={turned ? { w: b.h, h: b.w } : { w: b.w, h: b.h }}
+            cleanliness={cleanliness}
+          />
         )}
       </group>
     </group>

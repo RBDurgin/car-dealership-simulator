@@ -237,9 +237,15 @@ export const SALES_DESKS: SalesDesk[] = [1, 2].map((n) => ({
   guestChairId: `sales-guest-${n}`,
 }))
 
-// Heights (world units) that stacked props sit at.
-const DESK_TOP = 0.53
-const COUNTER_TOP = 0.63
+/** How much the furniture models are scaled up, to sit in proportion with the people. */
+export const FURNITURE_SCALE = 2.3
+
+// Heights (world units) that stacked props sit at: the model's height times its scale.
+const DESK_TOP = 0.38 * FURNITURE_SCALE
+const COUNTER_TOP = 0.45 * FURNITURE_SCALE
+
+/** Seat height of the chairs and the sofa (their models' seats are all ~0.235 tall). */
+export const SEAT_HEIGHT = 0.235 * FURNITURE_SCALE
 
 /**
  * Sales desk `n` with its two-tile desk at `at`, set out like the office desk:

@@ -9,11 +9,15 @@ import {
   type CharacterAnim,
   type CharacterVariant,
 } from '../sim/characters'
+import { SEAT_HEIGHT } from '../sim/layout'
 
 const BASE = `${import.meta.env.BASE_URL}models/characters`
 /** The Kenney Mini Characters are ~0.67 units tall; this brings them to ~1.2. */
 const CHARACTER_SCALE = 1.8
 const FADE_SECONDS = 0.2
+/** Seat height the sit clip is posed for; seated characters are lifted the rest of the way. */
+const SIT_POSE_SEAT = 0.33
+const SIT_LIFT = Math.max(0, SEAT_HEIGHT - SIT_POSE_SEAT)
 /**
  * Ground covered by one loop of each locomotion clip at CHARACTER_SCALE (two steps of
  * leg length × the clip's swing: ±60° walk, ±90° sprint). Used to sync feet to speed.
@@ -74,6 +78,7 @@ export function Character({
   const playing = useRef<AnimationAction | null>(null)
 
   useFrame(() => {
+    if (root.current) root.current.position.y = anim.current === 'sit' ? SIT_LIFT : 0
     const next = actions[anim.current]
     // Also restarts the current clip if something stopped it: drei's useAnimations
     // cleanup stops every action when StrictMode re-runs effects in dev.
