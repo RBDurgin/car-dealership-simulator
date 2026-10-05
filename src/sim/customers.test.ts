@@ -163,6 +163,16 @@ describe('generateCustomer', () => {
     expect(new Set(customers.map((c) => c.expect)).size).toBeGreaterThan(10)
   })
 
+  it('hopes for less off with showroom improvements up, but still something', () => {
+    for (let i = 0; i < 20; i++) {
+      const plain = generateCustomer('x', inventory, createRng(i))
+      const cut = generateCustomer('x', inventory, createRng(i), { expectCut: 0.25 })
+      expect(cut.expect).toBeCloseTo(plain.expect * 0.75, 2)
+      if (plain.expect > 0) expect(cut.expect).toBeGreaterThan(0)
+      expect({ ...cut, expect: 0 }).toEqual({ ...plain, expect: 0 })
+    }
+  })
+
   it('makes bargain hunters spend less and decisive buyers wait less', () => {
     const many = (archetype: 'regular' | 'bargain' | 'decisive') =>
       Array.from({ length: 100 }, (_, i) =>

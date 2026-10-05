@@ -1,24 +1,24 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import {
+  AREA_LABELS,
   improvementBlocker,
   IMPROVEMENT_IDS,
   IMPROVEMENTS,
   installed,
   slotTier,
+  type ImprovementArea,
   type ImprovementId,
   type OwnedImprovement,
 } from '../sim/improvements'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
+import { effectLabel } from './improvementText'
 
-/** "+5% walk-ins · +4 passers-by a day". */
-function effectLabel(id: ImprovementId): string {
-  const { walkInChance = 0, passersBy = 0 } = IMPROVEMENTS[id].effects
-  const parts = [
-    walkInChance > 0 && `+${Math.round(walkInChance * 100)}% of passers-by walk in`,
-    passersBy > 0 && `+${passersBy} passers-by a day`,
-  ]
-  return parts.filter(Boolean).join(' · ')
+/** What each area's upgrades do, under its list. */
+const AREA_NOTES: Record<ImprovementArea, string> = {
+  outside: 'More passers-by, and more of them turning in.',
+  showroom: 'Buyers haggle less and say yes a little more often.',
+  lounge: 'Customers waiting to be helped give up later.',
 }
 
 function UpgradeRow({
@@ -92,15 +92,18 @@ export function UpgradesTab() {
         <dt>Spent today</dt>
         <dd className="price">{formatMoney(spent)}</dd>
       </dl>
-      <h3>Out front</h3>
-      <ul className="staff-list">
-        {IMPROVEMENT_IDS.map((id) => (
-          <UpgradeRow key={id} id={id} cash={cash} owned={owned} day={day} />
-        ))}
-      </ul>
-      <p className="muted staff-blurb">
-        More passers-by, and more of them turning in, starting the morning after it goes up.
-      </p>
+      {(Object.keys(AREA_LABELS) as ImprovementArea[]).map((area) => (
+        <section key={area}>
+          <h3>{AREA_LABELS[area]}</h3>
+          <ul className="staff-list">
+            {IMPROVEMENT_IDS.filter((id) => IMPROVEMENTS[id].area === area).map((id) => (
+              <UpgradeRow key={id} id={id} cash={cash} owned={owned} day={day} />
+            ))}
+          </ul>
+          <p className="muted staff-blurb">{AREA_NOTES[area]}</p>
+        </section>
+      ))}
+      <p className="muted staff-blurb">Each works from the morning after it goes up.</p>
     </>
   )
 }

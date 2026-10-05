@@ -3,22 +3,32 @@ import {
   buyImprovement,
   effectsOf,
   IMPROVEMENT_FOOTPRINTS,
+  IMPROVEMENT_IDS,
   IMPROVEMENTS,
   improvementBlocker,
   improvementFootprints,
+  improvementProps,
   installed,
+  MAX_ACCEPT_BONUS,
+  MAX_EXPECT_CUT,
+  MAX_PATIENCE_SAVED,
   NO_EFFECTS,
   slotTier,
+  swappedModel,
 } from './improvements'
 import { applyToGrid, buildInventory, carProp } from './inventory'
-import { approachTilesFor } from './interactables'
+import { approachTilesFor, buildInteractables, pathToInteractable } from './interactables'
 import {
   buildLayout,
+  DESK_CHAIR_ID,
+  GUEST_CHAIR_ID,
+  OFFICE_COMPUTER_ID,
   createGrid,
   LOT_ENTRY_TILES,
   PARKING_SPACES,
   parkedCarRect,
   PROPS,
+  SALES_DESKS,
   SIDEWALK_ENDS,
   SPAWN_TILE,
   zoneAt,
@@ -34,7 +44,41 @@ describe('improvement effects', () => {
   })
 
   it('sums the slots', () => {
-    expect(effectsOf(['big-sign', 'tube-man'])).toEqual({ walkInChance: 0.1, passersBy: 4 })
+    expect(effectsOf(['big-sign', 'tube-man'])).toEqual({
+      ...NO_EFFECTS,
+      walkInChance: 0.1,
+      passersBy: 4,
+    })
+    expect(effectsOf(['polished-floor', 'lounge-tv'])).toEqual({
+      ...NO_EFFECTS,
+      expectCut: 0.12,
+      acceptBonus: 0.02,
+      patienceSaved: 0.15,
+    })
+  })
+
+  it('caps the indoor effects with everything up, short of ending haggling or patience', () => {
+    const all = effectsOf(IMPROVEMENT_IDS)
+    expect(all.expectCut).toBeLessThanOrEqual(MAX_EXPECT_CUT)
+    expect(all.acceptBonus).toBeLessThanOrEqual(MAX_ACCEPT_BONUS)
+    expect(all.patienceSaved).toBeLessThanOrEqual(MAX_PATIENCE_SAVED)
+    expect(MAX_EXPECT_CUT).toBeLessThan(1)
+    expect(MAX_PATIENCE_SAVED).toBeLessThan(1)
+  })
+
+  it('swaps the sofa and adds the lounge props only once they’re up', () => {
+    expect(swappedModel([], 'lounge-sofa')).toBeNull()
+    expect(swappedModel(['designer-sofa'], 'lounge-sofa')).toBe('loungeDesignSofa')
+    expect(swappedModel(['designer-sofa'], 'sign')).toBeNull()
+    expect(improvementProps(['big-sign'])).toEqual([])
+    expect(improvementProps(['lounge-tv', 'coffee-bar']).map((p) => p.id)).toEqual([
+      'lounge-tv-cabinet',
+      'lounge-tv',
+      'coffee-bar-1',
+      'coffee-bar-2',
+      'coffee-stool-1',
+      'coffee-stool-2',
+    ])
   })
 
   it('counts only the top tier of a slot', () => {
@@ -86,10 +130,9 @@ describe('improvement footprints', () => {
   const inventory = buildInventory(createRng(1))
   const grid = createGrid(layout)
   applyToGrid(grid, inventory)
-  const footprints = Object.values(IMPROVEMENT_FOOTPRINTS) as Rect[]
-  for (const rect of improvementFootprints(['big-sign', 'pylon-sign', 'tube-man'])) {
-    grid.setRectBlocked(rect, true)
-  }
+  const outdoor = Object.values(IMPROVEMENT_FOOTPRINTS) as Rect[]
+  const indoor = improvementProps(IMPROVEMENT_IDS)
+  for (const rect of improvementFootprints(IMPROVEMENT_IDS)) grid.setRectBlocked(rect, true)
   const tiles = (r: Rect) =>
     Array.from({ length: r.w * r.h }, (_, i) => `${r.tx + (i % r.w)},${r.tz + Math.floor(i / r.w)}`)
   const taken = new Set(
@@ -101,13 +144,49 @@ describe('improvement footprints', () => {
     ].flatMap(tiles),
   )
 
-  it('only the tube man needs ground of its own', () => {
-    expect(improvementFootprints(['big-sign', 'pylon-sign'])).toEqual([])
+  it('only the tube man and the blocking lounge props need ground of their own', () => {
+    expect(improvementFootprints(['big-sign', 'pylon-sign', 'designer-sofa'])).toEqual([])
+    expect(improvementFootprints(['polished-floor', 'spotlights', 'turntables'])).toEqual([])
     expect(improvementFootprints(['tube-man'])).toEqual([IMPROVEMENT_FOOTPRINTS['tube-man']])
+    expect(improvementFootprints(['lounge-tv'])).toEqual([{ tx: 31, tz: 9, w: 2, h: 1 }])
+  })
+
+  it('put the lounge props in the lounge, clear of the fixed props and each other', () => {
+    const blocking = indoor.filter((p) => p.blocks !== false)
+    const own = blocking.flatMap((p) => tiles(p.rect))
+    expect(new Set(own).size).toBe(own.length)
+    for (const p of indoor) {
+      for (const key of tiles(p.rect)) {
+        const [tx, tz] = key.split(',').map(Number)
+        expect(zoneAt(layout, tx, tz), p.id).toBe('lounge')
+      }
+    }
+    for (const key of own) expect(taken.has(key), key).toBe(false)
+  })
+
+  it('leave the desk, the computer, the coffee machine and every seat reachable', () => {
+    const its = buildInteractables(grid, PROPS)
+    for (const id of [DESK_CHAIR_ID, OFFICE_COMPUTER_ID, 'coffee-machine']) {
+      expect(pathToInteractable(grid, SPAWN_TILE, its.get(id)!), id).not.toBeNull()
+    }
+    const sofa = PROPS.find((p) => p.id === 'lounge-sofa')!
+    const seats = [
+      ...[GUEST_CHAIR_ID, ...SALES_DESKS.map((d) => d.guestChairId)].map(
+        (id) => PROPS.find((p) => p.id === id)!.rect,
+      ),
+      ...Array.from({ length: sofa.rect.w }, (_, i) => ({
+        ...sofa.rect,
+        tx: sofa.rect.tx + i,
+        w: 1,
+      })),
+    ]
+    for (const seat of seats) {
+      expect(findPathToAny(grid, SPAWN_TILE, approachTilesFor(grid, seat))).not.toBeNull()
+    }
   })
 
   it('stand on the lot, clear of props, parking spaces, the entry and the spawn', () => {
-    for (const rect of footprints) {
+    for (const rect of outdoor) {
       for (const key of tiles(rect)) {
         const [tx, tz] = key.split(',').map(Number)
         expect(zoneAt(layout, tx, tz)).toBe('asphalt')

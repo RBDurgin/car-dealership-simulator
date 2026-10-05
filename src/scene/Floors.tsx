@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
+import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
+import { slotTier } from '../sim/improvements'
 import { PARKING_SPACES, ZONES, type ZoneKind } from '../sim/layout'
 import { rectBounds } from './runtime'
+import { useUpNow } from './useUpNow'
 
 const ZONE_COLORS: Record<ZoneKind, string> = {
   grass: '#6f8f5a',
@@ -41,6 +44,55 @@ function Plane({
   )
 }
 
+/** Pixels per tile of the polished floor's texture. */
+const TILE_PX = 64
+
+/** Big glossy tiles with thin grout lines, one per grid tile, for the polished floor upgrade. */
+function usePolishedTexture(w: number, h: number): CanvasTexture {
+  return useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = TILE_PX
+    canvas.height = TILE_PX
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#f4f2ee'
+    ctx.fillRect(0, 0, TILE_PX, TILE_PX)
+    ctx.fillStyle = '#c9c4ba'
+    ctx.fillRect(0, 0, TILE_PX, 2)
+    ctx.fillRect(0, 0, 2, TILE_PX)
+    const tex = new CanvasTexture(canvas)
+    tex.colorSpace = SRGBColorSpace
+    tex.wrapS = tex.wrapT = RepeatWrapping
+    tex.repeat.set(w, h)
+    tex.anisotropy = 8
+    return tex
+  }, [w, h])
+}
+
+/** The showroom floor: plain, or polished tiles once that upgrade is in. */
+function ShowroomFloor({
+  x,
+  z,
+  w,
+  h,
+  y,
+}: {
+  x: number
+  z: number
+  w: number
+  h: number
+  y: number
+}) {
+  const polished = slotTier(useUpNow(), 'floor') > 0
+  const texture = usePolishedTexture(w, h)
+  if (!polished) return <Plane x={x} z={z} w={w} h={h} y={y} color={ZONE_COLORS.showroom} />
+  return (
+    <mesh position={[x, y, z]} rotation-x={-Math.PI / 2} receiveShadow>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial map={texture} roughness={0.15} metalness={0.15} />
+    </mesh>
+  )
+}
+
 /** Side lines of every parking space, deduplicated where neighbours share an edge. */
 function useStripes() {
   return useMemo(() => {
@@ -71,6 +123,11 @@ export function Floors() {
       {ZONES.map((zone, i) => {
         const b = rectBounds(zone.rect)
         const wide = EXTEND_X.has(zone.kind)
+        // Later zones sit a hair higher so overlaps never z-fight.
+        const y = 0.004 + i * 0.002
+        if (zone.kind === 'showroom') {
+          return <ShowroomFloor key={i} x={b.x} z={b.z} w={b.w} h={b.h} y={y} />
+        }
         return (
           <Plane
             key={i}
@@ -78,8 +135,7 @@ export function Floors() {
             z={b.z}
             w={wide ? HORIZON : b.w}
             h={b.h}
-            // Later zones sit a hair higher so overlaps never z-fight.
-            y={0.004 + i * 0.002}
+            y={y}
             color={ZONE_COLORS[zone.kind]}
           />
         )

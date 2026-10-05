@@ -819,6 +819,10 @@ kbd {
   margin: 0 0 4px;
   font-size: 14px;
 }
+.how-to-play h4 {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
 .how-to-play p {
   margin: 0;
   font-size: 13px;

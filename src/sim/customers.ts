@@ -175,6 +175,8 @@ export interface CustomerOptions {
   archetype?: Archetype
   /** What brought them in. 'regular' by default. */
   source?: Source
+  /** Share taken off the discount they hope for, from showroom improvements (`Effects.expectCut`). */
+  expectCut?: number
 }
 
 /**
@@ -242,7 +244,7 @@ export function generateCustomer(
   const jitter = (rng.next() * 2 - 1) * EXPECT_JITTER
   return {
     ...customer,
-    expect: Math.round((traits.haggle.expect + jitter) * 1000) / 1000,
+    expect: Math.round((traits.haggle.expect + jitter) * (1 - (opts.expectCut ?? 0)) * 1000) / 1000,
     browseCarIds: ordered.map((car) => car.id),
     targetCarId: target?.id ?? null,
   }

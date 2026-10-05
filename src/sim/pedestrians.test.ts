@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOMER_VARIANTS } from './characters'
 import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
+import { NO_EFFECTS } from './improvements'
 import { buildLayout, createGrid, LOT_ENTRY_TILES, SIDEWALK_ENDS } from './layout'
 import {
   PEDESTRIANS_PER_DAY,
@@ -49,7 +50,7 @@ describe('planPedestrians', () => {
   })
 
   it('draws more passers-by, and more of them in, with improvements up', () => {
-    const effects = { walkInChance: 0.15, passersBy: 6 }
+    const effects = { ...NO_EFFECTS, walkInChance: 0.15, passersBy: 6 }
     const boosted = Array.from({ length: 100 }, (_, i) =>
       planPedestrians(createRng(i), i + 1, effects),
     )

@@ -1,24 +1,36 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
+  AdditiveBlending,
   Box3,
   CanvasTexture,
   Color,
   MeshStandardMaterial,
+  Quaternion,
   SRGBColorSpace,
   Vector3,
+  type Group,
   type Mesh,
   type Object3D,
 } from 'three'
 import type { Vec2 } from '../sim/grid'
-import { installed, slotTier } from '../sim/improvements'
+import { improvementProps, installed, slotTier, swappedModel } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
-import { DEALERSHIP_NAME, FURNITURE_SCALE, PROPS, type Prop, type PropModel } from '../sim/layout'
+import {
+  DEALERSHIP_NAME,
+  DISPLAY_CARS,
+  FURNITURE_SCALE,
+  PROPS,
+  type Prop,
+  type PropModel,
+  type Rect,
+} from '../sim/layout'
 import { PLAYER_RADIUS } from '../sim/movement'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
 import { customerPos, interactables, playerPos, rectBounds } from './runtime'
+import { useUpNow } from './useUpNow'
 
 const BASE = `${import.meta.env.BASE_URL}models`
 const CAR_SCALE = 0.95
@@ -57,6 +69,11 @@ const MODELS: Record<Exclude<PropModel, 'sign'>, ModelDef> = {
   kitchenCoffeeMachine: furniture('kitchenCoffeeMachine'),
   kitchenCabinet: furniture('kitchenCabinet'),
   loungeSofa: furniture('loungeSofa', { fit: true }),
+  loungeDesignSofa: furniture('loungeDesignSofa', { fit: true }),
+  cabinetTelevision: furniture('cabinetTelevision'),
+  televisionModern: furniture('televisionModern'),
+  kitchenBar: furniture('kitchenBar'),
+  stoolBar: furniture('stoolBar'),
   tableCoffeeSquare: furniture('tableCoffeeSquare'),
   computerScreen: furniture('computerScreen'),
   bookcaseClosedWide: furniture('bookcaseClosedWide'),
@@ -279,8 +296,15 @@ function Sign({ width }: { width: number }) {
 
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
-function PropView({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
-  const content = <PropContent prop={prop} cleanliness={cleanliness} />
+interface PropViewProps {
+  prop: Prop
+  cleanliness?: number
+  /** Its display platform is a turntable (the turntables upgrade). */
+  turntable?: boolean
+}
+
+function PropView({ prop, cleanliness, turntable }: PropViewProps) {
+  const content = <PropContent prop={prop} cleanliness={cleanliness} turntable={turntable} />
   return interactables.has(prop.id) ? (
     <Interactable id={prop.id}>{content}</Interactable>
   ) : (
@@ -290,10 +314,23 @@ function PropView({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
   )
 }
 
-function PropContent({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
+function PropContent({ prop, cleanliness, turntable }: PropViewProps) {
   const b = rectBounds(prop.rect)
   const turned = prop.facing % 2 === 1
   const y = (prop.elevation ?? 0) + (prop.platform ? PLATFORM_HEIGHT : 0)
+  const body = (
+    <group position-y={y} rotation-y={(prop.facing * Math.PI) / 2}>
+      {prop.model === 'sign' ? (
+        <Sign width={turned ? b.h : b.w} />
+      ) : (
+        <Model
+          def={MODELS[prop.model]}
+          footprint={turned ? { w: b.h, h: b.w } : { w: b.w, h: b.h }}
+          cleanliness={cleanliness}
+        />
+      )}
+    </group>
+  )
   return (
     <group position={[b.x, 0, b.z]}>
       {prop.platform && (
@@ -306,18 +343,110 @@ function PropContent({ prop, cleanliness }: { prop: Prop; cleanliness?: number }
           <meshStandardMaterial color="#c9ced6" metalness={0.3} roughness={0.35} />
         </RoundedBox>
       )}
-      <group position-y={y} rotation-y={(prop.facing * Math.PI) / 2}>
-        {prop.model === 'sign' ? (
-          <Sign width={turned ? b.h : b.w} />
-        ) : (
-          <Model
-            def={MODELS[prop.model]}
-            footprint={turned ? { w: b.h, h: b.w } : { w: b.w, h: b.h }}
-            cleanliness={cleanliness}
-          />
-        )}
-      </group>
+      {prop.platform && turntable ? (
+        <>
+          {/* A lit strip round the foot of the platform. */}
+          <RoundedBox args={[b.w - 0.1, 0.05, b.h - 0.1]} radius={0.02} position-y={0.025}>
+            <meshStandardMaterial
+              color="#bfe9ff"
+              emissive="#5cc8ff"
+              emissiveIntensity={1.6}
+              toneMapped={false}
+            />
+          </RoundedBox>
+          <Sway phase={prop.rect.tx + prop.rect.tz}>{body}</Sway>
+        </>
+      ) : (
+        body
+      )}
     </group>
+  )
+}
+
+/** How far (radians) and how fast a turntable swings its car either way. */
+const SWAY_ANGLE = 0.22
+const SWAY_SPEED = 0.35
+
+/** Swings its children slowly side to side, as a turntable shows off a car. Stays inside the footprint. */
+function Sway({ phase, children }: { phase: number; children: ReactNode }) {
+  const ref = useRef<Group>(null)
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      ref.current.rotation.y = SWAY_ANGLE * Math.sin(clock.elapsedTime * SWAY_SPEED + phase)
+    }
+  })
+  return <group ref={ref}>{children}</group>
+}
+
+const STAND_HEIGHT = 2.3
+const BEAM_MATERIAL = new MeshStandardMaterial({
+  color: '#fff6d8',
+  emissive: '#fff1c2',
+  emissiveIntensity: 0.6,
+  transparent: true,
+  opacity: 0.12,
+  depthWrite: false,
+  blending: AdditiveBlending,
+})
+const UP = new Vector3(0, 1, 0)
+
+/**
+ * A light stand in a corner of display `rect`, its head aimed at the middle of
+ * the platform with a faint beam. `corner` picks the corner: -1/1 on each axis.
+ */
+function LightStand({ rect, corner }: { rect: Rect; corner: [number, number] }) {
+  const b = rectBounds(rect)
+  const x = corner[0] * (b.w / 2 - 0.2)
+  const z = corner[1] * (b.h / 2 - 0.2)
+  const beam = useMemo(() => {
+    const head = new Vector3(x, STAND_HEIGHT, z)
+    const target = new Vector3(0, 0.6, 0)
+    const toHead = head.clone().sub(target)
+    const length = toHead.length()
+    toHead.normalize()
+    return {
+      position: target.clone().add(head).multiplyScalar(0.5),
+      quaternion: new Quaternion().setFromUnitVectors(UP, toHead),
+      length,
+      // The lamp head faces down the beam.
+      tilt: new Quaternion().setFromUnitVectors(UP, toHead.clone().negate()),
+    }
+  }, [x, z])
+  return (
+    <group position={[b.x, 0, b.z]}>
+      <mesh position={[x, STAND_HEIGHT / 2, z]} castShadow>
+        <cylinderGeometry args={[0.035, 0.06, STAND_HEIGHT, 8]} />
+        <meshStandardMaterial color="#2b2e33" metalness={0.6} roughness={0.4} />
+      </mesh>
+      <group position={[x, STAND_HEIGHT, z]} quaternion={beam.tilt}>
+        <mesh>
+          <cylinderGeometry args={[0.12, 0.17, 0.3, 12]} />
+          <meshStandardMaterial color="#2b2e33" metalness={0.6} roughness={0.4} />
+        </mesh>
+        <mesh position-y={0.151} rotation-x={-Math.PI / 2}>
+          <circleGeometry args={[0.15, 16]} />
+          <meshBasicMaterial color="#fff6d8" toneMapped={false} />
+        </mesh>
+      </group>
+      {/* The beam: wide at the car, narrow at the lamp. */}
+      <mesh position={beam.position} quaternion={beam.quaternion} material={BEAM_MATERIAL}>
+        <cylinderGeometry args={[0.15, 0.9, beam.length, 16, 1, true]} />
+      </mesh>
+    </group>
+  )
+}
+
+/** The spotlights upgrade: two light stands at opposite corners of each display platform. */
+function Spotlights() {
+  return (
+    <>
+      {DISPLAY_CARS.map(({ rect }, i) => (
+        <group key={i}>
+          <LightStand rect={rect} corner={[-1, 1]} />
+          <LightStand rect={rect} corner={[1, -1]} />
+        </group>
+      ))}
+    </>
   )
 }
 
@@ -344,7 +473,7 @@ function useDevRestockKey() {
  * Cars in stock, as dirty as they are. Re-renders only when the inventory
  * changes (a sale or restock, dirt or a wash).
  */
-function Cars() {
+function Cars({ turntables }: { turntables: boolean }) {
   const inventory = useGame((s) => s.inventory)
   const cars = useMemo(
     () => availableCars(inventory).map((car) => ({ prop: carProp(car), car })),
@@ -354,19 +483,26 @@ function Cars() {
   return (
     <>
       {cars.map(({ prop, car }) => (
-        <PropView key={prop.id} prop={prop} cleanliness={car.cleanliness} />
+        <PropView key={prop.id} prop={prop} cleanliness={car.cleanliness} turntable={turntables} />
       ))}
     </>
   )
 }
 
+/** The fixed props (as the improvements up have them), what improvements add, and the cars. */
 export function Props() {
+  const up = useUpNow()
   return (
     <>
-      {PROPS.map((p) => (
+      {PROPS.map((p) => {
+        const model = swappedModel(up, p.id)
+        return <PropView key={p.id} prop={model ? { ...p, model } : p} />
+      })}
+      {improvementProps(up).map((p) => (
         <PropView key={p.id} prop={p} />
       ))}
-      <Cars />
+      {slotTier(up, 'lighting') > 0 && <Spotlights />}
+      <Cars turntables={slotTier(up, 'platforms') > 0} />
     </>
   )
 }

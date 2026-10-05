@@ -1,6 +1,6 @@
 # Phase 7 Plan — Marketing and improvements
 
-**Status:** 7a done 2026-10-05. 7b done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 7a done 2026-10-05. 7b done 2026-10-05. 7c done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -55,6 +55,7 @@ Phases 5–6 gave us a real P&L (cost, gross, wages, floor plan) and haggling. T
 - Waiting room: TV and an upgraded sofa (replaces `loungeSofa`), plus a coffee bar. These slow patience loss while waiting or queued, as a multiplier in `tick`.
 - Showroom: new flooring, lighting and a display platform upgrade. Each lowers `expect` a little (floored at 0) and adds a small `acceptChance` bonus, capped so upgrades can't remove haggling entirely.
 - Props swap in at fixed spots in `layout.ts`. Check walls, crowd and pathing still pass their tests.
+- **As built:** six one-tier upgrades in `IMPROVEMENTS`, grouped by a new `area` (`outside`, `showroom`, `lounge`) on the Upgrades tab and in the help. Showroom: polished floor (a tiled, glossy floor in `scene/Floors.tsx`), spotlights (a light stand with a beam at two corners of each display platform) and turntable platforms (a lit rim, and the car swings slowly side to side in `useFrame`, staying inside its footprint). Lounge: a TV on a cabinet, a designer sofa (a `swap` of the `lounge-sofa` model; same footprint, so the finance sofa seats are unchanged) and a coffee bar with two stools. Added props live on the catalogue (`props`, drawn via `improvementProps`) and their blocking tiles come out of `improvementFootprints`, so `scene/runtime` blocks them each morning like the tube man. `Effects` gains `expectCut` (a *share* of the customer's hoped-for discount, so haggling never goes away; applied in `generateCustomer`, so it only reaches customers who arrive with it up), `acceptBonus` (added to the seller bonus in the store's `answerOffer`, for player and staff alike) and `patienceSaved` (taken off the patience drain in `tickClock`, on top of the receptionist). Each is capped (`MAX_EXPECT_CUT` 0.4, `MAX_ACCEPT_BONUS` 0.06, `MAX_PATIENCE_SAVED` 0.5). Patience only drains while `waiting`, so a queued buyer on the sofa isn't affected, despite the plan's wording. No save change: improvements are saved by id, and the new ids validate.
 
 ### 7d: Reputation and referrals
 

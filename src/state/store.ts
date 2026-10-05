@@ -45,7 +45,9 @@ import {
 } from '../sim/inventory'
 import {
   buyImprovement,
+  effectsOf,
   IMPROVEMENTS,
+  installed,
   type ImprovementId,
   type OwnedImprovement,
 } from '../sim/improvements'
@@ -468,10 +470,18 @@ export const useGame = create<GameState>((set, get) => {
     get().customers.find((c) => c.handlerId === employeeId && phases.includes(c.phase))
 
   /** Accept-chance bonus for whoever is selling to `c`. */
+  /** What the improvements up today add up to. */
+  const upEffects = () => {
+    const s = get()
+    return effectsOf(installed(s.improvements, s.clock.day))
+  }
+
+  /** The seller's skill bonus plus what the showroom improvements add. */
   const sellerBonus = (c: Customer) => {
-    if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL)
+    const showroom = upEffects().acceptBonus
+    if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + showroom
     const e = get().roster.find((x) => x.id === c.handlerId)
-    return e ? skillBonus(e.skill) : 0
+    return (e ? skillBonus(e.skill) : 0) + showroom
   }
 
   /**
@@ -680,14 +690,16 @@ export const useGame = create<GameState>((set, get) => {
       // Waiting customers lose patience, new ones arrive, and at closing everyone
       // heads out (`commit` applies the close).
       const minutes = step.day === s.clock.day ? step.minute - s.clock.minute : 0
-      // A receptionist keeps waiting customers company, so they last longer.
+      // A receptionist keeps waiting customers company, and a comfy waiting
+      // area keeps them happy, so they last longer.
       const except = s.activeAction?.targetId
-      const drain = minutes * patienceFactor(s.roster)
+      const { patienceSaved, expectCut } = upEffects()
+      const drain = minutes * patienceFactor(s.roster) * (1 - patienceSaved)
       let customers = reduceCustomers(s.customers, { type: 'tick', minutes: drain, except })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
       const arrived = due.map((source) =>
-        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, { source }),
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, { source, expectCut }),
       )
       customers = [...customers, ...arrived]
       set({
@@ -796,7 +808,9 @@ export const useGame = create<GameState>((set, get) => {
       if (isClosed(s.clock) || n <= 0) return
       const stock = availableCars(s.inventory)
       const arrived = Array.from({ length: n }, () =>
-        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+          expectCut: upEffects().expectCut,
+        }),
       )
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived) })
       commit([...s.customers, ...arrived])
@@ -814,6 +828,7 @@ export const useGame = create<GameState>((set, get) => {
         variant,
         archetype,
         source: 'walk-in',
+        expectCut: upEffects().expectCut,
       })
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...s.customers, c])

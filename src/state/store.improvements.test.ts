@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
+import { LAST_ARRIVAL_MINUTE } from '../sim/spawner'
 import { netIncome } from '../sim/deal'
 import { IMPROVEMENTS, installed } from '../sim/improvements'
 import { createSave, parseSave } from '../sim/save'
@@ -54,6 +55,29 @@ describe('improvements', () => {
     game().loadGame(save)
     expect(game().clock.day).toBe(2)
     expect(up()).toEqual(['big-sign'])
+  })
+
+  it('keeps waiting customers patient for longer with the waiting area done up', () => {
+    // Bought before today, so they're up.
+    useGame.setState({
+      improvements: [
+        { id: 'lounge-tv', day: 0 },
+        { id: 'coffee-bar', day: 0 },
+      ],
+    })
+    const tickTo = (minute: number) => game().tickClock({ day: 1, minute })
+    tickTo(LAST_ARRIVAL_MINUTE)
+    const c = game().customers[0]
+    game().dispatchCustomer({ type: 'arrive', id: c.id })
+    for (let i = 0; i < c.browseCarIds.length; i++) {
+      game().dispatchCustomer({ type: 'browsed', id: c.id })
+    }
+    const waiting = game().customers.find((x) => x.id === c.id)!
+    expect(waiting.phase).toBe('waiting')
+    tickTo(LAST_ARRIVAL_MINUTE + 20)
+    expect(game().customers.find((x) => x.id === c.id)!.patienceLeft).toBeCloseTo(
+      waiting.patienceLeft - 20 * (1 - 0.3),
+    )
   })
 
   it('opens the upgrades tab from the computer and its key', () => {

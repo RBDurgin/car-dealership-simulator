@@ -7,7 +7,7 @@ export const CONTROLS: [string, string][] = [
   ['H', 'Staff'],
   ['I', 'Stock (order cars)'],
   ['M', 'Marketing (ads)'],
-  ['U', 'Upgrades (sign, tube man)'],
+  ['U', 'Upgrades (outside, showroom, waiting area)'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away'],

@@ -1,6 +1,12 @@
+import { Fragment } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
-import { IMPROVEMENT_IDS, IMPROVEMENTS } from '../sim/improvements'
+import {
+  AREA_LABELS,
+  IMPROVEMENT_IDS,
+  IMPROVEMENTS,
+  type ImprovementArea,
+} from '../sim/improvements'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
@@ -9,6 +15,7 @@ import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
+import { effectLabel } from './improvementText'
 
 /** A short guide: shown when a new game starts, and again on `?` or from the title screen. */
 export function HowToPlay() {
@@ -163,22 +170,29 @@ export function HowToPlay() {
                 (or press <kbd>U</kbd>)
               </>
             )}
-            . You pay once, it goes up overnight and stays for good:
+            . You pay once, it goes up overnight and stays for good. Out front, a sign or a tube man
+            draws more people and more of them in. In the showroom, buyers who like what they see
+            hope for less off (they still haggle) and say yes a little more often. A done-up waiting
+            area keeps customers who are waiting to be helped there longer.
           </p>
-          <ul>
-            {IMPROVEMENT_IDS.map((id) => {
-              const u = IMPROVEMENTS[id]
-              const { walkInChance = 0, passersBy = 0 } = u.effects
-              return (
-                <li key={id}>
-                  <b>{u.label}</b>: {formatMoney(u.cost)}. {Math.round(walkInChance * 100)} more in
-                  100 walk in
-                  {passersBy > 0 && <>, and {passersBy} more people pass by a day</>}.
-                  {u.requires && <> Replaces the {IMPROVEMENTS[u.requires].label.toLowerCase()}.</>}
-                </li>
-              )
-            })}
-          </ul>
+          {(Object.keys(AREA_LABELS) as ImprovementArea[]).map((area) => (
+            <Fragment key={area}>
+              <h4>{AREA_LABELS[area]}</h4>
+              <ul>
+                {IMPROVEMENT_IDS.filter((id) => IMPROVEMENTS[id].area === area).map((id) => {
+                  const u = IMPROVEMENTS[id]
+                  return (
+                    <li key={id}>
+                      <b>{u.label}</b>: {formatMoney(u.cost)}. {effectLabel(id)}.
+                      {u.requires && (
+                        <> Replaces the {IMPROVEMENTS[u.requires].label.toLowerCase()}.</>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </Fragment>
+          ))}
           <p>The day summary takes what you spent off the net on the day you buy.</p>
         </section>
         <section>
