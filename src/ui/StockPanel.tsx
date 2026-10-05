@@ -16,6 +16,7 @@ import {
 import { useGame, type ComputerTab } from '../state/store'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
+import { UpgradesTab } from './UpgradesTab'
 
 const WHERE = { showroom: 'Showroom', lot: 'Lot' } as const
 
@@ -148,8 +149,9 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
 
 /**
  * The office computer: buying stock from the manufacturer (the catalog,
- * today's orders and the cars in stock) and, on the marketing tab, ad
- * campaigns. Opened at the computer, from the top bar's Office button, or with I and M.
+ * today's orders and the cars in stock), ad campaigns on the marketing tab,
+ * and improvements on the upgrades tab. Opened at the computer, from the top
+ * bar's Office button, or with I, M and U.
  * Orders are delivered the next morning.
  */
 export function StockPanel() {
@@ -181,10 +183,10 @@ export function StockPanel() {
           </button>
         ))}
       </div>
-      {tab === 'stock' ? <StockTab /> : <MarketingTab />}
+      {tab === 'stock' ? <StockTab /> : tab === 'marketing' ? <MarketingTab /> : <UpgradesTab />}
       <div className="status-hint">
-        {tab === 'stock' ? 'Orders arrive tomorrow morning.' : 'Campaigns start tomorrow morning.'}
-        {touch ? '' : ` ${tab === 'stock' ? 'I' : 'M'} or Esc to close.`}
+        {TAB_HINTS[tab].hint}
+        {touch ? '' : ` ${TAB_HINTS[tab].key} or Esc to close.`}
       </div>
     </div>
   )
@@ -193,7 +195,14 @@ export function StockPanel() {
 const TABS: [ComputerTab, string][] = [
   ['stock', 'Stock'],
   ['marketing', 'Marketing'],
+  ['upgrades', 'Upgrades'],
 ]
+
+const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
+  stock: { hint: 'Orders arrive tomorrow morning.', key: 'I' },
+  marketing: { hint: 'Campaigns start tomorrow morning.', key: 'M' },
+  upgrades: { hint: 'Upgrades go up overnight.', key: 'U' },
+}
 
 function StockTab() {
   const cash = useGame((s) => s.cash)

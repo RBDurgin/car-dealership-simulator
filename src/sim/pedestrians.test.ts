@@ -47,6 +47,18 @@ describe('planPedestrians', () => {
   it('is deterministic for a seed', () => {
     expect(planPedestrians(createRng(4), 2)).toEqual(planPedestrians(createRng(4), 2))
   })
+
+  it('draws more passers-by, and more of them in, with improvements up', () => {
+    const effects = { walkInChance: 0.15, passersBy: 6 }
+    const boosted = Array.from({ length: 100 }, (_, i) =>
+      planPedestrians(createRng(i), i + 1, effects),
+    )
+    boosted.forEach((plan, i) => expect(plan.length).toBe(days[i].length + 6))
+    const all = boosted.flat()
+    const share = all.filter((p) => p.walkIn).length / all.length
+    expect(share).toBeGreaterThan(WALK_IN_CHANCE + 0.15 - 0.05)
+    expect(share).toBeLessThan(WALK_IN_CHANCE + 0.15 + 0.05)
+  })
 })
 
 describe('turnInTile', () => {

@@ -1,6 +1,8 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
+import { IMPROVEMENT_IDS, IMPROVEMENTS } from '../sim/improvements'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
+import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
@@ -146,6 +148,38 @@ export function HowToPlay() {
             time. The day summary takes the ad spend off the net on the day you pay, and shows how
             many visitors each source brought and what they bought, so you can see which ads pay.
           </p>
+        </section>
+        <section>
+          <h3>Improvements</h3>
+          <p>
+            Passers-by on the sidewalk sometimes turn in: about {Math.round(WALK_IN_CHANCE * 100)}{' '}
+            in 100 to start with. Catch more of their eye on the office computer&apos;s{' '}
+            <b>Upgrades</b> tab
+            {touch ? (
+              <> (tap Office and switch tabs)</>
+            ) : (
+              <>
+                {' '}
+                (or press <kbd>U</kbd>)
+              </>
+            )}
+            . You pay once, it goes up overnight and stays for good:
+          </p>
+          <ul>
+            {IMPROVEMENT_IDS.map((id) => {
+              const u = IMPROVEMENTS[id]
+              const { walkInChance = 0, passersBy = 0 } = u.effects
+              return (
+                <li key={id}>
+                  <b>{u.label}</b>: {formatMoney(u.cost)}. {Math.round(walkInChance * 100)} more in
+                  100 walk in
+                  {passersBy > 0 && <>, and {passersBy} more people pass by a day</>}.
+                  {u.requires && <> Replaces the {IMPROVEMENTS[u.requires].label.toLowerCase()}.</>}
+                </li>
+              )
+            })}
+          </ul>
+          <p>The day summary takes what you spent off the net on the day you buy.</p>
         </section>
         <section>
           <h3>Staff</h3>

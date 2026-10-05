@@ -1,6 +1,6 @@
 # Phase 7 Plan — Marketing and improvements
 
-**Status:** 7a done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 7a done 2026-10-05. 7b done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -48,6 +48,7 @@ Phases 5–6 gave us a real P&L (cost, gross, wages, floor plan) and haggling. T
 - Larger sign (2 tiers, replaces the `sign` prop) and wacky inflatable tube man. The tube man is a procedural flailing mesh in `scene/`, animated in `useFrame` (no store updates). Both raise `WALK_IN_CHANCE`, and the tube man also adds passers-by.
 - `planPedestrians(rng, day, effects)`: the scene reads owned upgrades from the store once per day.
 - Store: `improvements: string[]` and `buyImprovement(id)`. Upgrades tab in the computer panel. Save adds `improvements`.
+- **As built:** upgrades go up *overnight* rather than the moment they're bought, like orders and campaigns. The store keeps `improvements: OwnedImprovement[]` (`{ id, day }`), and `installed(owned, day)` is what's up. That keeps the prop and its effect in step (passers-by are planned once a day) and means the tube man's tile (`IMPROVEMENT_FOOTPRINTS`) is only blocked in the morning, never under someone mid-day. `Effects` only has `walkInChance` and `passersBy` so far; 7c adds the indoor fields. Spend goes in `DayStats.improvements` and comes off `netIncome`. The lit pylon is tier 2 of the sign; only the top tier in a slot counts. Key U, save v6.
 
 ### 7c: Indoor improvements
 

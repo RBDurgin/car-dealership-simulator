@@ -231,6 +231,8 @@ export interface DayStats {
   interest: number
   /** Spent on ad campaigns today (paid when bought). */
   marketing: number
+  /** Spent on improvements today (paid when bought). */
+  improvements: number
   /** Customers who found none of the body types they wanted, by their first choice. */
   missed: Partial<Record<CarModel, number>>
   /** Payroll has been paid for the day. */
@@ -252,6 +254,7 @@ export function emptyStats(): DayStats {
     commissions: 0,
     interest: 0,
     marketing: 0,
+    improvements: 0,
     missed: {},
     settled: false,
     owner: null,
@@ -273,7 +276,7 @@ export function grossProfit(stats: DayStats): number {
 }
 
 /**
- * Gross profit less the day's staff costs, floor plan interest and ad spend,
+ * Gross profit less the day's staff costs, floor plan interest, ad spend and improvements,
  * plus any bonus from the owner.
  */
 export function netIncome(stats: DayStats): number {
@@ -282,7 +285,8 @@ export function netIncome(stats: DayStats): number {
     stats.wages -
     stats.commissions -
     stats.interest -
-    stats.marketing +
+    stats.marketing -
+    stats.improvements +
     (stats.owner?.bonus ?? 0)
   )
 }

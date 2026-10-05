@@ -2,6 +2,7 @@ import { Reservations, type Agent } from '../sim/crowd'
 import { PLAYER_ID } from '../sim/customers'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
+import { improvementFootprints, installed, type ImprovementId } from '../sim/improvements'
 import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { nearestStandable, PLAYER_RADIUS } from '../sim/movement'
@@ -25,9 +26,17 @@ export const grid = createGrid(layout)
 
 export const interactables = new Map<string, Interactable>()
 
-/** Blocks/frees car footprints and rebuilds the interactables to match the inventory. */
-function syncInventory(inventory: readonly InventoryCar[]): void {
+/** Improvements up today, which block their footprints. */
+let upNow: ImprovementId[] = []
+
+/**
+ * Blocks/frees car and improvement footprints and rebuilds the interactables
+ * to match. Improvements are only ever added.
+ */
+function syncWorld(inventory: readonly InventoryCar[], improvements: ImprovementId[]): void {
   applyToGrid(grid, inventory)
+  upNow = improvements
+  for (const rect of improvementFootprints(improvements)) grid.setRectBlocked(rect, true)
   // Rebuild everything, not just the cars: a freed footprint can open up new
   // approach tiles for its neighbours.
   interactables.clear()
@@ -38,16 +47,23 @@ function syncInventory(inventory: readonly InventoryCar[]): void {
 const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
 export const playerPos = { x: spawn.x, z: spawn.z }
 
-syncInventory(useGame.getState().inventory)
+const upOn = (s: ReturnType<typeof useGame.getState>) => installed(s.improvements, s.clock.day)
+
+syncWorld(useGame.getState().inventory, upOn(useGame.getState()))
 // Runs synchronously inside the store update, before React re-renders anything.
 useGame.subscribe((s, prev) => {
-  if (s.inventory === prev.inventory) return
-  syncInventory(s.inventory)
-  // A car delivered overnight onto the space the player ended the day in steps
-  // them out. Only new cars: the player sits on a blocked chair tile.
+  const up = upOn(s)
+  const raised = up.filter((id) => !upNow.includes(id))
+  if (s.inventory === prev.inventory && raised.length === 0) return
+  syncWorld(s.inventory, up)
+  // A car delivered or an improvement put up overnight where the player ended
+  // the day steps them out. Only new ones: the player sits on a blocked chair tile.
   const known = new Set(prev.inventory.map((c) => c.id))
-  const added = s.inventory.filter((c) => !known.has(c.id))
-  if (added.some((c) => touches(c.rect, playerPos))) {
+  const added = [
+    ...s.inventory.filter((c) => !known.has(c.id)).map((c) => c.rect),
+    ...improvementFootprints(raised),
+  ]
+  if (added.some((rect) => touches(rect, playerPos))) {
     Object.assign(playerPos, nearestStandable(grid, playerPos))
   }
 })

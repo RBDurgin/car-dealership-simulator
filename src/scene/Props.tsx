@@ -1,17 +1,18 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
-import type { ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo } from 'react'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Box3,
   CanvasTexture,
   Color,
+  MeshStandardMaterial,
   SRGBColorSpace,
   Vector3,
   type Mesh,
-  type MeshStandardMaterial,
   type Object3D,
 } from 'three'
 import type { Vec2 } from '../sim/grid'
+import { installed, slotTier } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { DEALERSHIP_NAME, FURNITURE_SCALE, PROPS, type Prop, type PropModel } from '../sim/layout'
 import { PLAYER_RADIUS } from '../sim/movement'
@@ -180,16 +181,72 @@ function useSignTexture(): CanvasTexture {
   }, [])
 }
 
+/** How each tier of the sign is built: the board's height off the ground and how far it overhangs. */
+const SIGN_TIERS = [
+  { boardY: 2.3, extraWidth: 0, post: 0.14 },
+  // Bigger sign: a wider board, up higher.
+  { boardY: 3.1, extraWidth: 1.6, post: 0.2 },
+  // Lit pylon: higher still, lit from inside with chasing bulbs round the edge.
+  { boardY: 4.4, extraWidth: 2.2, post: 0.3 },
+]
+const BULB_SPACING = 0.32
+const BULB_ON = new MeshStandardMaterial({
+  color: '#fff3c4',
+  emissive: '#ffd36b',
+  emissiveIntensity: 2,
+})
+const BULB_OFF = new MeshStandardMaterial({ color: '#8a7f63', roughness: 0.4 })
+
+/** Chasing bulbs along the top and bottom edges of a board `w` by `h`, on both faces. */
+function Bulbs({ w, h }: { w: number; h: number }) {
+  const bulbs = useRef<Mesh[]>([]).current
+  const per = Math.floor(w / BULB_SPACING)
+  useFrame(({ clock }) => {
+    const step = Math.floor(clock.elapsedTime * 6)
+    bulbs.forEach((m, i) => (m.material = (i + step) % 3 === 0 ? BULB_ON : BULB_OFF))
+  })
+  const spots = [-1, 1].flatMap((face) =>
+    [-1, 1].flatMap((edge) =>
+      Array.from({ length: per }, (_, i) => [
+        -w / 2 + BULB_SPACING / 2 + i * (w / per),
+        (edge * (h + 0.1)) / 2,
+        face * 0.08,
+      ]),
+    ),
+  )
+  return (
+    <>
+      {spots.map((p, i) => (
+        <mesh
+          key={i}
+          position={p as [number, number, number]}
+          material={BULB_OFF}
+          ref={(m) => {
+            if (m) bulbs[i] = m
+          }}
+        >
+          <sphereGeometry args={[0.06, 8, 6]} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
+/** The dealership sign, as the upgrades have it (0 is the one it opened with). */
 function Sign({ width }: { width: number }) {
   const texture = useSignTexture()
-  const boardW = width - 0.2
+  const tier = useGame((s) => slotTier(installed(s.improvements, s.clock.day), 'sign'))
+  const { boardY, extraWidth, post } = SIGN_TIERS[tier]
+  const lit = tier >= 2
+  const boardW = width - 0.2 + extraWidth
   const boardH = boardW / 3
-  const boardY = 2.3
+  // Posts stay inside the footprint whatever the board's width.
+  const postX = (width - 0.2) / 2.6
   return (
     <group>
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[(side * boardW) / 2.6, boardY / 2, 0]} castShadow>
-          <boxGeometry args={[0.14, boardY, 0.14]} />
+        <mesh key={side} position={[side * postX, boardY / 2, 0]} castShadow>
+          <boxGeometry args={[post, boardY, post]} />
           <meshStandardMaterial color="#3d4148" />
         </mesh>
       ))}
@@ -202,10 +259,20 @@ function Sign({ width }: { width: number }) {
         <group key={rot} rotation-y={rot}>
           <mesh position={[0, boardY, 0.065]}>
             <planeGeometry args={[boardW, boardH]} />
-            <meshStandardMaterial map={texture} />
+            {/* Lit from inside: shown at full brightness whatever the light. */}
+            {lit ? (
+              <meshBasicMaterial map={texture} toneMapped={false} />
+            ) : (
+              <meshStandardMaterial map={texture} />
+            )}
           </mesh>
         </group>
       ))}
+      {lit && (
+        <group position-y={boardY}>
+          <Bulbs w={boardW} h={boardH} />
+        </group>
+      )}
     </group>
   )
 }

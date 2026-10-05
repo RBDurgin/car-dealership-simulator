@@ -1,4 +1,5 @@
 import type { GameTime } from './clock'
+import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
@@ -12,10 +13,10 @@ import type { Employee } from './staff'
  * type (`InventoryCar`, `Employee`) changes shape, and add an entry to
  * `UPGRADES` that brings the previous version up to date. Saves older than the
  * upgrade chain reaches are ignored. Orders placed during the day are kept and
- * delivered on the morning the save resumes, and ad campaigns that haven't
- * finished carry on.
+ * delivered on the morning the save resumes, ad campaigns that haven't
+ * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 5
+export const SAVE_VERSION = 6
 
 export interface SaveData {
   version: number
@@ -30,6 +31,8 @@ export interface SaveData {
   orders: Order[]
   /** Ad campaigns still running (or starting) the morning the save resumes. */
   campaigns: Campaign[]
+  /** Improvements bought, with the day each was bought. */
+  improvements: OwnedImprovement[]
 }
 
 export interface SaveSource {
@@ -39,6 +42,7 @@ export interface SaveSource {
   roster: Employee[]
   orders: Order[]
   campaigns: Campaign[]
+  improvements: OwnedImprovement[]
 }
 
 /** A save of the day that just ended. The fired are gone and everyone else is off for the night. */
@@ -52,6 +56,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off' })),
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
+    improvements: s.improvements,
   }
 }
 
@@ -88,6 +93,8 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   }),
   // v5: ad campaigns.
   4: (raw) => ({ ...raw, campaigns: [] }),
+  // v6: improvements.
+  5: (raw) => ({ ...raw, improvements: [] }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -109,12 +116,13 @@ function upgrade(raw: RawSave): RawSave | null {
 export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
-  const { savedAt, day, cash, inventory, roster, orders, campaigns } = raw
+  const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
   if (!Array.isArray(orders) || !orders.every(isOrder)) return null
   if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
+  if (!Array.isArray(improvements) || !improvements.every(isImprovement)) return null
   return raw as unknown as SaveData
 }
 
@@ -165,6 +173,10 @@ function isCampaign(v: unknown): boolean {
     isNumber(v.startDay) &&
     isNumber(v.endDay)
   )
+}
+
+function isImprovement(v: unknown): boolean {
+  return isObject(v) && IMPROVEMENT_IDS.includes(v.id as OwnedImprovement['id']) && isNumber(v.day)
 }
 
 function isSlot(location: unknown, index: unknown): boolean {

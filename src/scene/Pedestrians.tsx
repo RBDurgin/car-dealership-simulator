@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { memo, Suspense, useState } from 'react'
 import type { Group } from 'three'
 import type { CustomerVariant } from '../sim/characters'
+import { effectsOf, installed } from '../sim/improvements'
 import {
   planPedestrians,
   takeDuePedestrians,
@@ -102,8 +103,8 @@ const PedestrianFigure = memo(function PedestrianFigure({
 })
 
 /**
- * Passers-by on the sidewalk, from a plan made from the day's number (see
- * `sim/pedestrians.ts`), so the store never hears of them. A few turn in at
+ * Passers-by on the sidewalk, from a plan made from the day's number and the
+ * improvements up that day (see `sim/pedestrians.ts`), so the store never hears of them. A few turn in at
  * the driveway and become customers (the store's `walkIn`); the rest walk on by.
  * Re-renders only when someone steps onto or off the sidewalk.
  */
@@ -118,7 +119,12 @@ export function Pedestrians() {
       const day = game.clock.day
       Object.assign(today, {
         day,
-        plan: planPedestrians(createRng(PEDESTRIAN_SEED + day), day),
+        // Improvements bought today go up tonight, so today's crowd is set now.
+        plan: planPedestrians(
+          createRng(PEDESTRIAN_SEED + day),
+          day,
+          effectsOf(installed(game.improvements, day)),
+        ),
         next: 0,
       })
       changed = true

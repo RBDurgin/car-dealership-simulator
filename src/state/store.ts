@@ -44,6 +44,12 @@ import {
   type InventoryCar,
 } from '../sim/inventory'
 import {
+  buyImprovement,
+  IMPROVEMENTS,
+  type ImprovementId,
+  type OwnedImprovement,
+} from '../sim/improvements'
+import {
   CHANNELS,
   launchCampaign,
   trafficBoost,
@@ -101,7 +107,7 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing'
+export type ComputerTab = 'stock' | 'marketing' | 'upgrades'
 
 export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
@@ -139,6 +145,8 @@ interface GameState {
   orders: Order[]
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
   campaigns: Campaign[]
+  /** Improvements bought, each with its day. One goes up the night after it's bought. */
+  improvements: OwnedImprovement[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -155,7 +163,7 @@ interface GameState {
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
-  /** The office computer panel (stock and marketing) is open. */
+  /** The office computer panel (stock, marketing and upgrades) is open. */
   stockOpen: boolean
   /** Which tab of it shows. */
   computerTab: ComputerTab
@@ -195,6 +203,8 @@ interface GameState {
   orderCar: (model: CarModel, financing: Financing) => boolean
   /** Buys an ad campaign on `channel`, paid in cash now, to start tomorrow. False if it can't be. */
   launchCampaign: (channel: Channel) => boolean
+  /** Buys improvement `id`, paid in cash now, to go up overnight. False if it can't be. */
+  buyImprovement: (id: ImprovementId) => boolean
   /** Cancels an order: cash comes back, or the floor plan credit is freed. */
   cancelOrder: (id: string) => void
   /** Pays the bank a floored car's cost from cash, so it stops accruing interest. */
@@ -420,6 +430,8 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'stock')
       case 'advertise':
         return get().toggleStockPanel(true, 'marketing')
+      case 'improve':
+        return get().toggleStockPanel(true, 'upgrades')
     }
   }
 
@@ -580,6 +592,7 @@ export const useGame = create<GameState>((set, get) => {
     inventory: buildInventory(createRng(INVENTORY_SEED)),
     orders: [],
     campaigns: [],
+    improvements: [],
     customers: [],
     arrivals: planArrivals(customerRng),
     dayStats: emptyStats(),
@@ -733,6 +746,22 @@ export const useGame = create<GameState>((set, get) => {
         dayStats: { ...s.dayStats, marketing: s.dayStats.marketing + cost },
       })
       notify(`${label} booked for ${formatMoney(cost)}. It runs for ${days} days from tomorrow.`)
+      return true
+    },
+    buyImprovement: (id) => {
+      const s = get()
+      const result = buyImprovement(s, id, s.clock.day)
+      if (!result.ok) {
+        notify(result.reason)
+        return false
+      }
+      const { label, cost } = IMPROVEMENTS[id]
+      set({
+        cash: result.cash,
+        improvements: result.improvements,
+        dayStats: { ...s.dayStats, improvements: s.dayStats.improvements + cost },
+      })
+      notify(`Bought the ${label.toLowerCase()} for ${formatMoney(cost)}. It goes up overnight.`)
       return true
     },
     cancelOrder: (id) => {
@@ -955,6 +984,7 @@ export const useGame = create<GameState>((set, get) => {
         roster: save.roster,
         orders: save.orders,
         campaigns: save.campaigns,
+        improvements: save.improvements,
       })
       beginDay(save.day + 1)
     },

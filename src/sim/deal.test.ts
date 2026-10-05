@@ -270,7 +270,7 @@ describe('day stats', () => {
     expect(grossProfit(emptyStats())).toBe(0)
   })
 
-  it('nets gross profit less staff costs, interest and ads, plus the owner bonus', () => {
+  it('nets gross profit less staff costs, interest, ads and improvements, plus the owner bonus', () => {
     const stats = {
       ...emptyStats(),
       sales: [sale(30_000, 27_000)],
@@ -278,9 +278,10 @@ describe('day stats', () => {
       commissions: 750,
       interest: 160,
       marketing: 1_200,
+      improvements: 3_000,
       owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
-    expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 - 1_200 + 1_500)
+    expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 - 1_200 - 3_000 + 1_500)
   })
 
   it('counts visitors by what brought them in', () => {

@@ -69,6 +69,12 @@ export function DaySummary() {
               <dd className="price">{formatMoney(-stats.marketing)}</dd>
             </>
           )}
+          {stats.improvements > 0 && (
+            <>
+              <dt>Improvements</dt>
+              <dd className="price">{formatMoney(-stats.improvements)}</dd>
+            </>
+          )}
           {!!stats.owner?.bonus && (
             <>
               <dt>Owner&apos;s bonus</dt>

@@ -4,8 +4,8 @@ import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
 
 /**
- * Day, time, cash, the owner's goal (on their days) and the office (stock and
- * marketing) and staff buttons.
+ * Day, time, cash, the owner's goal (on their days) and the office (stock,
+ * marketing and upgrades) and staff buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {

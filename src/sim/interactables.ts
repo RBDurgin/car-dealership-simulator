@@ -20,6 +20,7 @@ export type ActionId =
   | 'handOff'
   | 'orderStock'
   | 'advertise'
+  | 'improve'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -61,9 +62,10 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   // At the desk with a buyer in tow: the finance manager takes them from there.
   handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
-  // At the office computer: opens the stock panel, on its stock or marketing tab.
+  // At the office computer: opens the stock panel, on its stock, marketing or upgrades tab.
   orderStock: { id: 'orderStock', label: 'Order stock', verb: 'Ordering stock', mode: 'instant' },
   advertise: { id: 'advertise', label: 'Marketing', verb: 'Planning ads', mode: 'instant' },
+  improve: { id: 'improve', label: 'Upgrades', verb: 'Planning upgrades', mode: 'instant' },
 }
 
 export type InteractableKind = 'car' | 'chair' | 'coffee' | 'computer' | 'customer' | 'employee'
@@ -183,7 +185,7 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         kind: 'computer',
         name: 'Office computer',
         approachTiles: screenApproachTiles(grid, p.rect, p.facing),
-        actions: ['orderStock', 'advertise'],
+        actions: ['orderStock', 'advertise', 'improve'],
       })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })

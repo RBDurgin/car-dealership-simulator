@@ -1,6 +1,7 @@
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 import type { Tile } from './grid'
+import { NO_EFFECTS, type Effects } from './improvements'
 import { GRID_WIDTH, LOT_ENTRY_TILES, SIDEWALK_ENDS } from './layout'
 import type { Rng } from './rng'
 
@@ -32,10 +33,15 @@ export const PEDESTRIAN_SPEED = { min: 1.3, max: 1.9 }
 
 /**
  * Plans a day's passers-by, spread evenly over business hours, sorted by when
- * they set off.
+ * they set off. Improvements up that day draw more of them, and more turn in.
  */
-export function planPedestrians(rng: Rng, day: number): Pedestrian[] {
-  const count = rng.int(PEDESTRIANS_PER_DAY.min, PEDESTRIANS_PER_DAY.max)
+export function planPedestrians(
+  rng: Rng,
+  day: number,
+  effects: Effects = NO_EFFECTS,
+): Pedestrian[] {
+  const count = rng.int(PEDESTRIANS_PER_DAY.min, PEDESTRIANS_PER_DAY.max) + effects.passersBy
+  const walkInChance = WALK_IN_CHANCE + effects.walkInChance
   const minutes = Array.from({ length: count }, () =>
     Math.round(OPEN_MINUTE + rng.next() * (CLOSE_MINUTE - OPEN_MINUTE)),
   ).sort((a, b) => a - b)
@@ -50,7 +56,7 @@ export function planPedestrians(rng: Rng, day: number): Pedestrian[] {
       from,
       to,
       speed: PEDESTRIAN_SPEED.min + rng.next() * (PEDESTRIAN_SPEED.max - PEDESTRIAN_SPEED.min),
-      walkIn: rng.next() < WALK_IN_CHANCE,
+      walkIn: rng.next() < walkInChance,
     }
   })
 }

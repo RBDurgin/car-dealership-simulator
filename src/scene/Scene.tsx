@@ -12,6 +12,7 @@ import { Owner } from './Owner'
 import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
 import { Props } from './Props'
+import { TubeMan } from './TubeMan'
 import { Staff } from './Staff'
 import { Walls } from './Walls'
 
@@ -48,6 +49,7 @@ export function Scene() {
       <Suspense fallback={null}>
         <Props />
       </Suspense>
+      <TubeMan />
       <DebugGrid />
       <ClickMarker />
       <Player />
