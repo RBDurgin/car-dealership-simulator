@@ -1,6 +1,6 @@
 # Phase 5 Plan — Buying inventory from the manufacturer
 
-**Status:** Planned 2026-10-05. 5a done 2026-10-05. 5b done 2026-10-05. 5c done 2026-10-05 (awaiting review), which completes Phase 5. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** Complete 2026-10-05. 5a, 5b and 5c are done.
 
 ## Context
 
