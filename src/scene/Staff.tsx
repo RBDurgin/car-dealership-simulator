@@ -2,11 +2,20 @@ import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { memo, Suspense } from 'react'
 import type { Group } from 'three'
+import type { Customer } from '../sim/customers'
+import { hasBuyersInHand } from '../sim/deal'
 import type { Tile } from '../sim/grid'
 import { approachTilesFor } from '../sim/interactables'
 import { PROPS, SIDEWALK_ENDS } from '../sim/layout'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
-import { POSTS, ROLE_BADGES, STAFF_SPEED, type Employee, type Role } from '../sim/staff'
+import {
+  financeSeconds,
+  POSTS,
+  ROLE_BADGES,
+  STAFF_SPEED,
+  type Employee,
+  type Role,
+} from '../sim/staff'
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
@@ -42,6 +51,8 @@ interface StaffWalker extends Walker {
   exit: Tile
   /** 'post' (going to or at their post) or 'leave'. A new task means a new path. */
   task: string | null
+  /** Finance: the buyer whose paperwork is under way, and game seconds left on it. */
+  paperwork: { customerId: string; left: number } | null
 }
 
 const walkers = new Map<string, StaffWalker>()
@@ -53,7 +64,13 @@ function walkerFor(e: Employee): StaffWalker {
   const rng = createRng(hashSeed(e.id))
   const spawn = rng.pick(SIDEWALK_ENDS)
   const exit = rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
-  w = { ...createWalker(e.id, spawn, inwardHeading(spawn)), rng, exit, task: null }
+  w = {
+    ...createWalker(e.id, spawn, inwardHeading(spawn)),
+    rng,
+    exit,
+    task: null,
+    paperwork: null,
+  }
   walkers.set(e.id, w)
   staffPos.set(e.id, w.pos)
   return w
@@ -99,15 +116,48 @@ function onArrived(e: Employee, w: StaffWalker): void {
   if (e.status === 'arriving') game.dispatchStaff({ type: 'atPost', id: e.id })
 }
 
-function update(e: Employee, w: StaffWalker, seconds: number): void {
-  const task = e.status === 'leaving' ? 'leave' : 'post'
+/**
+ * The finance manager at their desk works through the paperwork of the buyer
+ * sitting opposite, and signs it off once done.
+ */
+function doPaperwork(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): void {
+  const c = customers.find((x) => x.handlerId === e.id && x.phase === 'signing')
+  if (!c) {
+    w.paperwork = null
+    return
+  }
+  if (w.paperwork?.customerId !== c.id) {
+    w.paperwork = { customerId: c.id, left: financeSeconds(e.skill) }
+  }
+  w.paperwork.left -= seconds
+  if (w.paperwork.left > 0) return
+  w.paperwork = null
+  useGame.getState().financeSign(e.id, c.id)
+}
+
+function update(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): void {
+  // Sent home (closing, or let go) with buyers still in hand: finish them first.
+  const task = e.status === 'leaving' && !hasBuyersInHand(customers, e.id) ? 'leave' : 'post'
   if (task !== w.task) plan(e, w, task)
   if (w.seat) {
     w.anim.current = 'sit'
-    return
+  } else {
+    walk(w, STAFF_SPEED, seconds, w.faceTo)
+    if (w.waypoints.length === 0) onArrived(e, w)
   }
-  walk(w, STAFF_SPEED, seconds, w.faceTo)
-  if (w.waypoints.length === 0) onArrived(e, w)
+  if (e.role === 'finance' && w.task === 'post' && w.waypoints.length === 0) {
+    doPaperwork(e, w, seconds, customers)
+  }
 }
 
 /** Role label over an employee's head, so staff read as staff. */
@@ -148,8 +198,9 @@ const onLot = (e: Employee) => e.status !== 'off'
 
 /**
  * Every employee in the world, moved by one `useFrame` (like Customers): they
- * walk in from the sidewalk at opening (or when hired), work from their post,
- * and walk out at closing (or when fired). Shift changes go to the store;
+ * walk in from the sidewalk at opening (or when hired), work from their post
+ * (the finance manager signs buyers' paperwork at the office desk), and walk
+ * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */
 export function Staff() {
@@ -162,7 +213,7 @@ export function Staff() {
     for (const e of game.roster) {
       if (!onLot(e)) continue
       live.add(e.id)
-      update(e, walkerFor(e), seconds)
+      update(e, walkerFor(e), seconds, game.customers)
     }
     for (const id of walkers.keys()) if (!live.has(id)) removeWalker(id)
     syncGroups(groups, walkers)

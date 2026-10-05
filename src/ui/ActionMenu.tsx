@@ -22,6 +22,8 @@ export function ActionMenu() {
   const menu = useGame((s) => s.menu)
   // Re-render when customers change, so a customer's menu follows their phase.
   const customers = useGame((s) => s.customers)
+  // And when staff come and go: the office desk changes hands with the finance manager.
+  const roster = useGame((s) => s.roster)
   const ref = useRef<HTMLDivElement>(null)
 
   // Any press outside the menu closes it. Capture phase, so it runs before the
@@ -48,7 +50,7 @@ export function ActionMenu() {
         // Start at the top and go clockwise.
         const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n
         // Unavailable actions stay clickable: requestAction explains why they can't run.
-        const blocked = actionBlocker(id, it.id, customers) !== null
+        const blocked = actionBlocker(id, it.id, customers, roster) !== null
         return (
           <button
             key={id}

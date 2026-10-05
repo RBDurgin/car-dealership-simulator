@@ -11,8 +11,10 @@ import {
   MAX_ACCEPT_CHANCE,
   moodOf,
   PATIENCE_MINUTES,
+  PLAYER_ID,
   reduceCustomer,
   reduceCustomers,
+  staffHandled,
   type Customer,
   type CustomerEvent,
 } from './customers'
@@ -37,6 +39,7 @@ const base: Customer = {
   offer: null,
   phase: 'arriving',
   leaveReason: null,
+  handlerId: null,
 }
 
 const run = (c: Customer, ...events: CustomerEvent[]) =>
@@ -185,7 +188,7 @@ describe('reduceCustomer', () => {
 
   it('runs a sale from greeting to driving off', () => {
     const steps: [CustomerEvent, Customer['phase']][] = [
-      [{ type: 'greet', id: 'c1', carId: 'lot-car-1' }, 'talking'],
+      [{ type: 'greet', id: 'c1', carId: 'lot-car-1', by: 'player' }, 'talking'],
       [{ type: 'offer', id: 'c1', carId: 'lot-car-1', price: 28_000 }, 'considering'],
       [{ type: 'respond', id: 'c1', accepted: true }, 'following'],
       [{ type: 'seat', id: 'c1' }, 'signing'],
@@ -202,8 +205,37 @@ describe('reduceCustomer', () => {
     expect(reduceCustomer(c, { type: 'despawn', id: 'c1' })).toBeNull()
   })
 
+  it('belongs to whoever greeted them until they leave', () => {
+    const talking = run(at('waiting'), { type: 'greet', id: 'c1', carId: 'a', by: 'staff-1' })!
+    expect(talking.handlerId).toBe('staff-1')
+    expect(staffHandled(talking)).toBe(true)
+    const gone = run(talking, { type: 'close' })!
+    expect(gone).toMatchObject({ phase: 'leaving', handlerId: null })
+  })
+
+  it('is handed off to finance, waits in the lounge and is called to the desk', () => {
+    const following = at('following', { handlerId: PLAYER_ID })
+    const queued = run(following, { type: 'handOff', id: 'c1', to: 'staff-1' })!
+    expect(queued).toMatchObject({ phase: 'queued', handlerId: 'staff-1' })
+    expect(moodOf(queued)).toBe('happy')
+    expect(bubbleOf(queued)).toBeNull()
+    // Waiting for finance costs no patience.
+    expect(reduceCustomer(queued, { type: 'tick', minutes: 30 })).toBe(queued)
+
+    const called = run(queued, { type: 'call', id: 'c1' })!
+    expect(called).toMatchObject({ phase: 'following', handlerId: 'staff-1' })
+    expect(run(called, { type: 'seat', id: 'c1' })!.phase).toBe('signing')
+
+    // Only the player's own buyer can be handed off, and only while following.
+    const theirs = at('following', { handlerId: 'staff-2' })
+    expect(reduceCustomer(theirs, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(theirs)
+    const talking = at('talking', { handlerId: PLAYER_ID })
+    expect(reduceCustomer(talking, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(talking)
+    expect(reduceCustomer(following, { type: 'call', id: 'c1' })).toBe(following)
+  })
+
   it('can be greeted while still browsing', () => {
-    const c = run(at('browsing'), { type: 'greet', id: 'c1', carId: 'lot-car-5' })!
+    const c = run(at('browsing'), { type: 'greet', id: 'c1', carId: 'lot-car-5', by: 'player' })!
     expect(c).toMatchObject({ phase: 'talking', targetCarId: 'lot-car-5' })
   })
 
@@ -216,15 +248,15 @@ describe('reduceCustomer', () => {
     expect(refused).toMatchObject({ phase: 'leaving', leaveReason: 'refused', offer: null })
     expect(moodOf(refused)).toBe('unhappy')
 
-    const empty = run(at('waiting'), { type: 'greet', id: 'c1', carId: null })!
+    const empty = run(at('waiting'), { type: 'greet', id: 'c1', carId: null, by: 'player' })!
     expect(empty).toMatchObject({ phase: 'leaving', leaveReason: 'refused' })
   })
 
   it('goes back to waiting when the player walks away', () => {
     const offer = { carId: 'lot-car-1', price: 28_000 }
-    for (const phase of ['talking', 'considering', 'following', 'signing'] as const) {
-      const c = run(at(phase, { offer }), { type: 'cancel', id: 'c1' })!
-      expect(c).toMatchObject({ phase: 'waiting', offer: null })
+    for (const phase of ['talking', 'considering', 'following', 'signing', 'queued'] as const) {
+      const c = run(at(phase, { offer, handlerId: PLAYER_ID }), { type: 'cancel', id: 'c1' })!
+      expect(c).toMatchObject({ phase: 'waiting', offer: null, handlerId: null })
     }
     for (const phase of ['arriving', 'browsing', 'waiting'] as const) {
       const c = at(phase)
@@ -247,7 +279,7 @@ describe('reduceCustomer', () => {
     // Patience carries over after a cancelled deal instead of resetting.
     const resumed = run(
       waiting,
-      { type: 'greet', id: 'c1', carId: 'a' },
+      { type: 'greet', id: 'c1', carId: 'a', by: 'player' },
       { type: 'cancel', id: 'c1' },
     )!
     expect(resumed.patienceLeft).toBe(30)
@@ -271,6 +303,13 @@ describe('reduceCustomer', () => {
     }
     const signing = at('signing')
     expect(reduceCustomer(signing, { type: 'close' })).toBe(signing)
+    // Finance finishes the buyers it was handed; the player's follower goes home.
+    for (const phase of ['queued', 'following'] as const) {
+      const c = at(phase, { handlerId: 'staff-1' })
+      expect(reduceCustomer(c, { type: 'close' })).toBe(c)
+    }
+    const mine = run(at('following', { handlerId: PLAYER_ID }), { type: 'close' })!
+    expect(mine.leaveReason).toBe('closing')
     const leaving = at('leaving', { leaveReason: 'impatient' })
     expect(reduceCustomer(leaving, { type: 'close' })).toBe(leaving)
   })
@@ -286,12 +325,14 @@ describe('reduceCustomer', () => {
       { type: 'signed', id: 'c1' },
       { type: 'despawn', id: 'c1' },
       // Events for someone else.
-      { type: 'greet', id: 'c2', carId: 'x' },
+      { type: 'greet', id: 'c2', carId: 'x', by: 'player' },
     ]
     for (const ev of stale) expect(reduceCustomer(waiting, ev)).toBe(waiting)
 
     const leaving = at('leaving', { leaveReason: 'refused' })
-    expect(reduceCustomer(leaving, { type: 'greet', id: 'c1', carId: 'x' })).toBe(leaving)
+    expect(reduceCustomer(leaving, { type: 'greet', id: 'c1', carId: 'x', by: 'player' })).toBe(
+      leaving,
+    )
     expect(reduceCustomer(leaving, { type: 'tick', minutes: 99 })).toBe(leaving)
   })
 })
@@ -300,7 +341,7 @@ describe('reduceCustomers', () => {
   const crowd = [at('waiting'), at('browsing', { id: 'c2' }), at('leaving', { id: 'c3' })]
 
   it('routes events by id and removes despawned customers', () => {
-    const greeted = reduceCustomers(crowd, { type: 'greet', id: 'c2', carId: 'x' })
+    const greeted = reduceCustomers(crowd, { type: 'greet', id: 'c2', carId: 'x', by: 'player' })
     expect(greeted.map((c) => c.phase)).toEqual(['waiting', 'talking', 'leaving'])
     expect(greeted[0]).toBe(crowd[0])
 
@@ -316,7 +357,9 @@ describe('reduceCustomers', () => {
 
   it('returns the same array when nothing changed', () => {
     expect(reduceCustomers(crowd, { type: 'seat', id: 'c1' })).toBe(crowd)
-    expect(reduceCustomers(crowd, { type: 'greet', id: 'nobody', carId: 'x' })).toBe(crowd)
+    expect(reduceCustomers(crowd, { type: 'greet', id: 'nobody', carId: 'x', by: 'player' })).toBe(
+      crowd,
+    )
     expect(reduceCustomers([], { type: 'close' })).toEqual([])
   })
 })

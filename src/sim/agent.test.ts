@@ -59,6 +59,17 @@ describe('stepAlongPath', () => {
     expect(wps).toHaveLength(0)
   })
 
+  it('keeps the rest of the path when it lands a hair short of a waypoint', () => {
+    // Float error leaves a tiny final hop onto the waypoint; that isn't being pinned.
+    const wps = [
+      { x: 0.5, z: 1.5 },
+      { x: 3.5, z: -2.5 },
+    ]
+    const s = stepAlongPath(grid, { x: 0.5, z: 1.5 + 1e-15 }, wps, 1.8, 0.05)
+    expect(wps).toEqual([{ x: 3.5, z: -2.5 }])
+    expect(s.z).toBeCloseTo(1.5)
+  })
+
   it('follows a smoothed path around an obstacle to the goal', () => {
     const g = new Grid(10, 10)
     g.blockRect(4, 0, 1, 8)

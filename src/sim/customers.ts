@@ -5,21 +5,23 @@ import type { Rng } from './rng'
 
 /**
  * A customer's visit. The world (2d) moves them and reports progress as events;
- * the player's actions (2e) drive the sale.
+ * whoever handles the sale (the player, or staff) drives it.
  *
  *   arriving ─arrive─► browsing ─browsed (last car)─► waiting ◄──────────────┐
  *                          │                            │                     │
  *                          └───────────greet────────────┤                  cancel
  *                                                       ▼                     │
  *            talking ─offer─► considering ─respond(yes)─► following ─seat─► signing
- *                                  │                                          │
- *                            respond(no)                                   signed
- *                                  ▼                                          ▼
- *                         leaving(refused)                           leaving(bought)
+ *                                  │                       │     ▲            │
+ *                            respond(no)             handOff│     │call     signed
+ *                                  ▼                       ▼     │            ▼
+ *                         leaving(refused)                 queued    leaving(bought)
  *
+ * `greet` makes the greeter their handler; `handOff` passes a buyer to the
+ * finance manager, who `call`s them from the lounge when the desk is free.
  * Waiting customers lose patience on `tick` and leave impatient at zero.
- * `close` sends everyone except a customer mid-signature home. `cancel` from
- * talking, considering, following or signing puts them back to waiting.
+ * `close` sends everyone home except a customer mid-signature or in staff
+ * hands. `cancel` from any deal phase puts them back to waiting.
  */
 export type CustomerPhase =
   | 'arriving'
@@ -29,7 +31,12 @@ export type CustomerPhase =
   | 'considering'
   | 'following'
   | 'signing'
+  /** Handed off to finance: sitting in the lounge until the desk is free. */
+  | 'queued'
   | 'leaving'
+
+/** The player's id as a customer's handler (and in the crowd). */
+export const PLAYER_ID = 'player'
 
 export type LeaveReason = 'bought' | 'refused' | 'impatient' | 'closing'
 
@@ -62,6 +69,11 @@ export interface Customer {
   offer: Offer | null
   phase: CustomerPhase
   leaveReason: LeaveReason | null
+  /**
+   * Who is dealing with them: `PLAYER_ID` or an employee id, from greeting until
+   * they leave or the deal is dropped. Null otherwise.
+   */
+  handlerId: string | null
 }
 
 const FIRST_NAMES = [
@@ -160,6 +172,7 @@ export function generateCustomer(
     offer: null,
     phase: 'arriving',
     leaveReason: null,
+    handlerId: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -219,6 +232,7 @@ export function moodOf(c: Customer): Mood {
   switch (c.phase) {
     case 'following':
     case 'signing':
+    case 'queued':
       return 'happy'
     case 'leaving':
       if (c.leaveReason === 'bought') return 'happy'
@@ -258,16 +272,20 @@ export type CustomerEvent =
   | { type: 'arrive'; id: string }
   /** Finished looking at the current browse car. */
   | { type: 'browsed'; id: string }
-  /** The player greeted them. `carId` is what they ask about (see `chooseTarget`). */
-  | { type: 'greet'; id: string; carId: string | null }
+  /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
+  | { type: 'greet'; id: string; carId: string | null; by: string }
   | { type: 'offer'; id: string; carId: string; price: number }
   /** Their answer to the offer (see `decide`). */
   | { type: 'respond'; id: string; accepted: boolean }
   /** Sat down at the office desk. */
   | { type: 'seat'; id: string }
+  /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
+  | { type: 'handOff'; id: string; to: string }
+  /** Finance is free: up from the lounge and over to the desk. */
+  | { type: 'call'; id: string }
   /** Paperwork signed: the sale goes through. */
   | { type: 'signed'; id: string }
-  /** The player walked away mid-conversation or mid-deal. */
+  /** Their handler walked away mid-conversation or mid-deal. */
   | { type: 'cancel'; id: string }
   /** Walked off the map. Removes them. */
   | { type: 'despawn'; id: string }
@@ -283,7 +301,13 @@ const leave = (c: Customer, reason: LeaveReason): Customer => ({
   ...c,
   phase: 'leaving',
   leaveReason: reason,
+  handlerId: null,
 })
+
+/** Being looked after by an employee rather than the player. */
+export function staffHandled(c: Customer): boolean {
+  return c.handlerId !== null && c.handlerId !== PLAYER_ID
+}
 
 /**
  * One customer's next state, or null once they've despawned. Events that don't
@@ -305,7 +329,7 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.phase !== 'browsing' && c.phase !== 'waiting') return c
       // Nothing left they could want.
       if (ev.carId === null) return leave(c, 'refused')
-      return { ...c, phase: 'talking', targetCarId: ev.carId }
+      return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by }
     case 'offer':
       if (c.phase !== 'talking') return c
       return { ...c, phase: 'considering', offer: { carId: ev.carId, price: ev.price } }
@@ -315,12 +339,18 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'seat':
       if (c.phase !== 'following') return c
       return { ...c, phase: 'signing' }
+    case 'handOff':
+      if (c.phase !== 'following' || c.handlerId !== PLAYER_ID) return c
+      return { ...c, phase: 'queued', handlerId: ev.to }
+    case 'call':
+      if (c.phase !== 'queued') return c
+      return { ...c, phase: 'following' }
     case 'signed':
       if (c.phase !== 'signing') return c
       return leave(c, 'bought')
     case 'cancel':
-      if (!['talking', 'considering', 'following', 'signing'].includes(c.phase)) return c
-      return { ...c, phase: 'waiting', offer: null }
+      if (!['talking', 'considering', 'following', 'signing', 'queued'].includes(c.phase)) return c
+      return { ...c, phase: 'waiting', offer: null, handlerId: null }
     case 'despawn':
       return c.phase === 'leaving' ? null : c
     case 'tick': {
@@ -331,8 +361,10 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         : { ...c, patienceLeft }
     }
     case 'close':
-      // Let a signature in progress finish; everyone else heads out.
+      // Let a signature in progress finish, and staff finish the buyers they
+      // have in hand; everyone else heads out.
       if (c.phase === 'leaving' || c.phase === 'signing') return c
+      if (staffHandled(c) && (c.phase === 'queued' || c.phase === 'following')) return c
       return leave({ ...c, offer: null }, 'closing')
   }
 }

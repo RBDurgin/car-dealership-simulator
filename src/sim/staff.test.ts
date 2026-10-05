@@ -3,6 +3,10 @@ import { CUSTOMER_VARIANTS, STAFF_VARIANTS } from './characters'
 import { createRng } from './rng'
 import {
   canHire,
+  FINANCE_FEE,
+  FINANCE_SECONDS,
+  financeOnDuty,
+  financeSeconds,
   generateCandidates,
   MAX_SKILL,
   MIN_SKILL,
@@ -76,9 +80,45 @@ describe('hiring limits', () => {
 describe('payroll', () => {
   it('sums the wages of everyone still employed', () => {
     const roster = [hand('sales', { wage: 150 }), hand('porter', { wage: 75 })]
-    expect(payroll(roster)).toEqual({ wages: 225, commissions: 0 })
-    expect(payroll([...roster, hand('finance', { wage: 200, fired: true })]).wages).toBe(225)
-    expect(payroll([])).toEqual({ wages: 0, commissions: 0 })
+    expect(payroll(roster, [])).toEqual({ wages: 225, commissions: 0 })
+    expect(payroll([...roster, hand('finance', { wage: 200, fired: true })], []).wages).toBe(225)
+    expect(payroll([], [])).toEqual({ wages: 0, commissions: 0 })
+  })
+
+  it("adds up what staff earned on the day's sales", () => {
+    const sale = {
+      customerName: 'A',
+      carId: 'x',
+      model: 'sedan' as const,
+      price: 30_000,
+      minute: 600,
+    }
+    const sales = [
+      { ...sale, signedBy: null, commission: 0 },
+      { ...sale, signedBy: 'Jordan K.', commission: FINANCE_FEE },
+      { ...sale, signedBy: 'Jordan K.', commission: FINANCE_FEE },
+    ]
+    expect(payroll([], sales).commissions).toBe(2 * FINANCE_FEE)
+  })
+})
+
+describe('finance', () => {
+  it('takes about 6 seconds a deal, quicker with skill', () => {
+    expect(financeSeconds(3)).toBe(FINANCE_SECONDS)
+    expect(financeSeconds(1)).toBeGreaterThan(financeSeconds(3))
+    expect(financeSeconds(5)).toBeLessThan(financeSeconds(3))
+    expect(financeSeconds(5)).toBeGreaterThan(0)
+  })
+
+  it('is on duty only on shift and not let go', () => {
+    expect(financeOnDuty([])).toBeNull()
+    expect(financeOnDuty([hand('finance', { status: 'atPost' })])).not.toBeNull()
+    expect(financeOnDuty([hand('finance', { status: 'arriving' })])).not.toBeNull()
+    for (const status of ['off', 'leaving'] as const) {
+      expect(financeOnDuty([hand('finance', { status })])).toBeNull()
+    }
+    expect(financeOnDuty([hand('finance', { status: 'atPost', fired: true })])).toBeNull()
+    expect(financeOnDuty([hand('sales', { status: 'atPost' })])).toBeNull()
   })
 })
 

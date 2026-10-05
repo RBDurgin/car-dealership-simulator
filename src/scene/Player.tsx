@@ -5,7 +5,8 @@ import { useWasd } from '../input/useWasd'
 import { isTimedActionDone, type ActiveAction } from '../sim/actions'
 import { angleDiff, dampAngle, stepAlongPath, toWaypoints } from '../sim/agent'
 import { SEAT_HEIGHT, type CharacterAnim } from '../sim/characters'
-import { inConversation } from '../sim/deal'
+import { PLAYER_ID } from '../sim/customers'
+import { dealCustomer, inConversation } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
@@ -172,7 +173,10 @@ export function Player() {
         }
       }
     }
-    if (awaitingSignature.current !== null && game.customers.some((c) => c.phase === 'signing')) {
+    if (
+      awaitingSignature.current !== null &&
+      dealCustomer(game.customers, PLAYER_ID)?.phase === 'signing'
+    ) {
       game.arriveAction(awaitingSignature.current)
       awaitingSignature.current = null
     }

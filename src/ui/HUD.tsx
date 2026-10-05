@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { PLAYER_ID } from '../sim/customers'
 import { dealCustomer } from '../sim/deal'
 import { ACTIONS } from '../sim/interactables'
 import { findInteractable } from '../scene/runtime'
@@ -18,7 +19,7 @@ const NOTICE_MS = 2200
 
 function ActionStatus() {
   const action = useGame((s) => s.activeAction)
-  const dealName = useGame((s) => dealCustomer(s.customers)?.name)
+  const dealName = useGame((s) => dealCustomer(s.customers, PLAYER_ID)?.name)
   const it = action && findInteractable(action.targetId)
   if (!action || !it) return null
 
@@ -28,6 +29,7 @@ function ActionStatus() {
   let label: string
   if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
+  else if (action.action === 'handOff' && dealName) label = `Taking ${dealName} to finance`
   else label = `Heading to ${person ? it.name : it.name.toLowerCase()}`
   const hint = def.mode === 'hold' && performing ? 'Esc or move to stand up' : 'Esc to cancel'
   return (

@@ -1,5 +1,7 @@
+import { PLAYER_ID } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
+import { financeOnDuty } from '../sim/staff'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -9,7 +11,8 @@ import { formatMoney } from './format'
  * can be done from here as well as from the customer's menu.
  */
 export function CustomerPanel() {
-  const c = useGame((s) => dealCustomer(s.customers))
+  const c = useGame((s) => dealCustomer(s.customers, PLAYER_ID))
+  const finance = useGame((s) => !!financeOnDuty(s.roster))
   const car = useGame((s) => s.inventory.find((x) => x.id === (c?.offer?.carId ?? c?.targetCarId)))
   if (!c || !car) return null
 
@@ -41,7 +44,16 @@ export function CustomerPanel() {
       {c.phase === 'considering' && <div className="customer-status">Thinking it over…</div>}
       {c.phase === 'following' && (
         <div className="customer-status">
-          Agreed to buy! Take them to your desk chair and choose <b>Close deal</b>.
+          {finance ? (
+            <>
+              Agreed to buy! Click your finance manager at the office desk and choose{' '}
+              <b>Hand off to finance</b>.
+            </>
+          ) : (
+            <>
+              Agreed to buy! Take them to your desk chair and choose <b>Close deal</b>.
+            </>
+          )}
           <div className="status-hint">Esc when idle lets them wait</div>
         </div>
       )}

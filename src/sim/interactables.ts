@@ -2,7 +2,7 @@ import type { Grid, Tile, Vec2 } from './grid'
 import { DESK_CHAIR_ID, type CarModel, type Facing, type Prop, type Rect } from './layout'
 import { findPathToAny } from './pathfinding'
 
-export type ActionId = 'inspect' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal'
+export type ActionId = 'inspect' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal' | 'handOff'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -41,6 +41,8 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     mode: 'timed',
     durationMs: 4000,
   },
+  // At the desk with a buyer in tow: the finance manager takes them from there.
+  handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
 }
 
 export type InteractableKind = 'car' | 'chair' | 'coffee' | 'customer' | 'employee'

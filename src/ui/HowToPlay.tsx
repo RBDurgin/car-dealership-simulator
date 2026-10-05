@@ -1,3 +1,4 @@
+import { FINANCE_FEE } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -38,7 +39,11 @@ export function HowToPlay() {
           <h3>Staff</h3>
           <p>
             Press <kbd>H</kbd> to hire from the day&apos;s applicants. A receptionist keeps waiting
-            customers patient. Everyone on the payroll is paid at closing.
+            customers patient. A finance manager sits at your office desk: lead a buyer there, click
+            them and choose <b>Hand off to finance</b>, and you&apos;re free to sell to the next
+            customer while they do the paperwork. Buyers wait in the lounge if finance is busy.
+            Everyone on the payroll is paid at closing, and the finance manager also earns{' '}
+            {formatMoney(FINANCE_FEE)} per deal they sign.
           </p>
         </section>
         <section>

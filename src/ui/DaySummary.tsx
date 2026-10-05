@@ -52,6 +52,7 @@ export function DaySummary() {
               <li key={i}>
                 <span className="muted">{formatTime(s.minute)}</span> {carName(s.model)} to{' '}
                 {s.customerName} <span className="price">{formatMoney(s.price)}</span>
+                {s.signedBy && <span className="muted"> · signed by {s.signedBy}</span>}
               </li>
             ))}
           </ul>

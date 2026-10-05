@@ -29,6 +29,7 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   offer: null,
   phase: 'waiting',
   leaveReason: null,
+  handlerId: null,
   ...extra,
 })
 

@@ -7,13 +7,14 @@ import {
   currentBrowseCarId,
   CUSTOMER_SPEED,
   LINGER_MINUTES,
+  staffHandled,
   type Customer,
   type CustomerVariant,
 } from '../sim/customers'
 import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
 import type { Tile } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS, type Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { useGame } from '../state/store'
@@ -44,12 +45,21 @@ const EMOTE_SECONDS = 1.3
 const FOLLOW_STOP = 1.3
 const FOLLOW_START = 2
 const GUEST_CHAIR = PROPS.find((p) => p.id === GUEST_CHAIR_ID)!
+const SOFA = PROPS.find((p) => p.id === 'lounge-sofa')!
+/** One seat per tile of the lounge sofa, where buyers wait for finance. */
+const SOFA_SEATS: Prop[] = Array.from({ length: SOFA.rect.w }, (_, i) => ({
+  ...SOFA,
+  id: `${SOFA.id}-${i + 1}`,
+  rect: { tx: SOFA.rect.tx + i, tz: SOFA.rect.tz, w: 1, h: 1 },
+}))
+/** Who has each sofa seat, by seat id. */
+const sofaTaken = new Map<string, string>()
 
 /** What the player is up to, as far as customers care. */
 interface PlayerIntent {
   /** Whoever the player's current action is aimed at. */
   targetId: string | null
-  /** Heading to the desk to close a deal: the customer goes to the guest chair. */
+  /** Heading to the desk to close a deal: their buyer goes to the guest chair. */
   closingDeal: boolean
 }
 
@@ -67,6 +77,8 @@ interface CustomerWalker extends Walker {
   emote: { anim: CharacterAnim; left: number } | null
   /** The player's tile when a follower last planned a path to them. */
   followTile: Tile | null
+  /** The sofa seat they're heading to or sitting on while waiting for finance. */
+  sofaSeat: Prop | null
 }
 
 const walkers = new Map<string, CustomerWalker>()
@@ -89,13 +101,22 @@ function walkerFor(c: Customer): CustomerWalker {
     timer: 0,
     emote: null,
     followTile: null,
+    sofaSeat: null,
   }
   walkers.set(c.id, w)
   customerPos.set(c.id, w.pos)
   return w
 }
 
+/** Gives up their sofa seat, if they have one. */
+function leaveSofa(w: CustomerWalker): void {
+  if (w.sofaSeat) sofaTaken.delete(w.sofaSeat.id)
+  w.sofaSeat = null
+}
+
 function removeWalker(id: string): void {
+  const w = walkers.get(id)
+  if (w) leaveSofa(w)
   walkers.delete(id)
   customerPos.delete(id)
   releaseWalker(id)
@@ -109,7 +130,11 @@ function taskKey(c: Customer, player: PlayerIntent): string {
     case 'browsing':
       return `browse:${c.browsed}`
     case 'following':
+      // Called over by finance, or the player is taking them to sign.
+      if (staffHandled(c)) return 'toChair'
       return player.closingDeal ? 'toChair' : 'follow'
+    case 'queued':
+      return 'toSofa'
     case 'leaving':
       return 'leave'
     default:
@@ -132,6 +157,7 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   w.timer = 0
   w.followTile = null
   if (c.phase !== 'signing') standUp(w)
+  if (task !== 'toSofa') leaveSofa(w)
 
   let goals: Tile[]
   switch (c.phase) {
@@ -162,6 +188,17 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
       }
       // To the guest chair, by whichever side is nearest.
       pathTo(w, approachTilesFor(grid, GUEST_CHAIR.rect))
+      return
+    }
+    case 'queued': {
+      // A free sofa seat; with the sofa full they stand by it.
+      const seat = SOFA_SEATS.find((p) => !sofaTaken.has(p.id))
+      w.faceTo = null
+      if (seat) {
+        sofaTaken.set(seat.id, c.id)
+        w.sofaSeat = seat
+      }
+      pathTo(w, approachTilesFor(grid, (seat ?? SOFA).rect))
       return
     }
     default:
@@ -198,6 +235,9 @@ function onArrived(c: Customer, w: CustomerWalker): void {
       game.dispatchCustomer({ type: 'seat', id: c.id })
       break
     }
+    case 'queued':
+      if (w.sofaSeat) sitOn(w, w.sofaSeat)
+      break
     case 'leaving':
       removeWalker(c.id)
       game.dispatchCustomer({ type: 'despawn', id: c.id })
@@ -291,7 +331,8 @@ const CustomerFigure = memo(function CustomerFigure({
 /**
  * Every customer in the world, moved by one `useFrame`: they walk in from the
  * sidewalk, browse their cars, wait, stop to talk when the player comes over,
- * follow the player to the office to sign, and walk back out. Phase changes go
+ * follow the player to the office to sign (or wait on the lounge sofa until
+ * finance calls them), and walk back out. Phase changes go
  * to the store; positions stay in the walkers. Customers spread out around cars
  * and step around each other, staff and the player (see `sim/crowd.ts`).
  */

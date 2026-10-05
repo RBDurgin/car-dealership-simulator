@@ -1,5 +1,6 @@
 import { Reservations, type Agent } from '../sim/crowd'
-import { customerInteractable, personInteractable } from '../sim/deal'
+import { PLAYER_ID } from '../sim/customers'
+import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
@@ -50,8 +51,6 @@ export const customerPos = new Map<string, Vec2>()
 /** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
 export const staffPos = new Map<string, Vec2>()
 
-export const PLAYER_ID = 'player'
-
 /**
  * Everyone standing in the world (customers, staff, the player), for walkers to
  * keep their distance from. Anyone seated is left out: chairs block their tile,
@@ -84,16 +83,19 @@ for (const id of [GUEST_CHAIR_ID, DESK_CHAIR_ID, ...Object.values(POSTS)]) {
  * from where they're standing right now. Undefined if it's gone.
  */
 export function findInteractable(id: string): Interactable | undefined {
-  const it = interactables.get(id)
-  if (it) return it
   const game = useGame.getState()
+  const it = interactables.get(id)
+  // The finance manager works from the desk chair while they're on shift.
+  if (it && id === DESK_CHAIR_ID) return { ...it, actions: deskActions(game.roster) }
+  if (it) return it
   const c = game.customers.find((x) => x.id === id)
   const cPos = customerPos.get(id)
   if (c && cPos) return customerInteractable(grid, c, grid.worldToTile(cPos.x, cPos.z))
   const e = game.roster.find((x) => x.id === id)
   const ePos = staffPos.get(id)
   if (e && ePos) {
-    return personInteractable(grid, e, 'employee', grid.worldToTile(ePos.x, ePos.z), ['inspect'])
+    const tile = grid.worldToTile(ePos.x, ePos.z)
+    return personInteractable(grid, e, 'employee', tile, employeeActions(e, game.roster))
   }
   return undefined
 }

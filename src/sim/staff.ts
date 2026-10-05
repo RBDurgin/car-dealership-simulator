@@ -1,6 +1,7 @@
 import { STAFF_VARIANTS, type StaffVariant } from './characters'
 import { randomName } from './customers'
-import { RECEPTION_CHAIR_ID } from './layout'
+import type { Sale } from './deal'
+import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID } from './layout'
 import type { Rng } from './rng'
 
 /**
@@ -51,7 +52,7 @@ export const ROLE_LIMITS: Record<Role, number> = {
 export const POSTS: Record<Role, string | null> = {
   sales: null,
   receptionist: RECEPTION_CHAIR_ID,
-  finance: null,
+  finance: DESK_CHAIR_ID,
   porter: null,
 }
 
@@ -85,6 +86,14 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
 /** Share of a car's price a salesperson earns for selling it (paid from 3d). */
 export const SALES_COMMISSION = 0.03
 
+/** Flat fee the finance manager earns for each deal they sign. */
+export const FINANCE_FEE = 200
+
+/** Game seconds of paperwork per deal for an average (skill 3) finance manager. */
+export const FINANCE_SECONDS = 6
+/** Each skill level above or below average takes this much off or adds it on. */
+const FINANCE_SKILL_STEP = 0.15
+
 /** Walking speed in the world, units per second: a touch brisker than customers. */
 export const STAFF_SPEED = 1.8
 
@@ -94,6 +103,11 @@ export const RECEPTION_PATIENCE_FACTOR = 0.5
 export function wageFor(role: Role, skill: number): number {
   const w = WAGES[role]
   return w.base + w.perSkill * skill
+}
+
+/** Game seconds a finance manager of `skill` takes over one deal's paperwork. */
+export function financeSeconds(skill: number): number {
+  return FINANCE_SECONDS * (1 + (3 - skill) * FINANCE_SKILL_STEP)
 }
 
 /**
@@ -137,10 +151,29 @@ export function canHire(roster: readonly Employee[], role: Role): string | null 
     : `You already have ${limit} ${ROLE_PLURALS[role]}.`
 }
 
-/** What the day's staff cost, paid at closing. Commissions arrive with AI sales (3d). */
-export function payroll(roster: readonly Employee[]): { wages: number; commissions: number } {
+/**
+ * What the day's staff cost, paid at closing: wages for everyone still on the
+ * payroll, and what staff earned on today's `sales` (even if let go since).
+ */
+export function payroll(
+  roster: readonly Employee[],
+  sales: readonly Sale[],
+): { wages: number; commissions: number } {
   const wages = roster.filter((e) => !e.fired).reduce((sum, e) => sum + e.wage, 0)
-  return { wages, commissions: 0 }
+  const commissions = sales.reduce((sum, s) => sum + s.commission, 0)
+  return { wages, commissions }
+}
+
+/**
+ * The finance manager taking new buyers: on the way in or at the desk, and not
+ * let go. Null if there's nobody, in which case the player signs deals themselves.
+ */
+export function financeOnDuty(roster: readonly Employee[]): Employee | null {
+  return (
+    roster.find(
+      (e) => e.role === 'finance' && !e.fired && (e.status === 'arriving' || e.status === 'atPost'),
+    ) ?? null
+  )
 }
 
 /** Whether a receptionist is at the desk: waiting customers lose patience more slowly. */

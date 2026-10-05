@@ -38,6 +38,9 @@ export interface PathStep {
   moved: number
 }
 
+/** A step shorter than this (world units) counts as no movement at all. */
+const PINNED_EPSILON = 1e-6
+
 /**
  * Moves `pos` up to `speed * dt` along `waypoints`, shifting off each waypoint as
  * it's reached (the array is mutated). If geometry pins the mover so it can't make
@@ -67,12 +70,14 @@ export function stepAlongPath(
     out.dx = (tx / dist) * step
     out.dz = (tz / dist) * step
   }
-  if (out.dx === 0 && out.dz === 0) return out
+  // Already on the waypoint (give or take float error): nothing to move, and
+  // not being pinned either.
+  if (Math.hypot(out.dx, out.dz) <= PINNED_EPSILON) return out
 
   const next = moveWithCollision(grid, pos, out.dx, out.dz, radius)
   out.moved = Math.hypot(next.x - pos.x, next.z - pos.z)
   out.x = next.x
   out.z = next.z
-  if (out.moved <= 1e-6) waypoints.length = 0
+  if (out.moved <= PINNED_EPSILON) waypoints.length = 0
   return out
 }
