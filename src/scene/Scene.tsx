@@ -1,3 +1,4 @@
+import { Stats } from '@react-three/drei'
 import { Suspense } from 'react'
 import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
 import { CameraRig } from './CameraRig'
@@ -20,6 +21,9 @@ import { Walls } from './Walls'
  * load, because three.js only allocates the map once.
  */
 const SHADOW_MAP_SIZE = matchesMedia(COMPACT) || matchesMedia(COARSE) ? 2048 : 4096
+
+/** `?fps` in the URL shows a frame rate meter, for checking phones without a console. */
+const SHOW_FPS = new URLSearchParams(window.location.search).has('fps')
 
 export function Scene() {
   return (
@@ -51,6 +55,7 @@ export function Scene() {
       <Staff />
       <Pedestrians />
       <Owner />
+      {SHOW_FPS && <Stats className="fps-stats" />}
     </>
   )
 }

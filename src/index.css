@@ -23,3 +23,10 @@ canvas {
   user-select: none;
   -webkit-user-select: none;
 }
+
+/* The ?fps meter (stats.js sets its position inline): top center, clear of the HUD. */
+.fps-stats {
+  top: calc(env(safe-area-inset-top) + 4px) !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+}
