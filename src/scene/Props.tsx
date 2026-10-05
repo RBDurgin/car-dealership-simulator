@@ -193,7 +193,9 @@ function PropView({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
   return interactables.has(prop.id) ? (
     <Interactable id={prop.id}>{content}</Interactable>
   ) : (
-    <group onPointerDown={swallowClick}>{content}</group>
+    <group onPointerDown={swallowClick} onPointerUp={swallowClick}>
+      {content}
+    </group>
   )
 }
 

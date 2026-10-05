@@ -1,7 +1,8 @@
 import { Outlines, useCursor } from '@react-three/drei'
 import { createPortal, type ThreeEvent } from '@react-three/fiber'
 import { Fragment, useState, type ReactNode } from 'react'
-import type { Mesh } from 'three'
+import type { Mesh, Object3D } from 'three'
+import { isTap, isTouch } from '../input/touch'
 import { useGame } from '../state/store'
 
 const HOVER_COLOR = '#fde047'
@@ -9,8 +10,9 @@ const OUTLINE_PX = 3
 
 /**
  * Makes its children hoverable and clickable. Hover draws an outline around every
- * mesh inside; a left click opens the action menu at the cursor. While `disabled`
- * (e.g. a customer walking out) clicks pass through to whatever is underneath.
+ * mesh inside; a left click (or a tap) opens the action menu at the cursor. While
+ * `disabled` (e.g. a customer walking out) clicks pass through to whatever is underneath.
+ * Touch never hovers, so the outline can't stick; the menu's target is still outlined.
  */
 export function Interactable({
   id,
@@ -26,18 +28,26 @@ export function Interactable({
   const [meshes, setMeshes] = useState<Mesh[] | null>(null)
   useCursor(hovered)
 
+  // Collect the model's meshes on first hover or tap, before any outline meshes
+  // exist, so the outlines themselves are never collected. Opening the menu needs
+  // one of those first, so this always runs before anything is highlighted.
+  const collectMeshes = (root: Object3D) => {
+    if (meshes) return
+    const found: Mesh[] = []
+    root.traverse((o) => {
+      if ((o as Mesh).isMesh) found.push(o as Mesh)
+    })
+    setMeshes(found)
+  }
+  const openMenu = (e: ThreeEvent<PointerEvent>) => {
+    collectMeshes(e.eventObject)
+    useGame.getState().openMenu(id, e.nativeEvent.clientX, e.nativeEvent.clientY)
+  }
+
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
-    // Collect the model's meshes on first hover, before any outline meshes exist,
-    // so the outlines themselves are never collected. Opening the menu needs a hover
-    // first, so this always runs before anything is highlighted.
-    if (!meshes) {
-      const found: Mesh[] = []
-      e.eventObject.traverse((o) => {
-        if ((o as Mesh).isMesh) found.push(o as Mesh)
-      })
-      setMeshes(found)
-    }
+    if (isTouch(e.nativeEvent)) return
+    collectMeshes(e.eventObject)
     useGame.getState().setHovered(id)
   }
   const onOut = () => {
@@ -45,8 +55,11 @@ export function Interactable({
   }
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
-    if (e.button !== 0) return
-    useGame.getState().openMenu(id, e.nativeEvent.clientX, e.nativeEvent.clientY)
+    if (e.button === 0 && !isTouch(e.nativeEvent)) openMenu(e)
+  }
+  const onUp = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation()
+    if (isTouch(e.nativeEvent) && isTap(e.pointerId)) openMenu(e)
   }
 
   // Same tree either way, so toggling `disabled` doesn't remount the children.
@@ -55,6 +68,7 @@ export function Interactable({
       onPointerOver={disabled ? undefined : onOver}
       onPointerOut={disabled ? undefined : onOut}
       onPointerDown={disabled ? undefined : onDown}
+      onPointerUp={disabled ? undefined : onUp}
     >
       {children}
       {highlighted &&

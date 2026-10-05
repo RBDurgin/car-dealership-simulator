@@ -2,8 +2,8 @@ import { OrthographicCamera } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { MathUtils, type OrthographicCamera as OrthoCamera } from 'three'
-import { useGame } from '../state/store'
-import { cameraState, playerPos } from './runtime'
+import { onPinch, useTouchTracking } from '../input/touch'
+import { cameraState, playerPos, rotateView } from './runtime'
 
 // Classic isometric pitch (~35°); yaw starts at 45° and rotates in 90° steps.
 const DISTANCE = 40
@@ -15,31 +15,31 @@ const START_ZOOM = 40
 export function CameraRig() {
   const camera = useRef<OrthoCamera>(null)
   const domElement = useThree((s) => s.gl.domElement)
-  const yawTarget = useRef(cameraState.yaw)
   const zoomTarget = useRef(START_ZOOM)
   const focus = useRef({ x: playerPos.x, z: playerPos.z })
 
+  useTouchTracking()
+
   useEffect(() => {
+    const zoomBy = (factor: number) => {
+      zoomTarget.current = MathUtils.clamp(zoomTarget.current * factor, MIN_ZOOM, MAX_ZOOM)
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return
-      if (e.code === 'KeyQ') yawTarget.current += Math.PI / 2
-      else if (e.code === 'KeyE') yawTarget.current -= Math.PI / 2
-      else return
-      useGame.getState().setViewYaw(yawTarget.current)
+      if (e.code === 'KeyQ') rotateView(1)
+      else if (e.code === 'KeyE') rotateView(-1)
     }
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      zoomTarget.current = MathUtils.clamp(
-        zoomTarget.current * Math.exp(-e.deltaY * 0.001),
-        MIN_ZOOM,
-        MAX_ZOOM,
-      )
+      zoomBy(Math.exp(-e.deltaY * 0.001))
     }
     window.addEventListener('keydown', onKey)
     domElement.addEventListener('wheel', onWheel, { passive: false })
+    const offPinch = onPinch(zoomBy)
     return () => {
       window.removeEventListener('keydown', onKey)
       domElement.removeEventListener('wheel', onWheel)
+      offPinch()
     }
   }, [domElement])
 
@@ -48,7 +48,7 @@ export function CameraRig() {
     if (!cam) return
     const dt = Math.min(rawDelta, 0.05)
 
-    cameraState.yaw = MathUtils.damp(cameraState.yaw, yawTarget.current, 8, dt)
+    cameraState.yaw = MathUtils.damp(cameraState.yaw, cameraState.yawTarget, 8, dt)
     focus.current.x = MathUtils.damp(focus.current.x, playerPos.x, 6, dt)
     focus.current.z = MathUtils.damp(focus.current.z, playerPos.z, 6, dt)
     cam.zoom = MathUtils.damp(cam.zoom, zoomTarget.current, 10, dt)

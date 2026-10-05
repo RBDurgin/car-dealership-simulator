@@ -173,6 +173,7 @@ function BuildingWalls() {
         receiveShadow
         frustumCulled={false}
         onPointerDown={swallowClick}
+        onPointerUp={swallowClick}
       >
         <boxGeometry />
         <meshStandardMaterial color="#ece7dd" />
@@ -207,6 +208,7 @@ function BuildingWalls() {
         castShadow
         frustumCulled={false}
         onPointerDown={swallowClick}
+        onPointerUp={swallowClick}
       >
         <boxGeometry />
         <meshStandardMaterial />

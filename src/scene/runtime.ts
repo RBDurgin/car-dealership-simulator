@@ -129,8 +129,20 @@ export function findInteractable(id: string): Interactable | undefined {
   return undefined
 }
 
-/** Current (eased) camera yaw in radians. 0 = camera on +z looking toward -z. */
-export const cameraState = { yaw: useGame.getState().viewYaw }
+/**
+ * Camera yaw in radians: `yaw` is the current (eased) value, `yawTarget` where it's
+ * heading. 0 = camera on +z looking toward -z.
+ */
+export const cameraState = {
+  yaw: useGame.getState().viewYaw,
+  yawTarget: useGame.getState().viewYaw,
+}
+
+/** Turns the view a quarter turn: 1 = counter-clockwise (Q), -1 = clockwise (E). */
+export function rotateView(dir: 1 | -1): void {
+  cameraState.yawTarget += (dir * Math.PI) / 2
+  useGame.getState().setViewYaw(cameraState.yawTarget)
+}
 
 /** Precise running game time. The store only sees it in 10-minute steps. */
 export const gameTime = { ...useGame.getState().clock }

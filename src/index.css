@@ -7,3 +7,19 @@ body,
   background: #1b1d24;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
+
+/* Touch: the game owns every gesture, so the page never scrolls, zooms or bounces. */
+html,
+body,
+#root,
+canvas {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+canvas {
+  user-select: none;
+  -webkit-user-select: none;
+}
