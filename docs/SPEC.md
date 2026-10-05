@@ -14,18 +14,25 @@ Introduce other employees and NPC's.
 
 ## Phase 4
 
-This will include the ability to buy inventory from the manufacturer.
+Introduce Mobile breakpoint + controls.
+
+- controls HUD should be hidable on mobile (it takes a lot of real estate on mobile devices)
+- should support pinch-zoom
 
 ## Phase 5
 
-Introduce sales negotiation with customers.
+This will include the ability to buy inventory from the manufacturer.
 
 ## Phase 6
+
+Introduce sales negotiation with customers.
+
+## Phase 7
 
 Add the ability to spend money on marketing and improvements, which increases the liklihood of customers visiting. Improvements can also help with the ability to increase prices.
 
 Some examples of marketing improvements: Newspaper ads, TV Ads, Larger sign, Wacky Inflatable Tube Man. Improvements examples: waiting room improvements (tv, upgraded sofa/chairs, showroom improvements, et.q)
 
-## Phase 7
+## Phase 8
 
 Background music + sound effects. Talking between characters shoud be incomprehencible gibberish, similar to characters in the sims talking.
