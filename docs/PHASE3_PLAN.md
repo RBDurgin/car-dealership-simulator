@@ -104,6 +104,11 @@ Rules carried over: positions stay in walkers and `runtime.ts` maps (`staffPos`,
 - Commission is a share of the price, for example 3%. Each sale records `soldBy`, and `DaySummary` shows a per-seller breakdown.
 - Collision with the player: the player can't greet a customer who is being handled by staff (the bubble shows a staff badge). An AI never takes a customer the player is heading to: it checks `activeAction.targetId`.
 - **Done when:** with two salespeople hired and the player idle, a ×16 day sells cars on its own, commissions are paid, and nobody deadlocks over a customer or a desk.
+- **Built (2026-10-04):**
+  - Customers are claimed (`claim` event) before a salesperson walks over, so two staff never chase one customer. Claimed customers stop and lose no patience.
+  - Two sales desks, one per salesperson in hiring order (`salesDeskOf`): by the entrance (x21–22, z9–11) and by the office door (x26–27, z3–5). Salespeople sit at their desk between customers.
+  - A buyer goes to finance if finance is on duty and free, otherwise to the salesperson's own desk (`leadChoice`). The customer's `sellerId` keeps the sale credited through a hand-off. Commission is 3% of the price, plus the finance fee when finance signs.
+  - Salespeople also greet customers who are still browsing (a waiting customer always comes first). Skill 4–5 salespeople meet them as they arrive; skill 1–3 wait until the customer is standing at a car (`EARLY_GREET_SKILL`, `runtime.customersAtCar`).
 
 ### 3e — Lot porter & car cleanliness
 

@@ -12,7 +12,8 @@ import {
   type Interactable,
   type InteractableKind,
 } from './interactables'
-import type { CarModel } from './layout'
+import type { InventoryCar } from './inventory'
+import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import { financeOnDuty, type Employee } from './staff'
 
 /**
@@ -47,12 +48,15 @@ export function inConversation(customers: readonly Customer[]): boolean {
 }
 
 /**
- * The office guest chair is taken: someone is signing there, or on their way
- * over to sign with finance.
+ * A guest chair (the office's by default) is taken: someone is signing there,
+ * or on their way over to sign.
  */
-export function guestChairBusy(customers: readonly Customer[]): boolean {
+export function guestChairBusy(
+  customers: readonly Customer[],
+  chairId: string = GUEST_CHAIR_ID,
+): boolean {
   return customers.some(
-    (c) => c.phase === 'signing' || (c.phase === 'following' && staffHandled(c)),
+    (c) => c.chairId === chairId && (c.phase === 'signing' || c.phase === 'following'),
   )
 }
 
@@ -69,9 +73,19 @@ export function callNextBuyer(customers: Customer[]): Customer[] {
 /** Phases of a buyer handed off to finance: in the lounge, on the way to the desk, signing. */
 export const FINANCE_PHASES: readonly CustomerPhase[] = ['queued', 'following', 'signing']
 
-/** Whether employee `id` has buyers handed off to them that they haven't finished with. */
+/**
+ * Whether employee `id` has buyers they haven't finished with: handed off to
+ * finance, or a salesperson's buyer on the way to (or at) their desk.
+ */
 export function hasBuyersInHand(customers: readonly Customer[], id: string): boolean {
   return customers.some((c) => c.handlerId === id && FINANCE_PHASES.includes(c.phase))
+}
+
+/** Finance has buyers in the lounge, or one on the way to or at the office desk. */
+export function financeBusy(customers: readonly Customer[]): boolean {
+  return customers.some(
+    (c) => staffHandled(c) && (c.phase === 'queued' || guestChairBusy([c], GUEST_CHAIR_ID)),
+  )
 }
 
 /**
@@ -148,15 +162,16 @@ export function actionBlocker(
   if (isCustomerAction(action)) {
     const c = customers.find((x) => x.id === targetId)
     if (!c || c.phase === 'leaving') return `${c?.name ?? 'The customer'} left.`
-    if (staffHandled(c)) return `${c.name} is being helped.`
+    if (staffHandled(c)) {
+      const by = roster.find((e) => e.id === c.handlerId)
+      return by ? `${by.name} is helping ${c.name}.` : `${c.name} is being helped.`
+    }
     return customerActions(c).includes(action) ? null : `${c.name} is busy.`
   }
   const deal = dealCustomer(customers, PLAYER_ID)
   if (action === 'closeDeal') {
     if (financeOnDuty(roster)) return 'Your finance manager does the paperwork. Hand buyers off.'
-    if (customers.some((c) => staffHandled(c) && FINANCE_PHASES.includes(c.phase))) {
-      return 'Finance is still using the desk.'
-    }
+    if (financeBusy(customers)) return 'Finance is still using the desk.'
     if (deal?.phase !== 'following' && deal?.phase !== 'signing') return NOBODY_TO_SIGN
   }
   if (action === 'handOff') {
@@ -164,6 +179,14 @@ export function actionBlocker(
     if (deal?.phase !== 'following') return NOBODY_TO_SIGN
   }
   return null
+}
+
+/**
+ * The price a seller asks for `car`. Everyone offers MSRP for now; negotiation
+ * (Phase 5) takes over here.
+ */
+export function offerPrice(car: InventoryCar): number {
+  return car.msrp
 }
 
 /** The rough budget a customer admits to when greeted: their real budget to the nearest $5k. */
@@ -178,7 +201,9 @@ export interface Sale {
   price: number
   /** Game minute the paperwork was signed. */
   minute: number
-  /** The employee who signed it, or null when the player did. */
+  /** The salesperson who made the sale, or null when the player did. */
+  soldBy: string | null
+  /** The finance manager who signed it, or null when the seller did. */
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
   commission: number
@@ -219,6 +244,34 @@ export function revenue(stats: DayStats): number {
 /** Revenue less the day's staff costs. */
 export function netIncome(stats: DayStats): number {
   return revenue(stats) - stats.wages - stats.commissions
+}
+
+/** One seller's share of the day's sales. */
+export interface SellerTally {
+  /** The salesperson's name, or null for the player. */
+  seller: string | null
+  cars: number
+  revenue: number
+  /** What staff earned on these sales (the salesperson's cut and any finance fee). */
+  commission: number
+}
+
+/** The day's sales by who made them, the player first, then in order of first sale. */
+export function salesBySeller(stats: DayStats): SellerTally[] {
+  const tallies = new Map<string | null, SellerTally>()
+  const sorted = [...stats.sales].sort(
+    (a, b) => Number(a.soldBy !== null) - Number(b.soldBy !== null),
+  )
+  for (const s of sorted) {
+    const t = tallies.get(s.soldBy) ?? { seller: s.soldBy, cars: 0, revenue: 0, commission: 0 }
+    tallies.set(s.soldBy, {
+      ...t,
+      cars: t.cars + 1,
+      revenue: t.revenue + s.price,
+      commission: t.commission + s.commission,
+    })
+  }
+  return [...tallies.values()]
 }
 
 export function walkOuts(stats: DayStats): number {

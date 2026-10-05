@@ -254,14 +254,20 @@ describe('a crowd on the move', () => {
       { tx: 30, tz: 6 },
       { tx: 30, tz: 7 },
     ]
+    // From the strip by the sales desk.
+    const showroom: Tile[] = [
+      { tx: 26, tz: 6 },
+      { tx: 26, tz: 7 },
+      { tx: 27, tz: 6 },
+    ]
     for (let i = 0; i < 3; i++) {
-      agents.push(spawn(grid, `in${i}`, { tx: 26, tz: 4 + i }, office[i]))
+      agents.push(spawn(grid, `in${i}`, showroom[i], office[i]))
       agents.push(spawn(grid, `out${i}`, officeStarts[i], { tx: 25, tz: 4 + i }))
     }
     // The showroom entrance (21–22, 13): three each way.
     for (let i = 0; i < 3; i++) {
-      agents.push(spawn(grid, `enter${i}`, { tx: 20 + i, tz: 16 }, { tx: 20 + i, tz: 10 }))
-      agents.push(spawn(grid, `exit${i}`, { tx: 21 + i, tz: 11 }, { tx: 21 + i, tz: 17 }))
+      agents.push(spawn(grid, `enter${i}`, { tx: 20 + i, tz: 16 }, { tx: 20 + i, tz: 8 }))
+      agents.push(spawn(grid, `exit${i}`, { tx: 21 + i, tz: 12 }, { tx: 21 + i, tz: 17 }))
     }
     for (const a of agents) {
       expect(grid.isWalkable(a.goal.tx, a.goal.tz), a.id).toBe(true)

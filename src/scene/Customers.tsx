@@ -7,12 +7,13 @@ import {
   currentBrowseCarId,
   CUSTOMER_SPEED,
   LINGER_MINUTES,
+  PLAYER_ID,
   staffHandled,
   type Customer,
   type CustomerVariant,
 } from '../sim/customers'
 import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
-import type { Tile } from '../sim/grid'
+import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS, type Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
@@ -21,7 +22,15 @@ import { useGame } from '../state/store'
 import { Character } from './Character'
 import { CustomerBubble } from './CustomerBubble'
 import { Interactable } from './Interactable'
-import { customerPos, gameTime, grid, interactables, playerPos } from './runtime'
+import {
+  customerPos,
+  customersAtCar,
+  gameTime,
+  grid,
+  interactables,
+  playerPos,
+  staffPos,
+} from './runtime'
 import {
   createWalker,
   crowdCost,
@@ -44,7 +53,8 @@ const EMOTE_SECONDS = 1.3
 /** A follower stops this close to the player, and sets off again once they're this far. */
 const FOLLOW_STOP = 1.3
 const FOLLOW_START = 2
-const GUEST_CHAIR = PROPS.find((p) => p.id === GUEST_CHAIR_ID)!
+/** A guest chair by id: the office's, or a sales desk's. */
+const guestChair = (id: string | null) => PROPS.find((p) => p.id === (id ?? GUEST_CHAIR_ID))
 const SOFA = PROPS.find((p) => p.id === 'lounge-sofa')!
 /** One seat per tile of the lounge sofa, where buyers wait for finance. */
 const SOFA_SEATS: Prop[] = Array.from({ length: SOFA.rect.w }, (_, i) => ({
@@ -119,6 +129,7 @@ function removeWalker(id: string): void {
   if (w) leaveSofa(w)
   walkers.delete(id)
   customerPos.delete(id)
+  customersAtCar.delete(id)
   releaseWalker(id)
 }
 
@@ -130,9 +141,10 @@ function taskKey(c: Customer, player: PlayerIntent): string {
     case 'browsing':
       return `browse:${c.browsed}`
     case 'following':
-      // Called over by finance, or the player is taking them to sign.
-      if (staffHandled(c)) return 'toChair'
-      return player.closingDeal ? 'toChair' : 'follow'
+      // Sent to a desk by staff, or the player is taking them to sign. A
+      // salesperson's buyer waits to be told where to go.
+      if (staffHandled(c)) return c.chairId ? `toChair:${c.chairId}` : 'awaitLead'
+      return player.closingDeal ? `toChair:${GUEST_CHAIR_ID}` : 'follow'
     case 'queued':
       return 'toSofa'
     case 'leaving':
@@ -154,6 +166,7 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   w.waypoints = []
   w.unreachable = false
   w.lingerUntil = null
+  customersAtCar.delete(c.id)
   w.timer = 0
   w.followTile = null
   if (c.phase !== 'signing') standUp(w)
@@ -186,8 +199,10 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
         releaseWalker(c.id) // `follow` paths to the player as they move
         return
       }
+      if (task === 'awaitLead') return
       // To the guest chair, by whichever side is nearest.
-      pathTo(w, approachTilesFor(grid, GUEST_CHAIR.rect))
+      const chair = guestChair(c.chairId)
+      if (chair) pathTo(w, approachTilesFor(grid, chair.rect))
       return
     }
     case 'queued': {
@@ -226,12 +241,15 @@ function onArrived(c: Customer, w: CustomerWalker): void {
         game.dispatchCustomer({ type: 'browsed', id: c.id })
       } else if (w.lingerUntil === null) {
         w.lingerUntil = gameTime.minute + w.rng.int(LINGER_MINUTES.min, LINGER_MINUTES.max)
+        customersAtCar.add(c.id)
       } else if (gameTime.minute >= w.lingerUntil) {
         game.dispatchCustomer({ type: 'browsed', id: c.id })
       }
       break
     case 'following': {
-      if (w.task !== 'toChair' || w.seat || !sitOn(w, GUEST_CHAIR)) break
+      if (!w.task?.startsWith('toChair:') || w.seat) break
+      const chair = guestChair(w.task.slice('toChair:'.length))
+      if (!chair || !sitOn(w, chair)) break
       game.dispatchCustomer({ type: 'seat', id: c.id })
       break
     }
@@ -262,6 +280,23 @@ function follow(w: CustomerWalker): void {
   w.waypoints = tiles ? toWaypoints(grid, tiles, w.pos) : []
 }
 
+/** Where whoever is helping them stands: a salesperson, or the player. */
+function handlerPos(c: Customer): Vec2 {
+  if (c.handlerId && c.handlerId !== PLAYER_ID) return staffPos.get(c.handlerId) ?? playerPos
+  return playerPos
+}
+
+/**
+ * Someone is on their way over or talking with them, so they stand still and
+ * face them: the player heading over to greet, a salesperson who claimed them,
+ * a conversation, or a salesperson's buyer waiting to be shown to a desk.
+ */
+function attending(c: Customer, task: string, player: PlayerIntent): boolean {
+  if (player.targetId === c.id || CONVERSATION_PHASES.includes(c.phase)) return true
+  if (task === 'awaitLead') return true
+  return staffHandled(c) && (c.phase === 'browsing' || c.phase === 'waiting')
+}
+
 function update(
   c: Customer,
   w: CustomerWalker,
@@ -282,9 +317,9 @@ function update(
     w.anim.current = 'sit'
     return
   }
-  // Being greeted, or talking: stand still and face the player.
-  if (player.targetId === c.id || CONVERSATION_PHASES.includes(c.phase)) {
-    turnToward(w, playerPos, seconds)
+  // Being greeted, or talking: stand still and face whoever is helping them.
+  if (attending(c, task, player)) {
+    turnToward(w, handlerPos(c), seconds)
     w.anim.current = 'idle'
     w.timer += realSeconds
     if (c.phase === 'considering' && w.timer >= CONSIDER_SECONDS) {
@@ -330,9 +365,10 @@ const CustomerFigure = memo(function CustomerFigure({
 
 /**
  * Every customer in the world, moved by one `useFrame`: they walk in from the
- * sidewalk, browse their cars, wait, stop to talk when the player comes over,
- * follow the player to the office to sign (or wait on the lounge sofa until
- * finance calls them), and walk back out. Phase changes go
+ * sidewalk, browse their cars, wait, stop to talk when the player or a
+ * salesperson comes over, follow the player to the office to sign (or walk to
+ * a salesperson's desk, or wait on the lounge sofa until finance calls them),
+ * and walk back out. Phase changes go
  * to the store; positions stay in the walkers. Customers spread out around cars
  * and step around each other, staff and the player (see `sim/crowd.ts`).
  */

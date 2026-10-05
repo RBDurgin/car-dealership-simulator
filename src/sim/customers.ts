@@ -1,6 +1,6 @@
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { BASE_MSRP, type InventoryCar } from './inventory'
-import type { CarModel } from './layout'
+import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Rng } from './rng'
 
 /**
@@ -17,11 +17,14 @@ import type { Rng } from './rng'
  *                                  ▼                       ▼     │            ▼
  *                         leaving(refused)                 queued    leaving(bought)
  *
- * `greet` makes the greeter their handler; `handOff` passes a buyer to the
- * finance manager, who `call`s them from the lounge when the desk is free.
- * Waiting customers lose patience on `tick` and leave impatient at zero.
- * `close` sends everyone home except a customer mid-signature or in staff
- * hands. `cancel` from any deal phase puts them back to waiting.
+ * `greet` makes the greeter their handler; a salesperson `claim`s a browsing or
+ * waiting customer first, on their way over, so nobody else takes them.
+ * `handOff` passes a buyer to the finance manager, who `call`s them from the
+ * lounge when the desk is free; a salesperson `lead`s theirs to their own desk
+ * instead. Waiting customers lose patience on `tick` and leave impatient at
+ * zero, unless someone is on their way to help. `close` sends everyone home
+ * except a customer mid-signature or in staff hands. `cancel` from any deal
+ * phase puts them back to waiting, and drops a claim.
  */
 export type CustomerPhase =
   | 'arriving'
@@ -74,6 +77,13 @@ export interface Customer {
    * they leave or the deal is dropped. Null otherwise.
    */
   handlerId: string | null
+  /**
+   * The guest chair they're walking to, or sitting in, to sign: set when staff
+   * send them to a desk, or when they sit down. Null otherwise.
+   */
+  chairId: string | null
+  /** Who greeted them and made the sale, whoever ends up signing it. Null until greeted. */
+  sellerId: string | null
 }
 
 const FIRST_NAMES = [
@@ -173,6 +183,8 @@ export function generateCustomer(
     phase: 'arriving',
     leaveReason: null,
     handlerId: null,
+    chairId: null,
+    sellerId: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -205,21 +217,39 @@ export const MAX_ACCEPT_CHANCE = 0.95
 /** Headroom (fraction of budget left over) at which the price stops mattering. */
 export const COMFORT_HEADROOM = 0.25
 
+/** The player sells like a skill-4 salesperson. */
+export const PLAYER_SKILL = 4
+/** Accept chance bonus for the least and most skilled seller. */
+export const SKILL_BONUS = { min: -0.1, max: 0.05 }
+
+/** How much a seller of `skill` (1–5) adds to the accept chance: −10% to +5%. */
+export function skillBonus(skill: number): number {
+  return SKILL_BONUS.min + ((skill - 1) / 4) * (SKILL_BONUS.max - SKILL_BONUS.min)
+}
+
 /**
  * Chance they say yes to `car` at `price`. Zero over budget. Otherwise 35% for
  * a car of the wrong body type right at their limit, rising with preference
- * (+35%) and headroom (up to +30% at 25% under budget), capped at 95%.
+ * (+35%) and headroom (up to +30% at 25% under budget), plus the seller's
+ * `bonus` (see `skillBonus`), capped at 95%.
  */
-export function acceptChance(c: Customer, car: InventoryCar, price: number): number {
+export function acceptChance(c: Customer, car: InventoryCar, price: number, bonus = 0): number {
   if (price > c.budget) return 0
   const preferred = c.preferredModels.includes(car.model) ? 1 : 0
   const headroom = Math.min(1, (c.budget - price) / c.budget / COMFORT_HEADROOM)
-  return Math.min(MAX_ACCEPT_CHANCE, 0.35 + 0.35 * preferred + 0.3 * headroom)
+  const chance = 0.35 + 0.35 * preferred + 0.3 * headroom + bonus
+  return Math.max(0, Math.min(MAX_ACCEPT_CHANCE, chance))
 }
 
 /** Whether they accept the offer. Deterministic for a given rng state. */
-export function decide(c: Customer, car: InventoryCar, price: number, rng: Rng): boolean {
-  const chance = acceptChance(c, car, price)
+export function decide(
+  c: Customer,
+  car: InventoryCar,
+  price: number,
+  rng: Rng,
+  bonus = 0,
+): boolean {
+  const chance = acceptChance(c, car, price, bonus)
   return chance > 0 && rng.next() < chance
 }
 
@@ -246,9 +276,11 @@ export function moodOf(c: Customer): Mood {
 }
 
 /** The icon above a customer's head, if any. */
-export type Bubble = 'waiting' | 'impatient' | 'considering' | 'bought' | 'upset'
+export type Bubble = 'waiting' | 'impatient' | 'considering' | 'helped' | 'bought' | 'upset'
 
 export function bubbleOf(c: Customer): Bubble | null {
+  // A salesperson is on their way over, or talking with them.
+  if (staffHandled(c) && ['browsing', 'waiting', 'talking'].includes(c.phase)) return 'helped'
   switch (c.phase) {
     case 'waiting':
       return moodOf(c) === 'impatient' ? 'impatient' : 'waiting'
@@ -272,15 +304,19 @@ export type CustomerEvent =
   | { type: 'arrive'; id: string }
   /** Finished looking at the current browse car. */
   | { type: 'browsed'; id: string }
+  /** Salesperson `by` is on their way over to help: nobody else takes them. */
+  | { type: 'claim'; id: string; by: string }
   /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
   | { type: 'greet'; id: string; carId: string | null; by: string }
   | { type: 'offer'; id: string; carId: string; price: number }
   /** Their answer to the offer (see `decide`). */
   | { type: 'respond'; id: string; accepted: boolean }
-  /** Sat down at the office desk. */
+  /** Sat down to sign: in the guest chair they were sent to, else the office's (the player's buyer). */
   | { type: 'seat'; id: string }
   /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
   | { type: 'handOff'; id: string; to: string }
+  /** Their salesperson sends them to sit at the desk with guest chair `chairId`. */
+  | { type: 'lead'; id: string; chairId: string }
   /** Finance is free: up from the lounge and over to the desk. */
   | { type: 'call'; id: string }
   /** Paperwork signed: the sale goes through. */
@@ -302,6 +338,7 @@ const leave = (c: Customer, reason: LeaveReason): Customer => ({
   phase: 'leaving',
   leaveReason: reason,
   handlerId: null,
+  chairId: null,
 })
 
 /** Being looked after by an employee rather than the player. */
@@ -325,11 +362,17 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       const browsed = c.browsed + 1
       return { ...c, browsed, phase: browsed >= c.browseCarIds.length ? 'waiting' : 'browsing' }
     }
+    case 'claim':
+      if (c.phase !== 'browsing' && c.phase !== 'waiting') return c
+      if (c.handlerId !== null) return c
+      return { ...c, handlerId: ev.by }
     case 'greet':
       if (c.phase !== 'browsing' && c.phase !== 'waiting') return c
+      // Someone else has claimed them.
+      if (c.handlerId !== null && c.handlerId !== ev.by) return c
       // Nothing left they could want.
       if (ev.carId === null) return leave(c, 'refused')
-      return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by }
+      return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by, sellerId: ev.by }
     case 'offer':
       if (c.phase !== 'talking') return c
       return { ...c, phase: 'considering', offer: { carId: ev.carId, price: ev.price } }
@@ -338,23 +381,34 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       return ev.accepted ? { ...c, phase: 'following' } : leave({ ...c, offer: null }, 'refused')
     case 'seat':
       if (c.phase !== 'following') return c
-      return { ...c, phase: 'signing' }
+      return { ...c, phase: 'signing', chairId: c.chairId ?? GUEST_CHAIR_ID }
     case 'handOff':
-      if (c.phase !== 'following' || c.handlerId !== PLAYER_ID) return c
+      // From the player or a salesperson, before they've been sent to a desk.
+      if (c.phase !== 'following' || c.handlerId === null || c.handlerId === ev.to) return c
+      if (c.chairId !== null) return c
       return { ...c, phase: 'queued', handlerId: ev.to }
+    case 'lead':
+      if (c.phase !== 'following' || !staffHandled(c) || c.chairId !== null) return c
+      return { ...c, chairId: ev.chairId }
     case 'call':
       if (c.phase !== 'queued') return c
-      return { ...c, phase: 'following' }
+      return { ...c, phase: 'following', chairId: GUEST_CHAIR_ID }
     case 'signed':
       if (c.phase !== 'signing') return c
       return leave(c, 'bought')
     case 'cancel':
+      // A salesperson who claimed them gives up: they carry on as they were.
+      if ((c.phase === 'browsing' || c.phase === 'waiting') && c.handlerId !== null) {
+        return { ...c, handlerId: null }
+      }
       if (!['talking', 'considering', 'following', 'signing', 'queued'].includes(c.phase)) return c
-      return { ...c, phase: 'waiting', offer: null, handlerId: null }
+      return { ...c, phase: 'waiting', offer: null, handlerId: null, chairId: null, sellerId: null }
     case 'despawn':
       return c.phase === 'leaving' ? null : c
     case 'tick': {
+      // Nobody gives up while someone is on their way to help them.
       if (c.phase !== 'waiting' || ev.minutes <= 0 || ev.except === c.id) return c
+      if (c.handlerId !== null) return c
       const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes)
       return patienceLeft === 0
         ? leave({ ...c, patienceLeft }, 'impatient')

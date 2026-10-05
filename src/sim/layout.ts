@@ -211,9 +211,52 @@ export const GUEST_CHAIR_ID = 'guest-chair'
 /** Where the receptionist sits, behind the reception desk facing the showroom. */
 export const RECEPTION_CHAIR_ID = 'reception-chair'
 
+/** A salesperson's desk on the showroom floor: their chair, and the buyer's opposite. */
+export interface SalesDesk {
+  chairId: string
+  guestChairId: string
+}
+
+/** One desk per salesperson the roster allows, in the order they're handed out. */
+export const SALES_DESKS: SalesDesk[] = [1, 2].map((n) => ({
+  chairId: `sales-chair-${n}`,
+  guestChairId: `sales-guest-${n}`,
+}))
+
 // Heights (world units) that stacked props sit at.
 const DESK_TOP = 0.53
 const COUNTER_TOP = 0.63
+
+/**
+ * Sales desk `n` with its two-tile desk at `at`, set out like the office desk:
+ * the salesperson's chair behind its east half, the buyer's in front of its west half.
+ */
+function salesDesk(n: number, at: Tile): Prop[] {
+  const { chairId, guestChairId } = SALES_DESKS[n - 1]
+  return [
+    { id: `sales-desk-${n}`, model: 'desk', rect: { ...at, w: 2, h: 1 }, facing: 2 },
+    {
+      id: `sales-monitor-${n}`,
+      model: 'computerScreen',
+      rect: { tx: at.tx + 1, tz: at.tz, w: 1, h: 1 },
+      facing: 2,
+      blocks: false,
+      elevation: DESK_TOP,
+    },
+    {
+      id: chairId,
+      model: 'chairDesk',
+      rect: { tx: at.tx + 1, tz: at.tz - 1, w: 1, h: 1 },
+      facing: 0,
+    },
+    {
+      id: guestChairId,
+      model: 'chairCushion',
+      rect: { tx: at.tx, tz: at.tz + 1, w: 1, h: 1 },
+      facing: 2,
+    },
+  ]
+}
 
 const FIXED_PROPS: Prop[] = [
   { id: 'sign', model: 'sign', rect: { tx: 21, tz: 23, w: 3, h: 1 }, facing: 0 },
@@ -223,6 +266,10 @@ const FIXED_PROPS: Prop[] = [
   { id: 'showroom-plant-1', model: 'pottedPlant', rect: { tx: 17, tz: 3, w: 1, h: 1 }, facing: 0 },
   { id: 'showroom-plant-2', model: 'pottedPlant', rect: { tx: 17, tz: 12, w: 1, h: 1 }, facing: 0 },
   { id: 'showroom-plant-3', model: 'pottedPlant', rect: { tx: 28, tz: 3, w: 1, h: 1 }, facing: 0 },
+
+  // Sales desks: one by the entrance, one in the corner by the office door.
+  ...salesDesk(1, { tx: 21, tz: 10 }),
+  ...salesDesk(2, { tx: 26, tz: 4 }),
 
   // Office
   { id: 'office-desk', model: 'desk', rect: { tx: 32, tz: 5, w: 2, h: 1 }, facing: 2 },

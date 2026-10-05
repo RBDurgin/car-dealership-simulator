@@ -10,16 +10,20 @@ import { PROPS, SIDEWALK_ENDS } from '../sim/layout'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import {
   financeSeconds,
-  POSTS,
+  postChairId,
   ROLE_BADGES,
+  SALES_PITCH_SECONDS,
+  SALES_SIGN_SECONDS,
+  skillSeconds,
   STAFF_SPEED,
   type Employee,
   type Role,
 } from '../sim/staff'
+import { nextSalesTask, type SalesTask } from '../sim/staffAi'
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
-import { grid, staffPos } from './runtime'
+import { customerPos, customersAtCar, grid, staffPos } from './runtime'
 import {
   createWalker,
   frameSeconds,
@@ -29,18 +33,19 @@ import {
   sitOn,
   standUp,
   syncGroups,
+  turnToward,
   walk,
   type Walker,
 } from './walker'
 
 /** Just above a ~1.2 unit tall character's head, like customer bubbles. */
 const BADGE_HEIGHT = 1.5
-/** Where staff without a post of their own (yet) stand: just inside the showroom entrance. */
+/** Where staff without a chair to work from stand: by the reception desk. */
 const STANDBY_TILES: Tile[] = [
-  { tx: 20, tz: 11 },
-  { tx: 21, tz: 11 },
-  { tx: 22, tz: 11 },
-  { tx: 23, tz: 12 },
+  { tx: 18, tz: 11 },
+  { tx: 19, tz: 11 },
+  { tx: 18, tz: 12 },
+  { tx: 19, tz: 12 },
 ]
 /** What standby staff face: the middle of the showroom. */
 const SHOWROOM_CENTER = grid.tileToWorld(22, 8)
@@ -49,10 +54,17 @@ const SHOWROOM_CENTER = grid.tileToWorld(22, 8)
 interface StaffWalker extends Walker {
   rng: Rng
   exit: Tile
-  /** 'post' (going to or at their post) or 'leave'. A new task means a new path. */
+  /**
+   * 'post' (going to or at their post), 'leave', or a salesperson's task with
+   * its customer (`greet:customer-3`). A new task means a new path.
+   */
   task: string | null
   /** Finance: the buyer whose paperwork is under way, and game seconds left on it. */
   paperwork: { customerId: string; left: number } | null
+  /** Game seconds spent on the current task (a salesperson's pitch or paperwork). */
+  timer: number
+  /** Customers this salesperson couldn't get to; they leave them to someone else. */
+  unreachableIds: Set<string>
 }
 
 const walkers = new Map<string, StaffWalker>()
@@ -70,6 +82,8 @@ function walkerFor(e: Employee): StaffWalker {
     exit,
     task: null,
     paperwork: null,
+    timer: 0,
+    unreachableIds: new Set(),
   }
   walkers.set(e.id, w)
   staffPos.set(e.id, w.pos)
@@ -82,17 +96,19 @@ function removeWalker(id: string): void {
   releaseWalker(id)
 }
 
-const postChair = (role: Role) => PROPS.find((p) => p.id === POSTS[role])
+const propById = (id: string | null) => (id ? PROPS.find((p) => p.id === id) : undefined)
+const postChair = (e: Employee) => propById(postChairId(e, useGame.getState().roster))
 
 function plan(e: Employee, w: StaffWalker, task: string): void {
   w.task = task
+  w.timer = 0
   standUp(w)
   if (task === 'leave') {
     w.faceTo = null
     pathTo(w, [w.exit])
     return
   }
-  const chair = postChair(e.role)
+  const chair = postChair(e)
   if (chair) {
     w.faceTo = null
     pathTo(w, approachTilesFor(grid, chair.rect))
@@ -110,7 +126,7 @@ function onArrived(e: Employee, w: StaffWalker): void {
     game.dispatchStaff({ type: 'left', id: e.id })
     return
   }
-  const chair = postChair(e.role)
+  const chair = postChair(e)
   // Can't reach the chair: work standing up rather than not at all.
   if (chair && !w.seat) sitOn(w, chair)
   if (e.status === 'arriving') game.dispatchStaff({ type: 'atPost', id: e.id })
@@ -137,7 +153,111 @@ function doPaperwork(
   w.paperwork.left -= seconds
   if (w.paperwork.left > 0) return
   w.paperwork = null
-  useGame.getState().financeSign(e.id, c.id)
+  useGame.getState().staffSign(e.id, c.id)
+}
+
+/** The key a salesperson's task is planned under: a new key means a new path. */
+const salesKey = (t: SalesTask) => (t.kind === 'idle' ? 'post' : `${t.kind}:${t.customerId}`)
+
+/**
+ * A salesperson's next move: claim a customer and walk over (`greet`), talk
+ * up the car and make an offer (`offer`), send a buyer to finance or their desk
+ * (`lead`), then sit down and sign (`sign`). Between customers they sit at
+ * their desk (`post`).
+ */
+function updateSales(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): void {
+  const game = useGame.getState()
+  const task = nextSalesTask(e, customers, {
+    roster: game.roster,
+    playerTargetId: game.activeAction?.targetId ?? null,
+    exclude: w.unreachableIds,
+    atCar: customersAtCar,
+  })
+  if (
+    task.kind === 'greet' &&
+    !customers.some((c) => c.id === task.customerId && c.handlerId === e.id)
+  ) {
+    // Somebody new: claim them first. Someone else got there first: try again next frame.
+    if (!game.staffClaim(e.id, task.customerId)) return
+  }
+  if (task.kind === 'lead') return game.staffLead(e.id)
+
+  const key = salesKey(task)
+  if (key !== w.task) planSales(e, w, task, key)
+  if (task.kind === 'idle') return updatePost(e, w, seconds)
+
+  if (task.kind === 'greet') {
+    walk(w, STAFF_SPEED, seconds, customerPos.get(task.customerId) ?? null)
+    if (w.waypoints.length > 0) return
+    if (w.unreachable) {
+      // Leave them to someone who can get to them.
+      w.unreachableIds.add(task.customerId)
+      game.dispatchCustomer({ type: 'cancel', id: task.customerId })
+      return
+    }
+    game.staffGreet(e.id)
+    return
+  }
+  if (task.kind === 'offer') {
+    const at = customerPos.get(task.customerId)
+    if (at) turnToward(w, at, seconds)
+    w.anim.current = 'idle'
+    w.timer += seconds
+    if (w.timer >= skillSeconds(SALES_PITCH_SECONDS, e.skill)) game.staffOffer(e.id)
+    return
+  }
+  // sign: to their desk chair, then the paperwork once the buyer sits down.
+  if (!w.seat) {
+    walk(w, STAFF_SPEED, seconds, null)
+    if (w.waypoints.length > 0) return
+    const chair = propById(task.chairId)
+    if (chair) sitOn(w, chair)
+  } else {
+    w.anim.current = 'sit'
+  }
+  const c = customers.find((x) => x.id === task.customerId)
+  if (c?.phase !== 'signing') return
+  w.timer += seconds
+  if (w.timer >= skillSeconds(SALES_SIGN_SECONDS, e.skill)) game.staffSign(e.id, c.id)
+}
+
+/** Sets off on a salesperson's new task. */
+function planSales(e: Employee, w: StaffWalker, task: SalesTask, key: string): void {
+  if (task.kind === 'idle') return plan(e, w, 'post')
+  w.task = key
+  w.timer = 0
+  w.faceTo = null
+  if (task.kind === 'offer') {
+    w.waypoints = []
+    return
+  }
+  standUp(w)
+  if (task.kind === 'greet') {
+    const at = customerPos.get(task.customerId)
+    const tile = at && grid.worldToTile(at.x, at.z)
+    if (tile) pathTo(w, approachTilesFor(grid, { ...tile, w: 1, h: 1 }))
+    else w.unreachable = true
+    return
+  }
+  if (task.kind === 'sign') {
+    const chair = propById(task.chairId)
+    if (chair) pathTo(w, approachTilesFor(grid, chair.rect))
+  }
+}
+
+/** Going to or working from their post, and reporting in on arrival. */
+function updatePost(e: Employee, w: StaffWalker, seconds: number): void {
+  if (w.seat) {
+    w.anim.current = 'sit'
+    return
+  }
+  walk(w, STAFF_SPEED, seconds, w.faceTo)
+  if (w.waypoints.length === 0) onArrived(e, w)
 }
 
 function update(
@@ -147,14 +267,11 @@ function update(
   customers: readonly Customer[],
 ): void {
   // Sent home (closing, or let go) with buyers still in hand: finish them first.
-  const task = e.status === 'leaving' && !hasBuyersInHand(customers, e.id) ? 'leave' : 'post'
+  const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
+  if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
+  const task = leaving ? 'leave' : 'post'
   if (task !== w.task) plan(e, w, task)
-  if (w.seat) {
-    w.anim.current = 'sit'
-  } else {
-    walk(w, STAFF_SPEED, seconds, w.faceTo)
-    if (w.waypoints.length === 0) onArrived(e, w)
-  }
+  updatePost(e, w, seconds)
   if (e.role === 'finance' && w.task === 'post' && w.waypoints.length === 0) {
     doPaperwork(e, w, seconds, customers)
   }

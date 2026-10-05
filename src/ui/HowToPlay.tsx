@@ -1,4 +1,4 @@
-import { FINANCE_FEE } from '../sim/staff'
+import { FINANCE_FEE, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -38,11 +38,17 @@ export function HowToPlay() {
         <section>
           <h3>Staff</h3>
           <p>
-            Press <kbd>H</kbd> to hire from the day&apos;s applicants. A receptionist keeps waiting
-            customers patient. A finance manager sits at your office desk: lead a buyer there, click
-            them and choose <b>Hand off to finance</b>, and you&apos;re free to sell to the next
-            customer while they do the paperwork. Buyers wait in the lounge if finance is busy.
-            Everyone on the payroll is paid at closing, and the finance manager also earns{' '}
+            Press <kbd>H</kbd> to hire from the day&apos;s applicants. Salespeople sell on their
+            own: they greet customers, make offers and sign buyers at their own desk, or hand them
+            to finance. They earn {Math.round(SALES_COMMISSION * 100)}% of each car they sell, and
+            the better they are, the more often customers say yes. Seasoned salespeople greet
+            customers as they arrive; newer ones wait until a customer is looking at a car. They
+            leave alone a customer you&apos;re walking over to, and you can&apos;t greet someone
+            they&apos;re helping (a tick over their head). A receptionist keeps waiting customers
+            patient. A finance manager sits at your office desk: lead a buyer there, click them and
+            choose <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer
+            while they do the paperwork. Buyers wait in the lounge if finance is busy. Everyone on
+            the payroll is paid at closing, and the finance manager also earns{' '}
             {formatMoney(FINANCE_FEE)} per deal they sign.
           </p>
         </section>

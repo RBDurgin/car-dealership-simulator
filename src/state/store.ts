@@ -6,7 +6,9 @@ import {
   decide,
   generateCustomer,
   PLAYER_ID,
+  PLAYER_SKILL,
   reduceCustomers,
+  skillBonus,
   type Customer,
   type CustomerEvent,
   type CustomerPhase,
@@ -21,6 +23,7 @@ import {
   emptyStats,
   hasBuyersInHand,
   isCustomerAction,
+  offerPrice,
   recordDepartures,
   type DayStats,
   type Sale,
@@ -46,9 +49,11 @@ import {
   payroll,
   reduceStaff,
   ROLE_LABELS,
+  SALES_COMMISSION,
   type Employee,
   type StaffEvent,
 } from '../sim/staff'
+import { leadChoice } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { formatMoney } from '../ui/format'
 
@@ -147,8 +152,16 @@ interface GameState {
   dispatchCustomer: (ev: CustomerEvent) => void
   /** A customer has thought over the offer on the table and answers it. */
   answerOffer: (id: string) => void
-  /** The finance manager finished the paperwork for the buyer at their desk. */
-  financeSign: (employeeId: string, customerId: string) => void
+  /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
+  staffClaim: (employeeId: string, customerId: string) => boolean
+  /** Salesperson `employeeId` reached the customer they claimed and greets them. */
+  staffGreet: (employeeId: string) => void
+  /** Salesperson `employeeId` makes their customer an offer. */
+  staffOffer: (employeeId: string) => void
+  /** Salesperson `employeeId`'s customer said yes: off to finance, or to their desk. */
+  staffLead: (employeeId: string) => void
+  /** Finance, or a salesperson at their desk, finished the paperwork for the buyer opposite. */
+  staffSign: (employeeId: string, customerId: string) => void
   /** From the end-of-day summary: opens the doors on the next day. */
   startNextDay: () => void
   /** Puts one of today's candidates on the payroll. */
@@ -314,25 +327,48 @@ export const useGame = create<GameState>((set, get) => {
     const c = s.customers.find((x) => x.id === id)
     const car = s.inventory.find((x) => x.id === c?.targetCarId)
     if (!c || !car || car.status !== 'available') return notify("That car isn't for sale any more.")
-    commit(reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: car.msrp }))
+    commit(
+      reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: offerPrice(car) }),
+    )
+  }
+
+  /** The customer salesperson `employeeId` is dealing with in `phases`, if any. */
+  const staffCustomer = (employeeId: string, phases: readonly CustomerPhase[]) =>
+    get().customers.find((c) => c.handlerId === employeeId && phases.includes(c.phase))
+
+  /** Accept-chance bonus for whoever is selling to `c`. */
+  const sellerBonus = (c: Customer) => {
+    if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL)
+    const e = get().roster.find((x) => x.id === c.handlerId)
+    return e ? skillBonus(e.skill) : 0
   }
 
   /**
    * Signs `c`'s paperwork: sells the car at the offer price, logs the sale and
-   * sends them home happy. Returns the sale, or null if the car can't be sold.
+   * sends them home happy. `signer` is the employee at the desk (finance, or
+   * the salesperson), null for the player. Returns the sale, or null if the car
+   * can't be sold.
    */
   const sign = (c: Customer, signer: Employee | null): Sale | null => {
     const s = get()
     const car = s.inventory.find((x) => x.id === c.offer?.carId)
     if (!c.offer || !car || !get().sellCar(car.id, c.offer.price)) return null
+    const price = c.offer.price
+    // Who made the sale. A salesperson let go since is no longer on the roster.
+    const seller =
+      c.sellerId && c.sellerId !== PLAYER_ID
+        ? (s.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
+        : null
+    const finance = signer?.role === 'finance' ? signer : null
     const sale: Sale = {
       customerName: c.name,
       carId: car.id,
       model: car.model,
-      price: c.offer.price,
+      price,
       minute: s.clock.minute,
-      signedBy: signer?.name ?? null,
-      commission: signer ? FINANCE_FEE : 0,
+      soldBy: seller,
+      signedBy: finance?.name ?? null,
+      commission: (seller ? Math.round(price * SALES_COMMISSION) : 0) + (finance ? FINANCE_FEE : 0),
     }
     set({ dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] } })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))
@@ -529,13 +565,61 @@ export const useGame = create<GameState>((set, get) => {
       if (c?.phase !== 'considering' || !c.offer) return
       const { price } = c.offer
       const car = s.inventory.find((x) => x.id === c.offer?.carId)
-      const accepted = !!car && car.status === 'available' && decide(c, car, price, dealRng)
+      const accepted =
+        !!car && car.status === 'available' && decide(c, car, price, dealRng, sellerBonus(c))
       commit(reduceCustomers(s.customers, { type: 'respond', id, accepted }))
+      // Staff deals go on quietly; the sale itself is announced.
+      if (c.handlerId !== PLAYER_ID) return
       if (accepted) notify(`${c.name}: "Deal! Lead the way."`)
       else if (price > c.budget) notify(`${c.name}: "That's more than I can spend."`)
       else notify(`${c.name}: "I'll pass, thanks."`)
     },
-    financeSign: (employeeId, customerId) => {
+    staffClaim: (employeeId, customerId) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      if (!e || e.role !== 'sales' || e.fired || e.status !== 'atPost') return false
+      // One customer at a time, and never the one the player is heading to.
+      if (s.customers.some((c) => c.handlerId === employeeId && c.phase !== 'leaving')) return false
+      if (s.activeAction?.targetId === customerId) return false
+      commit(reduceCustomers(s.customers, { type: 'claim', id: customerId, by: employeeId }))
+      return get().customers.find((c) => c.id === customerId)?.handlerId === employeeId
+    },
+    staffGreet: (employeeId) => {
+      const c = staffCustomer(employeeId, ['browsing', 'waiting'])
+      if (!c) return
+      const carId = chooseTarget(c, availableCars(get().inventory))
+      commit(reduceCustomers(get().customers, { type: 'greet', id: c.id, carId, by: employeeId }))
+    },
+    staffOffer: (employeeId) => {
+      const c = staffCustomer(employeeId, ['talking'])
+      const car = get().inventory.find((x) => x.id === c?.targetCarId)
+      if (!c) return
+      // Sold to someone else while they talked: nothing left to offer.
+      if (!car || car.status !== 'available') {
+        commit(reduceCustomers(get().customers, { type: 'cancel', id: c.id }))
+        return
+      }
+      const ev = { type: 'offer', id: c.id, carId: car.id, price: offerPrice(car) } as const
+      commit(reduceCustomers(get().customers, ev))
+    },
+    staffLead: (employeeId) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      const c = staffCustomer(employeeId, ['following'])
+      if (!e || !c || c.chairId !== null) return
+      const choice = leadChoice(e, s.customers, s.roster)
+      if (!choice) {
+        commit(reduceCustomers(s.customers, { type: 'cancel', id: c.id }))
+        return
+      }
+      if (choice.kind === 'desk') {
+        commit(reduceCustomers(s.customers, { type: 'lead', id: c.id, chairId: choice.chairId }))
+        return
+      }
+      const fm = financeOnDuty(s.roster)!
+      commit(reduceCustomers(s.customers, { type: 'handOff', id: c.id, to: fm.id }))
+    },
+    staffSign: (employeeId, customerId) => {
       const s = get()
       const e = s.roster.find((x) => x.id === employeeId)
       const c = s.customers.find((x) => x.id === customerId)
@@ -546,7 +630,7 @@ export const useGame = create<GameState>((set, get) => {
         return notify(`${e.name}: "The ${c.name} deal fell through."`)
       }
       notify(
-        `${e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!`,
+        `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!`,
       )
     },
     startNextDay: () => {
@@ -569,6 +653,14 @@ export const useGame = create<GameState>((set, get) => {
       const e = get().roster.find((x) => x.id === id)
       if (!e || e.fired) return
       setRoster(reduceStaff(get().roster, { type: 'fire', id }))
+      // A salesperson still talking someone round lets them go back to waiting.
+      const talking = get().customers.filter(
+        (c) =>
+          c.handlerId === id && ['browsing', 'waiting', 'talking', 'considering'].includes(c.phase),
+      )
+      let customers = get().customers
+      for (const c of talking) customers = reduceCustomers(customers, { type: 'cancel', id: c.id })
+      commit(customers)
       if (hasBuyersInHand(get().customers, id)) {
         notify(`You let ${e.name} go. They'll finish their paperwork first.`)
       } else notify(`You let ${e.name} go.`)

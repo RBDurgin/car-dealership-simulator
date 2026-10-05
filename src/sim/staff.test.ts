@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOMER_VARIANTS, STAFF_VARIANTS } from './characters'
+import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import {
   canHire,
@@ -12,6 +13,9 @@ import {
   MIN_SKILL,
   patienceFactor,
   payroll,
+  postChairId,
+  salesDeskOf,
+  skillSeconds,
   RECEPTION_PATIENCE_FACTOR,
   reduceStaff,
   ROLES,
@@ -92,6 +96,7 @@ describe('payroll', () => {
       model: 'sedan' as const,
       price: 30_000,
       minute: 600,
+      soldBy: null,
     }
     const sales = [
       { ...sale, signedBy: null, commission: 0 },
@@ -119,6 +124,37 @@ describe('finance', () => {
     }
     expect(financeOnDuty([hand('finance', { status: 'atPost', fired: true })])).toBeNull()
     expect(financeOnDuty([hand('sales', { status: 'atPost' })])).toBeNull()
+  })
+})
+
+describe('sales desks', () => {
+  it('hands out a desk each to the salespeople on the lot, in hiring order', () => {
+    const a = hand('sales', { status: 'atPost' })
+    const b = hand('sales', { status: 'arriving' })
+    const home = hand('sales', { status: 'off' })
+    const fm = hand('finance', { status: 'atPost' })
+    const roster = [home, fm, a, b]
+    expect(salesDeskOf(roster, a.id)).toBe(SALES_DESKS[0])
+    expect(salesDeskOf(roster, b.id)).toBe(SALES_DESKS[1])
+    expect(salesDeskOf(roster, home.id)).toBeNull()
+    expect(salesDeskOf(roster, fm.id)).toBeNull()
+    // A third (one let go, still finishing up) has no desk.
+    const c = hand('sales', { status: 'atPost' })
+    expect(salesDeskOf([...roster, c], c.id)).toBeNull()
+  })
+
+  it('gives every role its chair to work from', () => {
+    const a = hand('sales', { status: 'atPost' })
+    expect(postChairId(a, [a])).toBe(SALES_DESKS[0].chairId)
+    expect(postChairId(hand('finance'), [])).toBe(DESK_CHAIR_ID)
+    expect(postChairId(hand('receptionist'), [])).toBe(RECEPTION_CHAIR_ID)
+    expect(postChairId(hand('porter'), [])).toBeNull()
+  })
+
+  it('scales task times by skill', () => {
+    expect(skillSeconds(4, 3)).toBe(4)
+    expect(skillSeconds(4, 1)).toBeGreaterThan(skillSeconds(4, 5))
+    expect(skillSeconds(4, 5)).toBeGreaterThan(0)
   })
 })
 

@@ -31,6 +31,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,
+  chairId: null,
+  sellerId: null,
   ...extra,
 })
 
@@ -96,7 +98,7 @@ describe('handing off to finance', () => {
     perform('office-chair', 'handOff')
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     expect(customer()?.phase).toBe('signing')
-    game().financeSign(fm, 'customer-a')
+    game().staffSign(fm, 'customer-a')
     const price = car('lot-car-1').msrp
     expect(car('lot-car-1').status).toBe('sold')
     expect(game().cash).toBe(STARTING_CASH + price)
@@ -122,17 +124,17 @@ describe('handing off to finance', () => {
     expect(customer(B)).toMatchObject({ phase: 'queued', handlerId: fm })
     expect(game().notice?.text).toMatch(/wait in the lounge/)
 
-    game().financeSign(fm, 'customer-a')
+    game().staffSign(fm, 'customer-a')
     expect(customer(B)?.phase).toBe('following')
     game().dispatchCustomer({ type: 'seat', id: B })
-    game().financeSign(fm, B)
+    game().staffSign(fm, B)
     expect(game().dayStats.sales).toHaveLength(2)
   })
 
   it('ignores a signature for someone finance is not handling', () => {
     const fm = seatedFinance()
     sell('customer-a')
-    game().financeSign(fm, 'customer-a')
+    game().staffSign(fm, 'customer-a')
     expect(customer()?.phase).toBe('following')
     expect(game().dayStats.sales).toHaveLength(0)
   })
@@ -174,9 +176,9 @@ describe('handing off to finance', () => {
     game().tickClock({ day: 1, minute: CLOSE_MINUTE })
     expect(customer()?.phase).toBe('signing')
     expect(customer(B)?.phase).toBe('queued')
-    game().financeSign(fm, 'customer-a')
+    game().staffSign(fm, 'customer-a')
     game().dispatchCustomer({ type: 'seat', id: B })
-    game().financeSign(fm, B)
+    game().staffSign(fm, B)
     for (const c of game().customers) game().dispatchCustomer({ type: 'despawn', id: c.id })
 
     const revenue = car('lot-car-1').msrp + car('lot-car-2').msrp
@@ -195,7 +197,7 @@ describe('handing off to finance', () => {
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     game().fire(fm)
     expect(game().notice?.text).toMatch(/finish their paperwork/)
-    game().financeSign(fm, 'customer-a')
+    game().staffSign(fm, 'customer-a')
     expect(game().dayStats.sales).toHaveLength(1)
     expect(game().dayStats.sales[0].commission).toBe(FINANCE_FEE)
   })

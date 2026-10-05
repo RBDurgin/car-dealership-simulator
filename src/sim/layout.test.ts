@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLayout,
   createGrid,
+  DESK_CHAIR_ID,
+  DISPLAY_CARS,
+  GUEST_CHAIR_ID,
   LOT_ENTRY_TILES,
   OPENINGS,
   PARKING_SPACES,
   parkedCarRect,
   PROPS,
   RECEPTION_CHAIR_ID,
+  SALES_DESKS,
   SIDEWALK_ENDS,
   SPAWN_TILE,
   wallAt,
@@ -105,10 +109,29 @@ describe('dealership layout', () => {
     expect(path!.some((t) => t.tz === 13 && (t.tx === 21 || t.tx === 22))).toBe(true)
   })
 
-  it('lets staff walk from the sidewalk to the reception chair', () => {
-    const chair = PROPS.find((p) => p.id === RECEPTION_CHAIR_ID)!
-    const approach = approachTilesFor(grid, chair.rect)
-    expect(approach.length).toBeGreaterThan(0)
-    for (const end of SIDEWALK_ENDS) expect(findPathToAny(grid, end, approach)).not.toBeNull()
+  it('lets people walk from the sidewalk to every staff and guest chair', () => {
+    const chairs = [
+      RECEPTION_CHAIR_ID,
+      DESK_CHAIR_ID,
+      GUEST_CHAIR_ID,
+      ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
+    ]
+    for (const id of chairs) {
+      const chair = PROPS.find((p) => p.id === id)
+      expect(chair, id).toBeDefined()
+      const approach = approachTilesFor(grid, chair!.rect)
+      expect(approach.length, id).toBeGreaterThan(0)
+      for (const end of SIDEWALK_ENDS) expect(findPathToAny(grid, end, approach), id).not.toBeNull()
+    }
+  })
+
+  it('keeps the lounge sofa and every display car reachable around the sales desks', () => {
+    const sofa = PROPS.find((p) => p.id === 'lounge-sofa')!
+    expect(findPathToAny(grid, SPAWN_TILE, approachTilesFor(grid, sofa.rect))).not.toBeNull()
+    for (const car of DISPLAY_CARS) {
+      const approach = approachTilesFor(grid, car.rect)
+      expect(approach.length, car.model).toBeGreaterThanOrEqual(4)
+      expect(findPathToAny(grid, SPAWN_TILE, approach), car.model).not.toBeNull()
+    }
   })
 })

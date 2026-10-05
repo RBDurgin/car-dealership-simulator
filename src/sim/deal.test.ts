@@ -15,9 +15,11 @@ import {
   inConversation,
   recordDepartures,
   revenue,
+  salesBySeller,
   walkOuts,
 } from './deal'
 import { Grid } from './grid'
+import { GUEST_CHAIR_ID } from './layout'
 import type { Employee } from './staff'
 
 /** A finance manager at the desk. */
@@ -47,6 +49,8 @@ const base: Customer = {
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,
+  chairId: null,
+  sellerId: null,
 }
 
 const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({
@@ -170,7 +174,11 @@ describe('the finance desk', () => {
 
   it('calls the first buyer in the lounge once the guest chair is free', () => {
     const queued = (id: string) => at('queued', { id, handlerId: fm.id })
-    const busy = [at('signing', { handlerId: fm.id }), queued('c2'), queued('c3')]
+    const busy = [
+      at('signing', { handlerId: fm.id, chairId: GUEST_CHAIR_ID }),
+      queued('c2'),
+      queued('c3'),
+    ]
     expect(guestChairBusy(busy)).toBe(true)
     expect(callNextBuyer(busy)).toBe(busy)
 
@@ -228,6 +236,7 @@ describe('day stats', () => {
       carId: 'x',
       model: 'sedan' as const,
       minute: 600,
+      soldBy: null,
       signedBy: null,
       commission: 0,
     }
@@ -240,5 +249,27 @@ describe('day stats', () => {
     }
     expect(revenue(stats)).toBe(3500)
     expect(revenue(emptyStats())).toBe(0)
+  })
+
+  it('breaks the sales down by seller, the player first', () => {
+    const sale = (price: number, soldBy: string | null, commission = 0) => ({
+      customerName: 'A',
+      carId: 'x',
+      model: 'sedan' as const,
+      minute: 600,
+      price,
+      soldBy,
+      signedBy: null,
+      commission,
+    })
+    const stats = {
+      ...emptyStats(),
+      sales: [sale(30_000, 'Kim P.', 900), sale(20_000, null), sale(10_000, 'Kim P.', 500)],
+    }
+    expect(salesBySeller(stats)).toEqual([
+      { seller: null, cars: 1, revenue: 20_000, commission: 0 },
+      { seller: 'Kim P.', cars: 2, revenue: 40_000, commission: 1400 },
+    ])
+    expect(salesBySeller(emptyStats())).toEqual([])
   })
 })

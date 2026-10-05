@@ -12,12 +12,16 @@ import {
   moodOf,
   PATIENCE_MINUTES,
   PLAYER_ID,
+  PLAYER_SKILL,
   reduceCustomer,
   reduceCustomers,
+  SKILL_BONUS,
+  skillBonus,
   staffHandled,
   type Customer,
   type CustomerEvent,
 } from './customers'
+import { GUEST_CHAIR_ID } from './layout'
 import { availableCars, BASE_MSRP, buildInventory, sellCar, type InventoryCar } from './inventory'
 import { createRng } from './rng'
 
@@ -40,6 +44,8 @@ const base: Customer = {
   phase: 'arriving',
   leaveReason: null,
   handlerId: null,
+  chairId: null,
+  sellerId: null,
 }
 
 const run = (c: Customer, ...events: CustomerEvent[]) =>
@@ -157,6 +163,19 @@ describe('decide', () => {
     expect(yes / n).toBeLessThan(0.4)
   })
 
+  it("adds the seller's skill: −10% for a novice up to +5% for the best", () => {
+    expect(skillBonus(1)).toBeCloseTo(SKILL_BONUS.min)
+    expect(skillBonus(5)).toBeCloseTo(SKILL_BONUS.max)
+    expect(skillBonus(PLAYER_SKILL)).toBeGreaterThan(0)
+    expect(skillBonus(2)).toBeLessThan(skillBonus(3))
+    const atLimit = acceptChance(base, truck, base.budget)
+    expect(acceptChance(base, truck, base.budget, skillBonus(1))).toBeCloseTo(atLimit - 0.1)
+    expect(acceptChance(base, truck, base.budget, skillBonus(5))).toBeCloseTo(atLimit + 0.05)
+    // Still capped, and still a no over budget.
+    expect(acceptChance(base, sedan, base.budget * 0.5, skillBonus(5))).toBe(MAX_ACCEPT_CHANCE)
+    expect(acceptChance(base, sedan, base.budget + 100, skillBonus(5))).toBe(0)
+  })
+
   it('is deterministic for a seed', () => {
     const answers = (seed: number) => {
       const rng = createRng(seed)
@@ -223,12 +242,26 @@ describe('reduceCustomer', () => {
     expect(reduceCustomer(queued, { type: 'tick', minutes: 30 })).toBe(queued)
 
     const called = run(queued, { type: 'call', id: 'c1' })!
-    expect(called).toMatchObject({ phase: 'following', handlerId: 'staff-1' })
-    expect(run(called, { type: 'seat', id: 'c1' })!.phase).toBe('signing')
+    expect(called).toMatchObject({
+      phase: 'following',
+      handlerId: 'staff-1',
+      chairId: GUEST_CHAIR_ID,
+    })
+    expect(run(called, { type: 'seat', id: 'c1' })).toMatchObject({
+      phase: 'signing',
+      chairId: GUEST_CHAIR_ID,
+    })
 
-    // Only the player's own buyer can be handed off, and only while following.
+    // A salesperson's buyer can be handed off too, but not once sent to a desk,
+    // nor to the finance manager who already has them.
     const theirs = at('following', { handlerId: 'staff-2' })
-    expect(reduceCustomer(theirs, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(theirs)
+    expect(run(theirs, { type: 'handOff', id: 'c1', to: 'staff-1' })).toMatchObject({
+      phase: 'queued',
+      handlerId: 'staff-1',
+    })
+    const atDesk = at('following', { handlerId: 'staff-2', chairId: 'sales-guest-1' })
+    expect(reduceCustomer(atDesk, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(atDesk)
+    expect(reduceCustomer(called, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(called)
     const talking = at('talking', { handlerId: PLAYER_ID })
     expect(reduceCustomer(talking, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(talking)
     expect(reduceCustomer(following, { type: 'call', id: 'c1' })).toBe(following)
@@ -380,5 +413,72 @@ describe('bubbleOf', () => {
     expect(left('refused')).toBe('upset')
     expect(left('impatient')).toBe('upset')
     expect(left('closing')).toBeNull()
+  })
+})
+
+describe('salespeople', () => {
+  it('claim a customer on the way over, which keeps everyone else off them', () => {
+    const waiting = at('waiting')
+    const claimed = run(waiting, { type: 'claim', id: 'c1', by: 'staff-1' })!
+    expect(claimed).toMatchObject({ phase: 'waiting', handlerId: 'staff-1' })
+    expect(staffHandled(claimed)).toBe(true)
+    expect(bubbleOf(claimed)).toBe('helped')
+    // Someone else can neither claim nor greet them.
+    expect(reduceCustomer(claimed, { type: 'claim', id: 'c1', by: 'staff-2' })).toBe(claimed)
+    const greet = { type: 'greet', id: 'c1', carId: 'lot-car-1' } as const
+    expect(reduceCustomer(claimed, { ...greet, by: PLAYER_ID })).toBe(claimed)
+    // The claimer can.
+    expect(run(claimed, { ...greet, by: 'staff-1' })).toMatchObject({
+      phase: 'talking',
+      handlerId: 'staff-1',
+      sellerId: 'staff-1',
+    })
+    // Only browsing or waiting customers can be claimed.
+    const talking = at('talking', { handlerId: PLAYER_ID })
+    expect(reduceCustomer(talking, { type: 'claim', id: 'c1', by: 'staff-1' })).toBe(talking)
+  })
+
+  it("don't let a claimed customer lose patience, and can give up on them", () => {
+    const claimed = at('waiting', { handlerId: 'staff-1' })
+    expect(reduceCustomer(claimed, { type: 'tick', minutes: 30 })).toBe(claimed)
+    const browsing = at('browsing', { handlerId: 'staff-1', browsed: 1 })
+    expect(run(browsing, { type: 'cancel', id: 'c1' })).toMatchObject({
+      phase: 'browsing',
+      browsed: 1,
+      handlerId: null,
+    })
+    expect(run(claimed, { type: 'close' })).toMatchObject({ phase: 'leaving', handlerId: null })
+  })
+
+  it('send their buyer to their own desk to sign', () => {
+    const buyer = at('following', { handlerId: 'staff-1', sellerId: 'staff-1' })
+    const led = run(buyer, { type: 'lead', id: 'c1', chairId: 'sales-guest-1' })!
+    expect(led.chairId).toBe('sales-guest-1')
+    // Already on their way: the desk doesn't change.
+    expect(reduceCustomer(led, { type: 'lead', id: 'c1', chairId: 'sales-guest-2' })).toBe(led)
+    expect(run(led, { type: 'seat', id: 'c1' })).toMatchObject({
+      phase: 'signing',
+      chairId: 'sales-guest-1',
+    })
+    // Only staff send buyers to a desk; the player walks theirs over.
+    const mine = at('following', { handlerId: PLAYER_ID })
+    expect(reduceCustomer(mine, { type: 'lead', id: 'c1', chairId: 'sales-guest-1' })).toBe(mine)
+    // Spared at closing, mid-walk; dropping the deal clears it all.
+    expect(run(led, { type: 'close' })).toBe(led)
+    expect(run(led, { type: 'cancel', id: 'c1' })).toMatchObject({
+      phase: 'waiting',
+      handlerId: null,
+      chairId: null,
+      sellerId: null,
+    })
+  })
+
+  it('keep the sale to their name after handing off to finance', () => {
+    const buyer = at('following', { handlerId: 'staff-1', sellerId: 'staff-1' })
+    expect(run(buyer, { type: 'handOff', id: 'c1', to: 'staff-9' })).toMatchObject({
+      phase: 'queued',
+      handlerId: 'staff-9',
+      sellerId: 'staff-1',
+    })
   })
 })

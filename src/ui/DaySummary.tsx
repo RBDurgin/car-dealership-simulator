@@ -1,5 +1,5 @@
 import { formatTime, isClosed } from '../sim/clock'
-import { netIncome, revenue, walkOuts } from '../sim/deal'
+import { netIncome, revenue, salesBySeller, walkOuts } from '../sim/deal'
 import { carName } from '../sim/interactables'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -46,12 +46,35 @@ export function DaySummary() {
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>
+        {stats.sales.some((s) => s.soldBy !== null) && (
+          <table className="summary-sellers">
+            <thead>
+              <tr>
+                <th>Seller</th>
+                <th>Cars</th>
+                <th>Revenue</th>
+                <th>Commission</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salesBySeller(stats).map((t) => (
+                <tr key={t.seller ?? 'you'}>
+                  <td>{t.seller ?? 'You'}</td>
+                  <td>{t.cars}</td>
+                  <td className="price">{formatMoney(t.revenue)}</td>
+                  <td className="price">{formatMoney(t.commission)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         {stats.sales.length > 0 && (
           <ul className="summary-sales">
             {stats.sales.map((s, i) => (
               <li key={i}>
                 <span className="muted">{formatTime(s.minute)}</span> {carName(s.model)} to{' '}
                 {s.customerName} <span className="price">{formatMoney(s.price)}</span>
+                {s.soldBy && <span className="muted"> · sold by {s.soldBy}</span>}
                 {s.signedBy && <span className="muted"> · signed by {s.signedBy}</span>}
               </li>
             ))}

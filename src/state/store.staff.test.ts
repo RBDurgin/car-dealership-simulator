@@ -24,6 +24,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,
+  chairId: null,
+  sellerId: null,
   ...extra,
 })
 

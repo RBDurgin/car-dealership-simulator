@@ -1,0 +1,241 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CLOSE_MINUTE } from '../sim/clock'
+import type { Customer } from '../sim/customers'
+import { GUEST_CHAIR_ID, SALES_DESKS } from '../sim/layout'
+import { FINANCE_FEE, SALES_COMMISSION, type Role } from '../sim/staff'
+import { STARTING_CASH, useGame } from './store'
+
+// Customers' answers are random; these tests always get a yes.
+vi.mock('../sim/customers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../sim/customers')>()),
+  decide: () => true,
+}))
+
+const initial = useGame.getState()
+const game = () => useGame.getState()
+const customer = (id = A) => game().customers.find((c) => c.id === id)
+const car = (id: string) => game().inventory.find((c) => c.id === id)!
+const employee = (id: string) => game().roster.find((e) => e.id === id)!
+
+const A = 'customer-a'
+const B = 'customer-b'
+
+const shopper = (extra: Partial<Customer> = {}): Customer => ({
+  id: A,
+  name: 'Alex B.',
+  variant: 'male-a',
+  budget: 200_000,
+  preferredModels: ['sedan'],
+  patience: 120,
+  patienceLeft: 120,
+  browseCarIds: ['lot-car-1'],
+  browsed: 1,
+  targetCarId: 'lot-car-1',
+  offer: null,
+  phase: 'waiting',
+  leaveReason: null,
+  handlerId: null,
+  chairId: null,
+  sellerId: null,
+  ...extra,
+})
+
+let nextHire = 1
+/** Puts a new employee of `role` on the payroll, at their post. Returns their id. */
+function hired(role: Role): string {
+  const template = initial.candidates.find((c) => c.role === role)!
+  const id = `hire-${nextHire++}`
+  useGame.setState({ candidates: [{ ...template, id, name: `${role} ${id}` }] })
+  game().hire(id)
+  game().dispatchStaff({ type: 'atPost', id })
+  return id
+}
+
+/** A salesperson walks over, greets, pitches and gets a yes. */
+function talkRound(id: string, customerId = A) {
+  expect(game().staffClaim(id, customerId)).toBe(true)
+  game().staffGreet(id)
+  game().staffOffer(id)
+  game().answerOffer(customerId)
+}
+
+const commissionOn = (price: number) => Math.round(price * SALES_COMMISSION)
+
+describe('AI salespeople', () => {
+  beforeEach(() => {
+    useGame.setState(
+      {
+        ...initial,
+        customers: [
+          shopper(),
+          shopper({ id: B, name: 'Sam C.', browseCarIds: ['lot-car-2'], targetCarId: 'lot-car-2' }),
+        ],
+      },
+      true,
+    )
+  })
+
+  it('sell a car at their own desk and earn a commission', () => {
+    const sam = hired('sales')
+    talkRound(sam)
+    expect(customer()).toMatchObject({ phase: 'following', handlerId: sam, sellerId: sam })
+    // Customer quotes are only for the player's own deals.
+    expect(game().notice?.text).not.toMatch(/Lead the way/)
+
+    game().staffLead(sam)
+    expect(customer()?.chairId).toBe(SALES_DESKS[0].guestChairId)
+    game().dispatchCustomer({ type: 'seat', id: A })
+    expect(customer()?.phase).toBe('signing')
+    game().staffSign(sam, A)
+
+    const price = car('lot-car-1').msrp
+    expect(car('lot-car-1').status).toBe('sold')
+    expect(game().cash).toBe(STARTING_CASH + price)
+    expect(game().dayStats.sales).toEqual([
+      expect.objectContaining({
+        price,
+        soldBy: employee(sam).name,
+        signedBy: null,
+        commission: commissionOn(price),
+      }),
+    ])
+    expect(game().notice?.text).toMatch(new RegExp(`${employee(sam).name} sold`))
+  })
+
+  it('offer the MSRP of the car the customer is after', () => {
+    const sam = hired('sales')
+    game().staffClaim(sam, A)
+    game().staffGreet(sam)
+    expect(customer()?.phase).toBe('talking')
+    game().staffOffer(sam)
+    expect(customer()?.offer).toEqual({ carId: 'lot-car-1', price: car('lot-car-1').msrp })
+  })
+
+  it('hand buyers to a free finance manager, and keep the sale to their name', () => {
+    const sam = hired('sales')
+    const fm = hired('finance')
+    talkRound(sam)
+    game().staffLead(sam)
+    // Straight over to the office: nobody else is with finance.
+    expect(customer()).toMatchObject({
+      phase: 'following',
+      handlerId: fm,
+      chairId: GUEST_CHAIR_ID,
+      sellerId: sam,
+    })
+    game().dispatchCustomer({ type: 'seat', id: A })
+    game().staffSign(fm, A)
+
+    const price = car('lot-car-1').msrp
+    expect(game().dayStats.sales).toEqual([
+      expect.objectContaining({
+        soldBy: employee(sam).name,
+        signedBy: employee(fm).name,
+        commission: commissionOn(price) + FINANCE_FEE,
+      }),
+    ])
+  })
+
+  it('use their own desk while finance is busy', () => {
+    const sam = hired('sales')
+    hired('finance')
+    // The player's buyer is already with finance.
+    useGame.setState({
+      customers: [
+        ...game().customers,
+        shopper({ id: 'c', phase: 'queued', handlerId: game().roster[1].id }),
+      ],
+    })
+    talkRound(sam)
+    game().staffLead(sam)
+    expect(customer()).toMatchObject({ handlerId: sam, chairId: SALES_DESKS[0].guestChairId })
+  })
+
+  it('never both take the same customer, nor one the player is heading to', () => {
+    const sam = hired('sales')
+    const kim = hired('sales')
+    expect(game().staffClaim(sam, A)).toBe(true)
+    expect(game().staffClaim(kim, A)).toBe(false)
+    // One customer at a time.
+    expect(game().staffClaim(sam, B)).toBe(false)
+
+    game().requestAction(B, 'greet')
+    expect(game().activeAction?.targetId).toBe(B)
+    expect(game().staffClaim(kim, B)).toBe(false)
+  })
+
+  it("keep the player off a customer they're helping", () => {
+    const sam = hired('sales')
+    game().staffClaim(sam, A)
+    game().requestAction(A, 'greet')
+    expect(game().activeAction).toBeNull()
+    expect(game().notice?.text).toMatch(/is helping Alex B\./)
+  })
+
+  it('get their own desk each', () => {
+    const sam = hired('sales')
+    const kim = hired('sales')
+    talkRound(sam, A)
+    talkRound(kim, B)
+    game().staffLead(sam)
+    game().staffLead(kim)
+    expect(customer(A)?.chairId).toBe(SALES_DESKS[0].guestChairId)
+    expect(customer(B)?.chairId).toBe(SALES_DESKS[1].guestChairId)
+  })
+
+  it('let go mid-pitch leave the customer waiting, but finish a buyer in hand', () => {
+    const sam = hired('sales')
+    game().staffClaim(sam, A)
+    game().staffGreet(sam)
+    game().fire(sam)
+    expect(customer()).toMatchObject({ phase: 'waiting', handlerId: null })
+
+    const kim = hired('sales')
+    talkRound(kim, B)
+    game().fire(kim)
+    expect(customer(B)).toMatchObject({ phase: 'following', handlerId: kim })
+    game().staffLead(kim)
+    game().dispatchCustomer({ type: 'seat', id: B })
+    game().staffSign(kim, B)
+    expect(game().dayStats.sales).toEqual([
+      expect.objectContaining({
+        soldBy: `sales ${kim}`,
+        commission: commissionOn(car('lot-car-2').msrp),
+      }),
+    ])
+  })
+
+  it('at closing drop the customers they are talking to, finish their buyers, and are paid', () => {
+    const sam = hired('sales')
+    const kim = hired('sales')
+    const wages = employee(sam).wage + employee(kim).wage
+    talkRound(sam, A)
+    game().staffClaim(kim, B)
+
+    game().tickClock({ day: 1, minute: CLOSE_MINUTE })
+    expect(customer(B)).toMatchObject({ phase: 'leaving', leaveReason: 'closing' })
+    expect(customer(A)?.phase).toBe('following')
+    game().staffLead(sam)
+    expect(customer(A)?.chairId).toBe(SALES_DESKS[0].guestChairId)
+    game().dispatchCustomer({ type: 'seat', id: A })
+    game().staffSign(sam, A)
+    for (const c of game().customers) game().dispatchCustomer({ type: 'despawn', id: c.id })
+
+    const price = car('lot-car-1').msrp
+    expect(game().dayStats).toMatchObject({
+      settled: true,
+      wages,
+      commissions: commissionOn(price),
+    })
+    expect(game().cash).toBe(STARTING_CASH + price - wages - commissionOn(price))
+  })
+
+  it('give up on a car that sold while they talked', () => {
+    const sam = hired('sales')
+    game().staffClaim(sam, A)
+    game().staffGreet(sam)
+    game().sellCar('lot-car-1')
+    game().staffOffer(sam)
+    expect(customer()).toMatchObject({ phase: 'waiting', handlerId: null, offer: null })
+  })
+})

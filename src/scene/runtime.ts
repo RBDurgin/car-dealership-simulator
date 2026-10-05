@@ -9,6 +9,7 @@ import {
   createGrid,
   DESK_CHAIR_ID,
   GUEST_CHAIR_ID,
+  SALES_DESKS,
   SPAWN_TILE,
   type Rect,
 } from '../sim/layout'
@@ -48,6 +49,12 @@ export const playerPos = { x: spawn.x, z: spawn.z }
  */
 export const customerPos = new Map<string, Vec2>()
 
+/**
+ * Browsing customers standing at a car, looking it over (rather than walking
+ * between cars). Owned by scene/Customers; less skilled salespeople wait for this.
+ */
+export const customersAtCar = new Set<string>()
+
 /** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
 export const staffPos = new Map<string, Vec2>()
 
@@ -70,8 +77,14 @@ export function crowdAgents(): Agent[] {
 
 /** Goal tiles walkers have claimed, so they spread out around a car instead of stacking. */
 export const reservations = new Reservations()
-// The spots by the office chairs and staff posts are kept clear of browsers.
-for (const id of [GUEST_CHAIR_ID, DESK_CHAIR_ID, ...Object.values(POSTS)]) {
+// The spots by the office chairs, sales desks and staff posts are kept clear of browsers.
+const SEATS = [
+  GUEST_CHAIR_ID,
+  DESK_CHAIR_ID,
+  ...Object.values(POSTS),
+  ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
+]
+for (const id of SEATS) {
   const chair = id && layout.props.find((p) => p.id === id)
   if (!chair) continue
   const tiles = approachTilesFor(grid, chair.rect).map((t) => grid.index(t.tx, t.tz))

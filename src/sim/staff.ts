@@ -1,7 +1,7 @@
 import { STAFF_VARIANTS, type StaffVariant } from './characters'
 import { randomName } from './customers'
 import type { Sale } from './deal'
-import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID } from './layout'
+import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS, type SalesDesk } from './layout'
 import type { Rng } from './rng'
 
 /**
@@ -48,7 +48,10 @@ export const ROLE_LIMITS: Record<Role, number> = {
   porter: 1,
 }
 
-/** The chair each role works from, if it has one (more arrive in later phases). */
+/**
+ * The chair each role works from, if it has one. Salespeople each have their
+ * own desk instead (see `salesDeskOf`).
+ */
 export const POSTS: Record<Role, string | null> = {
   sales: null,
   receptionist: RECEPTION_CHAIR_ID,
@@ -83,7 +86,7 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   porter: { base: 60, perSkill: 15 },
 }
 
-/** Share of a car's price a salesperson earns for selling it (paid from 3d). */
+/** Share of a car's price a salesperson earns for selling it. */
 export const SALES_COMMISSION = 0.03
 
 /** Flat fee the finance manager earns for each deal they sign. */
@@ -91,8 +94,12 @@ export const FINANCE_FEE = 200
 
 /** Game seconds of paperwork per deal for an average (skill 3) finance manager. */
 export const FINANCE_SECONDS = 6
-/** Each skill level above or below average takes this much off or adds it on. */
-const FINANCE_SKILL_STEP = 0.15
+/** Game seconds an average salesperson spends talking up the car before making an offer. */
+export const SALES_PITCH_SECONDS = 4
+/** Game seconds of paperwork per deal for an average salesperson at their own desk. */
+export const SALES_SIGN_SECONDS = 6
+/** Each skill level above or below average takes this much off a task's time or adds it on. */
+const SKILL_TIME_STEP = 0.15
 
 /** Walking speed in the world, units per second: a touch brisker than customers. */
 export const STAFF_SPEED = 1.8
@@ -105,9 +112,30 @@ export function wageFor(role: Role, skill: number): number {
   return w.base + w.perSkill * skill
 }
 
+/** Game seconds an employee of `skill` takes over a task an average one does in `base`. */
+export function skillSeconds(base: number, skill: number): number {
+  return base * (1 + (3 - skill) * SKILL_TIME_STEP)
+}
+
 /** Game seconds a finance manager of `skill` takes over one deal's paperwork. */
 export function financeSeconds(skill: number): number {
-  return FINANCE_SECONDS * (1 + (3 - skill) * FINANCE_SKILL_STEP)
+  return skillSeconds(FINANCE_SECONDS, skill)
+}
+
+/**
+ * The desk salesperson `id` works from: handed out in roster (hiring) order to
+ * the salespeople on the lot. Null if they aren't one, or all desks are taken
+ * (a let-go salesperson still finishing up can hold one past the limit).
+ */
+export function salesDeskOf(roster: readonly Employee[], id: string): SalesDesk | null {
+  const sales = roster.filter((e) => e.role === 'sales' && e.status !== 'off')
+  const i = sales.findIndex((e) => e.id === id)
+  return i < 0 ? null : (SALES_DESKS[i] ?? null)
+}
+
+/** The chair employee `e` works from, or null if they stand. */
+export function postChairId(e: Employee, roster: readonly Employee[]): string | null {
+  return e.role === 'sales' ? (salesDeskOf(roster, e.id)?.chairId ?? null) : POSTS[e.role]
 }
 
 /**

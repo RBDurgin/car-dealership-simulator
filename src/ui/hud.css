@@ -286,6 +286,14 @@ kbd {
 .bubble-waiting::after {
   border-top-color: #fde047;
 }
+/* A salesperson is helping them: staff blue, like the badges. */
+.bubble-helped {
+  background: #1d4ed8;
+  color: #fff;
+}
+.bubble-helped::after {
+  border-top-color: #1d4ed8;
+}
 .bubble-impatient {
   background: #ef4444;
   color: #fff;
@@ -517,6 +525,23 @@ kbd {
   list-style: none;
   display: grid;
   gap: 4px;
+}
+.summary-sellers {
+  width: 100%;
+  margin: 0 0 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.summary-sellers th {
+  text-align: left;
+  font-weight: 600;
+  opacity: 0.7;
+}
+.summary-sellers th:not(:first-child),
+.summary-sellers td:not(:first-child) {
+  text-align: right;
 }
 .day-summary .btn {
   width: 100%;
