@@ -9,7 +9,7 @@ import { Grid, type Tile } from './grid'
 export const GRID_WIDTH = 40
 export const GRID_HEIGHT = 30
 export const SPAWN_TILE: Tile = { tx: 18, tz: 25 }
-export const DEALERSHIP_NAME = 'Summit Motors'
+export const DEALERSHIP_NAME = "Charles' Discount Automotive"
 /** Where customers appear and leave: both ends of the sidewalk, both lanes. */
 export const SIDEWALK_ENDS: Tile[] = [
   { tx: 0, tz: 25 },
