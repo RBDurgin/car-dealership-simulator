@@ -865,4 +865,20 @@ kbd {
     margin-bottom: 8px;
     font-size: 18px;
   }
+  /* In-world overlays keep their pixel size as the camera zooms out, so on a
+     phone they shrink to stop crowding the small figures. */
+  .staff-badge {
+    padding: 1px 4px;
+    font-size: 8px;
+  }
+  .bubble {
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+  }
+  .bubble::after {
+    bottom: -4px;
+    border-width: 4px;
+    border-bottom: 0;
+  }
 }

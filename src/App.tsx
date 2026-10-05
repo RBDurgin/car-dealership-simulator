@@ -5,7 +5,8 @@ import { HUD } from './ui/HUD'
 export default function App() {
   return (
     <>
-      <Canvas shadows="percentage">
+      {/* Phones report a DPR of 3; 2 looks the same at a fraction of the fill cost. */}
+      <Canvas shadows="percentage" dpr={[1, 2]}>
         <Scene />
       </Canvas>
       <HUD />
