@@ -1,6 +1,6 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect } from 'react'
-import { classifyTap, pinchZoom, type PointerSample } from './gestures'
+import { classifyTap, pinchZoom, twistDelta, twistTurn, type PointerSample } from './gestures'
 
 interface Press {
   start: PointerSample
@@ -15,6 +15,10 @@ const active = new Map<number, Press>()
 const verdicts = new Map<number, boolean>()
 let pinchDist = 0
 const pinchListeners = new Set<(factor: number) => void>()
+// Screen angle between the two fingers, and how far they've twisted since the last turn.
+let twistAngle = 0
+let twistAcc = 0
+const twistListeners = new Set<(dir: 1 | -1) => void>()
 
 /** True for touch and pen: they act on a tap (pointerup) and never hover. */
 export function isTouch(e: PointerEvent): boolean {
@@ -36,9 +40,23 @@ export function onPinch(fn: (factor: number) => void): () => void {
   return () => pinchListeners.delete(fn)
 }
 
+/**
+ * Calls `fn` each time a two-finger twist goes far enough for a quarter turn:
+ * 1 = clockwise on screen, -1 = counter-clockwise.
+ */
+export function onTwist(fn: (dir: 1 | -1) => void): () => void {
+  twistListeners.add(fn)
+  return () => twistListeners.delete(fn)
+}
+
 function twoFingerDistance(): number {
   const [a, b] = [...active.values()]
   return Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y)
+}
+
+function twoFingerAngle(): number {
+  const [a, b] = [...active.values()]
+  return Math.atan2(b.pos.y - a.pos.y, b.pos.x - a.pos.x)
 }
 
 /** Tracks touch pointers on the R3F canvas and stops the browser's own gestures there. */
@@ -55,7 +73,11 @@ export function useTouchTracking(): void {
         maxPointers: 1,
       })
       for (const p of active.values()) p.maxPointers = Math.max(p.maxPointers, active.size)
-      if (active.size === 2) pinchDist = twoFingerDistance()
+      if (active.size === 2) {
+        pinchDist = twoFingerDistance()
+        twistAngle = twoFingerAngle()
+        twistAcc = 0
+      }
     }
     const onMove = (e: PointerEvent) => {
       const p = active.get(e.pointerId)
@@ -67,6 +89,12 @@ export function useTouchTracking(): void {
       const factor = pinchZoom(pinchDist, dist)
       pinchDist = dist
       if (factor !== 1) for (const fn of pinchListeners) fn(factor)
+
+      const angle = twoFingerAngle()
+      const { turn, rest } = twistTurn(twistAcc + twistDelta(twistAngle, angle))
+      twistAngle = angle
+      twistAcc = rest
+      if (turn !== 0) for (const fn of twistListeners) fn(turn)
     }
     const onUp = (e: PointerEvent) => {
       const p = active.get(e.pointerId)

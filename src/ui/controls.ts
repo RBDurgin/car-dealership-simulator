@@ -21,7 +21,7 @@ export const CONTROLS: [string, string][] = [
 export const TOUCH_CONTROLS: [string, string][] = [
   ['Tap', 'Move / interact / greet'],
   ['Pinch', 'Zoom'],
-  ['⟲ ⟳', 'Rotate view'],
+  ['Twist', 'Rotate view (two fingers)'],
   ['Staff', 'Staff'],
   ['Walls', 'Wall mode'],
   ['✕', 'Cancel'],

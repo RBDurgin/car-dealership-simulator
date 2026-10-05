@@ -11,7 +11,7 @@ The spec's Phase 4 asks for a mobile breakpoint and controls: the controls HUD s
 **Decisions made with Robert:**
 
 - **Movement:** tap-to-move only, with no virtual joystick. Tapping already pathfinds.
-- **Camera:** pinch to zoom, plus on-screen ⟲ ⟳ rotate buttons that do what Q/E do. No twist gesture and no drag-pan.
+- **Camera:** pinch to zoom, plus on-screen ⟲ ⟳ rotate buttons that do what Q/E do. No drag-pan. (Later: on touch the ⟲ ⟳ buttons were replaced by a two-finger twist, 30° of twist per quarter turn, via `onTwist` in `input/touch.ts`.)
 - **Controls HUD:** collapsible on every device. It starts collapsed on small or touch screens, and the choice is remembered per device.
 - **Orientation:** landscape only. In portrait on a touch device, a "rotate your device" overlay pauses the game.
 
@@ -91,7 +91,7 @@ src/ui/
 
 ## Out of scope
 
-Virtual joystick, twist-to-rotate, drag-to-pan, portrait layout, PWA/fullscreen install, and haptics. Later phases (inventory buying, negotiation, marketing, audio) will build their UI on the compact breakpoint set up here.
+Virtual joystick, drag-to-pan, portrait layout, PWA/fullscreen install, and haptics. Later phases (inventory buying, negotiation, marketing, audio) will build their UI on the compact breakpoint set up here.
 
 ## Implementation notes from 4a
 

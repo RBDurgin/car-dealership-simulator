@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { rotateView } from '../scene/runtime'
 import { useGame } from '../state/store'
 
@@ -24,18 +25,26 @@ interface ViewButtonProps {
   children: ReactNode
 }
 
-/** On-screen buttons for the view keys: rotate (Q / E), wall mode (V) and help (?). */
+/**
+ * On-screen buttons for the view keys: rotate (Q / E), wall mode (V) and help (?).
+ * Touch screens rotate with a two-finger twist instead, so they skip the rotate buttons.
+ */
 export function ViewControls() {
   const wallMode = useGame((s) => s.wallMode)
+  const touch = useMediaQuery(COARSE)
   const game = useGame.getState()
   return (
     <div className="view-controls">
-      <ViewButton label="Rotate counter-clockwise (Q)" onClick={() => rotateView(1)}>
-        ⟲
-      </ViewButton>
-      <ViewButton label="Rotate clockwise (E)" onClick={() => rotateView(-1)}>
-        ⟳
-      </ViewButton>
+      {!touch && (
+        <>
+          <ViewButton label="Rotate counter-clockwise (Q)" onClick={() => rotateView(1)}>
+            ⟲
+          </ViewButton>
+          <ViewButton label="Rotate clockwise (E)" onClick={() => rotateView(-1)}>
+            ⟳
+          </ViewButton>
+        </>
+      )}
       <ViewButton label={`${WALL_LABELS[wallMode]} (V)`} wide onClick={game.cycleWallMode}>
         Walls
       </ViewButton>

@@ -40,3 +40,29 @@ export function pinchZoom(prevDist: number, dist: number): number {
   if (!(prevDist > 0) || !(dist > 0)) return 1
   return Math.min(Math.max(dist / prevDist, MIN_STEP), MAX_STEP)
 }
+
+/** Twisting two fingers this far (in radians) turns the view a quarter turn. */
+export const TWIST_STEP = Math.PI / 6
+
+/**
+ * Change from `prev` to `next`, the screen angle of the line between two
+ * fingers, wrapped to (-π, π] so crossing ±180° doesn't jump. Positive is
+ * clockwise on screen (y points down).
+ */
+export function twistDelta(prev: number, next: number): number {
+  let d = (next - prev) % (2 * Math.PI)
+  if (d > Math.PI) d -= 2 * Math.PI
+  else if (d <= -Math.PI) d += 2 * Math.PI
+  return d
+}
+
+/**
+ * Whether `acc`, the twist built up so far, is enough for a quarter turn:
+ * `turn` is 1 for clockwise, -1 for counter-clockwise, 0 for not yet, and
+ * `rest` is what carries over, so a long twist can turn more than once.
+ */
+export function twistTurn(acc: number): { turn: -1 | 0 | 1; rest: number } {
+  if (Math.abs(acc) < TWIST_STEP) return { turn: 0, rest: acc }
+  const turn = acc > 0 ? 1 : -1
+  return { turn, rest: acc - turn * TWIST_STEP }
+}

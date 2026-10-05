@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { classifyTap, pinchZoom, TAP_MAX_MOVE, TAP_MAX_MS } from './gestures'
+import {
+  classifyTap,
+  pinchZoom,
+  TAP_MAX_MOVE,
+  TAP_MAX_MS,
+  TWIST_STEP,
+  twistDelta,
+  twistTurn,
+} from './gestures'
 
 const down = { x: 100, y: 200, t: 1000 }
 
@@ -40,5 +48,33 @@ describe('pinchZoom', () => {
     expect(pinchZoom(0, 50)).toBe(1)
     expect(pinchZoom(50, 0)).toBe(1)
     expect(pinchZoom(Number.NaN, 50)).toBe(1)
+  })
+})
+
+describe('twistDelta', () => {
+  it('measures the change in angle, clockwise positive', () => {
+    expect(twistDelta(0, 0.3)).toBeCloseTo(0.3)
+    expect(twistDelta(0.3, 0)).toBeCloseTo(-0.3)
+  })
+
+  it('takes the short way across ±180°', () => {
+    expect(twistDelta(Math.PI - 0.1, -Math.PI + 0.1)).toBeCloseTo(0.2)
+    expect(twistDelta(-Math.PI + 0.1, Math.PI - 0.1)).toBeCloseTo(-0.2)
+  })
+})
+
+describe('twistTurn', () => {
+  it('waits until the twist reaches a step', () => {
+    expect(twistTurn(TWIST_STEP * 0.9)).toEqual({ turn: 0, rest: TWIST_STEP * 0.9 })
+    expect(twistTurn(-TWIST_STEP * 0.9).turn).toBe(0)
+  })
+
+  it('turns once a step is reached in either direction, keeping the rest', () => {
+    const cw = twistTurn(TWIST_STEP + 0.05)
+    expect(cw.turn).toBe(1)
+    expect(cw.rest).toBeCloseTo(0.05)
+    const ccw = twistTurn(-TWIST_STEP - 0.05)
+    expect(ccw.turn).toBe(-1)
+    expect(ccw.rest).toBeCloseTo(-0.05)
   })
 })

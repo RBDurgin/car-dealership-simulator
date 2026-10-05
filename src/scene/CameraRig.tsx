@@ -2,7 +2,7 @@ import { OrthographicCamera } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { MathUtils, type OrthographicCamera as OrthoCamera } from 'three'
-import { onPinch, useTouchTracking } from '../input/touch'
+import { onPinch, onTwist, useTouchTracking } from '../input/touch'
 import { cameraState, playerPos, rotateView } from './runtime'
 
 // Classic isometric pitch (~35°); yaw starts at 45° and rotates in 90° steps.
@@ -36,10 +36,13 @@ export function CameraRig() {
     window.addEventListener('keydown', onKey)
     domElement.addEventListener('wheel', onWheel, { passive: false })
     const offPinch = onPinch(zoomBy)
+    // A clockwise twist orbits the camera counter-clockwise (rotateView(1)), so the lot turns with the fingers.
+    const offTwist = onTwist(rotateView)
     return () => {
       window.removeEventListener('keydown', onKey)
       domElement.removeEventListener('wheel', onWheel)
       offPinch()
+      offTwist()
     }
   }, [domElement])
 
