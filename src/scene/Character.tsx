@@ -75,11 +75,13 @@ export function Character({
 
   useFrame(() => {
     const next = actions[anim.current]
-    if (!next || next === playing.current) return
+    // Also restarts the current clip if something stopped it: drei's useAnimations
+    // cleanup stops every action when StrictMode re-runs effects in dev.
+    if (!next || (next === playing.current && next.isRunning())) return
     const stride = STRIDE[anim.current]
     const timeScale = stride && moveSpeed ? (moveSpeed * next.getClip().duration) / stride : 1
     next.reset().setEffectiveTimeScale(timeScale).fadeIn(FADE_SECONDS).play()
-    playing.current?.fadeOut(FADE_SECONDS)
+    if (playing.current !== next) playing.current?.fadeOut(FADE_SECONDS)
     playing.current = next
   })
 
