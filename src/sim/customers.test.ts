@@ -136,7 +136,8 @@ describe('chooseTarget', () => {
 })
 
 describe('decide', () => {
-  const sedan: InventoryCar = { ...car('lot-car-1'), model: 'sedan' }
+  // Half clean: no bonus or penalty for the car's condition.
+  const sedan: InventoryCar = { ...car('lot-car-1'), model: 'sedan', cleanliness: 0.5 }
   const truck: InventoryCar = { ...sedan, model: 'truck' }
 
   it('always refuses over budget', () => {
@@ -174,6 +175,18 @@ describe('decide', () => {
     // Still capped, and still a no over budget.
     expect(acceptChance(base, sedan, base.budget * 0.5, skillBonus(5))).toBe(MAX_ACCEPT_CHANCE)
     expect(acceptChance(base, sedan, base.budget + 100, skillBonus(5))).toBe(0)
+  })
+
+  it('likes clean cars better: up to +8% spotless, −8% filthy', () => {
+    const atLimit = acceptChance(base, truck, base.budget)
+    expect(acceptChance(base, { ...truck, cleanliness: 1 }, base.budget)).toBeCloseTo(
+      atLimit + 0.08,
+    )
+    expect(acceptChance(base, { ...truck, cleanliness: 0 }, base.budget)).toBeCloseTo(
+      atLimit - 0.08,
+    )
+    // Still a no over budget, however clean.
+    expect(acceptChance(base, { ...sedan, cleanliness: 1 }, base.budget + 100)).toBe(0)
   })
 
   it('is deterministic for a seed', () => {

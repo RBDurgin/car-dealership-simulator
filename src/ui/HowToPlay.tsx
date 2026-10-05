@@ -34,6 +34,11 @@ export function HowToPlay() {
             Click a customer to <b>Greet</b> them, make an <b>Offer</b> on the car they like, and if
             they accept, <b>Close deal</b> at your desk. Walking away or Esc ends the conversation.
           </p>
+          <p>
+            Clean cars sell better. Cars gather dust overnight (faster out on the lot) and every
+            time a customer looks one over. Inspect a car to see if it&apos;s clean, dusty or dirty,
+            and click it to <b>Wash car</b>.
+          </p>
         </section>
         <section>
           <h3>Staff</h3>
@@ -47,9 +52,10 @@ export function HowToPlay() {
             they&apos;re helping (a tick over their head). A receptionist keeps waiting customers
             patient. A finance manager sits at your office desk: lead a buyer there, click them and
             choose <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer
-            while they do the paperwork. Buyers wait in the lounge if finance is busy. Everyone on
-            the payroll is paid at closing, and the finance manager also earns{' '}
-            {formatMoney(FINANCE_FEE)} per deal they sign.
+            while they do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter
+            washes the dirtiest cars for you, all day long. Everyone on the payroll is paid at
+            closing, and the finance manager also earns {formatMoney(FINANCE_FEE)} per deal they
+            sign.
           </p>
         </section>
         <section>

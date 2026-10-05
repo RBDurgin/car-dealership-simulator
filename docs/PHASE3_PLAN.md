@@ -118,6 +118,11 @@ Rules carried over: positions stay in walkers and `runtime.ts` maps (`staffPos`,
 - The porter's AI loop walks to the dirtiest car, plays a timed wash with an `interact` clip and sets the car back to 1. The player can also **Wash car** from the car menu.
 - Visuals: a dirty car's paint material gets a darkened, rougher tint, lerped by cleanliness. `InfoPanel` shows "Clean / Dusty / Dirty".
 - **Done when:** cars visibly get dusty over a couple of days, and the porter keeps them clean. The accept-chance bonus is covered by tests.
+- **Built (2026-10-04):**
+  - Cars gather 0.2 of dust a night on the lot and 0.1 in the showroom, plus 0.03 each time a customer finishes looking one over. A lot car left two nights reads "Dusty". The accept-chance bonus is linear: +8% spotless, 0 at half clean, −8% filthy.
+  - The porter waits out on the lot (`PORTER_STANDBY_TILES`), washes the dirtiest car below 0.8 (8s at skill 3, scaled by skill) and finishes a car before moving on. They leave alone a car the player is heading to.
+  - **Wash car** is on every car's menu (5s); it's refused for a spotless car. The tint darkens the car's own copy of its materials toward a dusty brown and roughens them.
+  - `SAVE_VERSION` is 2, because `InventoryCar` gained `cleanliness`. Version 1 saves are ignored.
 
 ### 3f — NPCs: pedestrians, archetypes, owner
 

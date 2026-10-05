@@ -16,7 +16,8 @@ export type StaffVariant = (typeof STAFF_VARIANTS)[number]
 export type CharacterVariant = 'salesperson' | CustomerVariant | StaffVariant
 
 /** Animation clips a character can play. Names match the Kenney Mini Characters clips. */
-export type CharacterAnim = 'idle' | 'walk' | 'sprint' | 'sit' | 'emote-yes' | 'emote-no'
+export type CharacterAnim =
+  'idle' | 'walk' | 'sprint' | 'sit' | 'emote-yes' | 'emote-no' | 'interact-right'
 
 /** How far a seated character is raised so they sit on the chair rather than in it. */
 export const SEAT_HEIGHT = 0.28

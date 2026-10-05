@@ -98,6 +98,8 @@ export const FINANCE_SECONDS = 6
 export const SALES_PITCH_SECONDS = 4
 /** Game seconds of paperwork per deal for an average salesperson at their own desk. */
 export const SALES_SIGN_SECONDS = 6
+/** Game seconds an average lot porter takes to wash a car. */
+export const PORTER_WASH_SECONDS = 8
 /** Each skill level above or below average takes this much off a task's time or adds it on. */
 const SKILL_TIME_STEP = 0.15
 

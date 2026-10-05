@@ -5,6 +5,7 @@ import {
   type Customer,
   type CustomerPhase,
 } from './customers'
+import { washBlocker } from './cleanliness'
 import type { Grid, Tile } from './grid'
 import {
   approachTilesFor,
@@ -158,7 +159,9 @@ export function actionBlocker(
   targetId: string,
   customers: readonly Customer[],
   roster: readonly Employee[],
+  inventory: readonly InventoryCar[],
 ): string | null {
+  if (action === 'wash') return washBlocker(inventory.find((c) => c.id === targetId))
   if (isCustomerAction(action)) {
     const c = customers.find((x) => x.id === targetId)
     if (!c || c.phase === 'leaving') return `${c?.name ?? 'The customer'} left.`

@@ -8,7 +8,7 @@ import type { Employee } from './staff'
  * rebuilt from its number when it starts. Bump the version whenever a saved
  * type (`InventoryCar`, `Employee`) changes shape; older saves are then ignored.
  */
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2
 
 export interface SaveData {
   version: number
@@ -59,6 +59,7 @@ function isCar(v: unknown): boolean {
     typeof v.id === 'string' &&
     typeof v.model === 'string' &&
     isNumber(v.msrp) &&
+    isNumber(v.cleanliness) &&
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold')
   )

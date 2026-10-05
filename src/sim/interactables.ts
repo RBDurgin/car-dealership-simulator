@@ -2,7 +2,8 @@ import type { Grid, Tile, Vec2 } from './grid'
 import { DESK_CHAIR_ID, type CarModel, type Facing, type Prop, type Rect } from './layout'
 import { findPathToAny } from './pathfinding'
 
-export type ActionId = 'inspect' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal' | 'handOff'
+export type ActionId =
+  'inspect' | 'wash' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal' | 'handOff'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -23,6 +24,7 @@ export interface ActionDef {
 
 export const ACTIONS: Record<ActionId, ActionDef> = {
   inspect: { id: 'inspect', label: 'Inspect', verb: 'Inspecting', mode: 'instant' },
+  wash: { id: 'wash', label: 'Wash car', verb: 'Washing the car', mode: 'timed', durationMs: 5000 },
   sit: { id: 'sit', label: 'Sit', verb: 'Sitting', mode: 'hold' },
   getCoffee: {
     id: 'getCoffee',
@@ -134,7 +136,7 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         colorHex: hex,
         location: p.platform ? 'Showroom display' : 'Lot',
       }
-      out.set(p.id, { ...base, kind: 'car', name, actions: ['inspect'], car })
+      out.set(p.id, { ...base, kind: 'car', name, actions: ['inspect', 'wash'], car })
     } else if (p.id === DESK_CHAIR_ID) {
       out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit', 'closeDeal'] })
     } else if (p.model === 'kitchenCoffeeMachine') {

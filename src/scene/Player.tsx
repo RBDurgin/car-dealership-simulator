@@ -191,7 +191,10 @@ export function Player() {
     }
     const b = body.current
     if (b) b.position.y = seat.current ? SEAT_HEIGHT : 0
-    anim.current = seat.current ? 'sit' : moved > 1e-6 ? 'sprint' : 'idle'
+    const washing = a?.action === 'wash' && a.phase === 'performing'
+    if (seat.current) anim.current = 'sit'
+    else if (moved > 1e-6) anim.current = 'sprint'
+    else anim.current = washing ? 'interact-right' : 'idle'
   })
 
   return (

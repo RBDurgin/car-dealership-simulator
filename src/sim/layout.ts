@@ -22,6 +22,13 @@ export const LOT_ENTRY_TILES: Tile[] = [
   { tx: 18, tz: 23 },
   { tx: 19, tz: 23 },
 ]
+/** Where the lot porter waits between washes: out on the lot, clear of the walkway. */
+export const PORTER_STANDBY_TILES: Tile[] = [
+  { tx: 33, tz: 16 },
+  { tx: 34, tz: 16 },
+  { tx: 33, tz: 17 },
+  { tx: 34, tz: 17 },
+]
 
 export interface Rect {
   tx: number

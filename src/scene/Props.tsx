@@ -1,7 +1,16 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
-import { Box3, CanvasTexture, SRGBColorSpace, Vector3, type Mesh, type Object3D } from 'three'
+import {
+  Box3,
+  CanvasTexture,
+  Color,
+  SRGBColorSpace,
+  Vector3,
+  type Mesh,
+  type MeshStandardMaterial,
+  type Object3D,
+} from 'three'
 import type { Vec2 } from '../sim/grid'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { DEALERSHIP_NAME, PROPS, type Prop, type PropModel } from '../sim/layout'
@@ -54,27 +63,65 @@ const MODELS: Record<Exclude<PropModel, 'sign'>, ModelDef> = {
 
 for (const def of Object.values(MODELS)) useGLTF.preload(def.url)
 
-/** Clones a GLB scene and recenters it so its footprint is centered on x/z and it rests on y=0. */
-function useCenteredModel(url: string): Object3D {
+/**
+ * Clones a GLB scene and recenters it so its footprint is centered on x/z and it
+ * rests on y=0. With `ownMaterials` the clone gets its own copies of the
+ * materials (which clones otherwise share), so they can be tinted per copy.
+ */
+function useCenteredModel(url: string, ownMaterials = false): Object3D {
   const { scene } = useGLTF(url)
   return useMemo(() => {
     const root = scene.clone(true)
     root.traverse((o) => {
-      if ((o as Mesh).isMesh) {
-        o.castShadow = true
-        o.receiveShadow = true
-      }
+      const mesh = o as Mesh
+      if (!mesh.isMesh) return
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      if (ownMaterials && !Array.isArray(mesh.material)) mesh.material = mesh.material.clone()
     })
     root.updateMatrixWorld(true)
     const box = new Box3().setFromObject(root)
     const c = box.getCenter(new Vector3())
     root.position.set(-c.x, -box.min.y, -c.z)
     return root
-  }, [scene])
+  }, [scene, ownMaterials])
 }
 
-function Model({ def }: { def: ModelDef }) {
-  const object = useCenteredModel(def.url)
+/** Paint tint and roughness of a spotless car, and of a filthy one. */
+const CLEAN_TINT = new Color('#ffffff')
+const DIRTY_TINT = new Color('#8c7a5e')
+const CLEAN_ROUGHNESS = 0.55
+const DIRTY_ROUGHNESS = 1
+
+/** Calls `fn` with each of a model's own (single) materials. */
+function eachMaterial(object: Object3D, fn: (m: MeshStandardMaterial) => void): void {
+  object.traverse((o) => {
+    const mesh = o as Mesh
+    if (mesh.isMesh && !Array.isArray(mesh.material)) fn(mesh.material as MeshStandardMaterial)
+  })
+}
+
+/** Dulls a car's paint toward a dusty brown as it gets dirtier. */
+function useDirt(object: Object3D, cleanliness: number | undefined): void {
+  useEffect(() => {
+    if (cleanliness === undefined) return
+    const dirt = 1 - cleanliness
+    eachMaterial(object, (m) => {
+      m.color.copy(CLEAN_TINT).lerp(DIRTY_TINT, dirt)
+      m.roughness = CLEAN_ROUGHNESS + (DIRTY_ROUGHNESS - CLEAN_ROUGHNESS) * dirt
+    })
+  }, [object, cleanliness])
+  // The materials are this copy's own: free them with it.
+  const isCar = cleanliness !== undefined
+  useEffect(() => {
+    if (isCar) return () => eachMaterial(object, (m) => m.dispose())
+  }, [object, isCar])
+}
+
+/** A prop's model; cars pass their `cleanliness` to look as dirty as they are. */
+function Model({ def, cleanliness }: { def: ModelDef; cleanliness?: number }) {
+  const object = useCenteredModel(def.url, cleanliness !== undefined)
+  useDirt(object, cleanliness)
   return (
     <group rotation-y={def.yaw ?? 0} scale={def.scale}>
       <primitive object={object} />
@@ -141,8 +188,8 @@ function Sign({ width }: { width: number }) {
 
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
-function PropView({ prop }: { prop: Prop }) {
-  const content = <PropContent prop={prop} />
+function PropView({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
+  const content = <PropContent prop={prop} cleanliness={cleanliness} />
   return interactables.has(prop.id) ? (
     <Interactable id={prop.id}>{content}</Interactable>
   ) : (
@@ -150,7 +197,7 @@ function PropView({ prop }: { prop: Prop }) {
   )
 }
 
-function PropContent({ prop }: { prop: Prop }) {
+function PropContent({ prop, cleanliness }: { prop: Prop; cleanliness?: number }) {
   const b = rectBounds(prop.rect)
   const turned = prop.facing % 2 === 1
   const y = (prop.elevation ?? 0) + (prop.platform ? PLATFORM_HEIGHT : 0)
@@ -170,7 +217,7 @@ function PropContent({ prop }: { prop: Prop }) {
         {prop.model === 'sign' ? (
           <Sign width={turned ? b.h : b.w} />
         ) : (
-          <Model def={MODELS[prop.model]} />
+          <Model def={MODELS[prop.model]} cleanliness={cleanliness} />
         )}
       </group>
     </group>
@@ -196,15 +243,21 @@ function useDevRestockKey() {
   }, [])
 }
 
-/** Cars in stock. Re-renders only when the inventory changes (a sale or restock). */
+/**
+ * Cars in stock, as dirty as they are. Re-renders only when the inventory
+ * changes (a sale or restock, dirt or a wash).
+ */
 function Cars() {
   const inventory = useGame((s) => s.inventory)
-  const props = useMemo(() => availableCars(inventory).map(carProp), [inventory])
+  const cars = useMemo(
+    () => availableCars(inventory).map((car) => ({ prop: carProp(car), car })),
+    [inventory],
+  )
   useDevRestockKey()
   return (
     <>
-      {props.map((p) => (
-        <PropView key={p.id} prop={p} />
+      {cars.map(({ prop, car }) => (
+        <PropView key={prop.id} prop={prop} cleanliness={car.cleanliness} />
       ))}
     </>
   )

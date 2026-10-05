@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
+import { browseDirt, dirtyOvernight, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
 import {
   chooseTarget,
@@ -104,7 +105,7 @@ interface GameState {
   /** Game time in 10-minute steps; the precise running time lives in scene/runtime. */
   clock: GameTime
   cash: number
-  /** Changes only when a car is sold or restocked. */
+  /** Changes when a car is sold, restocked, looked over (dirt) or washed, and overnight. */
   inventory: InventoryCar[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
@@ -162,6 +163,8 @@ interface GameState {
   staffLead: (employeeId: string) => void
   /** Finance, or a salesperson at their desk, finished the paperwork for the buyer opposite. */
   staffSign: (employeeId: string, customerId: string) => void
+  /** Lot porter `employeeId` finished washing car `carId`. */
+  staffWash: (employeeId: string, carId: string) => void
   /** From the end-of-day summary: opens the doors on the next day. */
   startNextDay: () => void
   /** Puts one of today's candidates on the payroll. */
@@ -203,8 +206,9 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Stores a new customer list. Everything that follows from customers changing
    * happens here: after closing nobody goes back to waiting, finance calls the
-   * next buyer from the lounge, walk-outs are tallied, and menus and actions
-   * aimed at someone who can't take them any more are dropped.
+   * next buyer from the lounge, walk-outs are tallied, cars that were looked
+   * over get a little dirtier, and menus and actions aimed at someone who can't
+   * take them any more are dropped.
    */
   const commit = (next: Customer[]) => {
     const s = get()
@@ -220,6 +224,7 @@ export const useGame = create<GameState>((set, get) => {
     }
     set({
       customers,
+      inventory: browseDirt(s.inventory, s.customers, customers),
       dayStats: recordDepartures(s.dayStats, s.customers, customers),
       menu: gone(s.menu?.targetId ?? null) ? null : s.menu,
       hoveredId: gone(s.hoveredId) ? null : s.hoveredId,
@@ -229,7 +234,8 @@ export const useGame = create<GameState>((set, get) => {
     // Aimed at a customer who left or moved on (e.g. ran out of patience on the
     // way), or a deal to close with nobody left to sign it.
     const a = get().activeAction
-    const blocker = a && actionBlocker(a.action, a.targetId, customers, get().roster)
+    const blocker =
+      a && actionBlocker(a.action, a.targetId, customers, get().roster, get().inventory)
     if (a && blocker) {
       dispatch({ type: 'cancel' })
       notify(blocker)
@@ -300,6 +306,8 @@ export const useGame = create<GameState>((set, get) => {
     switch (finished.action) {
       case 'inspect':
         return set({ inspectedId: finished.targetId })
+      case 'wash':
+        return wash(finished.targetId)
       case 'getCoffee':
         return notify('Ahh, fresh coffee.')
       case 'greet':
@@ -311,6 +319,15 @@ export const useGame = create<GameState>((set, get) => {
       case 'handOff':
         return handOff()
     }
+  }
+
+  /** Car `id` washed by the player. */
+  const wash = (id: string) => {
+    const inventory = washCar(get().inventory, id)
+    if (inventory === get().inventory) return
+    set({ inventory })
+    const car = inventory.find((c) => c.id === id)
+    if (car) notify(`The ${carName(car.model)} is spotless.`)
   }
 
   const greet = (id: string) => {
@@ -391,7 +408,7 @@ export const useGame = create<GameState>((set, get) => {
   const handOff = () => {
     const s = get()
     // Things may have changed on the way over (e.g. the finance manager was let go).
-    const blocker = actionBlocker('handOff', DESK_CHAIR_ID, s.customers, s.roster)
+    const blocker = actionBlocker('handOff', DESK_CHAIR_ID, s.customers, s.roster, s.inventory)
     if (blocker) return notify(blocker)
     const fm = financeOnDuty(s.roster)!
     const c = dealCustomer(s.customers, PLAYER_ID)!
@@ -404,7 +421,10 @@ export const useGame = create<GameState>((set, get) => {
     )
   }
 
-  /** Opens the doors on `day`: its arrivals and applicants, and the staff head in. */
+  /**
+   * Opens the doors on `day`: the cars have gathered a night's dust, there are
+   * new arrivals and applicants, and the staff head in.
+   */
   const beginDay = (day: number) => {
     customerRng = createRng(CUSTOMER_SEED + day)
     dealRng = createRng(DEAL_SEED + day)
@@ -412,6 +432,7 @@ export const useGame = create<GameState>((set, get) => {
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
+      inventory: dirtyOvernight(get().inventory),
       arrivals: planArrivals(customerRng),
       dayStats: emptyStats(),
       candidates: generateCandidates(staffRng, day),
@@ -460,7 +481,8 @@ export const useGame = create<GameState>((set, get) => {
     openMenu: (targetId, x, y) => set({ menu: { targetId, x, y } }),
     closeMenu: () => set({ menu: null }),
     requestAction: (targetId, action) => {
-      const blocker = actionBlocker(action, targetId, get().customers, get().roster)
+      const s = get()
+      const blocker = actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
       if (blocker) {
         set({ menu: null })
         return notify(blocker)
@@ -632,6 +654,12 @@ export const useGame = create<GameState>((set, get) => {
       notify(
         `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!`,
       )
+    },
+    staffWash: (employeeId, carId) => {
+      const e = get().roster.find((x) => x.id === employeeId)
+      if (e?.role !== 'porter' || e.status !== 'atPost') return
+      const inventory = washCar(get().inventory, carId)
+      if (inventory !== get().inventory) set({ inventory })
     },
     startNextDay: () => {
       const s = get()

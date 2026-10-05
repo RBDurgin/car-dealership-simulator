@@ -9,6 +9,7 @@ import {
   OPENINGS,
   PARKING_SPACES,
   parkedCarRect,
+  PORTER_STANDBY_TILES,
   PROPS,
   RECEPTION_CHAIR_ID,
   SALES_DESKS,
@@ -48,6 +49,13 @@ describe('dealership layout', () => {
         expect(findPath(grid, end, entry), `${end.tx},${end.tz}`).not.toBeNull()
         expect(findPath(grid, entry, end)).not.toBeNull()
       }
+    }
+  })
+
+  it('gives the porter a reachable standby spot out on the lot', () => {
+    for (const t of PORTER_STANDBY_TILES) {
+      expect(zoneAt(layout, t.tx, t.tz)).toBe('asphalt')
+      expect(findPath(grid, LOT_ENTRY_TILES[0], t), `${t.tx},${t.tz}`).not.toBeNull()
     }
   })
 

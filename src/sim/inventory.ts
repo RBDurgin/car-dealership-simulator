@@ -24,6 +24,8 @@ export interface InventoryCar {
   facing: Facing
   msrp: number
   status: CarStatus
+  /** 1 just washed, 0 filthy (see `sim/cleanliness`). */
+  cleanliness: number
 }
 
 /** List price per model before per-car variation (trim, options). */
@@ -56,6 +58,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
     facing,
     msrp: rollMsrp(model, rng),
     status: 'available',
+    cleanliness: 1,
   }))
   const lot = LOT_CARS.map(({ space, model }, i): InventoryCar => {
     const s = PARKING_SPACES[space]
@@ -68,6 +71,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
       facing: s.facing,
       msrp: rollMsrp(model, rng),
       status: 'available',
+      cleanliness: 1,
     }
   })
   return [...display, ...lot]

@@ -113,46 +113,46 @@ describe('customerInteractable', () => {
 
 describe('actionBlocker', () => {
   it('allows customer actions that fit their phase', () => {
-    expect(actionBlocker('greet', 'c1', [at('waiting')], [])).toBeNull()
-    expect(actionBlocker('offer', 'c1', [mine('talking')], [])).toBeNull()
+    expect(actionBlocker('greet', 'c1', [at('waiting')], [], [])).toBeNull()
+    expect(actionBlocker('offer', 'c1', [mine('talking')], [], [])).toBeNull()
   })
 
   it('blocks customer actions once they have left or moved on', () => {
-    expect(actionBlocker('greet', 'c1', [], [])).toMatch(/left/)
-    expect(actionBlocker('greet', 'c1', [at('leaving')], [])).toMatch(/Alex B\. left/)
-    expect(actionBlocker('offer', 'c1', [at('waiting')], [])).toMatch(/busy/)
+    expect(actionBlocker('greet', 'c1', [], [], [])).toMatch(/left/)
+    expect(actionBlocker('greet', 'c1', [at('leaving')], [], [])).toMatch(/Alex B\. left/)
+    expect(actionBlocker('offer', 'c1', [at('waiting')], [], [])).toMatch(/busy/)
   })
 
   it('blocks customer actions on someone staff are looking after', () => {
     const c = at('talking', { handlerId: 'staff-1' })
-    expect(actionBlocker('offer', 'c1', [c], [])).toMatch(/being helped/)
+    expect(actionBlocker('offer', 'c1', [c], [], [])).toMatch(/being helped/)
   })
 
   it("only allows closing a deal with the player's buyer following or seated", () => {
-    expect(actionBlocker('closeDeal', 'office-chair', [mine('talking')], [])).not.toBeNull()
-    expect(actionBlocker('closeDeal', 'office-chair', [mine('following')], [])).toBeNull()
-    expect(actionBlocker('closeDeal', 'office-chair', [mine('signing')], [])).toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [mine('talking')], [], [])).not.toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [mine('following')], [], [])).toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [mine('signing')], [], [])).toBeNull()
     const theirs = at('signing', { handlerId: 'staff-1' })
-    expect(actionBlocker('closeDeal', 'office-chair', [theirs], [])).not.toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', [theirs], [], [])).not.toBeNull()
   })
 
   it('leaves the paperwork to a finance manager on duty', () => {
     const buyer = [mine('following')]
-    expect(actionBlocker('closeDeal', 'office-chair', buyer, [fm])).toMatch(/Hand buyers off/)
-    expect(actionBlocker('handOff', 'office-chair', buyer, [fm])).toBeNull()
-    expect(actionBlocker('handOff', 'office-chair', buyer, [])).toMatch(/No finance/)
-    expect(actionBlocker('handOff', 'office-chair', [mine('talking')], [fm])).toMatch(/Nobody/)
+    expect(actionBlocker('closeDeal', 'office-chair', buyer, [fm], [])).toMatch(/Hand buyers off/)
+    expect(actionBlocker('handOff', 'office-chair', buyer, [fm], [])).toBeNull()
+    expect(actionBlocker('handOff', 'office-chair', buyer, [], [])).toMatch(/No finance/)
+    expect(actionBlocker('handOff', 'office-chair', [mine('talking')], [fm], [])).toMatch(/Nobody/)
   })
 
   it('keeps the player off the desk while a let-go finance manager finishes up', () => {
     const list = [mine('following'), at('queued', { id: 'c2', handlerId: fm.id })]
     const fired = { ...fm, fired: true, status: 'leaving' as const }
-    expect(actionBlocker('closeDeal', 'office-chair', list, [fired])).toMatch(/still using/)
+    expect(actionBlocker('closeDeal', 'office-chair', list, [fired], [])).toMatch(/still using/)
   })
 
   it('never blocks the furniture actions', () => {
-    expect(actionBlocker('sit', 'office-chair', [], [])).toBeNull()
-    expect(actionBlocker('getCoffee', 'coffee-machine', [], [])).toBeNull()
+    expect(actionBlocker('sit', 'office-chair', [], [], [])).toBeNull()
+    expect(actionBlocker('getCoffee', 'coffee-machine', [], [], [])).toBeNull()
   })
 })
 

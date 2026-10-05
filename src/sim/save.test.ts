@@ -45,6 +45,9 @@ describe('save data', () => {
     expect(parseSave({ ...save, cash: undefined })).toBeNull()
     expect(parseSave({ ...save, day: 0 })).toBeNull()
     expect(parseSave({ ...save, inventory: [{ id: 'x' }] })).toBeNull()
+    // A car saved before cars got dirty (version 1).
+    const { cleanliness: _, ...unwashed } = save.inventory[0]
+    expect(parseSave({ ...save, inventory: [unwashed] })).toBeNull()
     expect(parseSave({ ...save, roster: 'nobody' })).toBeNull()
   })
 })

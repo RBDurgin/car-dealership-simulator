@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { WASH_BELOW } from './cleanliness'
 import { PLAYER_ID, type Customer } from './customers'
+import { buildInventory, sellCar, type InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, SALES_DESKS } from './layout'
+import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
 import {
   EARLY_GREET_SKILL,
   leadChoice,
+  nextPorterTask,
   nextSalesTask,
   pickSalesCustomer,
   salesChairFor,
@@ -173,5 +177,58 @@ describe('salesChairFor', () => {
   it("finds the salesperson's chair across the desk from a guest chair", () => {
     for (const d of SALES_DESKS) expect(salesChairFor(d.guestChairId)).toBe(d.chairId)
     expect(salesChairFor(GUEST_CHAIR_ID)).toBeNull()
+  })
+})
+
+describe('nextPorterTask', () => {
+  const porter = staff('pat', 'porter')
+  const stock = buildInventory(createRng(42))
+  const withDirt = (dirt: Record<string, number>): InventoryCar[] =>
+    stock.map((c) => (c.id in dirt ? { ...c, cleanliness: dirt[c.id] } : c))
+  const dirty = withDirt({ 'lot-car-1': 0.5, 'lot-car-2': 0.2 })
+  const none = { playerTargetId: null }
+
+  it('washes the dirtiest car that needs it', () => {
+    expect(nextPorterTask(porter, dirty, none)).toEqual({ kind: 'wash', carId: 'lot-car-2' })
+  })
+
+  it('waits when every car is clean enough', () => {
+    expect(nextPorterTask(porter, stock, none)).toEqual({ kind: 'idle' })
+    const fine = withDirt({ 'lot-car-1': WASH_BELOW })
+    expect(nextPorterTask(porter, fine, none)).toEqual({ kind: 'idle' })
+  })
+
+  it('only works while at work', () => {
+    for (const status of ['arriving', 'leaving', 'off'] as const) {
+      expect(nextPorterTask({ ...porter, status }, dirty, none)).toEqual({ kind: 'idle' })
+    }
+    expect(nextPorterTask({ ...porter, fired: true }, dirty, none)).toEqual({ kind: 'idle' })
+  })
+
+  it("leaves the car the player is going to, and cars they couldn't reach", () => {
+    const wash = (carId: string) => ({ kind: 'wash', carId })
+    expect(nextPorterTask(porter, dirty, { playerTargetId: 'lot-car-2' })).toEqual(
+      wash('lot-car-1'),
+    )
+    const exclude = new Set(['lot-car-2'])
+    expect(nextPorterTask(porter, dirty, { ...none, exclude })).toEqual(wash('lot-car-1'))
+  })
+
+  it('finishes the car they started on, even if another gets dirtier', () => {
+    const current = 'lot-car-1'
+    expect(nextPorterTask(porter, dirty, { ...none, current })).toEqual({
+      kind: 'wash',
+      carId: 'lot-car-1',
+    })
+    // Done (washed), or sold: on to the next.
+    const washed = withDirt({ 'lot-car-2': 0.2 })
+    expect(nextPorterTask(porter, washed, { ...none, current })).toEqual({
+      kind: 'wash',
+      carId: 'lot-car-2',
+    })
+    expect(nextPorterTask(porter, sellCar(dirty, current), { ...none, current })).toEqual({
+      kind: 'wash',
+      carId: 'lot-car-2',
+    })
   })
 })

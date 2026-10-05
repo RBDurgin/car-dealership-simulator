@@ -1,4 +1,5 @@
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
+import { cleanlinessBonus } from './cleanliness'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Rng } from './rng'
@@ -230,14 +231,16 @@ export function skillBonus(skill: number): number {
 /**
  * Chance they say yes to `car` at `price`. Zero over budget. Otherwise 35% for
  * a car of the wrong body type right at their limit, rising with preference
- * (+35%) and headroom (up to +30% at 25% under budget), plus the seller's
- * `bonus` (see `skillBonus`), capped at 95%.
+ * (+35%) and headroom (up to +30% at 25% under budget), plus how clean the
+ * car is (±8%, see `cleanlinessBonus`) and the seller's `bonus` (see
+ * `skillBonus`), capped at 95%.
  */
 export function acceptChance(c: Customer, car: InventoryCar, price: number, bonus = 0): number {
   if (price > c.budget) return 0
   const preferred = c.preferredModels.includes(car.model) ? 1 : 0
   const headroom = Math.min(1, (c.budget - price) / c.budget / COMFORT_HEADROOM)
-  const chance = 0.35 + 0.35 * preferred + 0.3 * headroom + bonus
+  const chance =
+    0.35 + 0.35 * preferred + 0.3 * headroom + cleanlinessBonus(car.cleanliness) + bonus
   return Math.max(0, Math.min(MAX_ACCEPT_CHANCE, chance))
 }
 

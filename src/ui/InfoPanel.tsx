@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
+import { conditionOf } from '../sim/cleanliness'
 import { ROLE_LABELS } from '../sim/staff'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -59,6 +60,8 @@ export function InfoPanel() {
         <dd className="price">{formatMoney(stock.msrp)}</dd>
         <dt>Status</dt>
         <dd>{stock.status === 'available' ? 'For sale' : 'Sold'}</dd>
+        <dt>Condition</dt>
+        <dd>{conditionOf(stock.cleanliness)}</dd>
       </dl>
     </Panel>
   )

@@ -1,5 +1,7 @@
+import { dirtiestCar, SPOTLESS } from './cleanliness'
 import type { Customer } from './customers'
 import { financeBusy } from './deal'
+import type { InventoryCar } from './inventory'
 import { SALES_DESKS } from './layout'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 
@@ -126,3 +128,44 @@ export function nextSalesTask(
   const next = pickSalesCustomer(customers, exclude, (c) => early || !!ctx.atCar?.has(c.id))
   return next ? { kind: 'greet', customerId: next.id } : IDLE
 }
+
+/**
+ * A lot porter's next step:
+ * - wash: walk to the car and wash it
+ * - idle: every car is clean enough; wait at the standby spot
+ */
+export type PorterTask = { kind: 'idle' } | { kind: 'wash'; carId: string }
+
+/** What the porter needs to know beyond the stock. */
+export interface PorterContext {
+  /** The car the player is on their way to wash, which the porter leaves to them. */
+  playerTargetId: string | null
+  /** Cars the porter has given up on (e.g. couldn't reach). */
+  exclude?: ReadonlySet<string>
+  /** The car they're already washing, which they finish before moving on. */
+  current?: string | null
+}
+
+/**
+ * Porter `e`'s next task while they're at work: finish the car they're on,
+ * otherwise the dirtiest car that needs it.
+ */
+export function nextPorterTask(
+  e: Employee,
+  inventory: readonly InventoryCar[],
+  ctx: PorterContext,
+): PorterTask {
+  if (e.status !== 'atPost' || e.fired) return IDLE_PORTER
+  const current = ctx.current && inventory.find((c) => c.id === ctx.current)
+  if (current && current.status === 'available' && current.cleanliness < SPOTLESS) {
+    if (current.id !== ctx.playerTargetId && !ctx.exclude?.has(current.id)) {
+      return { kind: 'wash', carId: current.id }
+    }
+  }
+  const exclude = new Set(ctx.exclude)
+  if (ctx.playerTargetId) exclude.add(ctx.playerTargetId)
+  const car = dirtiestCar(inventory, exclude)
+  return car ? { kind: 'wash', carId: car.id } : IDLE_PORTER
+}
+
+const IDLE_PORTER: PorterTask = { kind: 'idle' }

@@ -4,12 +4,13 @@ import { memo, Suspense } from 'react'
 import type { Group } from 'three'
 import type { Customer } from '../sim/customers'
 import { hasBuyersInHand } from '../sim/deal'
-import type { Tile } from '../sim/grid'
-import { approachTilesFor } from '../sim/interactables'
-import { PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import type { Tile, Vec2 } from '../sim/grid'
+import { approachTilesFor, interactableCenter } from '../sim/interactables'
+import { PORTER_STANDBY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import {
   financeSeconds,
+  PORTER_WASH_SECONDS,
   postChairId,
   ROLE_BADGES,
   SALES_PITCH_SECONDS,
@@ -19,11 +20,11 @@ import {
   type Employee,
   type Role,
 } from '../sim/staff'
-import { nextSalesTask, type SalesTask } from '../sim/staffAi'
+import { nextPorterTask, nextSalesTask, type SalesTask } from '../sim/staffAi'
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
-import { customerPos, customersAtCar, grid, staffPos } from './runtime'
+import { customerPos, customersAtCar, grid, interactables, staffPos } from './runtime'
 import {
   createWalker,
   frameSeconds,
@@ -49,21 +50,31 @@ const STANDBY_TILES: Tile[] = [
 ]
 /** What standby staff face: the middle of the showroom. */
 const SHOWROOM_CENTER = grid.tileToWorld(22, 8)
+/** What the porter faces while waiting for a car to need a wash: the lot. */
+const LOT_CENTER = grid.tileToWorld(20, 18)
+
+/** Where staff without a chair wait, and what they face. */
+function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
+  return e.role === 'porter'
+    ? { tiles: PORTER_STANDBY_TILES, faceTo: LOT_CENTER }
+    : { tiles: STANDBY_TILES, faceTo: SHOWROOM_CENTER }
+}
 
 /** An employee's body in the world. Positions stay here, never in the store. */
 interface StaffWalker extends Walker {
   rng: Rng
   exit: Tile
   /**
-   * 'post' (going to or at their post), 'leave', or a salesperson's task with
-   * its customer (`greet:customer-3`). A new task means a new path.
+   * 'post' (going to or at their post), 'leave', a salesperson's task with
+   * its customer (`greet:customer-3`), or the car a porter is washing
+   * (`wash:lot-car-2`). A new task means a new path.
    */
   task: string | null
   /** Finance: the buyer whose paperwork is under way, and game seconds left on it. */
   paperwork: { customerId: string; left: number } | null
-  /** Game seconds spent on the current task (a salesperson's pitch or paperwork). */
+  /** Game seconds spent on the current task (a salesperson's pitch or paperwork, a wash). */
   timer: number
-  /** Customers this salesperson couldn't get to; they leave them to someone else. */
+  /** Customers (or, for the porter, cars) they couldn't get to; they leave them be. */
   unreachableIds: Set<string>
 }
 
@@ -113,8 +124,9 @@ function plan(e: Employee, w: StaffWalker, task: string): void {
     w.faceTo = null
     pathTo(w, approachTilesFor(grid, chair.rect))
   } else {
-    w.faceTo = SHOWROOM_CENTER
-    pathTo(w, [w.rng.pick(STANDBY_TILES), ...STANDBY_TILES], true)
+    const { tiles, faceTo } = standby(e)
+    w.faceTo = faceTo
+    pathTo(w, [w.rng.pick(tiles), ...tiles], true)
   }
 }
 
@@ -250,6 +262,44 @@ function planSales(e: Employee, w: StaffWalker, task: SalesTask, key: string): v
   }
 }
 
+const WASH_PREFIX = 'wash:'
+
+/**
+ * The lot porter's loop: walk to the dirtiest car that needs it and wash it,
+ * then the next; with every car clean enough, wait at the standby spot.
+ */
+function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
+  const game = useGame.getState()
+  const task = nextPorterTask(e, game.inventory, {
+    playerTargetId: game.activeAction?.targetId ?? null,
+    exclude: w.unreachableIds,
+    current: w.task?.startsWith(WASH_PREFIX) ? w.task.slice(WASH_PREFIX.length) : null,
+  })
+  if (task.kind === 'idle') {
+    if (w.task !== 'post') plan(e, w, 'post')
+    return updatePost(e, w, seconds)
+  }
+  const it = interactables.get(task.carId)
+  const key = `${WASH_PREFIX}${task.carId}`
+  if (key !== w.task) {
+    w.task = key
+    w.timer = 0
+    standUp(w)
+    w.faceTo = it ? interactableCenter(grid, it) : null
+    if (it) pathTo(w, it.approachTiles)
+    else w.unreachable = true
+  }
+  walk(w, STAFF_SPEED, seconds, w.faceTo)
+  if (w.waypoints.length > 0) return
+  if (w.unreachable || !it) {
+    w.unreachableIds.add(task.carId)
+    return
+  }
+  w.anim.current = 'interact-right'
+  w.timer += seconds
+  if (w.timer >= skillSeconds(PORTER_WASH_SECONDS, e.skill)) game.staffWash(e.id, task.carId)
+}
+
 /** Going to or working from their post, and reporting in on arrival. */
 function updatePost(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.seat) {
@@ -269,6 +319,7 @@ function update(
   // Sent home (closing, or let go) with buyers still in hand: finish them first.
   const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
+  if (e.role === 'porter' && !leaving) return updatePorter(e, w, seconds)
   const task = leaving ? 'leave' : 'post'
   if (task !== w.task) plan(e, w, task)
   updatePost(e, w, seconds)
@@ -316,7 +367,8 @@ const onLot = (e: Employee) => e.status !== 'off'
 /**
  * Every employee in the world, moved by one `useFrame` (like Customers): they
  * walk in from the sidewalk at opening (or when hired), work from their post
- * (the finance manager signs buyers' paperwork at the office desk), and walk
+ * (the finance manager signs buyers' paperwork at the office desk, the porter
+ * washes the dirtiest cars), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */
