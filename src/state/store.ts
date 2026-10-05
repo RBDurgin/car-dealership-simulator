@@ -31,7 +31,7 @@ import {
   type Sale,
 } from '../sim/deal'
 import { carName, type ActionId } from '../sim/interactables'
-import { clampAsk, respondToAsk, suggestedAsk, walkLine } from '../sim/negotiation'
+import { clampAsk, respondToAsk, staffAsk, suggestedAsk, walkLine } from '../sim/negotiation'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
 import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
 import {
@@ -802,8 +802,9 @@ export const useGame = create<GameState>((set, get) => {
         commit(reduceCustomers(get().customers, { type: 'cancel', id: c.id }))
         return
       }
-      // Haggling by skill comes in 6c: for now staff ask what the player would be told to.
-      const ev = { type: 'offer', id: c.id, carId: car.id, price: suggestedAsk(c, car) } as const
+      const e = get().roster.find((x) => x.id === employeeId)
+      const price = e ? staffAsk(e.skill, car, c.haggle) : suggestedAsk(c, car)
+      const ev = { type: 'offer', id: c.id, carId: car.id, price } as const
       commit(reduceCustomers(get().customers, ev))
     },
     staffLead: (employeeId) => {

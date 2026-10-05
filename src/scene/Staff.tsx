@@ -13,6 +13,7 @@ import {
   PORTER_WASH_SECONDS,
   postChairId,
   ROLE_BADGES,
+  SALES_COUNTER_SECONDS,
   SALES_PITCH_SECONDS,
   SALES_SIGN_SECONDS,
   skillSeconds,
@@ -219,8 +220,15 @@ function updateSales(
     const at = customerPos.get(task.customerId)
     if (at) turnToward(w, at, seconds)
     w.anim.current = 'idle'
+    // The clock starts over each time they get an answer: a counter brings a quicker re-pitch.
+    const c = customers.find((x) => x.id === task.customerId)
+    if (c?.phase !== 'talking') {
+      w.timer = 0
+      return
+    }
     w.timer += seconds
-    if (w.timer >= skillSeconds(SALES_PITCH_SECONDS, e.skill)) game.staffOffer(e.id)
+    const base = c.haggle ? SALES_COUNTER_SECONDS : SALES_PITCH_SECONDS
+    if (w.timer >= skillSeconds(base, e.skill)) game.staffOffer(e.id)
     return
   }
   // sign: to their desk chair, then the paperwork once the buyer sits down.

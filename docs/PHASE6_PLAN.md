@@ -1,6 +1,6 @@
 # Phase 6 Plan — Sales negotiation
 
-**Status:** 6b done 2026-10-05, awaiting review. 6c next (6a was folded into Phase 5a). We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 6b done 2026-10-05. 6c done 2026-10-05, awaiting review. Phase 6 is complete once 6c is reviewed (6a was folded into Phase 5a). We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -82,6 +82,8 @@ Done in Phase 5a (see `docs/PHASE5_PLAN.md`). This covers `InventoryCar.cost`, g
 **Help:** update `ui/HowToPlay.tsx` (haggling, margin, rounds by shopper type) and `ui/controls.ts`.
 
 ### 6c: Staff haggle by skill
+
+**Done.** Differences from the plan below: skill 3 never takes a counter outright (it only concedes 40%), and a counter under the floor is never taken. `staffAsk` keeps its answer inside the ask range (their counter up to the last ask), so when the floor sits above that range the salesperson holds and risks a walk-out. The pitch timer restarts whenever the customer isn't in `talking`, so the re-pitch waits for the answer. There was no sales role blurb, so the staff panel gains `ROLE_BLURBS` for applicants. No stale "negotiation (Phase 5)" comments were left in the code. No keys changed, so `ui/controls.ts` is unchanged.
 
 - `staffAsk(skill, car, haggle)` in `sim/negotiation.ts`:
   - **Round 1:** MSRP at skill ≥ 3, MSRP − 2% below that.

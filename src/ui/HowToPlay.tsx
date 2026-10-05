@@ -125,13 +125,16 @@ export function HowToPlay() {
               </>
             )}{' '}
             to hire from the day&apos;s applicants. Salespeople sell on their own: they greet
-            customers, make offers and sign buyers at their own desk, or hand them to finance. They
-            earn {Math.round(SALES_COMMISSION * 100)}% of the gross profit on each car they sell (at
-            least {formatMoney(MIN_COMMISSION)}), and the better they are, the more often customers
-            say yes. Seasoned salespeople greet customers as they arrive; newer ones wait until a
-            customer is looking at a car. They leave alone a customer you&apos;re walking over to,
-            and you can&apos;t greet someone they&apos;re helping (a tick over their head). A
-            receptionist keeps waiting customers patient. A finance manager sits at your office
+            customers, haggle over the price and sign buyers at their own desk, or hand them to
+            finance. They earn {Math.round(SALES_COMMISSION * 100)}% of the gross profit on each car
+            they sell (at least {formatMoney(MIN_COMMISSION)}), so a give-away costs them too. The
+            better they are, the more often customers say yes and the nearer MSRP they hold: green
+            salespeople open under MSRP and soon take the customer&apos;s counter, seasoned ones
+            give ground slowly. None of them sell below cost. The day summary shows how far off MSRP
+            each seller went. Seasoned salespeople greet customers as they arrive; newer ones wait
+            until a customer is looking at a car. They leave alone a customer you&apos;re walking
+            over to, and you can&apos;t greet someone they&apos;re helping (a tick over their head).
+            A receptionist keeps waiting customers patient. A finance manager sits at your office
             desk: lead a buyer there, {click.toLowerCase()} them and choose{' '}
             <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer while they
             do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter washes the

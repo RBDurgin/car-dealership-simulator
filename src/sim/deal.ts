@@ -309,6 +309,8 @@ export interface SellerTally {
   seller: string | null
   cars: number
   revenue: number
+  /** The sticker prices of these cars, added up. */
+  msrp: number
   /** Revenue less the cost of these cars. */
   gross: number
   /** What staff earned on these sales (the salesperson's cut and any finance fee). */
@@ -326,6 +328,7 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       seller: s.soldBy,
       cars: 0,
       revenue: 0,
+      msrp: 0,
       gross: 0,
       commission: 0,
     }
@@ -333,11 +336,17 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       ...t,
       cars: t.cars + 1,
       revenue: t.revenue + s.price,
+      msrp: t.msrp + s.msrp,
       gross: t.gross + s.price - s.cost,
       commission: t.commission + s.commission,
     })
   }
   return [...tallies.values()]
+}
+
+/** How far under sticker a seller sold on average, as a share of MSRP (0.03 = 3% off). */
+export function averageDiscount(t: SellerTally): number {
+  return t.msrp > 0 ? (t.msrp - t.revenue) / t.msrp : 0
 }
 
 export function walkOuts(stats: DayStats): number {

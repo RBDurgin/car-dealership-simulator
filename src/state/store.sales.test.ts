@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
 import { GUEST_CHAIR_ID, SALES_DESKS } from '../sim/layout'
+import { staffAsk } from '../sim/negotiation'
 import { FINANCE_FEE, salesCommission, type Role } from '../sim/staff'
 import { STARTING_CASH, useGame } from './store'
 
@@ -45,11 +46,11 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
 })
 
 let nextHire = 1
-/** Puts a new employee of `role` on the payroll, at their post. Returns their id. */
-function hired(role: Role): string {
+/** Puts a new employee of `role` and `skill` on the payroll, at their post. Returns their id. */
+function hired(role: Role, skill = 3): string {
   const template = initial.candidates.find((c) => c.role === role)!
   const id = `hire-${nextHire++}`
-  useGame.setState({ candidates: [{ ...template, id, name: `${role} ${id}` }] })
+  useGame.setState({ candidates: [{ ...template, id, skill, name: `${role} ${id}` }] })
   game().hire(id)
   game().dispatchStaff({ type: 'atPost', id })
   return id
@@ -109,35 +110,53 @@ describe('AI salespeople', () => {
     expect(game().notice?.text).toMatch(new RegExp(`${employee(sam).name} sold`))
   })
 
-  it('offer the MSRP of the car the customer is after', () => {
-    const sam = hired('sales')
+  it('open at MSRP from average skill, a little under below that', () => {
+    const sam = hired('sales', 3)
+    const kim = hired('sales', 1)
     game().staffClaim(sam, A)
     game().staffGreet(sam)
     expect(customer()?.phase).toBe('talking')
     game().staffOffer(sam)
     expect(customer()?.offer).toEqual({ carId: 'lot-car-1', price: car('lot-car-1').msrp })
+    game().staffClaim(kim, B)
+    game().staffGreet(kim)
+    game().staffOffer(kim)
+    expect(customer(B)?.offer?.price).toBe(staffAsk(1, car('lot-car-2'), null))
+    expect(customer(B)?.offer?.price).toBeLessThan(car('lot-car-2').msrp)
   })
 
-  it('ask again after a counter, and sell at the agreed price', () => {
-    const sam = hired('sales')
+  it('come down by skill after a counter, and sell at the agreed price', () => {
+    const sam = hired('sales', 3)
     const msrp = car('lot-car-1').msrp
     game().staffClaim(sam, A)
     game().staffGreet(sam)
     game().staffOffer(sam)
     game().dispatchCustomer({ type: 'respond', id: A, answer: 'counter', counter: msrp - 2000 })
     expect(customer()).toMatchObject({ phase: 'talking', handlerId: sam })
-    // Back in talking, they pitch again: splitting the difference for now.
+    // Back in talking, they pitch again: an average seller gives up 40% of the gap.
     game().staffOffer(sam)
-    expect(customer()?.offer?.price).toBe(msrp - 1000)
+    expect(customer()?.offer?.price).toBe(msrp - 800)
     game().answerOffer(A)
     game().staffLead(sam)
     game().dispatchCustomer({ type: 'seat', id: A })
     game().staffSign(sam, A)
     expect(game().dayStats.sales[0]).toMatchObject({
-      price: msrp - 1000,
+      price: msrp - 800,
       msrp,
       soldBy: employee(sam).name,
     })
+  })
+
+  it('take the counter when green', () => {
+    const kim = hired('sales', 1)
+    const lot = car('lot-car-1')
+    const counter = lot.cost + 1000
+    game().staffClaim(kim, A)
+    game().staffGreet(kim)
+    game().staffOffer(kim)
+    game().dispatchCustomer({ type: 'respond', id: A, answer: 'counter', counter })
+    game().staffOffer(kim)
+    expect(customer()?.offer?.price).toBe(counter)
   })
 
   it('hand buyers to a free finance manager, and keep the sale to their name', () => {

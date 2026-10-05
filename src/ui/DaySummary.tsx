@@ -1,5 +1,6 @@
 import { formatTime, isClosed } from '../sim/clock'
 import {
+  averageDiscount,
   costOfSales,
   grossProfit,
   missedSummary,
@@ -110,6 +111,7 @@ export function DaySummary() {
                 <th>Seller</th>
                 <th>Cars</th>
                 <th>Revenue</th>
+                <th>Off MSRP</th>
                 <th>Gross</th>
                 <th>Commission</th>
               </tr>
@@ -120,6 +122,7 @@ export function DaySummary() {
                   <td>{t.seller ?? 'You'}</td>
                   <td>{t.cars}</td>
                   <td className="price">{formatMoney(t.revenue)}</td>
+                  <td>{(averageDiscount(t) * 100).toFixed(1)}%</td>
                   <td className="price">{formatMoney(t.gross)}</td>
                   <td className="price">{formatMoney(t.commission)}</td>
                 </tr>

@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
-import { canHire, MAX_SKILL, ROLE_LABELS, type Employee, type StaffStatus } from '../sim/staff'
+import {
+  canHire,
+  MAX_SKILL,
+  ROLE_BLURBS,
+  ROLE_LABELS,
+  type Employee,
+  type StaffStatus,
+} from '../sim/staff'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -20,7 +27,16 @@ export function Skill({ skill }: { skill: number }) {
   )
 }
 
-function StaffRow({ e, children }: { e: Employee; children: ReactNode }) {
+function StaffRow({
+  e,
+  blurb = false,
+  children,
+}: {
+  e: Employee
+  /** Say what the role does, for someone not yet hired. */
+  blurb?: boolean
+  children: ReactNode
+}) {
   return (
     <li className="staff-row">
       <div className="staff-who">
@@ -28,6 +44,7 @@ function StaffRow({ e, children }: { e: Employee; children: ReactNode }) {
         <div className="staff-meta">
           {ROLE_LABELS[e.role]} · <Skill skill={e.skill} />
         </div>
+        {blurb && <div className="staff-blurb muted">{ROLE_BLURBS[e.role]}</div>}
       </div>
       <div className="staff-wage price">{formatMoney(e.wage)}/day</div>
       {children}
@@ -77,7 +94,7 @@ export function StaffPanel() {
           {candidates.map((c) => {
             const blocker = canHire(roster, c.role)
             return (
-              <StaffRow key={c.id} e={c}>
+              <StaffRow key={c.id} e={c} blurb>
                 <span />
                 <button
                   className="btn btn-small btn-primary"

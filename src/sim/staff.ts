@@ -32,6 +32,13 @@ const ROLE_PLURALS: Record<Role, string> = {
   finance: 'finance manager',
   porter: 'lot porter',
 }
+/** What each role does, for applicants in the staff panel. */
+export const ROLE_BLURBS: Record<Role, string> = {
+  sales: 'Sells on their own. Skill sets how firmly they haggle and how often customers say yes.',
+  receptionist: 'Keeps waiting customers patient.',
+  finance: 'Signs buyers at your office desk, so you can sell to the next one.',
+  porter: 'Washes the dirtiest cars on the lot.',
+}
 /** Short label for the badge over their head. */
 export const ROLE_BADGES: Record<Role, string> = {
   sales: 'Sales',
@@ -98,6 +105,8 @@ export const FINANCE_FEE = 200
 export const FINANCE_SECONDS = 6
 /** Game seconds an average salesperson spends talking up the car before making an offer. */
 export const SALES_PITCH_SECONDS = 4
+/** Game seconds an average salesperson takes to come back with a new price after a counter. */
+export const SALES_COUNTER_SECONDS = 2
 /** Game seconds of paperwork per deal for an average salesperson at their own desk. */
 export const SALES_SIGN_SECONDS = 6
 /** Game seconds an average lot porter takes to wash a car. */

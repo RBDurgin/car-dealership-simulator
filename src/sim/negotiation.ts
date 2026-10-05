@@ -111,6 +111,42 @@ export function suggestedAsk(c: Customer, car: InventoryCar): number {
   return clampAsk(c, car, roundPrice((c.haggle.lastAsk + c.haggle.counter) / 2))
 }
 
+/** Below MSRP − this share, a salesperson under average skill opens. */
+export const STAFF_OPEN_DISCOUNT = 0.02
+/** A salesperson's least margin over the car's cost: they never ask less. */
+export const STAFF_FLOOR_MARGIN = 300
+/** A seasoned salesperson takes a counter that keeps at least this share of MSRP as gross. */
+export const STAFF_ACCEPT_GROSS = 0.06
+
+/** The share of the gap to the counter a salesperson of `skill` gives up each round: 60% at 1, 20% at 5. */
+export function staffConcession(skill: number): number {
+  return 0.7 - 0.1 * skill
+}
+
+/**
+ * What a salesperson of `skill` asks for `car`, with the haggle as it stands
+ * (null before the first counter). Average and better open at MSRP, newer
+ * ones a little under. After a counter they come down a share of the gap
+ * (less the better they are), or take the counter: seasoned ones (4+) when it
+ * keeps a healthy gross, green ones (2 or less) whatever it is. Never under
+ * cost + `STAFF_FLOOR_MARGIN`.
+ */
+export function staffAsk(skill: number, car: InventoryCar, haggle: Haggle | null): number {
+  const floor = car.cost + STAFF_FLOOR_MARGIN
+  if (!haggle) {
+    const open = skill >= 3 ? car.msrp : roundPrice(car.msrp * (1 - STAFF_OPEN_DISCOUNT))
+    return Math.min(car.msrp, Math.max(floor, open))
+  }
+  const { lastAsk, counter } = haggle
+  const takes =
+    counter >= floor &&
+    (skill <= 2 || (skill >= 4 && counter - car.cost >= STAFF_ACCEPT_GROSS * car.msrp))
+  if (takes) return counter
+  const ask = roundPrice(lastAsk - staffConcession(skill) * (lastAsk - counter))
+  // Within what can be asked now: their counter up to the last ask.
+  return Math.min(lastAsk, Math.max(counter, floor, ask))
+}
+
 /** What they say when they walk. */
 export function walkLine(reason: WalkReason): string {
   switch (reason) {

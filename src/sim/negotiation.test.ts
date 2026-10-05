@@ -10,6 +10,9 @@ import {
   hopePrice,
   LAST_ROUND_FACTOR,
   respondToAsk,
+  STAFF_FLOOR_MARGIN,
+  staffAsk,
+  staffConcession,
   STUBBORN_WALK,
   suggestedAsk,
   type AskResponse,
@@ -179,5 +182,46 @@ describe('asking', () => {
     expect(askRange(mid, sedan)).toEqual({ min: 27_000, max: 29_000 })
     expect(clampAsk(mid, sedan, 30_000)).toBe(29_000)
     expect(clampAsk(mid, sedan, 20_000)).toBe(27_000)
+  })
+})
+
+describe('staffAsk', () => {
+  const h = (lastAsk: number, counter: number) => ({ round: 2, lastAsk, counter })
+  const floor = sedan.cost + STAFF_FLOOR_MARGIN
+
+  it('opens at MSRP from average skill up, a little under below that', () => {
+    expect([1, 2, 3, 4, 5].map((skill) => staffAsk(skill, sedan, null))).toEqual([
+      29_400, 29_400, 30_000, 30_000, 30_000,
+    ])
+  })
+
+  it('concedes less of the gap the better they are', () => {
+    expect(staffConcession(1)).toBeCloseTo(0.6)
+    expect(staffConcession(5)).toBeCloseTo(0.2)
+    // A $2,000 gap, and a counter too thin for anyone to take.
+    expect(staffAsk(3, sedan, h(28_500, 26_500))).toBe(27_700)
+    expect(staffAsk(5, sedan, h(30_000, 27_500))).toBe(29_500)
+    // Skill 3 never just takes it: 40% of the way down.
+    expect(staffAsk(3, sedan, h(30_000, 28_000))).toBe(29_200)
+  })
+
+  it('takes a counter: seasoned ones when the gross is healthy, green ones always', () => {
+    // 6% of MSRP is $1,800 over the $26,000 cost.
+    expect(staffAsk(4, sedan, h(30_000, 27_800))).toBe(27_800)
+    expect(staffAsk(4, sedan, h(30_000, 27_700))).toBeGreaterThan(27_700)
+    expect(staffAsk(1, sedan, h(29_400, 26_500))).toBe(26_500)
+    expect(staffAsk(2, sedan, h(29_400, 26_500))).toBe(26_500)
+  })
+
+  it('never goes under cost plus the floor margin, nor outside the ask range', () => {
+    for (let skill = 1; skill <= 5; skill++) {
+      for (const counter of [20_000, 25_000, 26_200, 26_400, 26_600]) {
+        const ask = staffAsk(skill, sedan, h(26_600, counter))
+        expect(ask).toBeGreaterThanOrEqual(Math.max(counter, floor))
+        expect(ask).toBeLessThanOrEqual(26_600)
+      }
+    }
+    const cheap = { ...sedan, cost: 29_900 }
+    expect(staffAsk(1, cheap, null)).toBe(30_000)
   })
 })

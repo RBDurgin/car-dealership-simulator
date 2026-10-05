@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PLAYER_ID, type Customer } from './customers'
 import {
+  averageDiscount,
   actionBlocker,
   budgetHint,
   callNextBuyer,
@@ -299,12 +300,12 @@ describe('day stats', () => {
   })
 
   it('breaks the sales down by seller, the player first', () => {
-    const sale = (price: number, soldBy: string | null, commission = 0) => ({
+    const sale = (price: number, soldBy: string | null, commission = 0, msrp = price) => ({
       customerName: 'A',
       carId: 'x',
       model: 'sedan' as const,
-      msrp: price,
-      cost: price - 3_000,
+      msrp,
+      cost: msrp - 3_000,
       minute: 600,
       price,
       soldBy,
@@ -313,12 +314,14 @@ describe('day stats', () => {
     })
     const stats = {
       ...emptyStats(),
-      sales: [sale(30_000, 'Kim P.', 900), sale(20_000, null), sale(10_000, 'Kim P.', 500)],
+      sales: [sale(28_000, 'Kim P.', 500, 30_000), sale(20_000, null), sale(10_000, 'Kim P.', 750)],
     }
-    expect(salesBySeller(stats)).toEqual([
-      { seller: null, cars: 1, revenue: 20_000, gross: 3_000, commission: 0 },
-      { seller: 'Kim P.', cars: 2, revenue: 40_000, gross: 6_000, commission: 1400 },
+    const tallies = salesBySeller(stats)
+    expect(tallies).toEqual([
+      { seller: null, cars: 1, revenue: 20_000, msrp: 20_000, gross: 3_000, commission: 0 },
+      { seller: 'Kim P.', cars: 2, revenue: 38_000, msrp: 40_000, gross: 4_000, commission: 1250 },
     ])
+    expect(tallies.map(averageDiscount)).toEqual([0, 0.05])
     expect(salesBySeller(emptyStats())).toEqual([])
   })
 })

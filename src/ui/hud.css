@@ -530,6 +530,10 @@ kbd {
   font-size: 12px;
   opacity: 0.75;
 }
+.staff-blurb {
+  font-size: 12px;
+  line-height: 1.3;
+}
 .staff-wage {
   grid-area: wage;
   text-align: right;
