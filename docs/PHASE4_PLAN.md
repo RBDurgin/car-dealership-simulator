@@ -1,6 +1,6 @@
 # Phase 4 Plan — Mobile breakpoint & touch controls
 
-**Status:** Planned 2026-10-05, approved for implementation in a new session. First step: add a Phase 4 line to `CLAUDE.md` conventions, then start 4a. As in earlier phases, we do one sub-phase per session and stop for Robert's review after each.
+**Status:** Complete 2026-10-05. 4a, 4b and 4c are done.
 
 ## Context
 
@@ -119,3 +119,4 @@ Virtual joystick, drag-to-pan, portrait layout, PWA/fullscreen install, and hapt
 - The drei `<Html>` overlays keep their pixel size as the camera zooms out. At minimum zoom on a phone, staff badges overlapped (a salesperson's badge hid under FINANCE). On compact screens, `hud.css` now shrinks the badges to 8px text and the bubbles to 18px. At 844×390 and minimum zoom they read clearly and no longer crowd.
 - Playwright (844×390, DPR 3, touch, SwiftShader) with 3 staff and 6 customers on screen measured 3.8 fps before and after. SwiftShader renders on the CPU, so this only shows that nothing broke. It doesn't measure phone performance.
 - Real-phone check (Robert, Chrome, LAN dev server, `?fps` meter): the frame rate held between 53 and 61 fps for a whole day, with no sustained drops. Add `?fps` to the URL for that on-screen meter (drei `<Stats />`, top center), since a phone browser has no console to paste into.
+- Phase 4 was closed after the Chrome check. Safari (iOS) was not tested on a real device, so check it first if an iPhone shows touch or zoom problems.
