@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Grid } from './grid'
-import { canStand, hasLineOfSight, moveWithCollision } from './movement'
+import { canStand, hasLineOfSight, moveWithCollision, nearestStandable } from './movement'
 
 describe('canStand', () => {
   it('rejects positions overlapping blocked tiles or the map edge', () => {
@@ -41,5 +41,23 @@ describe('hasLineOfSight', () => {
     const a = grid.tileToWorld(0, 5)
     expect(hasLineOfSight(grid, a, grid.tileToWorld(9, 5))).toBe(false)
     expect(hasLineOfSight(grid, a, grid.tileToWorld(9, 8))).toBe(true)
+  })
+})
+
+describe('nearestStandable', () => {
+  it('leaves someone who can stand where they are', () => {
+    const grid = new Grid(10, 10)
+    const pos = { x: 0.2, z: -1.3 }
+    expect(nearestStandable(grid, pos)).toBe(pos)
+  })
+
+  it('steps someone out of a car parked on top of them to the closest free tile', () => {
+    const grid = new Grid(10, 10)
+    // A 3×3 car centred on tile (5, 5); they stand just east of its middle.
+    grid.blockRect(4, 4, 3, 3)
+    const inside = grid.tileToWorld(5, 5)
+    const out = nearestStandable(grid, { x: inside.x + 0.4, z: inside.z })
+    expect(out).toEqual(grid.tileToWorld(7, 5))
+    expect(canStand(grid, out.x, out.z)).toBe(true)
   })
 })

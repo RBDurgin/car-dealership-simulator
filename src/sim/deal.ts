@@ -9,6 +9,7 @@ import { washBlocker } from './cleanliness'
 import type { Grid, Tile } from './grid'
 import {
   approachTilesFor,
+  carName,
   type ActionId,
   type Interactable,
   type InteractableKind,
@@ -229,6 +230,10 @@ export interface DayStats {
   /** Staff costs, paid once when the day is settled. */
   wages: number
   commissions: number
+  /** Floor plan interest, charged with payroll. */
+  interest: number
+  /** Customers who found none of the body types they wanted, by their first choice. */
+  missed: Partial<Record<CarModel, number>>
   /** Payroll has been paid for the day. */
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
@@ -245,6 +250,8 @@ export function emptyStats(): DayStats {
     closing: 0,
     wages: 0,
     commissions: 0,
+    interest: 0,
+    missed: {},
     settled: false,
     owner: null,
   }
@@ -264,9 +271,44 @@ export function grossProfit(stats: DayStats): number {
   return revenue(stats) - costOfSales(stats)
 }
 
-/** Gross profit less the day's staff costs, plus any bonus from the owner. */
+/** Gross profit less the day's staff costs and floor plan interest, plus any bonus from the owner. */
 export function netIncome(stats: DayStats): number {
-  return grossProfit(stats) - stats.wages - stats.commissions + (stats.owner?.bonus ?? 0)
+  return (
+    grossProfit(stats) -
+    stats.wages -
+    stats.commissions -
+    stats.interest +
+    (stats.owner?.bonus ?? 0)
+  )
+}
+
+/**
+ * Tallies the new `arrived` customers who can't find any body type they want
+ * among the `available` cars, under their first choice. Returns the same stats
+ * when everyone can.
+ */
+export function recordMissed(
+  stats: DayStats,
+  arrived: readonly Customer[],
+  available: readonly InventoryCar[],
+): DayStats {
+  const inStock = new Set(available.map((c) => c.model))
+  let missed = stats.missed
+  for (const c of arrived) {
+    if (c.preferredModels.some((m) => inStock.has(m))) continue
+    const model = c.preferredModels[0]
+    missed = { ...missed, [model]: (missed[model] ?? 0) + 1 }
+  }
+  return missed === stats.missed ? stats : { ...stats, missed }
+}
+
+/** "Summit Ridge ×2, Summit Hauler ×1": the missed demand, most asked-for first. Empty if none. */
+export function missedSummary(missed: DayStats['missed']): string {
+  return (Object.entries(missed) as [CarModel, number][])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([model, n]) => `${carName(model)} ×${n}`)
+    .join(', ')
 }
 
 /** One seller's share of the day's sales. */

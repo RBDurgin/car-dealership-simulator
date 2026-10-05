@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
 import { buildInventory } from './inventory'
+import type { Order } from './ordering'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import type { Employee } from './staff'
@@ -22,7 +23,17 @@ const source = () => ({
   cash: 31_500,
   inventory: buildInventory(createRng(1)),
   roster: [employee('staff-1-1'), employee('staff-2-1', { fired: true })],
+  orders: [order],
 })
+
+const order: Order = {
+  id: 'order-3-1',
+  model: 'truck',
+  cost: 45_800,
+  financing: 'floor',
+  slot: { location: 'lot', index: 2 },
+  day: 3,
+}
 
 describe('save data', () => {
   it('keeps the day, cash and inventory, drops the fired and sends everyone home', () => {
@@ -30,6 +41,7 @@ describe('save data', () => {
     expect(save).toMatchObject({ version: SAVE_VERSION, savedAt: 123, day: 3, cash: 31_500 })
     expect(save.inventory).toEqual(source().inventory)
     expect(save.roster.map((e) => [e.id, e.status])).toEqual([['staff-1-1', 'off']])
+    expect(save.orders).toEqual([order])
   })
 
   it('round-trips through JSON', () => {
@@ -42,14 +54,36 @@ describe('save data', () => {
     const v2 = {
       ...save,
       version: 2,
-      inventory: save.inventory.map((car) => ({ ...car, cost: undefined })),
+      orders: undefined,
+      inventory: save.inventory.map((car) => ({
+        ...car,
+        cost: undefined,
+        arrivedDay: undefined,
+        floored: undefined,
+      })),
     }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v2)))
-    expect(upgraded).toMatchObject({ version: SAVE_VERSION, day: 3, cash: 31_500 })
+    expect(upgraded).toMatchObject({ version: SAVE_VERSION, day: 3, cash: 31_500, orders: [] })
     expect(upgraded?.roster).toEqual(save.roster)
     upgraded?.inventory.forEach((car, i) => {
       expect(car).toEqual({ ...save.inventory[i], cost: Math.round((car.msrp * 0.89) / 100) * 100 })
     })
+  })
+
+  it('upgrades a version 3 save: opening stock, owned outright, and no orders', () => {
+    const save = createSave(source(), 123)
+    const v3 = {
+      ...save,
+      version: 3,
+      orders: undefined,
+      inventory: save.inventory.map((car) => ({
+        ...car,
+        arrivedDay: undefined,
+        floored: undefined,
+      })),
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v3)))
+    expect(upgraded).toEqual({ ...save, orders: [] })
   })
 
   it('rejects anything that is not a save of this version', () => {
@@ -67,5 +101,12 @@ describe('save data', () => {
     const { cost: __, ...uncosted } = save.inventory[0]
     expect(parseSave({ ...save, inventory: [uncosted] })).toBeNull()
     expect(parseSave({ ...save, roster: 'nobody' })).toBeNull()
+    expect(parseSave({ ...save, orders: undefined })).toBeNull()
+    expect(parseSave({ ...save, orders: [{ ...order, financing: 'lease' }] })).toBeNull()
+    expect(
+      parseSave({ ...save, orders: [{ ...order, slot: { location: 'lot', index: 27 } }] }),
+    ).toBeNull()
+    const { floored: ___, ...unfloored } = save.inventory[0]
+    expect(parseSave({ ...save, inventory: [unfloored] })).toBeNull()
   })
 })

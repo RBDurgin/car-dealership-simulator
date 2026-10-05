@@ -4,7 +4,7 @@ import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
 
 /**
- * Day, time, cash, the owner's goal (on their days) and the staff button.
+ * Day, time, cash, the owner's goal (on their days) and the stock and staff buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {
@@ -12,6 +12,7 @@ export function TopBar() {
   const cash = useGame((s) => s.cash)
   const timeScale = useGame((s) => s.timeScale)
   const staffOpen = useGame((s) => s.staffOpen)
+  const stockOpen = useGame((s) => s.stockOpen)
   return (
     <div className="panel topbar">
       <span>Day {clock.day}</span>
@@ -22,6 +23,13 @@ export function TopBar() {
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
       <GoalBanner />
+      <button
+        className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
+        aria-pressed={stockOpen}
+        onClick={() => useGame.getState().toggleStockPanel()}
+      >
+        Stock
+      </button>
       <button
         className={staffOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
         aria-pressed={staffOpen}

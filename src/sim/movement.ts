@@ -37,3 +37,30 @@ export function hasLineOfSight(grid: Grid, a: Vec2, b: Vec2, radius = PLAYER_RAD
   }
   return true
 }
+
+/**
+ * The centre of the nearest tile a mover can stand on, e.g. to step someone
+ * out of a car parked on top of them. Returns `pos` itself if they already can.
+ */
+export function nearestStandable(grid: Grid, pos: Vec2, radius = PLAYER_RADIUS): Vec2 {
+  if (canStand(grid, pos.x, pos.z, radius)) return pos
+  const start = grid.worldToTile(pos.x, pos.z)
+  let best: Vec2 | null = null
+  let bestDist = Infinity
+  // Rings of growing size; stop after the first ring that has somewhere to stand.
+  for (let r = 1; r < Math.max(grid.width, grid.height) && !best; r++) {
+    for (let tx = start.tx - r; tx <= start.tx + r; tx++) {
+      for (let tz = start.tz - r; tz <= start.tz + r; tz++) {
+        if (Math.max(Math.abs(tx - start.tx), Math.abs(tz - start.tz)) !== r) continue
+        if (!grid.inBounds(tx, tz)) continue
+        const p = grid.tileToWorld(tx, tz)
+        const d = Math.hypot(p.x - pos.x, p.z - pos.z)
+        if (d < bestDist && canStand(grid, p.x, p.z, radius)) {
+          best = p
+          bestDist = d
+        }
+      }
+    }
+  }
+  return best ?? pos
+}

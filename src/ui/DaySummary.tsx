@@ -1,5 +1,13 @@
 import { formatTime, isClosed } from '../sim/clock'
-import { costOfSales, grossProfit, netIncome, revenue, salesBySeller, walkOuts } from '../sim/deal'
+import {
+  costOfSales,
+  grossProfit,
+  missedSummary,
+  netIncome,
+  revenue,
+  salesBySeller,
+  walkOuts,
+} from '../sim/deal'
 import { carName } from '../sim/interactables'
 import { goalLabel } from '../sim/owner'
 import { useGame } from '../state/store'
@@ -14,7 +22,9 @@ export function DaySummary() {
   const day = useGame((s) => s.clock.day)
   const stats = useGame((s) => s.dayStats)
   const cash = useGame((s) => s.cash)
+  const arriving = useGame((s) => s.orders.length)
   if (!open) return null
+  const missed = missedSummary(stats.missed)
 
   return (
     <div className="modal-backdrop">
@@ -41,6 +51,12 @@ export function DaySummary() {
           <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
           <dt>Commissions</dt>
           <dd className="price">{formatMoney(-stats.commissions || 0)}</dd>
+          {stats.interest > 0 && (
+            <>
+              <dt>Floor plan interest</dt>
+              <dd className="price">{formatMoney(-stats.interest)}</dd>
+            </>
+          )}
           {!!stats.owner?.bonus && (
             <>
               <dt>Owner&apos;s bonus</dt>
@@ -59,6 +75,22 @@ export function DaySummary() {
               </span>
             )}
           </dd>
+          {missed && (
+            <>
+              <dt>Missed</dt>
+              <dd>
+                {missed} <span className="muted">(wanted, not in stock)</span>
+              </dd>
+            </>
+          )}
+          {arriving > 0 && (
+            <>
+              <dt>Arriving tomorrow</dt>
+              <dd>
+                {arriving} car{arriving === 1 ? '' : 's'}
+              </dd>
+            </>
+          )}
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>

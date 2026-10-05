@@ -1,4 +1,6 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
+import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
+import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
@@ -61,12 +63,41 @@ export function HowToPlay() {
           <p>
             Every car shows its MSRP and <i>your cost</i>, what the dealership paid for it. The
             difference is your gross profit on the sale. The day summary adds up revenue, the cost
-            of the cars sold and gross profit, then takes off wages and commissions for the net.
+            of the cars sold and gross profit, then takes off wages, commissions and floor plan
+            interest for the net.
           </p>
           <p>
             Clean cars sell better. Cars gather dust overnight (faster out on the lot) and every
             time a customer looks one over. Inspect a car to see if it&apos;s clean, dusty or dirty,
             and {click.toLowerCase()} it to <b>Wash car</b>.
+          </p>
+        </section>
+        <section>
+          <h3>Buying stock</h3>
+          <p>
+            Sold cars leave empty spaces. Order new ones at the office computer (
+            {click.toLowerCase()} the screen on your desk and choose <b>Order stock</b>),{' '}
+            {touch ? (
+              <>or tap Stock</>
+            ) : (
+              <>
+                press <kbd>I</kbd> or click Stock
+              </>
+            )}
+            . Cars ordered today are delivered the next morning, showroom platforms first, then the
+            lot. You can cancel an order until the day ends. One model each day is on incentive,{' '}
+            {Math.round(INCENTIVE_DISCOUNT * 100)}% off its invoice.
+          </p>
+          <p>
+            Pay in <b>cash</b>, or put the car on the <b>floor plan</b>: the bank pays for it (up to{' '}
+            {formatMoney(FLOOR_PLAN_LIMIT)} at once) and you pay{' '}
+            {(FLOOR_PLAN_DAILY_RATE * 100).toFixed(1)}% of its cost in interest every day it sits in
+            stock. When it sells, the bank takes its cost out of the price and you keep the rest.
+            You can also <b>Pay off</b> a car from cash to stop the interest.
+          </p>
+          <p>
+            Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
+            the day summary and the stock panel. Order what people are asking for.
           </p>
         </section>
         <section>

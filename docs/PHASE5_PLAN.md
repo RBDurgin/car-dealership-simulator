@@ -1,6 +1,6 @@
 # Phase 5 Plan — Buying inventory from the manufacturer
 
-**Status:** Planned 2026-10-05. 5a done 2026-10-05 (awaiting review); next is 5b. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** Planned 2026-10-05. 5a done 2026-10-05. 5b done 2026-10-05. 5c done 2026-10-05 (awaiting review), which completes Phase 5. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -109,6 +109,15 @@ src/ui/
 - `InventoryCar` gains `arrivedDay` and `floored`.
 - The upgrade fills v3 cars with `arrivedDay: 1, floored: false` and `orders: []`.
 
+**As built (5b notes):**
+
+- `deliver(orders, rng, day)` returns just the new cars; `beginDay` does `[...dirtyOvernight(dropSold(inventory)), ...deliver(...)]`, so the night's dust lands before the new cars arrive and they really are clean.
+- The incentive is applied by `orderCost(model, day)`; `invoicePrice(model)` stays the list invoice.
+- `claimedByOrder` keeps the `R` restock cheat out of slots an order has claimed (done here rather than in 5c).
+- `DayStats.interest` is in `netIncome` already; the summary row for it is still 5c.
+- A car delivered onto the spot where the player ended the day steps them out to the nearest free tile (`nearestStandable` in `sim/movement.ts`, called from `scene/runtime.ts`).
+- Customers with nothing they want in stock already behave: they browse nothing, wait, and leave as `refused` when greeted.
+
 **Done when:** store tests cover a full day: order (both financing types) → save/resume → delivery into the right slots → sell a floored car → payoff and interest are correct.
 
 ### 5c: Stock panel, office computer, help
@@ -139,6 +148,16 @@ src/ui/
   - Incentives, and using missed demand.
 - **Dev restock:** the `R` cheat keeps working. It only restores sold cars whose slot is still free; check that against `freeSlots`.
 - **Done when:** on desktop and at 667×375 touch, the player can order from the computer and from the button, see the cars next morning, and read interest and missed demand in the summary.
+
+**As built (5c notes):**
+
+- The computer is `OFFICE_COMPUTER_ID` (`office-monitor`, kind `computer`). Its approach tiles come from `screenApproachTiles`: the ring around the tile the screen faces (the desk chair), so the player walks round behind the desk, never to the guest side.
+- The staff and stock panels share the left edge, so opening one closes the other. Esc closes either.
+- "Asked for, not in stock" shows yesterday's count (`missedYesterday` in the store, set in `beginDay`) and today's so far. `missedYesterday` isn't saved, so it's empty on the morning a game is resumed; the summary that was just read showed it.
+- A blocked Buy/Floor plan button keeps its reason as a tooltip and also prints it under the row (touch has no tooltips). "No room" is said once above the catalog instead.
+- Catalog MSRP and margin are shown as `~` from `BASE_MSRP`, since each delivered car's MSRP is rolled ±5%.
+- The summary shows the interest row only when there was interest, and the missed and arriving lines only when non-empty (`missedSummary` in `sim/deal.ts`).
+- The `R` restock check was already covered by `claimedByOrder` in 5b; a store test confirms it.
 
 ## Files touched (main)
 

@@ -89,19 +89,30 @@ describe('dealership interactables', () => {
   applyToGrid(grid, inventory)
   const all = buildInteractables(grid, [...PROPS, ...inventory.map(carProp)])
 
-  it('registers every car, the desk chair and the coffee machine', () => {
+  it('registers every car, the desk chair, the office computer and the coffee machine', () => {
     const cars = [...all.values()].filter((it) => it.kind === 'car')
     expect(cars).toHaveLength(inventory.length)
     expect(all.get('display-1')?.car?.location).toBe('Showroom display')
     expect(all.get('office-chair')?.actions).toEqual(['sit', 'closeDeal'])
     expect(all.get('coffee-machine')?.actions).toEqual(['getCoffee'])
+    expect(all.get('office-monitor')?.actions).toEqual(['orderStock'])
     expect(all.has('office-desk')).toBe(false)
+    expect(all.has('sales-monitor-1')).toBe(false)
   })
 
   it('can reach every interactable from the spawn', () => {
     for (const it of all.values()) {
       expect(pathToInteractable(grid, SPAWN_TILE, it), it.id).not.toBeNull()
     }
+  })
+
+  it('approaches the office computer from the desk chair side, not the guest side', () => {
+    // The screen sits on the desk at (33, 5) facing the chair at (33, 4).
+    expect(all.get('office-monitor')!.approachTiles).toEqual([
+      { tx: 33, tz: 3 },
+      { tx: 32, tz: 4 },
+      { tx: 34, tz: 4 },
+    ])
   })
 
   it('approaches the coffee machine from in front of the counter', () => {

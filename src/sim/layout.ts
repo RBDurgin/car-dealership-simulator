@@ -221,6 +221,8 @@ export const DISPLAY_CARS: { model: CarModel; rect: Rect; facing: Facing }[] = [
 
 /** Where the player sits to close a deal, and where the customer sits opposite. */
 export const DESK_CHAIR_ID = 'office-chair'
+/** The office computer, where stock is ordered from the manufacturer. */
+export const OFFICE_COMPUTER_ID = 'office-monitor'
 export const GUEST_CHAIR_ID = 'guest-chair'
 /** Where the receptionist sits, behind the reception desk facing the showroom. */
 export const RECEPTION_CHAIR_ID = 'reception-chair'
@@ -294,7 +296,7 @@ const FIXED_PROPS: Prop[] = [
   // Office
   { id: 'office-desk', model: 'desk', rect: { tx: 32, tz: 5, w: 2, h: 1 }, facing: 2 },
   {
-    id: 'office-monitor',
+    id: OFFICE_COMPUTER_ID,
     model: 'computerScreen',
     rect: { tx: 33, tz: 5, w: 1, h: 1 }, // in front of the office chair
     facing: 2,

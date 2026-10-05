@@ -1,9 +1,24 @@
 import type { Grid, Tile, Vec2 } from './grid'
-import { DESK_CHAIR_ID, type CarModel, type Facing, type Prop, type Rect } from './layout'
+import {
+  DESK_CHAIR_ID,
+  OFFICE_COMPUTER_ID,
+  type CarModel,
+  type Facing,
+  type Prop,
+  type Rect,
+} from './layout'
 import { findPathToAny } from './pathfinding'
 
 export type ActionId =
-  'inspect' | 'wash' | 'sit' | 'getCoffee' | 'greet' | 'offer' | 'closeDeal' | 'handOff'
+  | 'inspect'
+  | 'wash'
+  | 'sit'
+  | 'getCoffee'
+  | 'greet'
+  | 'offer'
+  | 'closeDeal'
+  | 'handOff'
+  | 'orderStock'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -45,9 +60,11 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   // At the desk with a buyer in tow: the finance manager takes them from there.
   handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
+  // At the office computer: opens the stock panel.
+  orderStock: { id: 'orderStock', label: 'Order stock', verb: 'Ordering stock', mode: 'instant' },
 }
 
-export type InteractableKind = 'car' | 'chair' | 'coffee' | 'customer' | 'employee'
+export type InteractableKind = 'car' | 'chair' | 'coffee' | 'computer' | 'customer' | 'employee'
 
 export interface CarInfo {
   name: string
@@ -108,6 +125,25 @@ export function approachTilesFor(grid: Grid, r: Rect): Tile[] {
   return out
 }
 
+// The tile one step from a footprint in the direction it faces (see `Facing`).
+const FORWARD: Record<Facing, Vec2> = {
+  0: { x: 0, z: 1 },
+  1: { x: 1, z: 0 },
+  2: { x: 0, z: -1 },
+  3: { x: -1, z: 0 },
+}
+
+/**
+ * Where to stand to use a screen sitting on a desk: around the seat in front of
+ * it (the tile it faces), not on the far side of the desk.
+ */
+export function screenApproachTiles(grid: Grid, r: Rect, facing: Facing): Tile[] {
+  const f = FORWARD[facing]
+  const seat = { tx: r.tx + f.x, tz: r.tz + f.z }
+  const ring = approachTilesFor(grid, { ...seat, w: 1, h: 1 })
+  return grid.isWalkable(seat.tx, seat.tz) ? [seat, ...ring] : ring
+}
+
 /** Path to the cheapest-to-reach approach tile, or null if none is reachable. */
 export function pathToInteractable(grid: Grid, start: Tile, it: Interactable): Tile[] | null {
   return findPathToAny(grid, start, it.approachTiles)
@@ -139,6 +175,14 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
       out.set(p.id, { ...base, kind: 'car', name, actions: ['inspect', 'wash'], car })
     } else if (p.id === DESK_CHAIR_ID) {
       out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit', 'closeDeal'] })
+    } else if (p.id === OFFICE_COMPUTER_ID) {
+      out.set(p.id, {
+        ...base,
+        kind: 'computer',
+        name: 'Office computer',
+        approachTiles: screenApproachTiles(grid, p.rect, p.facing),
+        actions: ['orderStock'],
+      })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })
     }

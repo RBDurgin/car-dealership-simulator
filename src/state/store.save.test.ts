@@ -40,7 +40,9 @@ describe('saving and loading', () => {
     expect(game().screen).toBe('playing')
     expect(game().clock).toEqual({ day: 2, minute: OPEN_MINUTE })
     expect(game().cash).toBe(straight.cash)
-    expect(game().inventory.find((c) => c.id === 'lot-car-1')?.status).toBe('sold')
+    // Sold cars are cleared off the books when the next day opens.
+    expect(game().inventory.some((c) => c.id === 'lot-car-1')).toBe(false)
+    expect(game().inventory).toEqual(straight.inventory)
     expect(game().roster).toEqual(straight.roster)
     expect(game().roster).toMatchObject([{ id: hired.id, status: 'arriving' }])
     expect(game().candidates).toEqual(straight.candidates)

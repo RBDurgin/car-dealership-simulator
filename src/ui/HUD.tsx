@@ -13,6 +13,7 @@ import { HowToPlay } from './HowToPlay'
 import { InfoPanel } from './InfoPanel'
 import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
+import { StockPanel } from './StockPanel'
 import { TitleScreen } from './TitleScreen'
 import { TopBar } from './TopBar'
 import { ViewControls } from './ViewControls'
@@ -96,6 +97,7 @@ export function HUD() {
       if (game.screen === 'title') return
       if (e.code === 'Escape') game.cancelAll()
       else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
+      else if (e.code === 'KeyI' && !e.repeat) game.toggleStockPanel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -113,6 +115,7 @@ export function HUD() {
       <InfoPanel />
       <CustomerPanel />
       <StaffPanel />
+      <StockPanel />
       <ActionMenu />
       <DaySummary />
       <TitleScreen />

@@ -17,12 +17,16 @@ import {
   inConversation,
   netIncome,
   recordDepartures,
+  missedSummary,
+  recordMissed,
   revenue,
   salesBySeller,
   walkOuts,
 } from './deal'
 import { Grid } from './grid'
+import { buildInventory } from './inventory'
 import { GUEST_CHAIR_ID } from './layout'
+import { createRng } from './rng'
 import type { Employee } from './staff'
 
 /** A finance manager at the desk. */
@@ -257,15 +261,39 @@ describe('day stats', () => {
     expect(grossProfit(emptyStats())).toBe(0)
   })
 
-  it('nets gross profit less staff costs, plus the owner bonus', () => {
+  it('nets gross profit less staff costs and interest, plus the owner bonus', () => {
     const stats = {
       ...emptyStats(),
       sales: [sale(30_000, 27_000)],
       wages: 400,
       commissions: 750,
+      interest: 160,
       owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
-    expect(netIncome(stats)).toBe(3_000 - 400 - 750 + 1_500)
+    expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 + 1_500)
+  })
+
+  it('tallies customers who find none of their body types in stock, by first choice', () => {
+    const stock = buildInventory(createRng(1)).filter(
+      (c) => c.model !== 'truck' && c.model !== 'van',
+    )
+    const wants = (...preferredModels: Customer['preferredModels']) => ({
+      ...base,
+      preferredModels,
+    })
+    const stats = recordMissed(
+      emptyStats(),
+      [wants('truck', 'van'), wants('truck'), wants('van', 'sedan'), wants('van')],
+      stock,
+    )
+    expect(stats.missed).toEqual({ truck: 2, van: 1 })
+    const none = emptyStats()
+    expect(recordMissed(none, [wants('sedan')], stock)).toBe(none)
+  })
+
+  it('sums up missed demand, most asked-for first', () => {
+    expect(missedSummary({ van: 1, suv: 2 })).toBe('Summit Ridge ×2, Summit Hauler ×1')
+    expect(missedSummary({})).toBe('')
   })
 
   it('breaks the sales down by seller, the player first', () => {

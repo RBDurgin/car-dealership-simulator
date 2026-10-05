@@ -4,6 +4,7 @@ import { customerInteractable, deskActions, employeeActions, personInteractable 
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
+import { nearestStandable, PLAYER_RADIUS } from '../sim/movement'
 import {
   buildLayout,
   createGrid,
@@ -34,14 +35,32 @@ function syncInventory(inventory: readonly InventoryCar[]): void {
   for (const [id, it] of buildInteractables(grid, props)) interactables.set(id, it)
 }
 
+const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
+export const playerPos = { x: spawn.x, z: spawn.z }
+
 syncInventory(useGame.getState().inventory)
 // Runs synchronously inside the store update, before React re-renders anything.
 useGame.subscribe((s, prev) => {
-  if (s.inventory !== prev.inventory) syncInventory(s.inventory)
+  if (s.inventory === prev.inventory) return
+  syncInventory(s.inventory)
+  // A car delivered overnight onto the space the player ended the day in steps
+  // them out. Only new cars: the player sits on a blocked chair tile.
+  const known = new Set(prev.inventory.map((c) => c.id))
+  const added = s.inventory.filter((c) => !known.has(c.id))
+  if (added.some((c) => touches(c.rect, playerPos))) {
+    Object.assign(playerPos, nearestStandable(grid, playerPos))
+  }
 })
 
-const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
-export const playerPos = { x: spawn.x, z: spawn.z }
+/** Whether someone standing at `pos` overlaps the tiles of `rect`. */
+function touches(rect: Rect, pos: Vec2): boolean {
+  return [-PLAYER_RADIUS, PLAYER_RADIUS].some((ox) =>
+    [-PLAYER_RADIUS, PLAYER_RADIUS].some((oz) => {
+      const { tx, tz } = grid.worldToTile(pos.x + ox, pos.z + oz)
+      return tx >= rect.tx && tx < rect.tx + rect.w && tz >= rect.tz && tz < rect.tz + rect.h
+    }),
+  )
+}
 
 /**
  * Where each customer in the world is standing, by customer id. Owned and moved by

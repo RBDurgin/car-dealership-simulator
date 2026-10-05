@@ -28,19 +28,30 @@ import {
   isCustomerAction,
   offerPrice,
   recordDepartures,
+  recordMissed,
   type DayStats,
   type Sale,
 } from '../sim/deal'
 import { carName, type ActionId } from '../sim/interactables'
-import { DESK_CHAIR_ID } from '../sim/layout'
+import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
+import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
 import {
   availableCars,
   buildInventory,
+  dropSold,
   restock,
   sellCar as markSold,
   type InventoryCar,
 } from '../sim/inventory'
 import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
+import {
+  cancelOrder,
+  claimedByOrder,
+  deliver,
+  placeOrder,
+  type Financing,
+  type Order,
+} from '../sim/ordering'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
@@ -88,6 +99,7 @@ const DEAL_SEED = 9_000
 const STAFF_SEED = 11_000
 const OWNER_SEED = 12_000
 const WALK_IN_SEED = 14_000
+const DELIVERY_SEED = 16_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -110,8 +122,10 @@ interface GameState {
   /** Game time in 10-minute steps; the precise running time lives in scene/runtime. */
   clock: GameTime
   cash: number
-  /** Changes when a car is sold, restocked, looked over (dirt) or washed, and overnight. */
+  /** Changes when a car is sold, restocked, looked over (dirt), washed or paid off, and overnight. */
   inventory: InventoryCar[]
+  /** Cars ordered from the manufacturer, delivered the next morning. */
+  orders: Order[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -124,8 +138,12 @@ interface GameState {
   candidates: Employee[]
   /** On an owner's day, their goal for it. Null on other days. */
   owner: OwnerVisit | null
+  /** Yesterday's customers who found none of the body types they wanted (empty on a resumed game). */
+  missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
+  /** The stock panel (ordering, cars in stock) is open. */
+  stockOpen: boolean
   /** The how-to-play guide is open; the clock and the player wait while it is. */
   helpOpen: boolean
   /** The controls hint lists its keys (or gestures); collapsed it's just a header. */
@@ -158,6 +176,12 @@ interface GameState {
   tickClock: (t: GameTime) => void
   /** Sells a car at `price` (default MSRP). False if it isn't for sale. */
   sellCar: (id: string, price?: number) => boolean
+  /** Orders a `model` for delivery tomorrow, paid in cash now or on the floor plan. False if it can't be. */
+  orderCar: (model: CarModel, financing: Financing) => boolean
+  /** Cancels an order: cash comes back, or the floor plan credit is freed. */
+  cancelOrder: (id: string) => void
+  /** Pays the bank a floored car's cost from cash, so it stops accruing interest. */
+  payOff: (carId: string) => void
   /** Dev cheat: refills sold spaces, skipping any `canPlace` vetoes. */
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
@@ -194,6 +218,7 @@ interface GameState {
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
+  toggleStockPanel: (open?: boolean) => void
   toggleHelp: (open?: boolean) => void
   toggleControls: (open?: boolean) => void
   setRotatePrompt: (on: boolean) => void
@@ -225,6 +250,18 @@ let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
  */
 export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt'>): boolean {
   return s.screen === 'title' || s.helpOpen || s.rotatePrompt
+}
+
+/** "3 cars delivered: 2 on the lot, 1 in the showroom." */
+export function deliveryNotice(cars: readonly InventoryCar[]): string {
+  const lot = cars.filter((c) => c.location === 'lot').length
+  const showroom = cars.length - lot
+  const where = [lot > 0 && `${lot} on the lot`, showroom > 0 && `${showroom} in the showroom`]
+    .filter(Boolean)
+    .join(', ')
+  return cars.length === 1
+    ? `A ${carName(cars[0].model)} was delivered ${lot ? 'to the lot' : 'to the showroom'}.`
+    : `${cars.length} cars delivered: ${where}.`
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -283,6 +320,10 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
+  /** Counts new `arrived` customers who can't find a body type they want in stock. */
+  const tallyMissed = (stats: DayStats, arrived: readonly Customer[]) =>
+    recordMissed(stats, arrived, availableCars(get().inventory))
+
   /**
    * Pays the day's staff once the doors are shut and the last customer has gone,
    * before the summary shows, so it reports cash after payroll. On an owner's
@@ -292,11 +333,12 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
     const { wages, commissions } = payroll(s.roster, s.dayStats.sales)
+    const interest = dailyInterest(s.inventory)
     // A goal the player never heard (the owner didn't make it in) isn't judged.
     const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
     set({
-      cash: s.cash - wages - commissions + (owner?.bonus ?? 0),
-      dayStats: { ...s.dayStats, wages, commissions, owner, settled: true },
+      cash: s.cash - wages - commissions - interest + (owner?.bonus ?? 0),
+      dayStats: { ...s.dayStats, wages, commissions, interest, owner, settled: true },
     })
   }
 
@@ -348,6 +390,8 @@ export const useGame = create<GameState>((set, get) => {
         return closeDeal()
       case 'handOff':
         return handOff()
+      case 'orderStock':
+        return get().toggleStockPanel(true)
     }
   }
 
@@ -454,8 +498,9 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Opens the doors on `day`: the cars have gathered a night's dust, there are
-   * new arrivals and applicants, and the staff head in.
+   * Opens the doors on `day`: sold cars are gone, the rest have gathered a
+   * night's dust, yesterday's orders are parked in their slots, there are new
+   * arrivals and applicants, and the staff head in.
    */
   const beginDay = (day: number) => {
     customerRng = createRng(CUSTOMER_SEED + day)
@@ -463,23 +508,28 @@ export const useGame = create<GameState>((set, get) => {
     staffRng = createRng(STAFF_SEED + day)
     walkInRng = createRng(WALK_IN_SEED + day)
     const s = get()
+    const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
+    const inventory = [...dirtyOvernight(dropSold(s.inventory)), ...delivered]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
     const owner = isOwnerDay(day)
       ? {
-          goal: generateGoal(createRng(OWNER_SEED + day), s.inventory, salesStaff),
+          goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
           announced: false,
         }
       : null
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
-      inventory: dirtyOvernight(s.inventory),
+      inventory,
+      orders: [],
       arrivals: planArrivals(customerRng),
       dayStats: emptyStats(),
+      missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
       owner,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
+    if (delivered.length > 0) notify(deliveryNotice(delivered))
   }
 
   return {
@@ -496,13 +546,16 @@ export const useGame = create<GameState>((set, get) => {
     clock: startOfDay(1),
     cash: STARTING_CASH,
     inventory: buildInventory(createRng(INVENTORY_SEED)),
+    orders: [],
     customers: [],
     arrivals: planArrivals(customerRng),
     dayStats: emptyStats(),
     roster: [],
     candidates: generateCandidates(staffRng, 1),
     owner: null,
+    missedYesterday: {},
     staffOpen: false,
+    stockOpen: false,
     helpOpen: false,
     controlsOpen: true,
     rotatePrompt: false,
@@ -549,6 +602,7 @@ export const useGame = create<GameState>((set, get) => {
       if (s.helpOpen) return set({ helpOpen: false })
       if (s.menu) return set({ menu: null })
       if (s.staffOpen) return set({ staffOpen: false })
+      if (s.stockOpen) return set({ stockOpen: false })
       const busy = s.activeAction || s.moveOrder || s.inspectedId
       dispatch({ type: 'cancel' })
       set({ moveOrder: null, inspectedId: null })
@@ -594,7 +648,10 @@ export const useGame = create<GameState>((set, get) => {
       set({
         clock: step,
         arrivals: schedule,
-        dayStats: { ...s.dayStats, visitors: s.dayStats.visitors + count },
+        dayStats: tallyMissed(
+          { ...s.dayStats, visitors: s.dayStats.visitors + count },
+          customers.slice(customers.length - count),
+        ),
       })
       if (isClosed(step)) setRoster(reduceStaff(get().roster, { type: 'close' }))
       commit(customers)
@@ -607,17 +664,55 @@ export const useGame = create<GameState>((set, get) => {
       if (!car || inventory === s.inventory) return false
       // The car is gone: drop anything that still points at it.
       if (s.activeAction?.targetId === id) dispatch({ type: 'cancel' })
+      // The bank takes back what it lent on a floored car; the rest is ours.
       set({
         inventory,
-        cash: s.cash + (price ?? car.msrp),
+        cash: s.cash + (price ?? car.msrp) - payoffOnSale(car),
         menu: s.menu?.targetId === id ? null : s.menu,
         hoveredId: s.hoveredId === id ? null : s.hoveredId,
         inspectedId: s.inspectedId === id ? null : s.inspectedId,
       })
       return true
     },
+    orderCar: (model, financing) => {
+      const s = get()
+      const result = placeOrder(s, model, financing, s.clock.day)
+      if (!result.ok) {
+        notify(result.reason)
+        return false
+      }
+      set({ orders: result.orders, cash: result.cash })
+      const how = financing === 'cash' ? 'paid cash' : 'on the floor plan'
+      notify(
+        `Ordered a ${carName(model)} for ${formatMoney(result.order.cost)} (${how}). It arrives tomorrow.`,
+      )
+      return true
+    },
+    cancelOrder: (id) => {
+      const s = get()
+      const order = s.orders.find((o) => o.id === id)
+      if (!order) return
+      set(cancelOrder(s, id))
+      notify(`Cancelled the ${carName(order.model)}.`)
+    },
+    payOff: (carId) => {
+      const s = get()
+      const car = s.inventory.find((c) => c.id === carId)
+      if (!car || car.status !== 'available' || !car.floored) return
+      if (s.cash < car.cost) return notify('Not enough cash to pay it off.')
+      set({
+        cash: s.cash - car.cost,
+        inventory: s.inventory.map((c) => (c === car ? { ...c, floored: false } : c)),
+      })
+      notify(`Paid off the ${carName(car.model)}.`)
+    },
     devRestock: (canPlace) => {
-      const inventory = restock(get().inventory, canPlace)
+      // A sold car's space may since have been ordered into.
+      const { orders } = get()
+      const inventory = restock(
+        get().inventory,
+        (car) => !claimedByOrder(car.rect, orders) && (canPlace?.(car) ?? true),
+      )
       if (inventory !== get().inventory) set({ inventory })
     },
     devSpawnCustomers: (n) => {
@@ -627,7 +722,7 @@ export const useGame = create<GameState>((set, get) => {
       const arrived = Array.from({ length: n }, () =>
         generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
       )
-      set({ dayStats: { ...s.dayStats, visitors: s.dayStats.visitors + n } })
+      set({ dayStats: tallyMissed({ ...s.dayStats, visitors: s.dayStats.visitors + n }, arrived) })
       commit([...s.customers, ...arrived])
     },
     walkIn: (variant) => {
@@ -641,11 +736,10 @@ export const useGame = create<GameState>((set, get) => {
       const id = `customer-${nextCustomerId++}`
       const c = generateCustomer(id, availableCars(s.inventory), walkInRng, { variant, archetype })
       set({
-        dayStats: {
-          ...s.dayStats,
-          visitors: s.dayStats.visitors + 1,
-          walkIns: s.dayStats.walkIns + 1,
-        },
+        dayStats: tallyMissed(
+          { ...s.dayStats, visitors: s.dayStats.visitors + 1, walkIns: s.dayStats.walkIns + 1 },
+          [c],
+        ),
       })
       commit([...s.customers, c])
       return id
@@ -770,7 +864,17 @@ export const useGame = create<GameState>((set, get) => {
       } else notify(`You let ${e.name} go.`)
     },
     dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
-    toggleStaffPanel: (open) => set((s) => ({ staffOpen: open ?? !s.staffOpen })),
+    // The staff and stock panels share the left edge, so one closes the other.
+    toggleStaffPanel: (open) =>
+      set((s) => {
+        const staffOpen = open ?? !s.staffOpen
+        return { staffOpen, stockOpen: staffOpen ? false : s.stockOpen }
+      }),
+    toggleStockPanel: (open) =>
+      set((s) => {
+        const stockOpen = open ?? !s.stockOpen
+        return { stockOpen, staffOpen: stockOpen ? false : s.staffOpen }
+      }),
     toggleHelp: (open) => set((s) => ({ helpOpen: open ?? !s.helpOpen })),
     toggleControls: (open) => set((s) => ({ controlsOpen: open ?? !s.controlsOpen })),
     setRotatePrompt: (rotatePrompt) => set({ rotatePrompt }),
@@ -784,7 +888,13 @@ export const useGame = create<GameState>((set, get) => {
     loadGame: (save) => {
       // Only offered before the clock has run, so there are no customers,
       // actions or panels to clear.
-      set({ screen: 'playing', cash: save.cash, inventory: save.inventory, roster: save.roster })
+      set({
+        screen: 'playing',
+        cash: save.cash,
+        inventory: save.inventory,
+        roster: save.roster,
+        orders: save.orders,
+      })
       beginDay(save.day + 1)
     },
   }

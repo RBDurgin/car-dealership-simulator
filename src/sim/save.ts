@@ -1,5 +1,7 @@
 import type { GameTime } from './clock'
 import { COST_FRACTION, type InventoryCar } from './inventory'
+import { DISPLAY_CARS, PARKING_SPACES } from './layout'
+import type { Order } from './ordering'
 import type { Employee } from './staff'
 
 /**
@@ -8,9 +10,10 @@ import type { Employee } from './staff'
  * rebuilt from its number when it starts. Bump the version whenever a saved
  * type (`InventoryCar`, `Employee`) changes shape, and add an entry to
  * `UPGRADES` that brings the previous version up to date. Saves older than the
- * upgrade chain reaches are ignored.
+ * upgrade chain reaches are ignored. Orders placed during the day are kept and
+ * delivered on the morning the save resumes.
  */
-export const SAVE_VERSION = 3
+export const SAVE_VERSION = 4
 
 export interface SaveData {
   version: number
@@ -21,6 +24,8 @@ export interface SaveData {
   cash: number
   inventory: InventoryCar[]
   roster: Employee[]
+  /** Cars ordered, to be delivered on the morning the save resumes. */
+  orders: Order[]
 }
 
 export interface SaveSource {
@@ -28,6 +33,7 @@ export interface SaveSource {
   cash: number
   inventory: InventoryCar[]
   roster: Employee[]
+  orders: Order[]
 }
 
 /** A save of the day that just ended. The fired are gone and everyone else is off for the night. */
@@ -39,6 +45,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     cash: s.cash,
     inventory: s.inventory,
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off' })),
+    orders: s.orders,
   }
 }
 
@@ -63,6 +70,16 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
         )
       : raw.inventory,
   }),
+  // v4: cars know when they arrived and whether they're floored, and orders are saved.
+  3: (raw) => ({
+    ...raw,
+    inventory: Array.isArray(raw.inventory)
+      ? raw.inventory.map((c: unknown) =>
+          isObject(c) ? { ...c, arrivedDay: 1, floored: false } : c,
+        )
+      : raw.inventory,
+    orders: [],
+  }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -84,10 +101,11 @@ function upgrade(raw: RawSave): RawSave | null {
 export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
-  const { savedAt, day, cash, inventory, roster } = raw
+  const { savedAt, day, cash, inventory, roster, orders } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
+  if (!Array.isArray(orders) || !orders.every(isOrder)) return null
   return raw as unknown as SaveData
 }
 
@@ -99,6 +117,8 @@ function isCar(v: unknown): boolean {
     isNumber(v.msrp) &&
     isNumber(v.cost) &&
     isNumber(v.cleanliness) &&
+    isNumber(v.arrivedDay) &&
+    typeof v.floored === 'boolean' &&
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold')
   )
@@ -113,4 +133,23 @@ function isEmployee(v: unknown): boolean {
     isNumber(v.wage) &&
     isNumber(v.skill)
   )
+}
+
+function isOrder(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.model === 'string' &&
+    isNumber(v.cost) &&
+    (v.financing === 'cash' || v.financing === 'floor') &&
+    isObject(v.slot) &&
+    isSlot(v.slot.location, v.slot.index) &&
+    isNumber(v.day)
+  )
+}
+
+function isSlot(location: unknown, index: unknown): boolean {
+  const count =
+    location === 'showroom' ? DISPLAY_CARS.length : location === 'lot' ? PARKING_SPACES.length : 0
+  return Number.isInteger(index) && (index as number) >= 0 && (index as number) < count
 }

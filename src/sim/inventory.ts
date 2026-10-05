@@ -28,6 +28,10 @@ export interface InventoryCar {
   status: CarStatus
   /** 1 just washed, 0 filthy (see `sim/cleanliness`). */
   cleanliness: number
+  /** The day it arrived on the lot: 1 for the opening stock. */
+  arrivedDay: number
+  /** Bought on the floor plan: the bank is owed its cost until it's sold or paid off. */
+  floored: boolean
 }
 
 /** List price per model before per-car variation (trim, options). */
@@ -47,9 +51,10 @@ export const MSRP_VARIATION = 0.05
 /** A car's dealer cost is between these fractions of its MSRP. */
 export const COST_FRACTION = { min: 0.86, max: 0.92 }
 
-const roundTo100 = (n: number) => Math.round(n / 100) * 100
+export const roundTo100 = (n: number) => Math.round(n / 100) * 100
 
-function rollMsrp(model: CarModel, rng: Rng): number {
+/** A car's sticker price: its model's base price, give or take `MSRP_VARIATION`. */
+export function rollMsrp(model: CarModel, rng: Rng): number {
   const factor = 1 + (rng.next() * 2 - 1) * MSRP_VARIATION
   return roundTo100(BASE_MSRP[model] * factor)
 }
@@ -59,7 +64,7 @@ function rollCost(msrp: number, rng: Rng): number {
   return roundTo100(msrp * (min + rng.next() * (max - min)))
 }
 
-type Uncosted = Omit<InventoryCar, 'cost'>
+type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored'>
 
 /**
  * Opening stock: the showroom displays plus the lot cars, priced from `rng`.
@@ -92,7 +97,12 @@ export function buildInventory(rng: Rng): InventoryCar[] {
       cleanliness: 1,
     }
   })
-  return [...display, ...lot].map((c) => ({ ...c, cost: rollCost(c.msrp, rng) }))
+  return [...display, ...lot].map((c) => ({
+    ...c,
+    cost: rollCost(c.msrp, rng),
+    arrivedDay: 1,
+    floored: false,
+  }))
 }
 
 export function availableCars(inventory: readonly InventoryCar[]): InventoryCar[] {
@@ -123,6 +133,11 @@ export function sellCar(inventory: InventoryCar[], id: string): InventoryCar[] {
   const car = inventory.find((c) => c.id === id)
   if (!car || car.status !== 'available') return inventory
   return inventory.map((c) => (c === car ? { ...c, status: 'sold' } : c))
+}
+
+/** Cars still in stock, dropping the sold ones. Returns the same array if none were sold. */
+export function dropSold(inventory: InventoryCar[]): InventoryCar[] {
+  return inventory.some((c) => c.status === 'sold') ? availableCars(inventory) : inventory
 }
 
 /**
