@@ -128,6 +128,10 @@ interface GameState {
   staffOpen: boolean
   /** The how-to-play guide is open; the clock and the player wait while it is. */
   helpOpen: boolean
+  /** The controls hint lists its keys (or gestures); collapsed it's just a header. */
+  controlsOpen: boolean
+  /** A touch device is held upright: the game waits behind a "rotate your device" prompt. */
+  rotatePrompt: boolean
   /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
   timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
@@ -146,6 +150,8 @@ interface GameState {
   cancelAll: () => void
   /** The player walked off (WASD or a button): stops everything and ends any conversation. */
   walkAway: () => void
+  /** From the customer panel: stops the player and tells a buyer in tow to wait. */
+  letWait: () => void
   closeInspect: () => void
   showNotice: (text: string) => void
   clearNotice: (id: number) => void
@@ -189,6 +195,8 @@ interface GameState {
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
   toggleHelp: (open?: boolean) => void
+  toggleControls: (open?: boolean) => void
+  setRotatePrompt: (on: boolean) => void
   cycleTimeScale: () => void
   /** From the title screen: plays the fresh day 1 the store starts with. */
   newGame: () => void
@@ -211,9 +219,12 @@ let staffRng: Rng = createRng(STAFF_SEED + 1)
 /** Passers-by who walk in. Apart from `customerRng`, as they turn up on frames, not clock steps. */
 let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
 
-/** Time stands still and the player can't move behind the title screen or the guide. */
-export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen'>): boolean {
-  return s.screen === 'title' || s.helpOpen
+/**
+ * Time stands still and the player can't move behind the title screen, the
+ * guide or the rotate-your-device prompt.
+ */
+export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt'>): boolean {
+  return s.screen === 'title' || s.helpOpen || s.rotatePrompt
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -491,6 +502,8 @@ export const useGame = create<GameState>((set, get) => {
     owner: null,
     staffOpen: false,
     helpOpen: false,
+    controlsOpen: true,
+    rotatePrompt: false,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
@@ -546,6 +559,11 @@ export const useGame = create<GameState>((set, get) => {
       dispatch({ type: 'cancel' })
       set({ moveOrder: null })
       endDeal(CONVERSATION_PHASES)
+    },
+    letWait: () => {
+      dispatch({ type: 'cancel' })
+      set({ moveOrder: null })
+      endDeal(DEAL_PHASES, (name) => `${name} will wait for you.`)
     },
     closeInspect: () => set({ inspectedId: null }),
     showNotice: (text) => set({ notice: { id: nextNoticeId++, text } }),
@@ -752,6 +770,8 @@ export const useGame = create<GameState>((set, get) => {
     dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
     toggleStaffPanel: (open) => set((s) => ({ staffOpen: open ?? !s.staffOpen })),
     toggleHelp: (open) => set((s) => ({ helpOpen: open ?? !s.helpOpen })),
+    toggleControls: (open) => set((s) => ({ controlsOpen: open ?? !s.controlsOpen })),
+    setRotatePrompt: (rotatePrompt) => set({ rotatePrompt }),
     cycleTimeScale: () =>
       set((s) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])

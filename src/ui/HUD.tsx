@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { PLAYER_ID } from '../sim/customers'
 import { dealCustomer } from '../sim/deal'
 import { ACTIONS } from '../sim/interactables'
@@ -10,9 +11,11 @@ import { CustomerPanel } from './CustomerPanel'
 import { DaySummary } from './DaySummary'
 import { HowToPlay } from './HowToPlay'
 import { InfoPanel } from './InfoPanel'
+import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
 import { TitleScreen } from './TitleScreen'
 import { TopBar } from './TopBar'
+import { ViewControls } from './ViewControls'
 import './hud.css'
 
 const NOTICE_MS = 2200
@@ -20,6 +23,7 @@ const NOTICE_MS = 2200
 function ActionStatus() {
   const action = useGame((s) => s.activeAction)
   const dealName = useGame((s) => dealCustomer(s.customers, PLAYER_ID)?.name)
+  const touch = useMediaQuery(COARSE)
   const it = action && findInteractable(action.targetId)
   if (!action || !it) return null
 
@@ -31,9 +35,19 @@ function ActionStatus() {
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
   else if (action.action === 'handOff' && dealName) label = `Taking ${dealName} to finance`
   else label = `Heading to ${person ? it.name : it.name.toLowerCase()}`
-  const hint = def.mode === 'hold' && performing ? 'Esc or move to stand up' : 'Esc to cancel'
+  const cancel = touch ? 'Tap ✕' : 'Esc'
+  const hint =
+    def.mode === 'hold' && performing ? `${cancel} or move to stand up` : `${cancel} to cancel`
   return (
     <div className="panel status">
+      <button
+        className="close status-cancel"
+        aria-label="Cancel"
+        title="Cancel (Esc)"
+        onClick={() => useGame.getState().cancelAll()}
+      >
+        ✕
+      </button>
       <div className="status-label">{label}</div>
       {performing && def.mode === 'timed' && (
         <div className="progress">
@@ -90,7 +104,10 @@ export function HUD() {
   return (
     <div className="hud">
       <TopBar />
-      <ControlsHint />
+      <div className="hud-corner">
+        <ViewControls />
+        <ControlsHint />
+      </div>
       <ActionStatus />
       <NoticeToast />
       <InfoPanel />
@@ -100,6 +117,7 @@ export function HUD() {
       <DaySummary />
       <TitleScreen />
       <HowToPlay />
+      <RotatePrompt />
     </div>
   )
 }

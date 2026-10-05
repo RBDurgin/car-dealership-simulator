@@ -1,3 +1,4 @@
+import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { ARCHETYPES } from '../sim/archetypes'
 import { PLAYER_ID } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
@@ -15,6 +16,7 @@ export function CustomerPanel() {
   const c = useGame((s) => dealCustomer(s.customers, PLAYER_ID))
   const finance = useGame((s) => !!financeOnDuty(s.roster))
   const car = useGame((s) => s.inventory.find((x) => x.id === (c?.offer?.carId ?? c?.targetCarId)))
+  const touch = useMediaQuery(COARSE)
   if (!c || !car) return null
 
   const game = useGame.getState()
@@ -48,15 +50,20 @@ export function CustomerPanel() {
         <div className="customer-status">
           {finance ? (
             <>
-              Agreed to buy! Click your finance manager at the office desk and choose{' '}
-              <b>Hand off to finance</b>.
+              Agreed to buy! {touch ? 'Tap' : 'Click'} your finance manager at the office desk and
+              choose <b>Hand off to finance</b>.
             </>
           ) : (
             <>
               Agreed to buy! Take them to your desk chair and choose <b>Close deal</b>.
             </>
           )}
-          <div className="status-hint">Esc when idle lets them wait</div>
+          <div className="customer-actions">
+            <button className="btn btn-small" onClick={() => game.letWait()}>
+              Let them wait
+            </button>
+          </div>
+          {!touch && <div className="status-hint">Esc when idle also lets them wait</div>}
         </div>
       )}
       {c.phase === 'signing' && <div className="customer-status">Signing the paperwork…</div>}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { canHire, MAX_SKILL, ROLE_LABELS, type Employee, type StaffStatus } from '../sim/staff'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -42,6 +43,7 @@ export function StaffPanel() {
   const open = useGame((s) => s.staffOpen)
   const roster = useGame((s) => s.roster)
   const candidates = useGame((s) => s.candidates)
+  const touch = useMediaQuery(COARSE)
   if (!open) return null
 
   const game = useGame.getState()
@@ -90,7 +92,9 @@ export function StaffPanel() {
           })}
         </ul>
       )}
-      <div className="status-hint">Wages are paid at closing. H or Esc to close.</div>
+      <div className="status-hint">
+        Wages are paid at closing.{touch ? '' : ' H or Esc to close.'}
+      </div>
     </div>
   )
 }

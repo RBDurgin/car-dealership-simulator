@@ -49,3 +49,28 @@ export function startAutosave(): () => void {
     if (changed) writeSave(createSave(s, Date.now()))
   })
 }
+
+const CONTROLS_KEY = 'car-dealership-simulator.controlsOpen'
+
+/**
+ * Opens or collapses the controls hint as this device last left it (or as
+ * `fallback` says on a first visit), then remembers each toggle. Kept apart
+ * from the save slot: it's a per-device preference, not game progress.
+ */
+export function startControlsPref(fallback: boolean): () => void {
+  let saved: string | null = null
+  try {
+    saved = localStorage.getItem(CONTROLS_KEY)
+  } catch {
+    // No storage: use the fallback.
+  }
+  useGame.getState().toggleControls(saved === null ? fallback : saved === '1')
+  return useGame.subscribe((s, prev) => {
+    if (s.controlsOpen === prev.controlsOpen) return
+    try {
+      localStorage.setItem(CONTROLS_KEY, s.controlsOpen ? '1' : '0')
+    } catch {
+      // Not remembered; it still toggles.
+    }
+  })
+}

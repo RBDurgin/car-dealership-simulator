@@ -167,6 +167,15 @@ describe('walking away from a deal', () => {
     expect(game().notice?.text).toMatch(/wait/)
   })
 
+  it('Let them wait stops the walk and lets the follower wait at once', () => {
+    greetAndOffer()
+    game().issueMoveOrder(3, 4)
+    game().letWait()
+    expect(game().moveOrder).toBeNull()
+    expect(customer()?.phase).toBe('waiting')
+    expect(game().notice?.text).toMatch(/wait/)
+  })
+
   it('greeting someone else drops the current deal', () => {
     greetAndOffer()
     game().requestAction('customer-b', 'greet')

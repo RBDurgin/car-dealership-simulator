@@ -41,3 +41,16 @@ describe('how-to-play guide', () => {
     expect(game().menu).not.toBeNull()
   })
 })
+
+describe('rotate-your-device prompt', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  it('pauses the game while it shows', () => {
+    game().newGame()
+    game().toggleHelp(false)
+    game().setRotatePrompt(true)
+    expect(isPaused(game())).toBe(true)
+    game().setRotatePrompt(false)
+    expect(isPaused(game())).toBe(false)
+  })
+})

@@ -16,3 +16,14 @@ export const CONTROLS: [string, string][] = [
       ] as [string, string][])
     : []),
 ]
+
+/** The same for a touch screen, where the on-screen buttons stand in for keys. */
+export const TOUCH_CONTROLS: [string, string][] = [
+  ['Tap', 'Move / interact / greet'],
+  ['Pinch', 'Zoom'],
+  ['⟲ ⟳', 'Rotate view'],
+  ['Staff', 'Staff'],
+  ['Walls', 'Wall mode'],
+  ['✕', 'Cancel'],
+  ['?', 'How to play'],
+]

@@ -1,3 +1,4 @@
+import { COARSE, COMPACT, useMediaQuery } from '../input/useMediaQuery'
 import { useEffect, useRef } from 'react'
 import { actionBlocker } from '../sim/deal'
 import { ACTIONS, type ActionId, type Interactable } from '../sim/interactables'
@@ -6,7 +7,11 @@ import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
 const RADIUS = 58
+/** Fingers need taller buttons (`hud.css`), so the ring spreads out to fit them. */
+const TOUCH_RADIUS = 72
 const MARGIN = 90
+/** A landscape phone is only ~375px tall: keep the ring nearer the edges. */
+const COMPACT_MARGIN = 70
 
 /** Button text: offers name their price. */
 function labelFor(action: ActionId, it: Interactable): string {
@@ -27,6 +32,8 @@ export function ActionMenu() {
   // And when a car is sold or washed.
   const inventory = useGame((s) => s.inventory)
   const ref = useRef<HTMLDivElement>(null)
+  const radius = useMediaQuery(COARSE) ? TOUCH_RADIUS : RADIUS
+  const margin = useMediaQuery(COMPACT) ? COMPACT_MARGIN : MARGIN
 
   // Any press outside the menu closes it. Capture phase, so it runs before the
   // canvas handlers and a click on another object can open a fresh menu.
@@ -42,8 +49,8 @@ export function ActionMenu() {
   const it = menu && findInteractable(menu.targetId)
   if (!menu || !it || it.actions.length === 0) return null
 
-  const x = Math.min(Math.max(menu.x, MARGIN), window.innerWidth - MARGIN)
-  const y = Math.min(Math.max(menu.y, MARGIN), window.innerHeight - MARGIN)
+  const x = Math.min(Math.max(menu.x, margin), window.innerWidth - margin)
+  const y = Math.min(Math.max(menu.y, margin), window.innerHeight - margin)
   const n = it.actions.length
   return (
     <div ref={ref} className="pie" style={{ left: x, top: y }}>
@@ -57,7 +64,7 @@ export function ActionMenu() {
           <button
             key={id}
             className={blocked ? 'pie-item pie-item-blocked' : 'pie-item'}
-            style={{ left: Math.cos(angle) * RADIUS, top: Math.sin(angle) * RADIUS }}
+            style={{ left: Math.cos(angle) * radius, top: Math.sin(angle) * radius }}
             aria-disabled={blocked}
             onClick={() => useGame.getState().requestAction(it.id, id)}
           >
