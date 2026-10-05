@@ -16,6 +16,7 @@ import {
 } from './interactables'
 import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
+import type { Source } from './marketing'
 import type { OwnerVerdict } from './owner'
 import { financeOnDuty, type Employee } from './staff'
 
@@ -207,6 +208,8 @@ export interface Sale {
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
   commission: number
+  /** What brought the buyer in. */
+  source: Source
 }
 
 /** One day's results, for the end-of-day summary. */
@@ -214,6 +217,8 @@ export interface DayStats {
   visitors: number
   /** Of the visitors, passers-by who wandered in off the sidewalk. */
   walkIns: number
+  /** Visitors by what brought them in. */
+  bySource: Partial<Record<Source, number>>
   sales: Sale[]
   /** Walk-outs by reason. Buyers are counted in `sales`. */
   refused: number
@@ -224,6 +229,8 @@ export interface DayStats {
   commissions: number
   /** Floor plan interest, charged with payroll. */
   interest: number
+  /** Spent on ad campaigns today (paid when bought). */
+  marketing: number
   /** Customers who found none of the body types they wanted, by their first choice. */
   missed: Partial<Record<CarModel, number>>
   /** Payroll has been paid for the day. */
@@ -236,6 +243,7 @@ export function emptyStats(): DayStats {
   return {
     visitors: 0,
     walkIns: 0,
+    bySource: {},
     sales: [],
     refused: 0,
     impatient: 0,
@@ -243,6 +251,7 @@ export function emptyStats(): DayStats {
     wages: 0,
     commissions: 0,
     interest: 0,
+    marketing: 0,
     missed: {},
     settled: false,
     owner: null,
@@ -263,15 +272,55 @@ export function grossProfit(stats: DayStats): number {
   return revenue(stats) - costOfSales(stats)
 }
 
-/** Gross profit less the day's staff costs and floor plan interest, plus any bonus from the owner. */
+/**
+ * Gross profit less the day's staff costs, floor plan interest and ad spend,
+ * plus any bonus from the owner.
+ */
 export function netIncome(stats: DayStats): number {
   return (
     grossProfit(stats) -
     stats.wages -
     stats.commissions -
-    stats.interest +
+    stats.interest -
+    stats.marketing +
     (stats.owner?.bonus ?? 0)
   )
+}
+
+/** Counts the new `arrived` customers as visitors, by what brought them in. */
+export function recordVisitors(stats: DayStats, arrived: readonly Customer[]): DayStats {
+  if (arrived.length === 0) return stats
+  const bySource = { ...stats.bySource }
+  for (const c of arrived) bySource[c.source] = (bySource[c.source] ?? 0) + 1
+  return {
+    ...stats,
+    visitors: stats.visitors + arrived.length,
+    walkIns: stats.walkIns + arrived.filter((c) => c.source === 'walk-in').length,
+    bySource,
+  }
+}
+
+/** One source's visitors and what they bought. */
+export interface SourceTally {
+  source: Source
+  visitors: number
+  cars: number
+  gross: number
+}
+
+/** The day's visitors and sales by what brought them in, busiest first. */
+export function salesBySource(stats: DayStats): SourceTally[] {
+  const tallies = new Map<Source, SourceTally>()
+  const tally = (source: Source) =>
+    tallies.get(source) ?? { source, visitors: 0, cars: 0, gross: 0 }
+  for (const [source, n] of Object.entries(stats.bySource) as [Source, number][]) {
+    tallies.set(source, { ...tally(source), visitors: n })
+  }
+  for (const s of stats.sales) {
+    const t = tally(s.source)
+    tallies.set(s.source, { ...t, cars: t.cars + 1, gross: t.gross + s.price - s.cost })
+  }
+  return [...tallies.values()].sort((a, b) => b.visitors - a.visitors)
 }
 
 /**

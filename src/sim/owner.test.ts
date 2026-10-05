@@ -28,6 +28,7 @@ const sale = (model: Sale['model'], price: number): Sale => ({
   soldBy: null,
   signedBy: null,
   commission: 0,
+  source: 'regular',
 })
 
 const withSales = (...sales: Sale[]): DayStats => ({ ...emptyStats(), sales })

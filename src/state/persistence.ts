@@ -34,7 +34,7 @@ export function clearSave(): void {
 
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
- * payroll is paid, then again for any hiring, firing or ordering from the day summary.
+ * payroll is paid, then again for any hiring, firing, ordering or advertising from the day summary.
  */
 export function startAutosave(): () => void {
   return useGame.subscribe((s, prev) => {
@@ -46,6 +46,7 @@ export function startAutosave(): () => void {
       s.cash !== prev.cash ||
       s.inventory !== prev.inventory ||
       s.orders !== prev.orders ||
+      s.campaigns !== prev.campaigns ||
       s.roster !== prev.roster
     if (changed) writeSave(createSave(s, Date.now()))
   })

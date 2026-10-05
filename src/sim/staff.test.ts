@@ -101,6 +101,7 @@ describe('payroll', () => {
       cost: 27_000,
       minute: 600,
       soldBy: null,
+      source: 'regular' as const,
     }
     const sales = [
       { ...sale, signedBy: null, commission: 0 },

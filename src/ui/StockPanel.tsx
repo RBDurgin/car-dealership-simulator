@@ -13,8 +13,9 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
-import { useGame } from '../state/store'
+import { useGame, type ComputerTab } from '../state/store'
 import { formatMoney } from './format'
+import { MarketingTab } from './MarketingTab'
 
 const WHERE = { showroom: 'Showroom', lot: 'Lot' } as const
 
@@ -146,20 +147,61 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
 }
 
 /**
- * Buying stock from the manufacturer: the catalog, today's orders and the cars
- * in stock. Opened at the office computer, from the top bar or with I. Orders
- * are delivered the next morning.
+ * The office computer: buying stock from the manufacturer (the catalog,
+ * today's orders and the cars in stock) and, on the marketing tab, ad
+ * campaigns. Opened at the computer, from the top bar's Office button, or with I and M.
+ * Orders are delivered the next morning.
  */
 export function StockPanel() {
   const open = useGame((s) => s.stockOpen)
+  const tab = useGame((s) => s.computerTab)
+  const touch = useMediaQuery(COARSE)
+  if (!open) return null
+  const show = (t: ComputerTab) => useGame.getState().toggleStockPanel(true, t)
+  return (
+    <div className="panel staff-panel stock-panel" role="dialog" aria-label="Office computer">
+      <button
+        className="close"
+        aria-label="Close"
+        onClick={() => useGame.getState().toggleStockPanel(false)}
+      >
+        ×
+      </button>
+      <div className="info-kicker">Office computer</div>
+      <div className="panel-tabs" role="tablist">
+        {TABS.map(([t, label]) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            className={tab === t ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            onClick={() => show(t)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'stock' ? <StockTab /> : <MarketingTab />}
+      <div className="status-hint">
+        {tab === 'stock' ? 'Orders arrive tomorrow morning.' : 'Campaigns start tomorrow morning.'}
+        {touch ? '' : ` ${tab === 'stock' ? 'I' : 'M'} or Esc to close.`}
+      </div>
+    </div>
+  )
+}
+
+const TABS: [ComputerTab, string][] = [
+  ['stock', 'Stock'],
+  ['marketing', 'Marketing'],
+]
+
+function StockTab() {
   const cash = useGame((s) => s.cash)
   const day = useGame((s) => s.clock.day)
   const inventory = useGame((s) => s.inventory)
   const orders = useGame((s) => s.orders)
   const missedToday = useGame((s) => s.dayStats.missed)
   const missedYesterday = useGame((s) => s.missedYesterday)
-  const touch = useMediaQuery(COARSE)
-  if (!open) return null
 
   const book = { cash, inventory, orders }
   const free = freeSlots(inventory, orders)
@@ -172,15 +214,7 @@ export function StockPanel() {
     (a, b) => Number(a.location === 'lot') - Number(b.location === 'lot'),
   )
   return (
-    <div className="panel staff-panel stock-panel" role="dialog" aria-label="Stock">
-      <button
-        className="close"
-        aria-label="Close"
-        onClick={() => useGame.getState().toggleStockPanel(false)}
-      >
-        ×
-      </button>
-      <div className="info-kicker">Stock</div>
+    <>
       <h2>Order from the manufacturer</h2>
       <dl className="stock-summary">
         <dt>Cash</dt>
@@ -233,9 +267,6 @@ export function StockPanel() {
           ))}
         </ul>
       )}
-      <div className="status-hint">
-        Orders arrive tomorrow morning.{touch ? '' : ' I or Esc to close.'}
-      </div>
-    </div>
+    </>
   )
 }

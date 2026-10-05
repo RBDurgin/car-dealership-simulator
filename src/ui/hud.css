@@ -559,6 +559,11 @@ kbd {
 .stock-panel {
   width: min(460px, calc(100vw - var(--edge-l) - var(--edge-r)));
 }
+.panel-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
 .stock-who .staff-name {
   white-space: nowrap;
 }
@@ -816,6 +821,13 @@ kbd {
 }
 .how-to-play p {
   margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+.how-to-play ul {
+  margin: 4px 0;
+  padding-left: 18px;
   font-size: 13px;
   line-height: 1.45;
   opacity: 0.85;

@@ -1,5 +1,6 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
+import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
@@ -92,10 +93,10 @@ export function HowToPlay() {
             Sold cars leave empty spaces. Order new ones at the office computer (
             {click.toLowerCase()} the screen on your desk and choose <b>Order stock</b>),{' '}
             {touch ? (
-              <>or tap Stock</>
+              <>or tap Office</>
             ) : (
               <>
-                press <kbd>I</kbd> or click Stock
+                press <kbd>I</kbd> or click Office
               </>
             )}
             . Cars ordered today are delivered the next morning, showroom platforms first, then the
@@ -112,6 +113,38 @@ export function HowToPlay() {
           <p>
             Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
             the day summary and the stock panel. Order what people are asking for.
+          </p>
+        </section>
+        <section>
+          <h3>Advertising</h3>
+          <p>
+            More visitors means more sales. Book an ad campaign on the office computer&apos;s{' '}
+            <b>Marketing</b> tab ({click.toLowerCase()} the screen and choose <b>Marketing</b>
+            {touch ? (
+              <>, or tap Office and switch tabs</>
+            ) : (
+              <>
+                , or press <kbd>M</kbd>
+              </>
+            )}
+            ). You pay up front, and the campaign brings extra visitors every day it runs, starting
+            tomorrow morning. Each channel draws its own crowd:
+          </p>
+          <ul>
+            {CHANNEL_IDS.map((id) => {
+              const c = CHANNELS[id]
+              return (
+                <li key={id}>
+                  <b>{c.label}</b>: {formatMoney(c.cost)} for {c.days} days, about {c.visitors}{' '}
+                  extra a day. {c.reaches}.
+                </li>
+              )
+            })}
+          </ul>
+          <p>
+            Booking the same channel again while it runs brings fewer extra visitors the second
+            time. The day summary takes the ad spend off the net on the day you pay, and shows how
+            many visitors each source brought and what they bought, so you can see which ads pay.
           </p>
         </section>
         <section>

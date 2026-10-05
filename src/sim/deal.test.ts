@@ -20,13 +20,17 @@ import {
   recordDepartures,
   missedSummary,
   recordMissed,
+  recordVisitors,
   revenue,
   salesBySeller,
+  salesBySource,
+  type Sale,
   walkOuts,
 } from './deal'
 import { Grid } from './grid'
 import { buildInventory } from './inventory'
 import { GUEST_CHAIR_ID } from './layout'
+import type { Source } from './marketing'
 import { createRng } from './rng'
 import type { Employee } from './staff'
 
@@ -47,6 +51,7 @@ const base: Customer = {
   name: 'Alex B.',
   variant: 'male-a',
   archetype: 'regular',
+  source: 'regular',
   companion: null,
   budget: 41_500,
   preferredModels: ['sedan'],
@@ -242,7 +247,7 @@ describe('day stats', () => {
     expect(stats.closing).toBe(1)
   })
 
-  const sale = (price: number, cost = 0) => ({
+  const sale = (price: number, cost = 0, source: Source = 'regular'): Sale => ({
     customerName: 'A',
     carId: 'x',
     model: 'sedan' as const,
@@ -253,6 +258,7 @@ describe('day stats', () => {
     soldBy: null,
     signedBy: null,
     commission: 0,
+    source,
   })
 
   it('adds up revenue, cost and gross profit', () => {
@@ -264,16 +270,42 @@ describe('day stats', () => {
     expect(grossProfit(emptyStats())).toBe(0)
   })
 
-  it('nets gross profit less staff costs and interest, plus the owner bonus', () => {
+  it('nets gross profit less staff costs, interest and ads, plus the owner bonus', () => {
     const stats = {
       ...emptyStats(),
       sales: [sale(30_000, 27_000)],
       wages: 400,
       commissions: 750,
       interest: 160,
+      marketing: 1_200,
       owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
-    expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 + 1_500)
+    expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 - 1_200 + 1_500)
+  })
+
+  it('counts visitors by what brought them in', () => {
+    const stats = recordVisitors(emptyStats(), [
+      base,
+      { ...base, source: 'tv' },
+      { ...base, source: 'tv' },
+      { ...base, source: 'walk-in' },
+    ])
+    expect(stats).toMatchObject({ visitors: 4, walkIns: 1 })
+    expect(stats.bySource).toEqual({ regular: 1, tv: 2, 'walk-in': 1 })
+    const none = emptyStats()
+    expect(recordVisitors(none, [])).toBe(none)
+  })
+
+  it('tallies visitors, cars and gross by source, busiest first', () => {
+    const stats = {
+      ...emptyStats(),
+      bySource: { regular: 2, tv: 3 },
+      sales: [sale(30_000, 27_000, 'tv'), sale(20_000, 18_000, 'tv'), sale(25_000, 22_000)],
+    }
+    expect(salesBySource(stats)).toEqual([
+      { source: 'tv', visitors: 3, cars: 2, gross: 5_000 },
+      { source: 'regular', visitors: 2, cars: 1, gross: 3_000 },
+    ])
   })
 
   it('tallies customers who find none of their body types in stock, by first choice', () => {
@@ -311,6 +343,7 @@ describe('day stats', () => {
       soldBy,
       signedBy: null,
       commission,
+      source: 'regular' as const,
     })
     const stats = {
       ...emptyStats(),

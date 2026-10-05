@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
 import { buildInventory } from './inventory'
+import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
@@ -24,6 +25,7 @@ const source = () => ({
   inventory: buildInventory(createRng(1)),
   roster: [employee('staff-1-1'), employee('staff-2-1', { fired: true })],
   orders: [order],
+  campaigns: [campaign, expired],
 })
 
 const order: Order = {
@@ -35,6 +37,10 @@ const order: Order = {
   day: 3,
 }
 
+// Bought on day 3, running days 4–6; and one that ended today.
+const campaign: Campaign = { id: 'tv-3-1', channel: 'tv', startDay: 4, endDay: 6 }
+const expired: Campaign = { id: 'online-1-1', channel: 'online', startDay: 1, endDay: 3 }
+
 describe('save data', () => {
   it('keeps the day, cash and inventory, drops the fired and sends everyone home', () => {
     const save = createSave(source(), 123)
@@ -42,6 +48,10 @@ describe('save data', () => {
     expect(save.inventory).toEqual(source().inventory)
     expect(save.roster.map((e) => [e.id, e.status])).toEqual([['staff-1-1', 'off']])
     expect(save.orders).toEqual([order])
+  })
+
+  it('keeps only the ad campaigns that carry on tomorrow', () => {
+    expect(createSave(source(), 123).campaigns).toEqual([campaign])
   })
 
   it('round-trips through JSON', () => {
@@ -55,6 +65,7 @@ describe('save data', () => {
       ...save,
       version: 2,
       orders: undefined,
+      campaigns: undefined,
       inventory: save.inventory.map((car) => ({
         ...car,
         cost: undefined,
@@ -63,7 +74,13 @@ describe('save data', () => {
       })),
     }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v2)))
-    expect(upgraded).toMatchObject({ version: SAVE_VERSION, day: 3, cash: 31_500, orders: [] })
+    expect(upgraded).toMatchObject({
+      version: SAVE_VERSION,
+      day: 3,
+      cash: 31_500,
+      orders: [],
+      campaigns: [],
+    })
     expect(upgraded?.roster).toEqual(save.roster)
     upgraded?.inventory.forEach((car, i) => {
       expect(car).toEqual({ ...save.inventory[i], cost: Math.round((car.msrp * 0.89) / 100) * 100 })
@@ -76,6 +93,7 @@ describe('save data', () => {
       ...save,
       version: 3,
       orders: undefined,
+      campaigns: undefined,
       inventory: save.inventory.map((car) => ({
         ...car,
         arrivedDay: undefined,
@@ -83,7 +101,13 @@ describe('save data', () => {
       })),
     }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v3)))
-    expect(upgraded).toEqual({ ...save, orders: [] })
+    expect(upgraded).toEqual({ ...save, orders: [], campaigns: [] })
+  })
+
+  it('upgrades a version 4 save with no ad campaigns', () => {
+    const save = createSave(source(), 123)
+    const v4 = { ...save, version: 4, campaigns: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v4)))).toEqual({ ...save, campaigns: [] })
   })
 
   it('rejects anything that is not a save of this version', () => {
@@ -108,5 +132,7 @@ describe('save data', () => {
     ).toBeNull()
     const { floored: ___, ...unfloored } = save.inventory[0]
     expect(parseSave({ ...save, inventory: [unfloored] })).toBeNull()
+    expect(parseSave({ ...save, campaigns: undefined })).toBeNull()
+    expect(parseSave({ ...save, campaigns: [{ ...campaign, channel: 'blimp' }] })).toBeNull()
   })
 })

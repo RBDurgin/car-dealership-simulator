@@ -4,7 +4,8 @@ import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
 
 /**
- * Day, time, cash, the owner's goal (on their days) and the stock and staff buttons.
+ * Day, time, cash, the owner's goal (on their days) and the office (stock and
+ * marketing) and staff buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {
@@ -28,7 +29,7 @@ export function TopBar() {
         aria-pressed={stockOpen}
         onClick={() => useGame.getState().toggleStockPanel()}
       >
-        Stock
+        Office
       </button>
       <button
         className={staffOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}

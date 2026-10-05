@@ -36,3 +36,14 @@ Some examples of marketing improvements: Newspaper ads, TV Ads, Larger sign, Wac
 ## Phase 8
 
 Background music + sound effects. Talking between characters shoud be incomprehencible gibberish, similar to characters in the sims talking.
+
+## Phase 9
+
+Introduce adversaries.
+
+Nazma: Disgruntled former employee that tries to ruin your business. Some examples are:
+
+- Making cars dirty (need to be washed again).
+- Stealing a car
+- Getting an employee to quit.
+  You can hire a security guard to help deter Nazma

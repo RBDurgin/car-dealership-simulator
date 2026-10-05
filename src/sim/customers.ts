@@ -2,6 +2,7 @@ import { ARCHETYPES, EXPECT_JITTER, pickArchetype, type Archetype } from './arch
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import { BASE_MSRP, type InventoryCar } from './inventory'
+import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
@@ -61,6 +62,8 @@ export interface Customer {
   variant: CustomerVariant
   /** What kind of shopper they are (see `ARCHETYPES`). */
   archetype: Archetype
+  /** What brought them in: an ad campaign, the sidewalk, or neither. */
+  source: Source
   /**
    * A couple's other half, who walks along with them in the world and has no
    * state of their own. Null for anyone shopping alone.
@@ -168,8 +171,10 @@ function pickBrowseCars(
 export interface CustomerOptions {
   /** Their look, e.g. a passer-by's who walked in. Random otherwise. */
   variant?: CustomerVariant
-  /** What kind of shopper they are. Random (weighted) otherwise. */
+  /** What kind of shopper they are. Random (weighted, skewed by `source`) otherwise. */
   archetype?: Archetype
+  /** What brought them in. 'regular' by default. */
+  source?: Source
 }
 
 /**
@@ -182,7 +187,8 @@ export function generateCustomer(
   rng: Rng,
   opts: CustomerOptions = {},
 ): Customer {
-  const archetype = opts.archetype ?? pickArchetype(rng)
+  const source = opts.source ?? 'regular'
+  const archetype = opts.archetype ?? pickArchetype(rng, sourceWeights(source))
   const traits = ARCHETYPES[archetype]
   const name = randomName(rng)
   const variant = opts.variant ?? rng.pick(CUSTOMER_VARIANTS)
@@ -205,6 +211,7 @@ export function generateCustomer(
     name,
     variant,
     archetype,
+    source,
     companion,
     budget,
     preferredModels,

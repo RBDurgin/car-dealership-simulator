@@ -1,6 +1,7 @@
 import type { GameTime } from './clock'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
+import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import type { Order } from './ordering'
 import type { Employee } from './staff'
 
@@ -11,9 +12,10 @@ import type { Employee } from './staff'
  * type (`InventoryCar`, `Employee`) changes shape, and add an entry to
  * `UPGRADES` that brings the previous version up to date. Saves older than the
  * upgrade chain reaches are ignored. Orders placed during the day are kept and
- * delivered on the morning the save resumes.
+ * delivered on the morning the save resumes, and ad campaigns that haven't
+ * finished carry on.
  */
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 5
 
 export interface SaveData {
   version: number
@@ -26,6 +28,8 @@ export interface SaveData {
   roster: Employee[]
   /** Cars ordered, to be delivered on the morning the save resumes. */
   orders: Order[]
+  /** Ad campaigns still running (or starting) the morning the save resumes. */
+  campaigns: Campaign[]
 }
 
 export interface SaveSource {
@@ -34,6 +38,7 @@ export interface SaveSource {
   inventory: InventoryCar[]
   roster: Employee[]
   orders: Order[]
+  campaigns: Campaign[]
 }
 
 /** A save of the day that just ended. The fired are gone and everyone else is off for the night. */
@@ -46,6 +51,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     inventory: s.inventory,
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off' })),
     orders: s.orders,
+    campaigns: unfinished(s.campaigns, s.clock.day + 1),
   }
 }
 
@@ -80,6 +86,8 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
       : raw.inventory,
     orders: [],
   }),
+  // v5: ad campaigns.
+  4: (raw) => ({ ...raw, campaigns: [] }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -101,11 +109,12 @@ function upgrade(raw: RawSave): RawSave | null {
 export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
-  const { savedAt, day, cash, inventory, roster, orders } = raw
+  const { savedAt, day, cash, inventory, roster, orders, campaigns } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
   if (!Array.isArray(orders) || !orders.every(isOrder)) return null
+  if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
   return raw as unknown as SaveData
 }
 
@@ -145,6 +154,16 @@ function isOrder(v: unknown): boolean {
     isObject(v.slot) &&
     isSlot(v.slot.location, v.slot.index) &&
     isNumber(v.day)
+  )
+}
+
+function isCampaign(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    CHANNEL_IDS.includes(v.channel as Campaign['channel']) &&
+    isNumber(v.startDay) &&
+    isNumber(v.endDay)
   )
 }
 

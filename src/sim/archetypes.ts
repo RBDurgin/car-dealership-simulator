@@ -87,11 +87,15 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
 
 const ALL = Object.keys(ARCHETYPES) as Archetype[]
 
-/** A random archetype, weighted by `ARCHETYPES[a].weight`. */
-export function pickArchetype(rng: Rng): Archetype {
-  let r = rng.next() * ALL.reduce((sum, a) => sum + ARCHETYPES[a].weight, 0)
+/**
+ * A random archetype, weighted by `weights` (an ad's skew, see
+ * `sourceWeights`) or by default `ARCHETYPES[a].weight`.
+ */
+export function pickArchetype(rng: Rng, weights?: Record<Archetype, number>): Archetype {
+  const weight = (a: Archetype) => weights?.[a] ?? ARCHETYPES[a].weight
+  let r = rng.next() * ALL.reduce((sum, a) => sum + weight(a), 0)
   for (const a of ALL) {
-    r -= ARCHETYPES[a].weight
+    r -= weight(a)
     if (r < 0) return a
   }
   return ALL[ALL.length - 1]

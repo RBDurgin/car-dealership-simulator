@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { OPEN_MINUTE } from './clock'
 import { createRng } from './rng'
-import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, VISITORS_PER_DAY } from './spawner'
+import {
+  LAST_ARRIVAL_MINUTE,
+  planArrivals,
+  takeDue,
+  VISITORS_PER_DAY,
+  type ArrivalSchedule,
+} from './spawner'
 
 describe('planArrivals', () => {
   it('plans 4–7 sorted arrivals within business hours', () => {
@@ -35,27 +41,50 @@ describe('planArrivals', () => {
   it('is deterministic for a seed', () => {
     expect(planArrivals(createRng(3))).toEqual(planArrivals(createRng(3)))
   })
+
+  it('tags the usual visitors as regular traffic', () => {
+    const { minutes, sources } = planArrivals(createRng(5))
+    expect(sources).toEqual(minutes.map(() => 'regular'))
+  })
+
+  it('adds campaign visitors on top, rolling the fractions', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      const plain = planArrivals(createRng(seed))
+      const boosted = planArrivals(createRng(seed), { tv: 3, newspaper: 1.5 })
+      const count = (s: string) => boosted.sources.filter((x) => x === s).length
+      // The usual visitors are planned first, from the same draws.
+      expect(count('regular')).toBe(plain.minutes.length)
+      expect(count('tv')).toBe(3)
+      expect([1, 2]).toContain(count('newspaper'))
+      expect(boosted.minutes).toEqual([...boosted.minutes].sort((a, b) => a - b))
+      expect(boosted.minutes.every((m) => m <= LAST_ARRIVAL_MINUTE)).toBe(true)
+    }
+  })
 })
 
 describe('takeDue', () => {
-  const schedule = { minutes: [600, 600, 700, 900], spawned: 0 }
+  const schedule: ArrivalSchedule = {
+    minutes: [600, 600, 700, 900],
+    sources: ['regular', 'tv', 'regular', 'online'],
+    spawned: 0,
+  }
 
   it('releases arrivals once their time has come, each only once', () => {
     const early = takeDue(schedule, 599)
-    expect(early.count).toBe(0)
+    expect(early.due).toEqual([])
     expect(early.schedule).toBe(schedule)
 
     const first = takeDue(schedule, 600)
-    expect(first.count).toBe(2)
+    expect(first.due).toEqual(['regular', 'tv'])
     expect(first.schedule.spawned).toBe(2)
-    expect(takeDue(first.schedule, 650).count).toBe(0)
+    expect(takeDue(first.schedule, 650).due).toEqual([])
 
     const rest = takeDue(first.schedule, 1080)
-    expect(rest.count).toBe(2)
-    expect(takeDue(rest.schedule, 1080)).toEqual({ schedule: rest.schedule, count: 0 })
+    expect(rest.due).toEqual(['regular', 'online'])
+    expect(takeDue(rest.schedule, 1080)).toEqual({ schedule: rest.schedule, due: [] })
   })
 
   it('catches up on several arrivals after a long frame', () => {
-    expect(takeDue(schedule, 800).count).toBe(3)
+    expect(takeDue(schedule, 800).due).toHaveLength(3)
   })
 })

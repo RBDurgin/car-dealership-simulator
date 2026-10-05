@@ -27,6 +27,7 @@ import {
   isCustomerAction,
   recordDepartures,
   recordMissed,
+  recordVisitors,
   type DayStats,
   type Sale,
 } from '../sim/deal'
@@ -42,6 +43,14 @@ import {
   sellCar as markSold,
   type InventoryCar,
 } from '../sim/inventory'
+import {
+  CHANNELS,
+  launchCampaign,
+  trafficBoost,
+  unfinished,
+  type Campaign,
+  type Channel,
+} from '../sim/marketing'
 import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
 import {
   cancelOrder,
@@ -91,6 +100,9 @@ export interface Notice {
 
 export type Screen = 'title' | 'playing'
 
+/** The office computer panel's tabs. */
+export type ComputerTab = 'stock' | 'marketing'
+
 export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
 const CUSTOMER_SEED = 7_000
@@ -125,6 +137,8 @@ interface GameState {
   inventory: InventoryCar[]
   /** Cars ordered from the manufacturer, delivered the next morning. */
   orders: Order[]
+  /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
+  campaigns: Campaign[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -141,8 +155,10 @@ interface GameState {
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
-  /** The stock panel (ordering, cars in stock) is open. */
+  /** The office computer panel (stock and marketing) is open. */
   stockOpen: boolean
+  /** Which tab of it shows. */
+  computerTab: ComputerTab
   /** The how-to-play guide is open; the clock and the player wait while it is. */
   helpOpen: boolean
   /** The controls hint lists its keys (or gestures); collapsed it's just a header. */
@@ -177,6 +193,8 @@ interface GameState {
   sellCar: (id: string, price?: number) => boolean
   /** Orders a `model` for delivery tomorrow, paid in cash now or on the floor plan. False if it can't be. */
   orderCar: (model: CarModel, financing: Financing) => boolean
+  /** Buys an ad campaign on `channel`, paid in cash now, to start tomorrow. False if it can't be. */
+  launchCampaign: (channel: Channel) => boolean
   /** Cancels an order: cash comes back, or the floor plan credit is freed. */
   cancelOrder: (id: string) => void
   /** Pays the bank a floored car's cost from cash, so it stops accruing interest. */
@@ -222,7 +240,11 @@ interface GameState {
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
-  toggleStockPanel: (open?: boolean) => void
+  /**
+   * Opens or closes the office computer panel. With a `tab` (and no `open`),
+   * a panel open on another tab switches to it instead of closing.
+   */
+  toggleStockPanel: (open?: boolean, tab?: ComputerTab) => void
   toggleHelp: (open?: boolean) => void
   toggleControls: (open?: boolean) => void
   setRotatePrompt: (on: boolean) => void
@@ -395,7 +417,9 @@ export const useGame = create<GameState>((set, get) => {
       case 'handOff':
         return handOff()
       case 'orderStock':
-        return get().toggleStockPanel(true)
+        return get().toggleStockPanel(true, 'stock')
+      case 'advertise':
+        return get().toggleStockPanel(true, 'marketing')
     }
   }
 
@@ -466,6 +490,7 @@ export const useGame = create<GameState>((set, get) => {
       soldBy: seller,
       signedBy: finance?.name ?? null,
       commission: (seller ? salesCommission(price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
+      source: c.source,
     }
     set({ dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] } })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))
@@ -503,8 +528,9 @@ export const useGame = create<GameState>((set, get) => {
 
   /**
    * Opens the doors on `day`: sold cars are gone, the rest have gathered a
-   * night's dust, yesterday's orders are parked in their slots, there are new
-   * arrivals and applicants, and the staff head in.
+   * night's dust, yesterday's orders are parked in their slots, finished ad
+   * campaigns end, there are new arrivals (more while ads run) and applicants,
+   * and the staff head in.
    */
   const beginDay = (day: number) => {
     customerRng = createRng(CUSTOMER_SEED + day)
@@ -513,6 +539,7 @@ export const useGame = create<GameState>((set, get) => {
     walkInRng = createRng(WALK_IN_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
+    const campaigns = unfinished(s.campaigns, day)
     const inventory = [...dirtyOvernight(dropSold(s.inventory)), ...delivered]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
     const owner = isOwnerDay(day)
@@ -526,7 +553,8 @@ export const useGame = create<GameState>((set, get) => {
       clock: startOfDay(day),
       inventory,
       orders: [],
-      arrivals: planArrivals(customerRng),
+      campaigns,
+      arrivals: planArrivals(customerRng, trafficBoost(campaigns, day)),
       dayStats: emptyStats(),
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
@@ -551,6 +579,7 @@ export const useGame = create<GameState>((set, get) => {
     cash: STARTING_CASH,
     inventory: buildInventory(createRng(INVENTORY_SEED)),
     orders: [],
+    campaigns: [],
     customers: [],
     arrivals: planArrivals(customerRng),
     dayStats: emptyStats(),
@@ -560,6 +589,7 @@ export const useGame = create<GameState>((set, get) => {
     missedYesterday: {},
     staffOpen: false,
     stockOpen: false,
+    computerTab: 'stock',
     helpOpen: false,
     controlsOpen: true,
     rotatePrompt: false,
@@ -641,21 +671,16 @@ export const useGame = create<GameState>((set, get) => {
       const except = s.activeAction?.targetId
       const drain = minutes * patienceFactor(s.roster)
       let customers = reduceCustomers(s.customers, { type: 'tick', minutes: drain, except })
-      const { schedule, count } = takeDue(s.arrivals, step.minute)
-      if (count > 0) {
-        const stock = availableCars(s.inventory)
-        const arrived = Array.from({ length: count }, () =>
-          generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
-        )
-        customers = [...customers, ...arrived]
-      }
+      const { schedule, due } = takeDue(s.arrivals, step.minute)
+      const stock = availableCars(s.inventory)
+      const arrived = due.map((source) =>
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, { source }),
+      )
+      customers = [...customers, ...arrived]
       set({
         clock: step,
         arrivals: schedule,
-        dayStats: tallyMissed(
-          { ...s.dayStats, visitors: s.dayStats.visitors + count },
-          customers.slice(customers.length - count),
-        ),
+        dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived),
       })
       if (isClosed(step)) setRoster(reduceStaff(get().roster, { type: 'close' }))
       commit(customers)
@@ -692,6 +717,24 @@ export const useGame = create<GameState>((set, get) => {
       )
       return true
     },
+    launchCampaign: (channel) => {
+      const s = get()
+      const day = s.clock.day
+      const n = s.campaigns.filter((c) => c.channel === channel && c.startDay === day + 1).length
+      const result = launchCampaign(s, channel, day, `${channel}-${day}-${n + 1}`)
+      if (!result.ok) {
+        notify(result.reason)
+        return false
+      }
+      const { label, cost, days } = CHANNELS[channel]
+      set({
+        cash: result.cash,
+        campaigns: result.campaigns,
+        dayStats: { ...s.dayStats, marketing: s.dayStats.marketing + cost },
+      })
+      notify(`${label} booked for ${formatMoney(cost)}. It runs for ${days} days from tomorrow.`)
+      return true
+    },
     cancelOrder: (id) => {
       const s = get()
       const order = s.orders.find((o) => o.id === id)
@@ -726,7 +769,7 @@ export const useGame = create<GameState>((set, get) => {
       const arrived = Array.from({ length: n }, () =>
         generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng),
       )
-      set({ dayStats: tallyMissed({ ...s.dayStats, visitors: s.dayStats.visitors + n }, arrived) })
+      set({ dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived) })
       commit([...s.customers, ...arrived])
     },
     walkIn: (variant) => {
@@ -738,13 +781,12 @@ export const useGame = create<GameState>((set, get) => {
       const picked = pickArchetype(walkInRng)
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = `customer-${nextCustomerId++}`
-      const c = generateCustomer(id, availableCars(s.inventory), walkInRng, { variant, archetype })
-      set({
-        dayStats: tallyMissed(
-          { ...s.dayStats, visitors: s.dayStats.visitors + 1, walkIns: s.dayStats.walkIns + 1 },
-          [c],
-        ),
+      const c = generateCustomer(id, availableCars(s.inventory), walkInRng, {
+        variant,
+        archetype,
+        source: 'walk-in',
       })
+      set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...s.customers, c])
       return id
     },
@@ -883,10 +925,15 @@ export const useGame = create<GameState>((set, get) => {
         const staffOpen = open ?? !s.staffOpen
         return { staffOpen, stockOpen: staffOpen ? false : s.stockOpen }
       }),
-    toggleStockPanel: (open) =>
+    toggleStockPanel: (open, tab) =>
       set((s) => {
-        const stockOpen = open ?? !s.stockOpen
-        return { stockOpen, staffOpen: stockOpen ? false : s.staffOpen }
+        const switching = open === undefined && tab !== undefined && tab !== s.computerTab
+        const stockOpen = open ?? (switching || !s.stockOpen)
+        return {
+          stockOpen,
+          computerTab: tab ?? s.computerTab,
+          staffOpen: stockOpen ? false : s.staffOpen,
+        }
       }),
     toggleHelp: (open) => set((s) => ({ helpOpen: open ?? !s.helpOpen })),
     toggleControls: (open) => set((s) => ({ controlsOpen: open ?? !s.controlsOpen })),
@@ -907,6 +954,7 @@ export const useGame = create<GameState>((set, get) => {
         inventory: save.inventory,
         roster: save.roster,
         orders: save.orders,
+        campaigns: save.campaigns,
       })
       beginDay(save.day + 1)
     },

@@ -1,6 +1,6 @@
 # Phase 6 Plan — Sales negotiation
 
-**Status:** 6b done 2026-10-05. 6c done 2026-10-05, awaiting review. Phase 6 is complete once 6c is reviewed (6a was folded into Phase 5a). We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** Complete 2026-10-05. 6b and 6c are done (6a was folded into Phase 5a).
 
 ## Context
 

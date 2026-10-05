@@ -7,9 +7,11 @@ import {
   netIncome,
   revenue,
   salesBySeller,
+  salesBySource,
   walkOuts,
 } from '../sim/deal'
 import { carName } from '../sim/interactables'
+import { sourceLabel } from '../sim/marketing'
 import { goalLabel } from '../sim/owner'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -26,6 +28,9 @@ export function DaySummary() {
   const arriving = useGame((s) => s.orders.length)
   if (!open) return null
   const missed = missedSummary(stats.missed)
+  const sources = salesBySource(stats)
+  // Worth a table once anyone came from an ad (walk-ins alone are in the visitor line).
+  const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
 
   return (
     <div className="modal-backdrop">
@@ -56,6 +61,12 @@ export function DaySummary() {
             <>
               <dt>Floor plan interest</dt>
               <dd className="price">{formatMoney(-stats.interest)}</dd>
+            </>
+          )}
+          {stats.marketing > 0 && (
+            <>
+              <dt>Marketing</dt>
+              <dd className="price">{formatMoney(-stats.marketing)}</dd>
             </>
           )}
           {!!stats.owner?.bonus && (
@@ -103,6 +114,28 @@ export function DaySummary() {
             </div>
             <div className="summary-owner-line">“{stats.owner.line}”</div>
           </div>
+        )}
+        {advertised && (
+          <table className="summary-sellers">
+            <thead>
+              <tr>
+                <th>Came from</th>
+                <th>Visitors</th>
+                <th>Cars</th>
+                <th>Gross</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.map((t) => (
+                <tr key={t.source}>
+                  <td>{sourceLabel(t.source)}</td>
+                  <td>{t.visitors}</td>
+                  <td>{t.cars}</td>
+                  <td className="price">{formatMoney(t.gross)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
         {stats.sales.some((s) => s.soldBy !== null) && (
           <table className="summary-sellers">

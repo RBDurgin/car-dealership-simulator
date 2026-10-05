@@ -34,6 +34,7 @@ const base: Customer = {
   name: 'Alex B.',
   variant: 'male-a',
   archetype: 'regular',
+  source: 'regular',
   companion: null,
   budget: 40_000,
   preferredModels: ['sedan'],
