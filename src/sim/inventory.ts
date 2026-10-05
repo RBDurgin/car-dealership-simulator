@@ -23,6 +23,8 @@ export interface InventoryCar {
   rect: Rect
   facing: Facing
   msrp: number
+  /** What the dealership paid for it: the invoice price (see `COST_FRACTION`). */
+  cost: number
   status: CarStatus
   /** 1 just washed, 0 filthy (see `sim/cleanliness`). */
   cleanliness: number
@@ -42,14 +44,30 @@ export const BASE_MSRP: Record<CarModel, number> = {
 /** Each car's MSRP is within ±this fraction of its model's base price. */
 export const MSRP_VARIATION = 0.05
 
+/** A car's dealer cost is between these fractions of its MSRP. */
+export const COST_FRACTION = { min: 0.86, max: 0.92 }
+
+const roundTo100 = (n: number) => Math.round(n / 100) * 100
+
 function rollMsrp(model: CarModel, rng: Rng): number {
   const factor = 1 + (rng.next() * 2 - 1) * MSRP_VARIATION
-  return Math.round((BASE_MSRP[model] * factor) / 100) * 100
+  return roundTo100(BASE_MSRP[model] * factor)
 }
 
-/** Opening stock: the showroom displays plus the lot cars, priced from `rng`. */
+function rollCost(msrp: number, rng: Rng): number {
+  const { min, max } = COST_FRACTION
+  return roundTo100(msrp * (min + rng.next() * (max - min)))
+}
+
+type Uncosted = Omit<InventoryCar, 'cost'>
+
+/**
+ * Opening stock: the showroom displays plus the lot cars, priced from `rng`.
+ * It's owned outright. Costs are rolled after every MSRP, so the MSRPs are the
+ * same as before cars had a cost.
+ */
 export function buildInventory(rng: Rng): InventoryCar[] {
-  const display = DISPLAY_CARS.map(({ model, rect, facing }, i): InventoryCar => ({
+  const display = DISPLAY_CARS.map(({ model, rect, facing }, i): Uncosted => ({
     id: `display-${i + 1}`,
     model,
     location: 'showroom',
@@ -60,7 +78,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
     status: 'available',
     cleanliness: 1,
   }))
-  const lot = LOT_CARS.map(({ space, model }, i): InventoryCar => {
+  const lot = LOT_CARS.map(({ space, model }, i): Uncosted => {
     const s = PARKING_SPACES[space]
     return {
       id: `lot-car-${i + 1}`,
@@ -74,7 +92,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
       cleanliness: 1,
     }
   })
-  return [...display, ...lot]
+  return [...display, ...lot].map((c) => ({ ...c, cost: rollCost(c.msrp, rng) }))
 }
 
 export function availableCars(inventory: readonly InventoryCar[]): InventoryCar[] {

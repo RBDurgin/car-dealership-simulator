@@ -34,6 +34,8 @@ export function CustomerPanel() {
         <dd>{carName(car.model)}</dd>
         <dt>MSRP</dt>
         <dd className="price">{formatMoney(car.msrp)}</dd>
+        <dt>Your cost</dt>
+        <dd className="price">{formatMoney(car.cost)}</dd>
       </dl>
       {c.phase === 'talking' && (
         <div className="customer-actions">

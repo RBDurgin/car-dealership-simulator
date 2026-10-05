@@ -1,5 +1,5 @@
 import { formatTime, isClosed } from '../sim/clock'
-import { netIncome, revenue, salesBySeller, walkOuts } from '../sim/deal'
+import { costOfSales, grossProfit, netIncome, revenue, salesBySeller, walkOuts } from '../sim/deal'
 import { carName } from '../sim/interactables'
 import { goalLabel } from '../sim/owner'
 import { useGame } from '../state/store'
@@ -33,6 +33,10 @@ export function DaySummary() {
           <dd>{stats.sales.length}</dd>
           <dt>Revenue</dt>
           <dd className="price">{formatMoney(revenue(stats))}</dd>
+          <dt>Cost of cars sold</dt>
+          <dd className="price">{formatMoney(-costOfSales(stats) || 0)}</dd>
+          <dt>Gross profit</dt>
+          <dd className="price">{formatMoney(grossProfit(stats))}</dd>
           <dt>Wages</dt>
           <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
           <dt>Commissions</dt>
@@ -74,6 +78,7 @@ export function DaySummary() {
                 <th>Seller</th>
                 <th>Cars</th>
                 <th>Revenue</th>
+                <th>Gross</th>
                 <th>Commission</th>
               </tr>
             </thead>
@@ -83,6 +88,7 @@ export function DaySummary() {
                   <td>{t.seller ?? 'You'}</td>
                   <td>{t.cars}</td>
                   <td className="price">{formatMoney(t.revenue)}</td>
+                  <td className="price">{formatMoney(t.gross)}</td>
                   <td className="price">{formatMoney(t.commission)}</td>
                 </tr>
               ))}

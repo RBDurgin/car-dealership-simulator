@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
 import { GUEST_CHAIR_ID, SALES_DESKS } from '../sim/layout'
-import { FINANCE_FEE, SALES_COMMISSION, type Role } from '../sim/staff'
+import { FINANCE_FEE, salesCommission, type Role } from '../sim/staff'
 import { STARTING_CASH, useGame } from './store'
 
 // Customers' answers are random; these tests always get a yes.
@@ -61,7 +61,8 @@ function talkRound(id: string, customerId = A) {
   game().answerOffer(customerId)
 }
 
-const commissionOn = (price: number) => Math.round(price * SALES_COMMISSION)
+/** What a salesperson earns selling `id` at MSRP. */
+const commissionOn = (id: string) => salesCommission(car(id).msrp, car(id).cost)
 
 describe('AI salespeople', () => {
   beforeEach(() => {
@@ -98,7 +99,9 @@ describe('AI salespeople', () => {
         price,
         soldBy: employee(sam).name,
         signedBy: null,
-        commission: commissionOn(price),
+        msrp: price,
+        cost: car('lot-car-1').cost,
+        commission: commissionOn('lot-car-1'),
       }),
     ])
     expect(game().notice?.text).toMatch(new RegExp(`${employee(sam).name} sold`))
@@ -128,12 +131,11 @@ describe('AI salespeople', () => {
     game().dispatchCustomer({ type: 'seat', id: A })
     game().staffSign(fm, A)
 
-    const price = car('lot-car-1').msrp
     expect(game().dayStats.sales).toEqual([
       expect.objectContaining({
         soldBy: employee(sam).name,
         signedBy: employee(fm).name,
-        commission: commissionOn(price) + FINANCE_FEE,
+        commission: commissionOn('lot-car-1') + FINANCE_FEE,
       }),
     ])
   })
@@ -202,7 +204,7 @@ describe('AI salespeople', () => {
     expect(game().dayStats.sales).toEqual([
       expect.objectContaining({
         soldBy: `sales ${kim}`,
-        commission: commissionOn(car('lot-car-2').msrp),
+        commission: commissionOn('lot-car-2'),
       }),
     ])
   })
@@ -227,9 +229,9 @@ describe('AI salespeople', () => {
     expect(game().dayStats).toMatchObject({
       settled: true,
       wages,
-      commissions: commissionOn(price),
+      commissions: commissionOn('lot-car-1'),
     })
-    expect(game().cash).toBe(STARTING_CASH + price - wages - commissionOn(price))
+    expect(game().cash).toBe(STARTING_CASH + price - wages - commissionOn('lot-car-1'))
   })
 
   it('give up on a car that sold while they talked', () => {

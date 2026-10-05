@@ -86,8 +86,10 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   porter: { base: 60, perSkill: 15 },
 }
 
-/** Share of a car's price a salesperson earns for selling it. */
-export const SALES_COMMISSION = 0.03
+/** Share of a sale's gross profit (price less cost) a salesperson earns for making it. */
+export const SALES_COMMISSION = 0.25
+/** The least a salesperson earns on a sale, however thin the margin (a "mini"). */
+export const MIN_COMMISSION = 100
 
 /** Flat fee the finance manager earns for each deal they sign. */
 export const FINANCE_FEE = 200
@@ -108,6 +110,11 @@ export const STAFF_SPEED = 1.8
 
 /** Multiplier on waiting customers' patience drain while a receptionist is at the desk. */
 export const RECEPTION_PATIENCE_FACTOR = 0.5
+
+/** What a salesperson earns for selling a car that cost `cost` at `price`. */
+export function salesCommission(price: number, cost: number): number {
+  return Math.max(MIN_COMMISSION, Math.round((price - cost) * SALES_COMMISSION))
+}
 
 export function wageFor(role: Role, skill: number): number {
   const w = WAGES[role]

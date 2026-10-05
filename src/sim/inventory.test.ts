@@ -6,6 +6,7 @@ import {
   BASE_MSRP,
   buildInventory,
   carProp,
+  COST_FRACTION,
   MSRP_VARIATION,
   restock,
   sellCar,
@@ -42,6 +43,15 @@ describe('buildInventory', () => {
     // Same model, different cars: prices vary.
     const sedans = new Set(inventory.filter((c) => c.model === 'sedan').map((c) => c.msrp))
     expect(sedans.size).toBeGreaterThan(1)
+  })
+
+  it('costs each car a dealer price below its MSRP, rounded to $100', () => {
+    for (const c of inventory) {
+      expect(c.cost % 100).toBe(0)
+      expect(c.cost).toBeGreaterThanOrEqual(c.msrp * COST_FRACTION.min - 50)
+      expect(c.cost).toBeLessThanOrEqual(c.msrp * COST_FRACTION.max + 50)
+    }
+    expect(new Set(inventory.map((c) => c.cost / c.msrp)).size).toBeGreaterThan(1)
   })
 
   it('is deterministic for a seed', () => {

@@ -8,11 +8,14 @@ import {
   customerInteractable,
   dealCustomer,
   deskActions,
+  costOfSales,
   emptyStats,
   employeeActions,
+  grossProfit,
   guestChairBusy,
   hasBuyersInHand,
   inConversation,
+  netIncome,
   recordDepartures,
   revenue,
   salesBySeller,
@@ -232,25 +235,37 @@ describe('day stats', () => {
     expect(stats.closing).toBe(1)
   })
 
-  it('adds up revenue', () => {
-    const sale = {
-      customerName: 'A',
-      carId: 'x',
-      model: 'sedan' as const,
-      minute: 600,
-      soldBy: null,
-      signedBy: null,
-      commission: 0,
-    }
+  const sale = (price: number, cost = 0) => ({
+    customerName: 'A',
+    carId: 'x',
+    model: 'sedan' as const,
+    price,
+    msrp: price,
+    cost,
+    minute: 600,
+    soldBy: null,
+    signedBy: null,
+    commission: 0,
+  })
+
+  it('adds up revenue, cost and gross profit', () => {
+    const stats = { ...emptyStats(), sales: [sale(30_000, 27_000), sale(25_000, 22_500)] }
+    expect(revenue(stats)).toBe(55_000)
+    expect(costOfSales(stats)).toBe(49_500)
+    expect(grossProfit(stats)).toBe(5_500)
+    expect(revenue(emptyStats())).toBe(0)
+    expect(grossProfit(emptyStats())).toBe(0)
+  })
+
+  it('nets gross profit less staff costs, plus the owner bonus', () => {
     const stats = {
       ...emptyStats(),
-      sales: [
-        { ...sale, price: 1000 },
-        { ...sale, price: 2500 },
-      ],
+      sales: [sale(30_000, 27_000)],
+      wages: 400,
+      commissions: 750,
+      owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
-    expect(revenue(stats)).toBe(3500)
-    expect(revenue(emptyStats())).toBe(0)
+    expect(netIncome(stats)).toBe(3_000 - 400 - 750 + 1_500)
   })
 
   it('breaks the sales down by seller, the player first', () => {
@@ -258,6 +273,8 @@ describe('day stats', () => {
       customerName: 'A',
       carId: 'x',
       model: 'sedan' as const,
+      msrp: price,
+      cost: price - 3_000,
       minute: 600,
       price,
       soldBy,
@@ -269,8 +286,8 @@ describe('day stats', () => {
       sales: [sale(30_000, 'Kim P.', 900), sale(20_000, null), sale(10_000, 'Kim P.', 500)],
     }
     expect(salesBySeller(stats)).toEqual([
-      { seller: null, cars: 1, revenue: 20_000, commission: 0 },
-      { seller: 'Kim P.', cars: 2, revenue: 40_000, commission: 1400 },
+      { seller: null, cars: 1, revenue: 20_000, gross: 3_000, commission: 0 },
+      { seller: 'Kim P.', cars: 2, revenue: 40_000, gross: 6_000, commission: 1400 },
     ])
     expect(salesBySeller(emptyStats())).toEqual([])
   })

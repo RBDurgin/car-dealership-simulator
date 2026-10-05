@@ -53,7 +53,7 @@ import {
   payroll,
   reduceStaff,
   ROLE_LABELS,
-  SALES_COMMISSION,
+  salesCommission,
   type Employee,
   type StaffEvent,
 } from '../sim/staff'
@@ -412,10 +412,12 @@ export const useGame = create<GameState>((set, get) => {
       carId: car.id,
       model: car.model,
       price,
+      msrp: car.msrp,
+      cost: car.cost,
       minute: s.clock.minute,
       soldBy: seller,
       signedBy: finance?.name ?? null,
-      commission: (seller ? Math.round(price * SALES_COMMISSION) : 0) + (finance ? FINANCE_FEE : 0),
+      commission: (seller ? salesCommission(price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
     }
     set({ dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] } })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))

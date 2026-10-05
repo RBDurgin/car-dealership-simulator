@@ -1,6 +1,6 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { OWNER_BONUS } from '../sim/owner'
-import { FINANCE_FEE, SALES_COMMISSION } from '../sim/staff'
+import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -59,6 +59,11 @@ export function HowToPlay() {
             ends the conversation.
           </p>
           <p>
+            Every car shows its MSRP and <i>your cost</i>, what the dealership paid for it. The
+            difference is your gross profit on the sale. The day summary adds up revenue, the cost
+            of the cars sold and gross profit, then takes off wages and commissions for the net.
+          </p>
+          <p>
             Clean cars sell better. Cars gather dust overnight (faster out on the lot) and every
             time a customer looks one over. Inspect a car to see if it&apos;s clean, dusty or dirty,
             and {click.toLowerCase()} it to <b>Wash car</b>.
@@ -76,17 +81,17 @@ export function HowToPlay() {
             )}{' '}
             to hire from the day&apos;s applicants. Salespeople sell on their own: they greet
             customers, make offers and sign buyers at their own desk, or hand them to finance. They
-            earn {Math.round(SALES_COMMISSION * 100)}% of each car they sell, and the better they
-            are, the more often customers say yes. Seasoned salespeople greet customers as they
-            arrive; newer ones wait until a customer is looking at a car. They leave alone a
-            customer you&apos;re walking over to, and you can&apos;t greet someone they&apos;re
-            helping (a tick over their head). A receptionist keeps waiting customers patient. A
-            finance manager sits at your office desk: lead a buyer there, {click.toLowerCase()} them
-            and choose <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer
-            while they do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter
-            washes the dirtiest cars for you, all day long. Everyone on the payroll is paid at
-            closing, and the finance manager also earns {formatMoney(FINANCE_FEE)} per deal they
-            sign.
+            earn {Math.round(SALES_COMMISSION * 100)}% of the gross profit on each car they sell (at
+            least {formatMoney(MIN_COMMISSION)}), and the better they are, the more often customers
+            say yes. Seasoned salespeople greet customers as they arrive; newer ones wait until a
+            customer is looking at a car. They leave alone a customer you&apos;re walking over to,
+            and you can&apos;t greet someone they&apos;re helping (a tick over their head). A
+            receptionist keeps waiting customers patient. A finance manager sits at your office
+            desk: lead a buyer there, {click.toLowerCase()} them and choose{' '}
+            <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer while they
+            do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter washes the
+            dirtiest cars for you, all day long. Everyone on the payroll is paid at closing, and the
+            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign.
           </p>
         </section>
         <section>

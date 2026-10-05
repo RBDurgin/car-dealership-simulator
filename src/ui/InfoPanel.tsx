@@ -58,6 +58,8 @@ export function InfoPanel() {
         </dd>
         <dt>MSRP</dt>
         <dd className="price">{formatMoney(stock.msrp)}</dd>
+        <dt>Your cost</dt>
+        <dd className="price">{formatMoney(stock.cost)}</dd>
         <dt>Status</dt>
         <dd>{stock.status === 'available' ? 'For sale' : 'Sold'}</dd>
         <dt>Condition</dt>

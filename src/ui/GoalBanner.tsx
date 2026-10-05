@@ -6,6 +6,7 @@ import { formatMoney } from './format'
 function progressText(goal: OwnerGoal, current: number, target: number): string {
   switch (goal.kind) {
     case 'revenue':
+    case 'profit':
       return `${formatMoney(current)} of ${formatMoney(target)}`
     case 'noImpatient':
       return current === 0 ? 'none so far' : `${current} so far`

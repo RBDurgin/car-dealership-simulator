@@ -1,4 +1,4 @@
-import { revenue, type DayStats } from './deal'
+import { grossProfit, revenue, type DayStats } from './deal'
 import { carName } from './interactables'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
@@ -14,6 +14,7 @@ export type OwnerGoal =
   | { kind: 'model'; model: CarModel }
   | { kind: 'noImpatient' }
   | { kind: 'revenue'; amount: number }
+  | { kind: 'profit'; amount: number }
 
 /** Today's visit: the goal, and whether the owner has reached the office and said it yet. */
 export interface OwnerVisit {
@@ -47,7 +48,7 @@ export function isOwnerDay(day: number): boolean {
 }
 
 /**
- * A goal the day's team can reasonably meet: more sales and revenue with more
+ * A goal the day's team can reasonably meet: more sales, revenue and profit with more
  * salespeople on the payroll, and a body type only if one is for sale.
  */
 export function generateGoal(
@@ -56,13 +57,15 @@ export function generateGoal(
   salesStaff: number,
 ): OwnerGoal {
   const models = [...new Set(availableCars(inventory).map((c) => c.model))]
-  const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'noImpatient']
+  const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'profit', 'noImpatient']
   if (models.length > 0) kinds.push('model')
   switch (rng.pick(kinds)) {
     case 'sales':
       return { kind: 'sales', count: rng.int(2, 3) + salesStaff }
     case 'revenue':
       return { kind: 'revenue', amount: (rng.int(6, 9) + 3 * salesStaff) * 10_000 }
+    case 'profit':
+      return { kind: 'profit', amount: (rng.int(6, 9) + 3 * salesStaff) * 1_000 }
     case 'noImpatient':
       return { kind: 'noImpatient' }
     case 'model':
@@ -70,7 +73,10 @@ export function generateGoal(
   }
 }
 
-/** "Sell 2 cars", "Sell a Summit Ridge", "No impatient walk-outs", "$80,000 revenue". */
+/**
+ * "Sell 2 cars", "Sell a Summit Ridge", "No impatient walk-outs", "$80,000 revenue",
+ * "$8,000 gross profit".
+ */
 export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string {
   switch (goal.kind) {
     case 'sales':
@@ -81,6 +87,8 @@ export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string
       return 'No impatient walk-outs'
     case 'revenue':
       return `${money(goal.amount)} revenue`
+    case 'profit':
+      return `${money(goal.amount)} gross profit`
   }
 }
 
@@ -105,6 +113,10 @@ export function goalProgress(
       return { current: stats.impatient, target: 0, met: stats.impatient === 0 }
     case 'revenue': {
       const current = revenue(stats)
+      return { current, target: goal.amount, met: current >= goal.amount }
+    }
+    case 'profit': {
+      const current = grossProfit(stats)
       return { current, target: goal.amount, met: current >= goal.amount }
     }
   }

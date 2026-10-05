@@ -187,7 +187,7 @@ export function actionBlocker(
 
 /**
  * The price a seller asks for `car`. Everyone offers MSRP for now; negotiation
- * (Phase 5) takes over here.
+ * (Phase 6) takes over here.
  */
 export function offerPrice(car: InventoryCar): number {
   return car.msrp
@@ -203,6 +203,9 @@ export interface Sale {
   carId: string
   model: CarModel
   price: number
+  /** The car's sticker price and what the dealership paid for it. */
+  msrp: number
+  cost: number
   /** Game minute the paperwork was signed. */
   minute: number
   /** The salesperson who made the sale, or null when the player did. */
@@ -251,9 +254,19 @@ export function revenue(stats: DayStats): number {
   return stats.sales.reduce((sum, s) => sum + s.price, 0)
 }
 
-/** Revenue less the day's staff costs, plus any bonus from the owner. */
+/** What the cars sold today cost the dealership. */
+export function costOfSales(stats: DayStats): number {
+  return stats.sales.reduce((sum, s) => sum + s.cost, 0)
+}
+
+/** Revenue less the cost of the cars sold. */
+export function grossProfit(stats: DayStats): number {
+  return revenue(stats) - costOfSales(stats)
+}
+
+/** Gross profit less the day's staff costs, plus any bonus from the owner. */
 export function netIncome(stats: DayStats): number {
-  return revenue(stats) - stats.wages - stats.commissions + (stats.owner?.bonus ?? 0)
+  return grossProfit(stats) - stats.wages - stats.commissions + (stats.owner?.bonus ?? 0)
 }
 
 /** One seller's share of the day's sales. */
@@ -262,6 +275,8 @@ export interface SellerTally {
   seller: string | null
   cars: number
   revenue: number
+  /** Revenue less the cost of these cars. */
+  gross: number
   /** What staff earned on these sales (the salesperson's cut and any finance fee). */
   commission: number
 }
@@ -273,11 +288,18 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
     (a, b) => Number(a.soldBy !== null) - Number(b.soldBy !== null),
   )
   for (const s of sorted) {
-    const t = tallies.get(s.soldBy) ?? { seller: s.soldBy, cars: 0, revenue: 0, commission: 0 }
+    const t = tallies.get(s.soldBy) ?? {
+      seller: s.soldBy,
+      cars: 0,
+      revenue: 0,
+      gross: 0,
+      commission: 0,
+    }
     tallies.set(s.soldBy, {
       ...t,
       cars: t.cars + 1,
       revenue: t.revenue + s.price,
+      gross: t.gross + s.price - s.cost,
       commission: t.commission + s.commission,
     })
   }

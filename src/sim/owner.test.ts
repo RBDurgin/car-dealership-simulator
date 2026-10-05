@@ -22,6 +22,8 @@ const sale = (model: Sale['model'], price: number): Sale => ({
   carId: 'lot-car-1',
   model,
   price,
+  msrp: price,
+  cost: price - 4_000,
   minute: 600,
   soldBy: null,
   signedBy: null,
@@ -49,10 +51,11 @@ describe('isOwnerDay', () => {
 describe('generateGoal', () => {
   it('rolls every kind of goal, each sensible', () => {
     const goals = Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 0))
-    expect(new Set(goals.map((g) => g.kind)).size).toBe(4)
+    expect(new Set(goals.map((g) => g.kind)).size).toBe(5)
     for (const g of goals) {
       if (g.kind === 'sales') expect(g.count).toBeGreaterThanOrEqual(2)
       if (g.kind === 'revenue') expect(g.amount % 10_000).toBe(0)
+      if (g.kind === 'profit') expect(g.amount % 1_000).toBe(0)
       if (g.kind === 'model') expect(inventory.some((c) => c.model === g.model)).toBe(true)
     }
   })
@@ -79,6 +82,7 @@ describe('goalLabel', () => {
     expect(goalLabel({ kind: 'model', model: 'suv' }, formatMoney)).toBe('Sell a Summit Ridge')
     expect(goalLabel({ kind: 'noImpatient' }, formatMoney)).toBe('No impatient walk-outs')
     expect(goalLabel({ kind: 'revenue', amount: 80_000 }, formatMoney)).toBe('$80,000 revenue')
+    expect(goalLabel({ kind: 'profit', amount: 8_000 }, formatMoney)).toBe('$8,000 gross profit')
   })
 })
 
@@ -102,6 +106,12 @@ describe('goalProgress', () => {
   it('adds up revenue', () => {
     const goal: OwnerGoal = { kind: 'revenue', amount: 60_000 }
     expect(goalProgress(goal, withSales(sale('van', 35_000))).current).toBe(35_000)
+    expect(goalProgress(goal, withSales(sale('van', 35_000), sale('suv', 25_000))).met).toBe(true)
+  })
+
+  it('adds up gross profit', () => {
+    const goal: OwnerGoal = { kind: 'profit', amount: 7_000 }
+    expect(goalProgress(goal, withSales(sale('van', 35_000))).current).toBe(4_000)
     expect(goalProgress(goal, withSales(sale('van', 35_000), sale('suv', 25_000))).met).toBe(true)
   })
 

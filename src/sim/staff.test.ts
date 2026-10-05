@@ -10,10 +10,12 @@ import {
   financeSeconds,
   generateCandidates,
   MAX_SKILL,
+  MIN_COMMISSION,
   MIN_SKILL,
   patienceFactor,
   payroll,
   postChairId,
+  salesCommission,
   salesDeskOf,
   skillSeconds,
   RECEPTION_PATIENCE_FACTOR,
@@ -95,6 +97,8 @@ describe('payroll', () => {
       carId: 'x',
       model: 'sedan' as const,
       price: 30_000,
+      msrp: 30_000,
+      cost: 27_000,
       minute: 600,
       soldBy: null,
     }
@@ -104,6 +108,13 @@ describe('payroll', () => {
       { ...sale, signedBy: 'Jordan K.', commission: FINANCE_FEE },
     ]
     expect(payroll([], sales).commissions).toBe(2 * FINANCE_FEE)
+  })
+
+  it("pays salespeople a quarter of the sale's gross, never less than a mini", () => {
+    expect(salesCommission(30_000, 27_000)).toBe(750)
+    expect(salesCommission(30_000, 29_800)).toBe(MIN_COMMISSION)
+    // Sold at a loss still pays the mini.
+    expect(salesCommission(30_000, 31_000)).toBe(MIN_COMMISSION)
   })
 })
 
