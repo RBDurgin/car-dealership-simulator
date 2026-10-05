@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { ARCHETYPES } from './archetypes'
+import { ARCHETYPES, EXPECT_JITTER } from './archetypes'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
   acceptChance,
   bubbleOf,
   chooseTarget,
   currentBrowseCarId,
-  decide,
   generateCustomer,
   MAX_ACCEPT_CHANCE,
   MIN_PATIENCE,
@@ -44,6 +43,8 @@ const base: Customer = {
   browsed: 0,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'arriving',
   leaveReason: null,
   handlerId: null,
@@ -152,6 +153,15 @@ describe('generateCustomer', () => {
     expect(c.browseCarIds).toHaveLength(1)
   })
 
+  it("hopes for their archetype's discount off MSRP, give or take", () => {
+    for (const c of customers) {
+      const { expect: want } = ARCHETYPES[c.archetype].haggle
+      expect(c.haggle).toBeNull()
+      expect(Math.abs(c.expect - want)).toBeLessThanOrEqual(EXPECT_JITTER + 1e-9)
+    }
+    expect(new Set(customers.map((c) => c.expect)).size).toBeGreaterThan(10)
+  })
+
   it('makes bargain hunters spend less and decisive buyers wait less', () => {
     const many = (archetype: 'regular' | 'bargain' | 'decisive') =>
       Array.from({ length: 100 }, (_, i) =>
@@ -187,16 +197,13 @@ describe('chooseTarget', () => {
   })
 })
 
-describe('decide', () => {
+describe('acceptChance', () => {
   // Half clean: no bonus or penalty for the car's condition.
   const sedan: InventoryCar = { ...car('lot-car-1'), model: 'sedan', cleanliness: 0.5 }
   const truck: InventoryCar = { ...sedan, model: 'truck' }
 
   it('always refuses over budget', () => {
     expect(acceptChance(base, sedan, base.budget + 100)).toBe(0)
-    for (let seed = 0; seed < 50; seed++) {
-      expect(decide(base, sedan, base.budget + 100, createRng(seed))).toBe(false)
-    }
   })
 
   it('likes preferred cars and lower prices better', () => {
@@ -205,15 +212,6 @@ describe('decide', () => {
     expect(acceptChance(base, sedan, base.budget)).toBeCloseTo(0.7)
     expect(acceptChance(base, truck, base.budget * 0.9)).toBeGreaterThan(atLimit)
     expect(acceptChance(base, sedan, base.budget * 0.5)).toBe(MAX_ACCEPT_CHANCE)
-  })
-
-  it('accepts at roughly the predicted rate', () => {
-    const rng = createRng(11)
-    const n = 2000
-    let yes = 0
-    for (let i = 0; i < n; i++) if (decide(base, truck, base.budget, rng)) yes++
-    expect(yes / n).toBeGreaterThan(0.3)
-    expect(yes / n).toBeLessThan(0.4)
   })
 
   it('makes tire-kickers hard to sell to and decisive buyers easy', () => {
@@ -251,15 +249,6 @@ describe('decide', () => {
     // Still a no over budget, however clean.
     expect(acceptChance(base, { ...sedan, cleanliness: 1 }, base.budget + 100)).toBe(0)
   })
-
-  it('is deterministic for a seed', () => {
-    const answers = (seed: number) => {
-      const rng = createRng(seed)
-      return Array.from({ length: 20 }, () => decide(base, truck, 38_000, rng))
-    }
-    expect(answers(4)).toEqual(answers(4))
-    expect(new Set(answers(4)).size).toBe(2)
-  })
 })
 
 describe('reduceCustomer', () => {
@@ -285,7 +274,7 @@ describe('reduceCustomer', () => {
     const steps: [CustomerEvent, Customer['phase']][] = [
       [{ type: 'greet', id: 'c1', carId: 'lot-car-1', by: 'player' }, 'talking'],
       [{ type: 'offer', id: 'c1', carId: 'lot-car-1', price: 28_000 }, 'considering'],
-      [{ type: 'respond', id: 'c1', accepted: true }, 'following'],
+      [{ type: 'respond', id: 'c1', answer: 'accept' }, 'following'],
       [{ type: 'seat', id: 'c1' }, 'signing'],
       [{ type: 'signed', id: 'c1' }, 'leaving'],
     ]
@@ -352,13 +341,37 @@ describe('reduceCustomer', () => {
     const refused = run(at('considering', { offer: { carId: 'x', price: 1 } }), {
       type: 'respond',
       id: 'c1',
-      accepted: false,
+      answer: 'walk',
     })!
     expect(refused).toMatchObject({ phase: 'leaving', leaveReason: 'refused', offer: null })
     expect(moodOf(refused)).toBe('unhappy')
 
     const empty = run(at('waiting'), { type: 'greet', id: 'c1', carId: null, by: 'player' })!
     expect(empty).toMatchObject({ phase: 'leaving', leaveReason: 'refused' })
+  })
+
+  it('goes back to talking with their counter, and keeps score of the haggle', () => {
+    const considering = at('considering', { offer: { carId: 'x', price: 30_000 } })
+    const countered = run(considering, {
+      type: 'respond',
+      id: 'c1',
+      answer: 'counter',
+      counter: 27_000,
+    })!
+    expect(countered).toMatchObject({
+      phase: 'talking',
+      offer: null,
+      haggle: { round: 2, lastAsk: 30_000, counter: 27_000 },
+    })
+    expect(bubbleOf(countered)).toBe('counter')
+
+    const asked = run(countered, { type: 'offer', id: 'c1', carId: 'x', price: 28_500 })!
+    expect(asked).toMatchObject({ phase: 'considering', haggle: { round: 2 } })
+    const again = run(asked, { type: 'respond', id: 'c1', answer: 'counter', counter: 27_600 })!
+    expect(again.haggle).toEqual({ round: 3, lastAsk: 28_500, counter: 27_600 })
+
+    // Walking off starts the haggle over.
+    expect(run(again, { type: 'cancel', id: 'c1' })!.haggle).toBeNull()
   })
 
   it('goes back to waiting when the player walks away', () => {
@@ -429,7 +442,7 @@ describe('reduceCustomer', () => {
       { type: 'arrive', id: 'c1' },
       { type: 'browsed', id: 'c1' },
       { type: 'offer', id: 'c1', carId: 'x', price: 1 },
-      { type: 'respond', id: 'c1', accepted: true },
+      { type: 'respond', id: 'c1', answer: 'accept' },
       { type: 'seat', id: 'c1' },
       { type: 'signed', id: 'c1' },
       { type: 'despawn', id: 'c1' },

@@ -6,9 +6,9 @@ import { FINANCE_FEE } from '../sim/staff'
 import { STARTING_CASH, useGame } from './store'
 
 // Customers' answers are random; these tests always get a yes.
-vi.mock('../sim/customers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../sim/customers')>()),
-  decide: () => true,
+vi.mock('../sim/negotiation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../sim/negotiation')>()),
+  respondToAsk: () => ({ answer: 'accept' }),
 }))
 
 const initial = useGame.getState()
@@ -30,6 +30,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   browsed: 1,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,

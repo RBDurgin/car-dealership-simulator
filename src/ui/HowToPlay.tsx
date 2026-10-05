@@ -44,6 +44,11 @@ export function HowToPlay() {
             yes. Customers <i>watching every dollar</i> have a tight budget, and couples shop
             together and take their time over each car.
           </p>
+          <p>
+            They haggle differently too. Bargain hunters want the most off and go back and forth the
+            longest. Decisive buyers want only a little off and won&apos;t haggle for long, and
+            neither will someone who is just looking.
+          </p>
         </section>
         <section>
           <h3>The owner</h3>
@@ -56,9 +61,18 @@ export function HowToPlay() {
         <section>
           <h3>Making a sale</h3>
           <p>
-            {click} a customer to <b>Greet</b> them, make an <b>Offer</b> on the car they like, and
-            if they accept, <b>Close deal</b> at your desk. Walking away or {touch ? '✕' : 'Esc'}{' '}
-            ends the conversation.
+            {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they
+            accept, <b>Close deal</b> at your desk. Walking away or {touch ? '✕' : 'Esc'} ends the
+            conversation.
+          </p>
+          <p>
+            Prices are haggled in the customer panel. Open with <b>Ask MSRP</b> or a little off, or
+            set any price with − and +. Ask for more than they hoped to pay and they counter (a{' '}
+            <b>$?</b> over their head); then <b>Hold</b> your price, <b>Split the difference</b>, or{' '}
+            <b>Accept</b> their counter. Asking near what they hope for makes a yes likelier, but
+            every round has a catch: hold firm and they may walk out, and after a few rounds
+            they&apos;ll only reluctantly pay over their hope. The panel shows your margin at each
+            price, in red below cost.
           </p>
           <p>
             Every car shows its MSRP and <i>your cost</i>, what the dealership paid for it. The

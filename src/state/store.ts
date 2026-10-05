@@ -6,7 +6,6 @@ import { browseDirt, dirtyOvernight, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
 import {
   chooseTarget,
-  decide,
   generateCustomer,
   PLAYER_ID,
   PLAYER_SKILL,
@@ -26,13 +25,13 @@ import {
   emptyStats,
   hasBuyersInHand,
   isCustomerAction,
-  offerPrice,
   recordDepartures,
   recordMissed,
   type DayStats,
   type Sale,
 } from '../sim/deal'
 import { carName, type ActionId } from '../sim/interactables'
+import { clampAsk, respondToAsk, suggestedAsk, walkLine } from '../sim/negotiation'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
 import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
 import {
@@ -195,8 +194,13 @@ interface GameState {
   ownerArrived: () => void
   /** Progress reported by the world (or the player) for one customer. */
   dispatchCustomer: (ev: CustomerEvent) => void
-  /** A customer has thought over the offer on the table and answers it. */
+  /** A customer has thought over the offer on the table and answers it: accept, counter or walk. */
   answerOffer: (id: string) => void
+  /**
+   * The player asks their customer `price` for the car, kept between the
+   * customer's counter and the last ask (or up to MSRP to open).
+   */
+  ask: (price: number) => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */
@@ -413,14 +417,14 @@ export const useGame = create<GameState>((set, get) => {
     if (carId === null) notify(`${c.name}: "Nothing here for me, sorry."`)
   }
 
-  const offer = (id: string) => {
+  /** Asks customer `id` for their car: `price`, or the suggested ask (see `suggestedAsk`). */
+  const offer = (id: string, price?: number) => {
     const s = get()
     const c = s.customers.find((x) => x.id === id)
     const car = s.inventory.find((x) => x.id === c?.targetCarId)
     if (!c || !car || car.status !== 'available') return notify("That car isn't for sale any more.")
-    commit(
-      reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: offerPrice(car) }),
-    )
+    const ask = price === undefined ? suggestedAsk(c, car) : clampAsk(c, car, price)
+    commit(reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: ask }))
   }
 
   /** The customer salesperson `employeeId` is dealing with in `phases`, if any. */
@@ -755,16 +759,23 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const c = s.customers.find((x) => x.id === id)
       if (c?.phase !== 'considering' || !c.offer) return
-      const { price } = c.offer
       const car = s.inventory.find((x) => x.id === c.offer?.carId)
-      const accepted =
-        !!car && car.status === 'available' && decide(c, car, price, dealRng, sellerBonus(c))
-      commit(reduceCustomers(s.customers, { type: 'respond', id, accepted }))
+      const res =
+        car?.status === 'available'
+          ? respondToAsk(c, car, c.offer.price, dealRng, sellerBonus(c))
+          : ({ answer: 'walk', reason: 'gone' } as const)
+      const counter = res.answer === 'counter' ? res.counter : undefined
+      commit(reduceCustomers(s.customers, { type: 'respond', id, answer: res.answer, counter }))
       // Staff deals go on quietly; the sale itself is announced.
       if (c.handlerId !== PLAYER_ID) return
-      if (accepted) notify(`${c.name}: "Deal! Lead the way."`)
-      else if (price > c.budget) notify(`${c.name}: "That's more than I can spend."`)
-      else notify(`${c.name}: "I'll pass, thanks."`)
+      if (res.answer === 'accept') notify(`${c.name}: "Deal! Lead the way."`)
+      else if (res.answer === 'counter')
+        notify(`${c.name}: "How about ${formatMoney(res.counter)}?"`)
+      else notify(`${c.name}: "${walkLine(res.reason)}"`)
+    },
+    ask: (price) => {
+      const c = dealCustomer(get().customers, PLAYER_ID)
+      if (c?.phase === 'talking') offer(c.id, price)
     },
     staffClaim: (employeeId, customerId) => {
       const s = get()
@@ -791,7 +802,8 @@ export const useGame = create<GameState>((set, get) => {
         commit(reduceCustomers(get().customers, { type: 'cancel', id: c.id }))
         return
       }
-      const ev = { type: 'offer', id: c.id, carId: car.id, price: offerPrice(car) } as const
+      // Haggling by skill comes in 6c: for now staff ask what the player would be told to.
+      const ev = { type: 'offer', id: c.id, carId: car.id, price: suggestedAsk(c, car) } as const
       commit(reduceCustomers(get().customers, ev))
     },
     staffLead: (employeeId) => {

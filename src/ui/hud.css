@@ -397,6 +397,15 @@ kbd {
 .bubble-helped::after {
   border-top-color: #1d4ed8;
 }
+/* They countered: waiting on the seller's next ask. */
+.bubble-counter {
+  background: #f59e0b;
+  color: #1f2937;
+  font-size: 13px;
+}
+.bubble-counter::after {
+  border-top-color: #f59e0b;
+}
 .bubble-impatient {
   background: #ef4444;
   color: #fff;
@@ -661,6 +670,23 @@ kbd {
   margin-top: 12px;
   line-height: 1.4;
 }
+.customer-panel .haggle-figures {
+  margin-top: 10px;
+}
+.margin-loss {
+  color: #f87171;
+}
+.haggle-stepper {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+.haggle-stepper .btn:not(.haggle-ask) {
+  min-width: 36px;
+}
+.haggle-ask {
+  flex: 1;
+}
 
 /* End-of-day summary */
 .modal-backdrop {
@@ -846,6 +872,9 @@ kbd {
   .btn {
     min-height: 44px;
   }
+  .haggle-stepper .btn:not(.haggle-ask) {
+    min-width: 44px;
+  }
   .topbar .btn {
     min-height: 36px;
   }
@@ -922,6 +951,23 @@ kbd {
   }
   .customer-quote {
     font-size: 12px;
+  }
+  /* Haggling needs the buttons in view: drop the chat, and take the full
+     height unless the info panel is sharing the edge. */
+  .customer-panel.haggling {
+    width: 250px;
+  }
+  .hud:not(:has(.info-panel)) .customer-panel.haggling {
+    max-height: calc(100dvh - var(--edge-t) - var(--edge-b));
+  }
+  .customer-panel.haggling
+    :is(.info-kicker, .customer-quote, .customer-type, .customer-car, .haggle-last) {
+    display: none;
+  }
+  .customer-panel.haggling .customer-actions,
+  .customer-panel.haggling .haggle-stepper {
+    margin-top: 6px;
+    gap: 6px;
   }
   .staff-panel {
     top: calc(var(--edge-t) + 52px);

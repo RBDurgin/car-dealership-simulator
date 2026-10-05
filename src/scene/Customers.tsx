@@ -192,11 +192,14 @@ function taskKey(c: Customer, player: PlayerIntent): string {
 
 /** Starts walking toward the goal for the customer's current task, from wherever they are. */
 function plan(c: Customer, w: CustomerWalker, task: string): void {
-  // Just answered an offer: nod or shake their head first.
+  // Just answered an offer: nod or shake their head first. A counter gets a
+  // single "hmm, not quite" shake, and they stay to talk it over.
   if (w.task === 'considering' && c.phase === 'following') {
     w.emote = { anim: 'emote-yes', left: EMOTE_SECONDS }
   } else if (w.task === 'considering' && c.leaveReason === 'refused') {
     w.emote = { anim: 'emote-no', left: EMOTE_SECONDS }
+  } else if (w.task === 'considering' && c.phase === 'talking') {
+    w.emote = { anim: 'emote-no', left: EMOTE_SECONDS / 2 }
   }
   w.task = task
   w.waypoints = []

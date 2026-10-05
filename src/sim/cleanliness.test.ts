@@ -36,6 +36,8 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   browsed,
   targetCarId: browseCarIds[browseCarIds.length - 1] ?? null,
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'browsing',
   leaveReason: null,
   handlerId: null,

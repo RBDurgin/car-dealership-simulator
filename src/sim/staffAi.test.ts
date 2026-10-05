@@ -28,6 +28,8 @@ const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   browsed: 1,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,

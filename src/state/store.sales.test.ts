@@ -6,9 +6,9 @@ import { FINANCE_FEE, salesCommission, type Role } from '../sim/staff'
 import { STARTING_CASH, useGame } from './store'
 
 // Customers' answers are random; these tests always get a yes.
-vi.mock('../sim/customers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../sim/customers')>()),
-  decide: () => true,
+vi.mock('../sim/negotiation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../sim/negotiation')>()),
+  respondToAsk: () => ({ answer: 'accept' }),
 }))
 
 const initial = useGame.getState()
@@ -34,6 +34,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   browsed: 1,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,
@@ -114,6 +116,28 @@ describe('AI salespeople', () => {
     expect(customer()?.phase).toBe('talking')
     game().staffOffer(sam)
     expect(customer()?.offer).toEqual({ carId: 'lot-car-1', price: car('lot-car-1').msrp })
+  })
+
+  it('ask again after a counter, and sell at the agreed price', () => {
+    const sam = hired('sales')
+    const msrp = car('lot-car-1').msrp
+    game().staffClaim(sam, A)
+    game().staffGreet(sam)
+    game().staffOffer(sam)
+    game().dispatchCustomer({ type: 'respond', id: A, answer: 'counter', counter: msrp - 2000 })
+    expect(customer()).toMatchObject({ phase: 'talking', handlerId: sam })
+    // Back in talking, they pitch again: splitting the difference for now.
+    game().staffOffer(sam)
+    expect(customer()?.offer?.price).toBe(msrp - 1000)
+    game().answerOffer(A)
+    game().staffLead(sam)
+    game().dispatchCustomer({ type: 'seat', id: A })
+    game().staffSign(sam, A)
+    expect(game().dayStats.sales[0]).toMatchObject({
+      price: msrp - 1000,
+      msrp,
+      soldBy: employee(sam).name,
+    })
   })
 
   it('hand buyers to a free finance manager, and keep the sale to their name', () => {

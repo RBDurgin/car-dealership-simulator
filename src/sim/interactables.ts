@@ -49,7 +49,7 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     durationMs: 2500,
   },
   greet: { id: 'greet', label: 'Greet', verb: 'Greeting', mode: 'timed', durationMs: 1500 },
-  offer: { id: 'offer', label: 'Offer at MSRP', verb: 'Making an offer', mode: 'instant' },
+  offer: { id: 'offer', label: 'Make an offer', verb: 'Making an offer', mode: 'instant' },
   // Starts performing only once the customer is seated (see scene/Player).
   closeDeal: {
     id: 'closeDeal',

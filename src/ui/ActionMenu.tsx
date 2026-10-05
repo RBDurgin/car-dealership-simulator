@@ -2,6 +2,7 @@ import { COARSE, COMPACT, useMediaQuery } from '../input/useMediaQuery'
 import { useEffect, useRef } from 'react'
 import { actionBlocker } from '../sim/deal'
 import { ACTIONS, type ActionId, type Interactable } from '../sim/interactables'
+import { suggestedAsk } from '../sim/negotiation'
 import { findInteractable } from '../scene/runtime'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -13,13 +14,13 @@ const MARGIN = 90
 /** A landscape phone is only ~375px tall: keep the ring nearer the edges. */
 const COMPACT_MARGIN = 70
 
-/** Button text: offers name their price. */
+/** Button text: an offer names the suggested ask. */
 function labelFor(action: ActionId, it: Interactable): string {
   if (action !== 'offer') return ACTIONS[action].label
   const s = useGame.getState()
   const c = s.customers.find((x) => x.id === it.id)
   const car = s.inventory.find((x) => x.id === c?.targetCarId)
-  return car ? `Offer at MSRP (${formatMoney(car.msrp)})` : ACTIONS.offer.label
+  return c && car ? `Ask ${formatMoney(suggestedAsk(c, car))}` : ACTIONS.offer.label
 }
 
 /** Sims-style pie menu: action buttons arranged on a ring around the click point. */

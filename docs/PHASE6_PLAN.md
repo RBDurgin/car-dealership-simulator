@@ -1,6 +1,6 @@
 # Phase 6 Plan — Sales negotiation
 
-**Status:** Planned 2026-10-05, approved for implementation in a new session. First step: point `CLAUDE.md` at this plan and start 6b (6a was folded into Phase 5a). Phase 5 comes first. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 6b done 2026-10-05, awaiting review. 6c next (6a was folded into Phase 5a). We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -29,6 +29,8 @@ Everything else extends existing modules: `customers.ts` (haggle state, `respond
 Done in Phase 5a (see `docs/PHASE5_PLAN.md`). This covers `InventoryCar.cost`, gross profit in the summary, commission on gross and the owner's profit goal. Phase 6 starts at 6b.
 
 ### 6b: Player negotiation
+
+**Done.** Differences from the plan below: `haggle` is null until the first counter (round 1), and `lastAsk` is recorded when they counter rather than on the `offer` event, so `respondToAsk` can tell whether the seller came down. A counter clears `offer`. Staff ask `suggestedAsk` (MSRP, then split the difference) until 6c gives them `staffAsk`. On compact screens the haggling panel drops the quote and takes the full height so the buttons stay in view. No keys changed, so `ui/controls.ts` is unchanged.
 
 **Customer side (`sim/negotiation.ts`, pure):**
 

@@ -20,9 +20,17 @@ export interface ArchetypeTraits {
   accept: number
   /** Multiplier on how long they look each car over. */
   linger: number
+  /**
+   * How they haggle: the fraction off MSRP they hope to pay, and how many asks
+   * they'll hear (they counter all but the last; see `respondToAsk`).
+   */
+  haggle: { expect: number; rounds: number }
   /** What the player learns about them on greeting. */
   hint: string
 }
+
+/** How far a customer's haggle `expect` strays either side of their archetype's. */
+export const EXPECT_JITTER = 0.02
 
 export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
   regular: {
@@ -32,6 +40,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     budget: { min: 0.85, max: 1.3 },
     accept: 0,
     linger: 1,
+    haggle: { expect: 0.04, rounds: 3 },
     hint: 'Shopping around',
   },
   'tire-kicker': {
@@ -41,6 +50,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     budget: { min: 0.85, max: 1.3 },
     accept: -0.35,
     linger: 1.2,
+    haggle: { expect: 0.06, rounds: 2 },
     hint: 'Just looking',
   },
   decisive: {
@@ -50,6 +60,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     budget: { min: 0.95, max: 1.3 },
     accept: 0.15,
     linger: 0.6,
+    haggle: { expect: 0.02, rounds: 2 },
     hint: 'Knows what they want',
   },
   bargain: {
@@ -59,6 +70,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     budget: { min: 0.7, max: 0.95 },
     accept: 0,
     linger: 1,
+    haggle: { expect: 0.08, rounds: 4 },
     hint: 'Watching every dollar',
   },
   couple: {
@@ -68,6 +80,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     budget: { min: 0.85, max: 1.3 },
     accept: 0,
     linger: 1.3,
+    haggle: { expect: 0.05, rounds: 3 },
     hint: 'Shopping together',
   },
 }

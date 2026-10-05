@@ -1,8 +1,9 @@
-import { ARCHETYPES, pickArchetype, type Archetype } from './archetypes'
+import { ARCHETYPES, EXPECT_JITTER, pickArchetype, type Archetype } from './archetypes'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
+import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
 
 /**
@@ -13,12 +14,14 @@ import type { Rng } from './rng'
  *                          │                            │                     │
  *                          └───────────greet────────────┤                  cancel
  *                                                       ▼                     │
- *            talking ─offer─► considering ─respond(yes)─► following ─seat─► signing
- *                                  │                       │     ▲            │
- *                            respond(no)             handOff│     │call     signed
- *                                  ▼                       ▼     │            ▼
- *                         leaving(refused)                 queued    leaving(bought)
+ *            talking ─offer─► considering ─respond(accept)─► following ─seat─► signing
+ *               ▲                  │  │                       │     ▲            │
+ *               └─respond(counter)─┘  respond(walk)     handOff│     │call     signed
+ *                                     ▼                       ▼     │            ▼
+ *                            leaving(refused)                 queued    leaving(bought)
  *
+ * An offer is haggled over (`sim/negotiation.ts`): a counter sends them back
+ * to talking, with `haggle` keeping score, for the seller to ask again.
  * `greet` makes the greeter their handler; a salesperson `claim`s a browsing or
  * waiting customer first, on their way over, so nobody else takes them.
  * `handOff` passes a buyer to the finance manager, who `call`s them from the
@@ -77,8 +80,12 @@ export interface Customer {
   browsed: number
   /** The car they're interested in, revealed on greeting. */
   targetCarId: string | null
-  /** The offer on the table, from `offer` until they leave or the deal is cancelled. */
+  /** The offer on the table, from `offer` until they counter, leave or the deal is cancelled. */
   offer: Offer | null
+  /** Fraction off MSRP they hope to pay (see `hopePrice`). */
+  expect: number
+  /** The haggle so far, once they've countered. Null in the first round. */
+  haggle: Haggle | null
   phase: CustomerPhase
   leaveReason: LeaveReason | null
   /**
@@ -207,6 +214,8 @@ export function generateCustomer(
     browsed: 0,
     targetCarId: null,
     offer: null,
+    expect: traits.haggle.expect,
+    haggle: null,
     phase: 'arriving',
     leaveReason: null,
     handlerId: null,
@@ -223,8 +232,10 @@ export function generateCustomer(
   )
   const target = favourite(customer, browse)
   const ordered = target ? [...browse.filter((car) => car !== target), target] : []
+  const jitter = (rng.next() * 2 - 1) * EXPECT_JITTER
   return {
     ...customer,
+    expect: Math.round((traits.haggle.expect + jitter) * 1000) / 1000,
     browseCarIds: ordered.map((car) => car.id),
     targetCarId: target?.id ?? null,
   }
@@ -281,18 +292,6 @@ export function acceptChance(c: Customer, car: InventoryCar, price: number, bonu
   return Math.max(0, Math.min(MAX_ACCEPT_CHANCE, chance))
 }
 
-/** Whether they accept the offer. Deterministic for a given rng state. */
-export function decide(
-  c: Customer,
-  car: InventoryCar,
-  price: number,
-  rng: Rng,
-  bonus = 0,
-): boolean {
-  const chance = acceptChance(c, car, price, bonus)
-  return chance > 0 && rng.next() < chance
-}
-
 export type Mood = 'neutral' | 'impatient' | 'happy' | 'unhappy'
 
 /** Patience fraction below which a waiting customer shows they're getting impatient. */
@@ -316,9 +315,12 @@ export function moodOf(c: Customer): Mood {
 }
 
 /** The icon above a customer's head, if any. */
-export type Bubble = 'waiting' | 'impatient' | 'considering' | 'helped' | 'bought' | 'upset'
+export type Bubble =
+  'waiting' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
 
 export function bubbleOf(c: Customer): Bubble | null {
+  // They've named their price and wait for the seller's answer.
+  if (c.phase === 'talking' && c.haggle) return 'counter'
   // A salesperson is on their way over, or talking with them.
   if (staffHandled(c) && ['browsing', 'waiting', 'talking'].includes(c.phase)) return 'helped'
   switch (c.phase) {
@@ -349,8 +351,8 @@ export type CustomerEvent =
   /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
   | { type: 'greet'; id: string; carId: string | null; by: string }
   | { type: 'offer'; id: string; carId: string; price: number }
-  /** Their answer to the offer (see `decide`). */
-  | { type: 'respond'; id: string; accepted: boolean }
+  /** Their answer to the offer (see `respondToAsk`), with their price if they counter. */
+  | { type: 'respond'; id: string; answer: 'accept' | 'counter' | 'walk'; counter?: number }
   /** Sat down to sign: in the guest chair they were sent to, else the office's (the player's buyer). */
   | { type: 'seat'; id: string }
   /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
@@ -417,8 +419,17 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.phase !== 'talking') return c
       return { ...c, phase: 'considering', offer: { carId: ev.carId, price: ev.price } }
     case 'respond':
-      if (c.phase !== 'considering') return c
-      return ev.accepted ? { ...c, phase: 'following' } : leave({ ...c, offer: null }, 'refused')
+      if (c.phase !== 'considering' || !c.offer) return c
+      if (ev.answer === 'accept') return { ...c, phase: 'following' }
+      if (ev.answer === 'walk' || ev.counter === undefined) {
+        return leave({ ...c, offer: null }, 'refused')
+      }
+      return {
+        ...c,
+        phase: 'talking',
+        offer: null,
+        haggle: { round: (c.haggle?.round ?? 1) + 1, lastAsk: c.offer.price, counter: ev.counter },
+      }
     case 'seat':
       if (c.phase !== 'following') return c
       return { ...c, phase: 'signing', chairId: c.chairId ?? GUEST_CHAIR_ID }
@@ -442,7 +453,15 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         return { ...c, handlerId: null }
       }
       if (!['talking', 'considering', 'following', 'signing', 'queued'].includes(c.phase)) return c
-      return { ...c, phase: 'waiting', offer: null, handlerId: null, chairId: null, sellerId: null }
+      return {
+        ...c,
+        phase: 'waiting',
+        offer: null,
+        haggle: null,
+        handlerId: null,
+        chairId: null,
+        sellerId: null,
+      }
     case 'despawn':
       return c.phase === 'leaving' ? null : c
     case 'tick': {

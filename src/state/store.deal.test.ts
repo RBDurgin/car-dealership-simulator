@@ -1,13 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
+import type { AskResponse } from '../sim/negotiation'
 import { STARTING_CASH, useGame } from './store'
 
-// Customers' answers are random; these tests pick them.
-const answer = vi.hoisted(() => ({ accept: true }))
-vi.mock('../sim/customers', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../sim/customers')>()),
-  decide: () => answer.accept,
+// Customers' answers are random; these tests pick them, and see what was asked.
+const answer = vi.hoisted(() => ({
+  accept: true,
+  /** Answers to give before falling back to `accept`. */
+  queue: [] as AskResponse[],
+  asks: [] as number[],
+}))
+vi.mock('../sim/negotiation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../sim/negotiation')>()),
+  respondToAsk: (_c: Customer, _car: unknown, ask: number): AskResponse => {
+    answer.asks.push(ask)
+    return (
+      answer.queue.shift() ??
+      (answer.accept ? { answer: 'accept' } : { answer: 'walk', reason: 'pass' })
+    )
+  },
 }))
 
 const initial = useGame.getState()
@@ -29,6 +41,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   browsed: 1,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,
@@ -56,6 +70,8 @@ describe('selling to a customer', () => {
   beforeEach(() => {
     useGame.setState({ ...initial, customers: [shopper()] }, true)
     answer.accept = true
+    answer.queue = []
+    answer.asks = []
   })
 
   it('greeting starts a conversation about the car they want', () => {
@@ -84,6 +100,56 @@ describe('selling to a customer', () => {
     game().answerOffer('customer-a')
     expect(customer()?.phase).toBe('following')
     expect(game().notice?.text).toMatch(/Deal/)
+  })
+
+  it('haggles: a counter, a split, then accepting their counter, and signs at that price', () => {
+    const msrp = car('lot-car-1').msrp
+    answer.queue = [
+      { answer: 'counter', counter: msrp - 3000 },
+      { answer: 'counter', counter: msrp - 2000 },
+    ]
+    greetAndOffer()
+    expect(customer()).toMatchObject({
+      phase: 'talking',
+      offer: null,
+      haggle: { round: 2, lastAsk: msrp, counter: msrp - 3000 },
+    })
+    expect(game().notice?.text).toMatch(/How about/)
+
+    // The menu's offer splits the difference.
+    perform('customer-a', 'offer')
+    game().answerOffer('customer-a')
+    expect(answer.asks).toEqual([msrp, msrp - 1500])
+    expect(customer()?.haggle).toEqual({ round: 3, lastAsk: msrp - 1500, counter: msrp - 2000 })
+
+    // Asks are kept between their counter and the last ask.
+    game().ask(msrp)
+    expect(customer()?.offer?.price).toBe(msrp - 1500)
+    game().dispatchCustomer({
+      type: 'respond',
+      id: 'customer-a',
+      answer: 'counter',
+      counter: msrp - 2000,
+    })
+    game().ask(1)
+    expect(customer()?.offer?.price).toBe(msrp - 2000)
+    game().answerOffer('customer-a')
+    expect(customer()?.phase).toBe('following')
+
+    game().requestAction('office-chair', 'closeDeal')
+    const id = game().activeAction!.id
+    game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
+    game().arriveAction(id)
+    game().completeAction(id)
+    expect(game().cash).toBe(STARTING_CASH + msrp - 2000)
+    expect(game().dayStats.sales[0]).toMatchObject({ price: msrp - 2000, msrp })
+  })
+
+  it('a customer who walks says why', () => {
+    answer.queue = [{ answer: 'walk', reason: 'stubborn' }]
+    greetAndOffer()
+    expect(customer()).toMatchObject({ phase: 'leaving', leaveReason: 'refused' })
+    expect(game().notice?.text).toMatch(/not moving/)
   })
 
   it('a refused offer sends them home unhappy and counts the walk-out', () => {
@@ -132,6 +198,8 @@ describe('walking away from a deal', () => {
       true,
     )
     answer.accept = true
+    answer.queue = []
+    answer.asks = []
   })
 
   it('Esc mid-conversation leaves them waiting', () => {
@@ -207,6 +275,8 @@ describe('the day loop', () => {
   beforeEach(() => {
     useGame.setState({ ...initial, customers: [shopper()] }, true)
     answer.accept = true
+    answer.queue = []
+    answer.asks = []
   })
 
   it("doesn't wear down the patience of the customer the player is heading to", () => {

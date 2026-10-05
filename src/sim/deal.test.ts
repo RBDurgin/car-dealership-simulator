@@ -55,6 +55,8 @@ const base: Customer = {
   browsed: 0,
   targetCarId: 'lot-car-1',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'waiting',
   leaveReason: null,
   handlerId: null,

@@ -22,6 +22,8 @@ const browser: Customer = {
   browsed: 0,
   targetCarId: 'lot-car-2',
   offer: null,
+  expect: 0.04,
+  haggle: null,
   phase: 'browsing',
   leaveReason: null,
   handlerId: null,

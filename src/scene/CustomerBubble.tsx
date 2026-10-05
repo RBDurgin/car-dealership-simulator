@@ -9,6 +9,7 @@ const ICONS: Record<Bubble, string> = {
   waiting: '!',
   impatient: '!',
   considering: '…',
+  counter: '$?',
   helped: '✓',
   bought: '$',
   upset: '☹',
@@ -16,7 +17,8 @@ const ICONS: Record<Bubble, string> = {
 
 /**
  * The icon over a customer's head: `!` when they want help (red once impatient),
- * a tick while a salesperson is helping them, `…` while considering an offer, `$` after buying, a frown when they leave upset.
+ * a tick while a salesperson is helping them, `…` while considering an offer, `$?`
+ * after they counter, `$` after buying, a frown when they leave upset.
  * Re-renders only when the icon changes.
  */
 export function CustomerBubble({ id }: { id: string }) {

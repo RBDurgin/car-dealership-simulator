@@ -186,14 +186,6 @@ export function actionBlocker(
   return null
 }
 
-/**
- * The price a seller asks for `car`. Everyone offers MSRP for now; negotiation
- * (Phase 6) takes over here.
- */
-export function offerPrice(car: InventoryCar): number {
-  return car.msrp
-}
-
 /** The rough budget a customer admits to when greeted: their real budget to the nearest $5k. */
 export function budgetHint(c: Customer): number {
   return Math.max(5000, Math.round(c.budget / 5000) * 5000)
