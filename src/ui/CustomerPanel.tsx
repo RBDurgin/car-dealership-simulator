@@ -1,3 +1,4 @@
+import { ARCHETYPES } from '../sim/archetypes'
 import { PLAYER_ID } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
@@ -6,8 +7,8 @@ import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /**
- * The customer the player is dealing with: the car they want, its price, roughly
- * what they want to spend, and where the deal stands. Offering and walking away
+ * The customer the player is dealing with: what kind of shopper they are, the
+ * car they want, its price, roughly what they want to spend, and where the deal stands. Offering and walking away
  * can be done from here as well as from the customer's menu.
  */
 export function CustomerPanel() {
@@ -21,6 +22,7 @@ export function CustomerPanel() {
     <div className="panel customer-panel">
       <div className="info-kicker">Customer</div>
       <h2>{c.name}</h2>
+      <div className="customer-type">{ARCHETYPES[c.archetype].hint}</div>
       <p className="customer-quote">
         “I'm interested in the {carName(car.model)}. I'm hoping to spend around{' '}
         {formatMoney(budgetHint(c))}.”

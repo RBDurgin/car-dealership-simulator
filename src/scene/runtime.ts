@@ -1,7 +1,7 @@
 import { Reservations, type Agent } from '../sim/crowd'
 import { PLAYER_ID } from '../sim/customers'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
-import type { Vec2 } from '../sim/grid'
+import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import {
@@ -59,7 +59,22 @@ export const customersAtCar = new Set<string>()
 export const staffPos = new Map<string, Vec2>()
 
 /**
- * Everyone standing in the world (customers, staff, the player), for walkers to
+ * Walkers the store doesn't know about: passers-by (scene/Pedestrians), a
+ * couple's companion (scene/Customers) and the owner (scene/Owner). Here only
+ * so everyone else keeps their distance.
+ */
+export const ambientPos = new Map<string, Vec2>()
+
+/**
+ * A passer-by who just walked in, by their new customer id: where they were
+ * on the sidewalk and the end they were heading for. scene/Customers picks
+ * them up from here instead of a sidewalk end, and they leave the way they
+ * were going.
+ */
+export const walkInSpawns = new Map<string, { pos: Vec2; heading: number; exit: Tile }>()
+
+/**
+ * Everyone standing in the world (customers, staff, passers-by, the player), for walkers to
  * keep their distance from. Anyone seated is left out: chairs block their tile,
  * so nobody can walk into them anyway.
  */
@@ -72,6 +87,7 @@ export function crowdAgents(): Agent[] {
   add(PLAYER_ID, playerPos)
   for (const [id, pos] of customerPos) add(id, pos)
   for (const [id, pos] of staffPos) add(id, pos)
+  for (const [id, pos] of ambientPos) add(id, pos)
   return agents
 }
 

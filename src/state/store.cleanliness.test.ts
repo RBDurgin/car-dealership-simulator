@@ -12,6 +12,8 @@ const browser: Customer = {
   id: 'customer-a',
   name: 'Alex B.',
   variant: 'male-a',
+  archetype: 'regular',
+  companion: null,
   budget: 40_000,
   preferredModels: ['sedan'],
   patience: 120,

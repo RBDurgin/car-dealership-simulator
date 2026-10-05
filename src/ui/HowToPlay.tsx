@@ -1,3 +1,4 @@
+import { OWNER_BONUS } from '../sim/owner'
 import { FINANCE_FEE, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS } from './controls'
@@ -24,8 +25,26 @@ export function HowToPlay() {
           <h3>The day</h3>
           <p>
             Doors open at 9:00 and close at 18:00. Customers browse the lot, then wait for help and
-            lose patience if nobody comes. Each day ends with a summary, and your progress is saved
-            then.
+            lose patience if nobody comes. Some are passers-by who wander in off the sidewalk. Each
+            day ends with a summary, and your progress is saved then.
+          </p>
+        </section>
+        <section>
+          <h3>Customers</h3>
+          <p>
+            Not everyone shops the same way, and greeting a customer tells you what kind they are.
+            Someone who is <i>just looking</i> browses a lot and rarely buys. Someone who{' '}
+            <i>knows what they want</i> heads for one car, won&apos;t wait long, and usually says
+            yes. Customers <i>watching every dollar</i> have a tight budget, and couples shop
+            together and take their time over each car.
+          </p>
+        </section>
+        <section>
+          <h3>The owner</h3>
+          <p>
+            Every two or three days the owner drops by at opening, walks to the office and sets a
+            goal for the day, shown in the top bar. Meet it by closing for a{' '}
+            {formatMoney(OWNER_BONUS)} bonus; miss it and you&apos;ll hear about it in the summary.
           </p>
         </section>
         <section>

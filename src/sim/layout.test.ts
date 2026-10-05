@@ -7,6 +7,7 @@ import {
   GUEST_CHAIR_ID,
   LOT_ENTRY_TILES,
   OPENINGS,
+  OWNER_OFFICE_TILES,
   PARKING_SPACES,
   parkedCarRect,
   PORTER_STANDBY_TILES,
@@ -56,6 +57,16 @@ describe('dealership layout', () => {
     for (const t of PORTER_STANDBY_TILES) {
       expect(zoneAt(layout, t.tx, t.tz)).toBe('asphalt')
       expect(findPath(grid, LOT_ENTRY_TILES[0], t), `${t.tx},${t.tz}`).not.toBeNull()
+    }
+  })
+
+  it("gives the owner a reachable spot in the office, off the chairs' approaches", () => {
+    const chairs = [DESK_CHAIR_ID, GUEST_CHAIR_ID].map((id) => PROPS.find((p) => p.id === id)!)
+    const approaches = chairs.flatMap((c) => approachTilesFor(grid, c.rect))
+    for (const t of OWNER_OFFICE_TILES) {
+      expect(zoneAt(layout, t.tx, t.tz)).toBe('office')
+      expect(findPath(grid, SIDEWALK_ENDS[0], t), `${t.tx},${t.tz}`).not.toBeNull()
+      expect(approaches).not.toContainEqual(t)
     }
   })
 

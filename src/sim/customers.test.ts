@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
+import { ARCHETYPES } from './archetypes'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
   acceptChance,
   bubbleOf,
-  BUDGET_FACTOR,
   chooseTarget,
   currentBrowseCarId,
   decide,
   generateCustomer,
   MAX_ACCEPT_CHANCE,
+  MIN_PATIENCE,
   moodOf,
   PATIENCE_MINUTES,
   PLAYER_ID,
@@ -33,6 +34,8 @@ const base: Customer = {
   id: 'c1',
   name: 'Alex B.',
   variant: 'male-a',
+  archetype: 'regular',
+  companion: null,
   budget: 40_000,
   preferredModels: ['sedan'],
   patience: 60,
@@ -70,22 +73,26 @@ describe('generateCustomer', () => {
       expect(c.preferredModels.length).toBeGreaterThanOrEqual(1)
       expect(new Set(c.preferredModels).size).toBe(c.preferredModels.length)
 
+      const traits = ARCHETYPES[c.archetype]
       const top = Math.max(...c.preferredModels.map((m) => BASE_MSRP[m]))
       expect(c.budget % 500).toBe(0)
-      expect(c.budget).toBeGreaterThanOrEqual(top * BUDGET_FACTOR.min - 250)
-      expect(c.budget).toBeLessThanOrEqual(top * BUDGET_FACTOR.max + 250)
+      expect(c.budget).toBeGreaterThanOrEqual(top * traits.budget.min - 250)
+      expect(c.budget).toBeLessThanOrEqual(top * traits.budget.max + 250)
 
       expect(c.patience % 5).toBe(0)
-      expect(c.patience).toBeGreaterThanOrEqual(PATIENCE_MINUTES.min)
-      expect(c.patience).toBeLessThanOrEqual(PATIENCE_MINUTES.max)
+      expect(c.patience).toBeGreaterThanOrEqual(
+        Math.max(MIN_PATIENCE, PATIENCE_MINUTES.min * traits.patience - 5),
+      )
+      expect(c.patience).toBeLessThanOrEqual(PATIENCE_MINUTES.max * traits.patience + 5)
       expect(c.patienceLeft).toBe(c.patience)
     }
   })
 
-  it('browses 1–3 distinct cars, ending at the target', () => {
+  it('browses as many distinct cars as their archetype likes, ending at the target', () => {
     for (const c of customers) {
-      expect(c.browseCarIds.length).toBeGreaterThanOrEqual(1)
-      expect(c.browseCarIds.length).toBeLessThanOrEqual(3)
+      const { browse } = ARCHETYPES[c.archetype]
+      expect(c.browseCarIds.length).toBeGreaterThanOrEqual(browse.min)
+      expect(c.browseCarIds.length).toBeLessThanOrEqual(browse.max)
       expect(new Set(c.browseCarIds).size).toBe(c.browseCarIds.length)
       expect(c.browseCarIds.at(-1)).toBe(c.targetCarId)
     }
@@ -113,6 +120,51 @@ describe('generateCustomer', () => {
   it('is deterministic for a seed', () => {
     expect(generateCustomer('x', inventory, createRng(5))).toEqual(
       generateCustomer('x', inventory, createRng(5)),
+    )
+  })
+
+  it('rolls every archetype, regulars most often', () => {
+    const counts = new Map<string, number>()
+    for (const c of customers) counts.set(c.archetype, (counts.get(c.archetype) ?? 0) + 1)
+    expect([...counts.keys()].sort()).toEqual(Object.keys(ARCHETYPES).sort())
+    const regulars = counts.get('regular')!
+    for (const [a, n] of counts) if (a !== 'regular') expect(n).toBeLessThan(regulars)
+  })
+
+  it('gives couples, and only couples, a companion who looks different', () => {
+    for (const c of customers) {
+      if (c.archetype === 'couple') {
+        expect(CUSTOMER_VARIANTS).toContain(c.companion)
+        expect(c.companion).not.toBe(c.variant)
+      } else {
+        expect(c.companion).toBeNull()
+      }
+    }
+  })
+
+  it('takes a given look and archetype', () => {
+    const c = generateCustomer('x', inventory, createRng(5), {
+      variant: 'female-c',
+      archetype: 'decisive',
+    })
+    expect(c.variant).toBe('female-c')
+    expect(c.archetype).toBe('decisive')
+    expect(c.browseCarIds).toHaveLength(1)
+  })
+
+  it('makes bargain hunters spend less and decisive buyers wait less', () => {
+    const many = (archetype: 'regular' | 'bargain' | 'decisive') =>
+      Array.from({ length: 100 }, (_, i) =>
+        generateCustomer(`c${i}`, inventory, createRng(i), { archetype }),
+      )
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+    const budgetShare = (c: Customer) =>
+      c.budget / Math.max(...c.preferredModels.map((m) => BASE_MSRP[m]))
+    expect(mean(many('bargain').map(budgetShare))).toBeLessThan(
+      mean(many('regular').map(budgetShare)) - 0.15,
+    )
+    expect(mean(many('decisive').map((c) => c.patience))).toBeLessThan(
+      mean(many('regular').map((c) => c.patience)) * 0.7,
     )
   })
 })
@@ -162,6 +214,17 @@ describe('decide', () => {
     for (let i = 0; i < n; i++) if (decide(base, truck, base.budget, rng)) yes++
     expect(yes / n).toBeGreaterThan(0.3)
     expect(yes / n).toBeLessThan(0.4)
+  })
+
+  it('makes tire-kickers hard to sell to and decisive buyers easy', () => {
+    const atLimit = acceptChance(base, sedan, base.budget)
+    const kicker = { ...base, archetype: 'tire-kicker' as const }
+    const decisive = { ...base, archetype: 'decisive' as const }
+    expect(acceptChance(kicker, sedan, base.budget)).toBeCloseTo(atLimit - 0.35)
+    expect(acceptChance(decisive, sedan, base.budget)).toBeCloseTo(atLimit + 0.15)
+    // Never below zero, and still a no over budget.
+    expect(acceptChance(kicker, truck, base.budget, skillBonus(1))).toBe(0)
+    expect(acceptChance(decisive, sedan, base.budget + 100)).toBe(0)
   })
 
   it("adds the seller's skill: −10% for a novice up to +5% for the best", () => {

@@ -3,7 +3,11 @@ import type { Rng } from './rng'
 
 /** Nobody new shows up after this, so late visitors have time to be helped. */
 export const LAST_ARRIVAL_MINUTE = 17 * 60
-export const VISITORS_PER_DAY = { min: 6, max: 10 }
+/**
+ * Planned arrivals. Passers-by who wander in (see `sim/pedestrians.ts`) add
+ * about three more a day on top.
+ */
+export const VISITORS_PER_DAY = { min: 4, max: 7 }
 
 /** A day's arrivals and how many of them have already been spawned. */
 export interface ArrivalSchedule {

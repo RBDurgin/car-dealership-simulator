@@ -1,6 +1,7 @@
 import { formatTime, isClosed } from '../sim/clock'
 import { netIncome, revenue, salesBySeller, walkOuts } from '../sim/deal'
 import { carName } from '../sim/interactables'
+import { goalLabel } from '../sim/owner'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -22,7 +23,12 @@ export function DaySummary() {
         <h2>Day {day} summary</h2>
         <dl className="summary-stats">
           <dt>Visitors</dt>
-          <dd>{stats.visitors}</dd>
+          <dd>
+            {stats.visitors}
+            {stats.walkIns > 0 && (
+              <span className="muted"> ({stats.walkIns} walked in off the street)</span>
+            )}
+          </dd>
           <dt>Cars sold</dt>
           <dd>{stats.sales.length}</dd>
           <dt>Revenue</dt>
@@ -31,6 +37,12 @@ export function DaySummary() {
           <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
           <dt>Commissions</dt>
           <dd className="price">{formatMoney(-stats.commissions || 0)}</dd>
+          {!!stats.owner?.bonus && (
+            <>
+              <dt>Owner&apos;s bonus</dt>
+              <dd className="price">{formatMoney(stats.owner.bonus)}</dd>
+            </>
+          )}
           <dt>Net</dt>
           <dd className="price">{formatMoney(netIncome(stats))}</dd>
           <dt>Walk-outs</dt>
@@ -46,6 +58,15 @@ export function DaySummary() {
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>
+        {stats.owner && (
+          <div className={stats.owner.met ? 'summary-owner goal-met' : 'summary-owner'}>
+            <div>
+              Owner&apos;s goal: <b>{goalLabel(stats.owner.goal, formatMoney)}</b>{' '}
+              {stats.owner.met ? '— met!' : '— missed.'}
+            </div>
+            <div className="summary-owner-line">“{stats.owner.line}”</div>
+          </div>
+        )}
         {stats.sales.some((s) => s.soldBy !== null) && (
           <table className="summary-sellers">
             <thead>

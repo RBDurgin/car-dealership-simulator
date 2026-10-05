@@ -1,3 +1,4 @@
+import { ARCHETYPES, pickArchetype, type Archetype } from './archetypes'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import { BASE_MSRP, type InventoryCar } from './inventory'
@@ -55,6 +56,13 @@ export interface Customer {
   id: string
   name: string
   variant: CustomerVariant
+  /** What kind of shopper they are (see `ARCHETYPES`). */
+  archetype: Archetype
+  /**
+   * A couple's other half, who walks along with them in the world and has no
+   * state of their own. Null for anyone shopping alone.
+   */
+  companion: CustomerVariant | null
   /** Most they'll pay. */
   budget: number
   /** Body types they're shopping for. */
@@ -114,10 +122,10 @@ export function randomName(rng: Rng): string {
 
 export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
 
-/** Budget is the priciest preferred model's base price times a factor in this range. */
-export const BUDGET_FACTOR = { min: 0.85, max: 1.3 }
-/** Patience in game minutes. */
+/** Patience in game minutes, before the archetype's multiplier. */
 export const PATIENCE_MINUTES = { min: 45, max: 120 }
+/** Nobody waits less than this many game minutes, however impatient. */
+export const MIN_PATIENCE = 15
 
 /** How much a customer likes a car: preferred body type first, then whether it's affordable. */
 function carScore(c: Customer, car: InventoryCar): number {
@@ -150,29 +158,47 @@ function pickBrowseCars(
   return picked
 }
 
-/** A new customer arriving now, planning to look at 1–3 of the `available` cars. */
+export interface CustomerOptions {
+  /** Their look, e.g. a passer-by's who walked in. Random otherwise. */
+  variant?: CustomerVariant
+  /** What kind of shopper they are. Random (weighted) otherwise. */
+  archetype?: Archetype
+}
+
+/**
+ * A new customer arriving now, planning to look at some of the `available`
+ * cars (how many, and the rest of their traits, depend on their archetype).
+ */
 export function generateCustomer(
   id: string,
   available: readonly InventoryCar[],
   rng: Rng,
+  opts: CustomerOptions = {},
 ): Customer {
+  const archetype = opts.archetype ?? pickArchetype(rng)
+  const traits = ARCHETYPES[archetype]
   const name = randomName(rng)
-  const variant = rng.pick(CUSTOMER_VARIANTS)
+  const variant = opts.variant ?? rng.pick(CUSTOMER_VARIANTS)
+  const companion =
+    archetype === 'couple' ? rng.pick(CUSTOMER_VARIANTS.filter((v) => v !== variant)) : null
 
   const first = rng.pick(CAR_MODELS)
   const second = rng.pick(CAR_MODELS)
   const preferredModels = rng.next() < 0.5 && second !== first ? [first, second] : [first]
 
   const top = Math.max(...preferredModels.map((m) => BASE_MSRP[m]))
-  const factor = BUDGET_FACTOR.min + rng.next() * (BUDGET_FACTOR.max - BUDGET_FACTOR.min)
+  const factor = traits.budget.min + rng.next() * (traits.budget.max - traits.budget.min)
   const budget = Math.round((top * factor) / 500) * 500
 
-  const patience = rng.int(PATIENCE_MINUTES.min / 5, PATIENCE_MINUTES.max / 5) * 5
+  const rolled = rng.int(PATIENCE_MINUTES.min / 5, PATIENCE_MINUTES.max / 5) * 5
+  const patience = Math.max(MIN_PATIENCE, Math.round((rolled * traits.patience) / 5) * 5)
 
   const customer: Customer = {
     id,
     name,
     variant,
+    archetype,
+    companion,
     budget,
     preferredModels,
     patience,
@@ -189,7 +215,12 @@ export function generateCustomer(
   }
 
   // They end their browse at the car they like best, which becomes the target.
-  const browse = pickBrowseCars(customer, available, rng.int(1, 3), rng)
+  const browse = pickBrowseCars(
+    customer,
+    available,
+    rng.int(traits.browse.min, traits.browse.max),
+    rng,
+  )
   const target = favourite(customer, browse)
   const ordered = target ? [...browse.filter((car) => car !== target), target] : []
   return {
@@ -232,7 +263,8 @@ export function skillBonus(skill: number): number {
  * Chance they say yes to `car` at `price`. Zero over budget. Otherwise 35% for
  * a car of the wrong body type right at their limit, rising with preference
  * (+35%) and headroom (up to +30% at 25% under budget), plus how clean the
- * car is (±8%, see `cleanlinessBonus`) and the seller's `bonus` (see
+ * car is (±8%, see `cleanlinessBonus`), their archetype (a tire-kicker rarely
+ * says yes, a decisive buyer usually does) and the seller's `bonus` (see
  * `skillBonus`), capped at 95%.
  */
 export function acceptChance(c: Customer, car: InventoryCar, price: number, bonus = 0): number {
@@ -240,7 +272,12 @@ export function acceptChance(c: Customer, car: InventoryCar, price: number, bonu
   const preferred = c.preferredModels.includes(car.model) ? 1 : 0
   const headroom = Math.min(1, (c.budget - price) / c.budget / COMFORT_HEADROOM)
   const chance =
-    0.35 + 0.35 * preferred + 0.3 * headroom + cleanlinessBonus(car.cleanliness) + bonus
+    0.35 +
+    0.35 * preferred +
+    0.3 * headroom +
+    cleanlinessBonus(car.cleanliness) +
+    ARCHETYPES[c.archetype].accept +
+    bonus
   return Math.max(0, Math.min(MAX_ACCEPT_CHANCE, chance))
 }
 

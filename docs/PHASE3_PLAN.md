@@ -140,6 +140,11 @@ Rules carried over: positions stay in walkers and `runtime.ts` maps (`staffPos`,
   - Visits every two to three days at opening (a fixed variant with a suit tint), walks to the office and sets a goal (`sim/owner.ts`). Example goals: "Sell 2 cars", "Sell an SUV", "No impatient walk-outs", "$80k revenue".
   - `GoalBanner` shows the goal and progress. The goal is judged against `DayStats` at closing: a cash bonus if it's met, a grumpy line in the summary if it isn't.
 - **Done when:** the sidewalk has passers-by and some walk in. Archetypes behave differently in a ×16 day, and an owner day shows the goal, tracks progress and pays or scolds in the summary.
+- **Built (2026-10-04):**
+  - 18–26 passers-by a day walk their lane end to end (`planPedestrians`, seeded by the day, so the store never sees them). About 15% turn in at the driveway; the store's `walkIn` adds them as a customer (counted in `dayStats.walkIns`) until 17:00, and `scene/Customers` picks them up from where they stood (`runtime.walkInSpawns`). Planned arrivals dropped from 6–10 to 4–7.
+  - Archetypes are a table (`ARCHETYPES`): regular, tire-kicker (3–5 cars, −35% accept), decisive (one car, half the patience, +15%), bargain (budget 0.7–0.95 of the base price) and couple (2–3 cars, lingers longer). A couple's companion is `Customer.companion`, a variant only: they follow the customer in the world and hover and click as one with them. Walk-ins are never couples.
+  - The owner visits on day 2, then every 2–3 days (`isOwnerDay`). They're `male-f` in a dark suit (`Character`'s `bodyTint`) with a gold badge, walk to the office, announce the goal (`ownerArrived`), look around for 30 game minutes and leave. Goals scale with the sales staff. The goal is judged in `settleDay`: $1,500 if met (in Net), a grumble if not; a goal the owner never announced isn't judged.
+  - Passers-by, companions and the owner are in `runtime.ambientPos`, so everyone keeps their distance from them.
 
 ## Files touched (representative)
 

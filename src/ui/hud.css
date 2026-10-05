@@ -239,6 +239,32 @@ kbd {
   font-weight: 600;
 }
 
+/* The owner's goal, in the top bar */
+.goal-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.16);
+  border: 1px solid rgba(234, 179, 8, 0.45);
+  font-size: 13px;
+}
+.goal-banner.goal-met {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+.goal-kicker {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.goal-progress {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
 /* Staff role badges are drei <Html> overlays too. */
 .staff-badge {
   padding: 2px 6px;
@@ -253,6 +279,9 @@ kbd {
   white-space: nowrap;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   user-select: none;
+}
+.owner-badge {
+  background: #a16207;
 }
 
 /* Customer bubbles are drei <Html> overlays, rendered outside .hud. */
@@ -462,6 +491,11 @@ kbd {
 .customer-panel dd {
   margin: 0;
 }
+.customer-type {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  opacity: 0.65;
+}
 .customer-quote {
   margin: 0 0 10px;
   font-style: italic;
@@ -545,6 +579,22 @@ kbd {
 }
 .day-summary .btn {
   width: 100%;
+}
+.summary-owner {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.summary-owner.goal-met {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.45);
+}
+.summary-owner-line {
+  margin-top: 4px;
+  font-style: italic;
+  opacity: 0.85;
 }
 .summary-saved {
   margin: 0 0 10px;

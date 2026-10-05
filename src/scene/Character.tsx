@@ -1,7 +1,7 @@
 import { useAnimations, useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef, type RefObject } from 'react'
-import type { AnimationAction, Group, Mesh } from 'three'
+import type { AnimationAction, Group, Mesh, MeshStandardMaterial } from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
 import {
   CUSTOMER_VARIANTS,
@@ -31,32 +31,44 @@ const urlFor = (variant: CharacterVariant) => `${BASE}/${FILES[variant]}.glb`
 
 for (const v of Object.keys(FILES) as CharacterVariant[]) useGLTF.preload(urlFor(v))
 
+/** The Kenney characters' clothes and hands; the head is a separate mesh. */
+const BODY_MESH = 'body-mesh'
+
 /**
  * An animated, skinned character facing +z. The clip is read from `anim` every frame
  * and crossfaded on change, so callers drive it from `useFrame` without re-rendering.
- * `moveSpeed` (units/s) speeds up walk/sprint so the feet don't slide.
+ * `moveSpeed` (units/s) speeds up walk/sprint so the feet don't slide. `bodyTint`
+ * multiplies the colour of their clothes (on this copy only), e.g. for a dark suit.
  */
 export function Character({
   variant,
   anim,
   moveSpeed,
+  bodyTint,
 }: {
   variant: CharacterVariant
   anim: RefObject<CharacterAnim>
   moveSpeed?: number
+  bodyTint?: string
 }) {
   const { scene, animations } = useGLTF(urlFor(variant))
   // Skinned meshes need SkeletonUtils.clone so each copy gets its own skeleton.
   const object = useMemo(() => {
     const root = clone(scene)
     root.traverse((o) => {
-      if ((o as Mesh).isMesh) {
-        o.castShadow = true
-        o.receiveShadow = true
+      if (!(o as Mesh).isMesh) return
+      const mesh = o as Mesh
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      // Clones share materials, so tint a copy of this one's.
+      if (bodyTint && mesh.name === BODY_MESH) {
+        const material = (mesh.material as MeshStandardMaterial).clone()
+        material.color.set(bodyTint)
+        mesh.material = material
       }
     })
     return root
-  }, [scene])
+  }, [scene, bodyTint])
   const root = useRef<Group>(null)
   const { actions } = useAnimations(animations, root)
   const playing = useRef<AnimationAction | null>(null)

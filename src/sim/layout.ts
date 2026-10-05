@@ -30,6 +30,13 @@ export const PORTER_STANDBY_TILES: Tile[] = [
   { tx: 34, tz: 17 },
 ]
 
+/** Where the owner stands on a visit: in the office, by the desk, clear of both chairs. */
+export const OWNER_OFFICE_TILES: Tile[] = [
+  { tx: 34, tz: 6 },
+  { tx: 35, tz: 6 },
+  { tx: 34, tz: 7 },
+]
+
 export interface Rect {
   tx: number
   tz: number

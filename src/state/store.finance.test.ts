@@ -20,6 +20,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   id: 'customer-a',
   name: 'Alex B.',
   variant: 'male-a',
+  archetype: 'regular',
+  companion: null,
   budget: 200_000,
   preferredModels: ['sedan'],
   patience: 120,

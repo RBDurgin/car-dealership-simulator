@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
+import { pickArchetype } from '../sim/archetypes'
+import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
 import {
@@ -38,9 +40,10 @@ import {
   sellCar as markSold,
   type InventoryCar,
 } from '../sim/inventory'
+import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
-import { planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
+import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
 import {
   canHire,
   FINANCE_FEE,
@@ -83,6 +86,8 @@ const INVENTORY_SEED = 2026
 const CUSTOMER_SEED = 7_000
 const DEAL_SEED = 9_000
 const STAFF_SEED = 11_000
+const OWNER_SEED = 12_000
+const WALK_IN_SEED = 14_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -117,6 +122,8 @@ interface GameState {
   roster: Employee[]
   /** Today's applicants. */
   candidates: Employee[]
+  /** On an owner's day, their goal for it. Null on other days. */
+  owner: OwnerVisit | null
   /** The staff panel is open. */
   staffOpen: boolean
   /** The how-to-play guide is open; the clock and the player wait while it is. */
@@ -149,6 +156,13 @@ interface GameState {
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
+  /**
+   * A passer-by who looks like `variant` turns in at the driveway. Returns the
+   * new customer's id, or null if the lot isn't taking visitors any more.
+   */
+  walkIn: (variant: CustomerVariant) => string | null
+  /** The owner reached the office and tells the player today's goal. */
+  ownerArrived: () => void
   /** Progress reported by the world (or the player) for one customer. */
   dispatchCustomer: (ev: CustomerEvent) => void
   /** A customer has thought over the offer on the table and answers it. */
@@ -194,6 +208,8 @@ let customerRng: Rng = createRng(CUSTOMER_SEED + 1)
 let dealRng: Rng = createRng(DEAL_SEED + 1)
 /** Job applicants. */
 let staffRng: Rng = createRng(STAFF_SEED + 1)
+/** Passers-by who walk in. Apart from `customerRng`, as they turn up on frames, not clock steps. */
+let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
 
 /** Time stands still and the player can't move behind the title screen or the guide. */
 export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen'>): boolean {
@@ -258,15 +274,18 @@ export const useGame = create<GameState>((set, get) => {
 
   /**
    * Pays the day's staff once the doors are shut and the last customer has gone,
-   * before the summary shows, so it reports cash after payroll.
+   * before the summary shows, so it reports cash after payroll. On an owner's
+   * day the day is judged against their goal, and any bonus is paid too.
    */
   const settleDay = () => {
     const s = get()
     if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
     const { wages, commissions } = payroll(s.roster, s.dayStats.sales)
+    // A goal the player never heard (the owner didn't make it in) isn't judged.
+    const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
     set({
-      cash: s.cash - wages - commissions,
-      dayStats: { ...s.dayStats, wages, commissions, settled: true },
+      cash: s.cash - wages - commissions + (owner?.bonus ?? 0),
+      dayStats: { ...s.dayStats, wages, commissions, owner, settled: true },
     })
   }
 
@@ -429,13 +448,23 @@ export const useGame = create<GameState>((set, get) => {
     customerRng = createRng(CUSTOMER_SEED + day)
     dealRng = createRng(DEAL_SEED + day)
     staffRng = createRng(STAFF_SEED + day)
+    walkInRng = createRng(WALK_IN_SEED + day)
+    const s = get()
+    const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
+    const owner = isOwnerDay(day)
+      ? {
+          goal: generateGoal(createRng(OWNER_SEED + day), s.inventory, salesStaff),
+          announced: false,
+        }
+      : null
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
-      inventory: dirtyOvernight(get().inventory),
+      inventory: dirtyOvernight(s.inventory),
       arrivals: planArrivals(customerRng),
       dayStats: emptyStats(),
       candidates: generateCandidates(staffRng, day),
+      owner,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
   }
@@ -459,6 +488,7 @@ export const useGame = create<GameState>((set, get) => {
     dayStats: emptyStats(),
     roster: [],
     candidates: generateCandidates(staffRng, 1),
+    owner: null,
     staffOpen: false,
     helpOpen: false,
     timeScale: 1,
@@ -579,6 +609,32 @@ export const useGame = create<GameState>((set, get) => {
       )
       set({ dayStats: { ...s.dayStats, visitors: s.dayStats.visitors + n } })
       commit([...s.customers, ...arrived])
+    },
+    walkIn: (variant) => {
+      const s = get()
+      if (s.screen !== 'playing' || isClosed(s.clock) || s.clock.minute > LAST_ARRIVAL_MINUTE) {
+        return null
+      }
+      // Passers-by come alone: a couple would need a companion out of thin air.
+      const picked = pickArchetype(walkInRng)
+      const archetype = picked === 'couple' ? 'regular' : picked
+      const id = `customer-${nextCustomerId++}`
+      const c = generateCustomer(id, availableCars(s.inventory), walkInRng, { variant, archetype })
+      set({
+        dayStats: {
+          ...s.dayStats,
+          visitors: s.dayStats.visitors + 1,
+          walkIns: s.dayStats.walkIns + 1,
+        },
+      })
+      commit([...s.customers, c])
+      return id
+    },
+    ownerArrived: () => {
+      const owner = get().owner
+      if (!owner || owner.announced) return
+      set({ owner: { ...owner, announced: true } })
+      notify(`The owner wants: ${goalLabel(owner.goal, formatMoney)}.`)
     },
     dispatchCustomer: (ev) => commit(reduceCustomers(get().customers, ev)),
     answerOffer: (id) => {

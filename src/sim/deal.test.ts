@@ -38,6 +38,8 @@ const base: Customer = {
   id: 'c1',
   name: 'Alex B.',
   variant: 'male-a',
+  archetype: 'regular',
+  companion: null,
   budget: 41_500,
   preferredModels: ['sedan'],
   patience: 60,

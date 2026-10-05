@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { memo, Suspense } from 'react'
 import type { Group } from 'three'
 import { toWaypoints } from '../sim/agent'
+import { ARCHETYPES } from '../sim/archetypes'
 import type { CharacterAnim } from '../sim/characters'
 import {
   currentBrowseCarId,
@@ -23,6 +24,7 @@ import { Character } from './Character'
 import { CustomerBubble } from './CustomerBubble'
 import { Interactable } from './Interactable'
 import {
+  ambientPos,
   customerPos,
   customersAtCar,
   gameTime,
@@ -30,6 +32,7 @@ import {
   interactables,
   playerPos,
   staffPos,
+  walkInSpawns,
 } from './runtime'
 import {
   createWalker,
@@ -53,6 +56,8 @@ const EMOTE_SECONDS = 1.3
 /** A follower stops this close to the player, and sets off again once they're this far. */
 const FOLLOW_STOP = 1.3
 const FOLLOW_START = 2
+/** A couple's companion walks a touch faster, so they catch up when left behind. */
+const COMPANION_SPEED = CUSTOMER_SPEED * 1.15
 /** A guest chair by id: the office's, or a sales desk's. */
 const guestChair = (id: string | null) => PROPS.find((p) => p.id === (id ?? GUEST_CHAIR_ID))
 const SOFA = PROPS.find((p) => p.id === 'lounge-sofa')!
@@ -91,19 +96,33 @@ interface CustomerWalker extends Walker {
   sofaSeat: Prop | null
 }
 
+/** A couple's other half: tags along after the customer, with no state of their own. */
+interface Companion extends Walker {
+  /** The customer's tile when the companion last planned a path to them. */
+  followTile: Tile | null
+}
+
 const walkers = new Map<string, CustomerWalker>()
 const groups = new Map<string, Group>()
+/** Companions and their scene groups, by the customer they're with. */
+const companions = new Map<string, Companion>()
+const companionGroups = new Map<string, Group>()
 
-/** The customer's walker, created at a sidewalk end on first sight. */
+/**
+ * The customer's walker, created on first sight: at a sidewalk end, or where
+ * they were on the sidewalk if they're a passer-by who walked in.
+ */
 function walkerFor(c: Customer): CustomerWalker {
   let w = walkers.get(c.id)
   if (w) return w
   const rng = createRng(hashSeed(c.id))
-  const spawn = rng.pick(SIDEWALK_ENDS)
-  // They leave the way they came, on either lane.
-  const exit = rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
+  const walkIn = walkInSpawns.get(c.id)
+  walkInSpawns.delete(c.id)
+  const spawn = walkIn ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z) : rng.pick(SIDEWALK_ENDS)
+  // They leave the way they came, on either lane; a passer-by carries on their way.
+  const exit = walkIn?.exit ?? rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
   w = {
-    ...createWalker(c.id, spawn, inwardHeading(spawn)),
+    ...createWalker(c.id, spawn, walkIn?.heading ?? inwardHeading(spawn)),
     rng,
     exit,
     task: null,
@@ -113,9 +132,22 @@ function walkerFor(c: Customer): CustomerWalker {
     followTile: null,
     sofaSeat: null,
   }
+  if (walkIn) w.pos = { ...walkIn.pos }
   walkers.set(c.id, w)
   customerPos.set(c.id, w.pos)
   return w
+}
+
+/** A couple's companion, created next to the customer on first sight. Null for anyone alone. */
+function companionFor(c: Customer, lead: CustomerWalker): Companion | null {
+  if (!c.companion) return null
+  let m = companions.get(c.id)
+  if (m) return m
+  const tile = grid.worldToTile(lead.pos.x, lead.pos.z)
+  m = { ...createWalker(`${c.id}:companion`, tile, lead.heading), followTile: null }
+  companions.set(c.id, m)
+  ambientPos.set(m.id, m.pos)
+  return m
 }
 
 /** Gives up their sofa seat, if they have one. */
@@ -131,6 +163,10 @@ function removeWalker(id: string): void {
   customerPos.delete(id)
   customersAtCar.delete(id)
   releaseWalker(id)
+  // Their companion goes with them.
+  const m = companions.get(id)
+  if (m) ambientPos.delete(m.id)
+  companions.delete(id)
 }
 
 /** What they're doing in the world. A new key means they need a new path. */
@@ -240,7 +276,8 @@ function onArrived(c: Customer, w: CustomerWalker): void {
         // Can't get to it, or it sold while they were on their way: move on.
         game.dispatchCustomer({ type: 'browsed', id: c.id })
       } else if (w.lingerUntil === null) {
-        w.lingerUntil = gameTime.minute + w.rng.int(LINGER_MINUTES.min, LINGER_MINUTES.max)
+        const minutes = w.rng.int(LINGER_MINUTES.min, LINGER_MINUTES.max)
+        w.lingerUntil = gameTime.minute + minutes * ARCHETYPES[c.archetype].linger
         customersAtCar.add(c.id)
       } else if (gameTime.minute >= w.lingerUntil) {
         game.dispatchCustomer({ type: 'browsed', id: c.id })
@@ -263,18 +300,21 @@ function onArrived(c: Customer, w: CustomerWalker): void {
   }
 }
 
-/** Keeps a follower's path pointed at the player, stopping a short way off. */
-function follow(w: CustomerWalker): void {
-  const d = Math.hypot(playerPos.x - w.pos.x, playerPos.z - w.pos.z)
+/**
+ * Keeps a follower's path pointed at `target` (the player, or a companion's
+ * customer), stopping a short way off.
+ */
+function follow(w: Walker & { followTile: Tile | null }, target: Vec2): void {
+  const d = Math.hypot(target.x - w.pos.x, target.z - w.pos.z)
   if (d <= FOLLOW_STOP) {
     w.waypoints = []
     return
   }
-  const tile = grid.worldToTile(playerPos.x, playerPos.z)
+  const tile = grid.worldToTile(target.x, target.z)
   const moved = !w.followTile || w.followTile.tx !== tile.tx || w.followTile.tz !== tile.tz
   if (d < FOLLOW_START || (w.waypoints.length > 0 && !moved)) return
   w.followTile = tile
-  // The player's own tile, or next to it if they're sitting on something.
+  // Their own tile, or next to it if they're sitting on something.
   const goals = [tile, ...approachTilesFor(grid, { ...tile, w: 1, h: 1 })]
   const tiles = findPathToAny(grid, grid.worldToTile(w.pos.x, w.pos.z), goals, crowdCost(w.id))
   w.waypoints = tiles ? toWaypoints(grid, tiles, w.pos) : []
@@ -327,19 +367,40 @@ function update(
     }
     return
   }
-  if (task === 'follow') follow(w)
+  if (task === 'follow') follow(w, playerPos)
   walk(w, CUSTOMER_SPEED, seconds, task === 'follow' ? playerPos : w.faceTo)
   if (w.waypoints.length === 0) onArrived(c, w)
+}
+
+/**
+ * A companion sticks with their customer, and once they've caught up looks at
+ * whatever the customer is looking at: the car, or whoever is helping them.
+ */
+function updateCompanion(
+  c: Customer,
+  lead: CustomerWalker,
+  m: Companion,
+  seconds: number,
+  player: PlayerIntent,
+): void {
+  follow(m, lead.pos)
+  const look = attending(c, lead.task ?? '', player) ? handlerPos(c) : (lead.faceTo ?? lead.pos)
+  walk(m, COMPANION_SPEED, seconds, look)
 }
 
 const CustomerFigure = memo(function CustomerFigure({
   id,
   variant,
   anim,
+  companionVariant,
+  companionAnim,
 }: {
   id: string
   variant: CustomerVariant
-  anim: CustomerWalker['anim']
+  anim: Walker['anim']
+  /** A couple's other half, who walks separately but hovers and clicks as one with them. */
+  companionVariant: CustomerVariant | null
+  companionAnim: Walker['anim'] | null
 }) {
   // Clickable while there's something to do with them (greet, make an offer).
   const helpable = useGame((s) => {
@@ -347,25 +408,46 @@ const CustomerFigure = memo(function CustomerFigure({
     return !!c && customerActions(c).length > 0
   })
   return (
-    <group
-      ref={(g) => {
-        if (g) groups.set(id, g)
-        else groups.delete(id)
-      }}
-    >
-      <Interactable id={id} disabled={!helpable}>
-        <Suspense fallback={null}>
-          <Character variant={variant} anim={anim} moveSpeed={CUSTOMER_SPEED} />
-        </Suspense>
-      </Interactable>
-      <CustomerBubble id={id} />
-    </group>
+    <>
+      <group
+        ref={(g) => {
+          if (g) groups.set(id, g)
+          else groups.delete(id)
+        }}
+      >
+        <Interactable id={id} disabled={!helpable}>
+          <Suspense fallback={null}>
+            <Character variant={variant} anim={anim} moveSpeed={CUSTOMER_SPEED} />
+          </Suspense>
+        </Interactable>
+        <CustomerBubble id={id} />
+      </group>
+      {companionVariant && companionAnim && (
+        <group
+          ref={(g) => {
+            if (g) companionGroups.set(id, g)
+            else companionGroups.delete(id)
+          }}
+        >
+          <Interactable id={id} disabled={!helpable}>
+            <Suspense fallback={null}>
+              <Character
+                variant={companionVariant}
+                anim={companionAnim}
+                moveSpeed={COMPANION_SPEED}
+              />
+            </Suspense>
+          </Interactable>
+        </group>
+      )}
+    </>
   )
 })
 
 /**
  * Every customer in the world, moved by one `useFrame`: they walk in from the
- * sidewalk, browse their cars, wait, stop to talk when the player or a
+ * sidewalk (a passer-by who wandered in picks up from where they were), with a
+ * couple's companion tagging along, browse their cars, wait, stop to talk when the player or a
  * salesperson comes over, follow the player to the office to sign (or walk to
  * a salesperson's desk, or wait on the lounge sofa until finance calls them),
  * and walk back out. Phase changes go
@@ -385,18 +467,34 @@ export function Customers() {
     const live = new Set<string>()
     for (const c of game.customers) {
       live.add(c.id)
-      update(c, walkerFor(c), seconds, realSeconds, player)
+      const w = walkerFor(c)
+      update(c, w, seconds, realSeconds, player)
+      // Removed if they just walked off the map.
+      const m = walkers.has(c.id) && companionFor(c, w)
+      if (m) updateCompanion(c, w, m, seconds, player)
     }
     // Anyone the store no longer knows about (despawned, or a new day) goes too.
     for (const id of walkers.keys()) if (!live.has(id)) removeWalker(id)
     syncGroups(groups, walkers)
+    syncGroups(companionGroups, companions)
   })
 
   return (
     <>
-      {customers.map((c) => (
-        <CustomerFigure key={c.id} id={c.id} variant={c.variant} anim={walkerFor(c).anim} />
-      ))}
+      {customers.map((c) => {
+        const w = walkerFor(c)
+        const m = companionFor(c, w)
+        return (
+          <CustomerFigure
+            key={c.id}
+            id={c.id}
+            variant={c.variant}
+            anim={w.anim}
+            companionVariant={c.companion}
+            companionAnim={m?.anim ?? null}
+          />
+        )
+      })}
     </>
   )
 }

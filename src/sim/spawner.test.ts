@@ -4,7 +4,7 @@ import { createRng } from './rng'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, VISITORS_PER_DAY } from './spawner'
 
 describe('planArrivals', () => {
-  it('plans 6–10 sorted arrivals within business hours', () => {
+  it('plans 4–7 sorted arrivals within business hours', () => {
     for (let seed = 0; seed < 50; seed++) {
       const { minutes, spawned } = planArrivals(createRng(seed))
       expect(spawned).toBe(0)

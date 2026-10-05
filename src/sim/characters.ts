@@ -11,6 +11,9 @@ export const CUSTOMER_VARIANTS = [
 /** Models only staff wear, so employees never look like customers. */
 export const STAFF_VARIANTS = ['male-c', 'male-e', 'male-f', 'female-a', 'female-e'] as const
 
+/** The dealership's owner, in a dark suit (see scene/Owner). */
+export const OWNER_VARIANT: StaffVariant = 'male-f'
+
 export type CustomerVariant = (typeof CUSTOMER_VARIANTS)[number]
 export type StaffVariant = (typeof STAFF_VARIANTS)[number]
 export type CharacterVariant = 'salesperson' | CustomerVariant | StaffVariant

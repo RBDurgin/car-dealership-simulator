@@ -1,8 +1,12 @@
 import { formatTime, isClosed } from '../sim/clock'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
+import { GoalBanner } from './GoalBanner'
 
-/** Day, time, cash and the staff button. Re-renders only on 10-minute clock steps and sales. */
+/**
+ * Day, time, cash, the owner's goal (on their days) and the staff button.
+ * Re-renders only on 10-minute clock steps and sales.
+ */
 export function TopBar() {
   const clock = useGame((s) => s.clock)
   const cash = useGame((s) => s.cash)
@@ -17,6 +21,7 @@ export function TopBar() {
       {timeScale !== 1 && <span className="topbar-speed">×{timeScale}</span>}
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
+      <GoalBanner />
       <button
         className={staffOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
         aria-pressed={staffOpen}

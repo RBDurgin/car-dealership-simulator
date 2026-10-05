@@ -6,6 +6,8 @@ import { DebugGrid } from './DebugGrid'
 import { Floors } from './Floors'
 import { GameClock } from './GameClock'
 import { Ground } from './Ground'
+import { Owner } from './Owner'
+import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
 import { Props } from './Props'
 import { Staff } from './Staff'
@@ -39,6 +41,8 @@ export function Scene() {
       <Player />
       <Customers />
       <Staff />
+      <Pedestrians />
+      <Owner />
     </>
   )
 }

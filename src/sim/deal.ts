@@ -15,6 +15,7 @@ import {
 } from './interactables'
 import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
+import type { OwnerVerdict } from './owner'
 import { financeOnDuty, type Employee } from './staff'
 
 /**
@@ -215,6 +216,8 @@ export interface Sale {
 /** One day's results, for the end-of-day summary. */
 export interface DayStats {
   visitors: number
+  /** Of the visitors, passers-by who wandered in off the sidewalk. */
+  walkIns: number
   sales: Sale[]
   /** Walk-outs by reason. Buyers are counted in `sales`. */
   refused: number
@@ -225,11 +228,14 @@ export interface DayStats {
   commissions: number
   /** Payroll has been paid for the day. */
   settled: boolean
+  /** On an owner's day, how the day measured up to their goal (set when settled). */
+  owner: OwnerVerdict | null
 }
 
 export function emptyStats(): DayStats {
   return {
     visitors: 0,
+    walkIns: 0,
     sales: [],
     refused: 0,
     impatient: 0,
@@ -237,6 +243,7 @@ export function emptyStats(): DayStats {
     wages: 0,
     commissions: 0,
     settled: false,
+    owner: null,
   }
 }
 
@@ -244,9 +251,9 @@ export function revenue(stats: DayStats): number {
   return stats.sales.reduce((sum, s) => sum + s.price, 0)
 }
 
-/** Revenue less the day's staff costs. */
+/** Revenue less the day's staff costs, plus any bonus from the owner. */
 export function netIncome(stats: DayStats): number {
-  return revenue(stats) - stats.wages - stats.commissions
+  return revenue(stats) - stats.wages - stats.commissions + (stats.owner?.bonus ?? 0)
 }
 
 /** One seller's share of the day's sales. */
