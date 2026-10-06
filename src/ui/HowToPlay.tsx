@@ -11,6 +11,7 @@ import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
+import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -64,8 +65,27 @@ export function HowToPlay() {
           <h3>The owner</h3>
           <p>
             Every two or three days the owner drops by at opening, walks to the office and sets a
-            goal for the day, shown in the top bar. Meet it by closing for a{' '}
-            {formatMoney(OWNER_BONUS)} bonus; miss it and you&apos;ll hear about it in the summary.
+            goal for the day, shown in the top bar. It might be a number of sales, revenue, gross
+            profit, a body type, no impatient walk-outs or a boost to your reputation. Meet it by
+            closing for a {formatMoney(OWNER_BONUS)} bonus; miss it and you&apos;ll hear about it in
+            the summary.
+          </p>
+        </section>
+        <section>
+          <h3>Reputation</h3>
+          <p>
+            Your good name, from 0 to 100, is the ♥ meter in the top bar. It moves once a day, at
+            closing: each buyer adds {REPUTATION_POINTS.sale}, each customer who walks out unhappy
+            takes off {-REPUTATION_POINTS.refused}, each one who gives up waiting{' '}
+            {-REPUTATION_POINTS.impatient}, and each who can&apos;t find the kind of car they want{' '}
+            {-REPUTATION_POINTS.missed}. Customers still on the lot at closing don&apos;t count, and
+            one day can move it by at most {MAX_DAILY_CHANGE} either way. The day summary shows the
+            change.
+          </p>
+          <p>
+            A good name brings more of the usual visitors, sends friends of past buyers your way (up
+            to {MAX_REFERRALS} referrals a day at the top, mostly ready to buy) and makes every ad
+            bring more people. A poor one means fewer visitors and ads that do less.
           </p>
         </section>
         <section>
@@ -152,8 +172,9 @@ export function HowToPlay() {
           </ul>
           <p>
             Booking the same channel again while it runs brings fewer extra visitors the second
-            time. The day summary takes the ad spend off the net on the day you pay, and shows how
-            many visitors each source brought and what they bought, so you can see which ads pay.
+            time, and a better reputation makes every ad bring more. The day summary takes the ad
+            spend off the net on the day you pay, and shows how many visitors each source brought
+            and what they bought, so you can see which ads pay.
           </p>
         </section>
         <section>

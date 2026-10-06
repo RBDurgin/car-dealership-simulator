@@ -1,10 +1,32 @@
 import { formatTime, isClosed } from '../sim/clock'
+import { reputationLabel } from '../sim/reputation'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
 
+/** Reputation as a small bar and its score; it only changes when a day is settled. */
+function ReputationMeter() {
+  const reputation = useGame((s) => s.reputation)
+  const label = reputationLabel(reputation)
+  return (
+    <span
+      className="rep-meter"
+      title={`Reputation: ${reputation}/100 (${label}). Happy buyers raise it; walk-outs, impatient customers and missed demand lower it.`}
+      aria-label={`Reputation ${reputation} of 100, ${label}`}
+    >
+      <span className="rep-icon" aria-hidden>
+        ♥
+      </span>
+      <span className="rep-bar" aria-hidden>
+        <span className="rep-fill" style={{ width: `${reputation}%` }} />
+      </span>
+      <span className="rep-score">{reputation}</span>
+    </span>
+  )
+}
+
 /**
- * Day, time, cash, the owner's goal (on their days) and the office (stock,
+ * Day, time, cash, reputation, the owner's goal (on their days) and the office (stock,
  * marketing and upgrades) and staff buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
@@ -23,6 +45,7 @@ export function TopBar() {
       {timeScale !== 1 && <span className="topbar-speed">×{timeScale}</span>}
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
+      <ReputationMeter />
       <GoalBanner />
       <button
         className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}

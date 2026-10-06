@@ -4,6 +4,7 @@ import type { OwnedImprovement } from './improvements'
 import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
+import { START_REPUTATION } from './reputation'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import type { Employee } from './staff'
@@ -28,6 +29,7 @@ const source = () => ({
   orders: [order],
   campaigns: [campaign, expired],
   improvements: [improvement],
+  reputation: 62,
 })
 
 const order: Order = {
@@ -70,6 +72,7 @@ describe('save data', () => {
       orders: undefined,
       campaigns: undefined,
       improvements: undefined,
+      reputation: undefined,
       inventory: save.inventory.map((car) => ({
         ...car,
         cost: undefined,
@@ -85,6 +88,7 @@ describe('save data', () => {
       orders: [],
       campaigns: [],
       improvements: [],
+      reputation: START_REPUTATION,
     })
     expect(upgraded?.roster).toEqual(save.roster)
     upgraded?.inventory.forEach((car, i) => {
@@ -100,6 +104,7 @@ describe('save data', () => {
       orders: undefined,
       campaigns: undefined,
       improvements: undefined,
+      reputation: undefined,
       inventory: save.inventory.map((car) => ({
         ...car,
         arrivedDay: undefined,
@@ -107,23 +112,53 @@ describe('save data', () => {
       })),
     }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v3)))
-    expect(upgraded).toEqual({ ...save, orders: [], campaigns: [], improvements: [] })
+    expect(upgraded).toEqual({
+      ...save,
+      orders: [],
+      campaigns: [],
+      improvements: [],
+      reputation: START_REPUTATION,
+    })
   })
 
   it('upgrades a version 4 save with no ad campaigns', () => {
     const save = createSave(source(), 123)
-    const v4 = { ...save, version: 4, campaigns: undefined, improvements: undefined }
+    const v4 = {
+      ...save,
+      version: 4,
+      campaigns: undefined,
+      improvements: undefined,
+      reputation: undefined,
+    }
     expect(parseSave(JSON.parse(JSON.stringify(v4)))).toEqual({
       ...save,
       campaigns: [],
       improvements: [],
+      reputation: START_REPUTATION,
     })
   })
 
   it('upgrades a version 5 save with no improvements', () => {
     const save = createSave(source(), 123)
-    const v5 = { ...save, version: 5, improvements: undefined }
-    expect(parseSave(JSON.parse(JSON.stringify(v5)))).toEqual({ ...save, improvements: [] })
+    const v5 = { ...save, version: 5, improvements: undefined, reputation: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v5)))).toEqual({
+      ...save,
+      improvements: [],
+      reputation: START_REPUTATION,
+    })
+  })
+
+  it('upgrades a version 6 save to the starting reputation', () => {
+    const save = createSave(source(), 123)
+    const v6 = { ...save, version: 6, reputation: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v6)))).toEqual({
+      ...save,
+      reputation: START_REPUTATION,
+    })
+  })
+
+  it('keeps the reputation', () => {
+    expect(createSave(source(), 123).reputation).toBe(62)
   })
 
   it('keeps every improvement bought, including today’s', () => {
@@ -156,5 +191,8 @@ describe('save data', () => {
     expect(parseSave({ ...save, campaigns: [{ ...campaign, channel: 'blimp' }] })).toBeNull()
     expect(parseSave({ ...save, improvements: undefined })).toBeNull()
     expect(parseSave({ ...save, improvements: [{ id: 'statue', day: 2 }] })).toBeNull()
+    expect(parseSave({ ...save, reputation: undefined })).toBeNull()
+    expect(parseSave({ ...save, reputation: 101 })).toBeNull()
+    expect(parseSave({ ...save, reputation: -1 })).toBeNull()
   })
 })

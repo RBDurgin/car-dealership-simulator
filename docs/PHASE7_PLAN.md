@@ -1,6 +1,6 @@
 # Phase 7 Plan — Marketing and improvements
 
-**Status:** 7a done 2026-10-05. 7b done 2026-10-05. 7c done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 7a done 2026-10-05. 7b done 2026-10-05. 7c done 2026-10-05. 7d done 2026-10-05, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -62,6 +62,7 @@ Phases 5–6 gave us a real P&L (cost, gross, wages, floor plan) and haggling. T
 - `sim/reputation.ts`: a 0–100 score, updated in `settleDay` from happy buyers, unhappy walkouts, impatient leavers and `missed`.
 - Reputation scales the base `VISITORS_PER_DAY` and adds referral arrivals (`source: 'referral'`). It also multiplies campaign effect, so ads work better with a good name.
 - HUD reputation meter, a change line in the summary, and the owner can set a reputation goal. Save adds `reputation`.
+- **As built:** reputation starts at 50 and only moves in `settleDay`: `reputationChange` gives +2 per sale, −1 per refusal, −2 per impatient walk-out and −1 per missed customer (closing walk-outs don't count), capped at ±8 a day. At 100 the usual visitors are ×1.3 (×0.7 at 0, rounded), ads bring ×1.5 (×0.5 at 0) and up to 2 referrals a day arrive (none at or below 50), skewed toward decisive and regular buyers (`REFERRAL_SKEW`). The owner's goal is "Gain N reputation" today (3–5 plus one per salesperson, never over the daily cap), tracked live from `reputationChange(dayStats)`. HUD: a ♥ bar and score in the top bar (bar hidden on compact screens); the summary has a reputation line with the change; the Marketing tab says how much reputation is boosting ads. Save v7 with an `UPGRADES[6]` step that starts old saves at 50.
 
 ## Verification (each sub-phase)
 

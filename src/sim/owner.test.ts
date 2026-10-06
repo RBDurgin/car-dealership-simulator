@@ -12,6 +12,7 @@ import {
   OWNER_GAP_DAYS,
   type OwnerGoal,
 } from './owner'
+import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from './reputation'
 import { createRng } from './rng'
 
 const inventory = buildInventory(createRng(42))
@@ -52,12 +53,20 @@ describe('isOwnerDay', () => {
 describe('generateGoal', () => {
   it('rolls every kind of goal, each sensible', () => {
     const goals = Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 0))
-    expect(new Set(goals.map((g) => g.kind)).size).toBe(5)
+    expect(new Set(goals.map((g) => g.kind)).size).toBe(6)
     for (const g of goals) {
       if (g.kind === 'sales') expect(g.count).toBeGreaterThanOrEqual(2)
       if (g.kind === 'revenue') expect(g.amount % 10_000).toBe(0)
       if (g.kind === 'profit') expect(g.amount % 1_000).toBe(0)
       if (g.kind === 'model') expect(inventory.some((c) => c.model === g.model)).toBe(true)
+      if (g.kind === 'reputation') expect(g.points).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('never asks for more reputation than a day can earn', () => {
+    for (let i = 0; i < 100; i++) {
+      const g = generateGoal(createRng(i), inventory, 6)
+      if (g.kind === 'reputation') expect(g.points).toBeLessThanOrEqual(MAX_DAILY_CHANGE)
     }
   })
 
@@ -84,6 +93,7 @@ describe('goalLabel', () => {
     expect(goalLabel({ kind: 'noImpatient' }, formatMoney)).toBe('No impatient walk-outs')
     expect(goalLabel({ kind: 'revenue', amount: 80_000 }, formatMoney)).toBe('$80,000 revenue')
     expect(goalLabel({ kind: 'profit', amount: 8_000 }, formatMoney)).toBe('$8,000 gross profit')
+    expect(goalLabel({ kind: 'reputation', points: 4 }, formatMoney)).toBe('Gain 4 reputation')
   })
 })
 
@@ -124,6 +134,17 @@ describe('goalProgress', () => {
       target: 0,
       met: false,
     })
+  })
+
+  it('tracks the day’s reputation change, walk-outs and all', () => {
+    const goal: OwnerGoal = { kind: 'reputation', points: 3 }
+    const twoSales = withSales(sale('van', 1), sale('suv', 1))
+    expect(goalProgress(goal, twoSales)).toEqual({
+      current: 2 * REPUTATION_POINTS.sale,
+      target: 3,
+      met: true,
+    })
+    expect(goalProgress(goal, { ...twoSales, impatient: 1 }).met).toBe(false)
   })
 })
 

@@ -309,6 +309,35 @@ kbd {
   font-weight: 600;
 }
 
+/* Reputation, in the top bar */
+.rep-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.rep-icon {
+  color: #f9a8d4;
+}
+.rep-bar {
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.rep-fill {
+  display: block;
+  height: 100%;
+  background: #f472b6;
+}
+.rep-change-up {
+  color: #86efac;
+}
+.rep-change-down {
+  color: #fca5a5;
+}
+
 /* The owner's goal, in the top bar */
 .goal-banner {
   display: inline-flex;
@@ -923,6 +952,9 @@ kbd {
   }
   .topbar-time {
     min-width: 0;
+  }
+  .rep-bar {
+    display: none;
   }
   .goal-icon {
     display: inline;

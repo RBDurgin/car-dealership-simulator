@@ -7,6 +7,7 @@ import {
   type Campaign,
   type Channel,
 } from '../sim/marketing'
+import { campaignScale } from '../sim/reputation'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -75,6 +76,8 @@ export function MarketingTab() {
   const day = useGame((s) => s.clock.day)
   const campaigns = useGame((s) => s.campaigns)
   const spent = useGame((s) => s.dayStats.marketing)
+  const reputation = useGame((s) => s.reputation)
+  const pull = Math.round((campaignScale(reputation) - 1) * 100)
   const live = campaigns.filter((c) => daysLeft(c, day) > 0)
   // Booked runs that bring visitors tomorrow, by channel, for the "booked" badge.
   const tomorrow = activeCampaigns(campaigns, day + 1)
@@ -98,7 +101,10 @@ export function MarketingTab() {
         ))}
       </ul>
       <p className="muted staff-blurb">
-        Running the same channel twice at once brings fewer extra visitors the second time.
+        Running the same channel twice at once brings fewer extra visitors the second time.{' '}
+        {pull === 0
+          ? 'A better reputation would make every ad bring more.'
+          : `Your reputation (${reputation}) makes ads bring ${Math.abs(pull)}% ${pull > 0 ? 'more' : 'fewer'} visitors.`}
       </p>
       <h3>Campaigns ({live.length})</h3>
       {live.length === 0 ? (

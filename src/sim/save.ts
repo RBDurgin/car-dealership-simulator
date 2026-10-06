@@ -4,6 +4,7 @@ import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import type { Order } from './ordering'
+import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import type { Employee } from './staff'
 
 /**
@@ -16,7 +17,7 @@ import type { Employee } from './staff'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 6
+export const SAVE_VERSION = 7
 
 export interface SaveData {
   version: number
@@ -33,6 +34,8 @@ export interface SaveData {
   campaigns: Campaign[]
   /** Improvements bought, with the day each was bought. */
   improvements: OwnedImprovement[]
+  /** Reputation after the day was settled (see `sim/reputation.ts`). */
+  reputation: number
 }
 
 export interface SaveSource {
@@ -43,6 +46,7 @@ export interface SaveSource {
   orders: Order[]
   campaigns: Campaign[]
   improvements: OwnedImprovement[]
+  reputation: number
 }
 
 /** A save of the day that just ended. The fired are gone and everyone else is off for the night. */
@@ -57,6 +61,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
     improvements: s.improvements,
+    reputation: s.reputation,
   }
 }
 
@@ -95,6 +100,8 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   4: (raw) => ({ ...raw, campaigns: [] }),
   // v6: improvements.
   5: (raw) => ({ ...raw, improvements: [] }),
+  // v7: reputation, starting where a new game does.
+  6: (raw) => ({ ...raw, reputation: START_REPUTATION }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -116,13 +123,14 @@ function upgrade(raw: RawSave): RawSave | null {
 export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
-  const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements } = raw
+  const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
   if (!Array.isArray(orders) || !orders.every(isOrder)) return null
   if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
   if (!Array.isArray(improvements) || !improvements.every(isImprovement)) return null
+  if (!isNumber(reputation) || reputation < 0 || reputation > MAX_REPUTATION) return null
   return raw as unknown as SaveData
 }
 

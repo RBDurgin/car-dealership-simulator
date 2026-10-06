@@ -2,6 +2,7 @@ import { grossProfit, revenue, type DayStats } from './deal'
 import { carName } from './interactables'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
+import { MAX_DAILY_CHANGE, reputationChange } from './reputation'
 import { createRng, type Rng } from './rng'
 
 /**
@@ -15,6 +16,8 @@ export type OwnerGoal =
   | { kind: 'noImpatient' }
   | { kind: 'revenue'; amount: number }
   | { kind: 'profit'; amount: number }
+  /** Raise reputation by at least `points` today (see `reputationChange`). */
+  | { kind: 'reputation'; points: number }
 
 /** Today's visit: the goal, and whether the owner has reached the office and said it yet. */
 export interface OwnerVisit {
@@ -57,7 +60,7 @@ export function generateGoal(
   salesStaff: number,
 ): OwnerGoal {
   const models = [...new Set(availableCars(inventory).map((c) => c.model))]
-  const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'profit', 'noImpatient']
+  const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'profit', 'noImpatient', 'reputation']
   if (models.length > 0) kinds.push('model')
   switch (rng.pick(kinds)) {
     case 'sales':
@@ -68,6 +71,9 @@ export function generateGoal(
       return { kind: 'profit', amount: (rng.int(6, 9) + 3 * salesStaff) * 1_000 }
     case 'noImpatient':
       return { kind: 'noImpatient' }
+    case 'reputation':
+      // Never more than a day can earn.
+      return { kind: 'reputation', points: Math.min(MAX_DAILY_CHANGE, rng.int(3, 5) + salesStaff) }
     case 'model':
       return { kind: 'model', model: rng.pick(models) }
   }
@@ -75,7 +81,7 @@ export function generateGoal(
 
 /**
  * "Sell 2 cars", "Sell a Summit Ridge", "No impatient walk-outs", "$80,000 revenue",
- * "$8,000 gross profit".
+ * "$8,000 gross profit", "Gain 4 reputation".
  */
 export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string {
   switch (goal.kind) {
@@ -89,6 +95,8 @@ export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string
       return `${money(goal.amount)} revenue`
     case 'profit':
       return `${money(goal.amount)} gross profit`
+    case 'reputation':
+      return `Gain ${goal.points} reputation`
   }
 }
 
@@ -118,6 +126,10 @@ export function goalProgress(
     case 'profit': {
       const current = grossProfit(stats)
       return { current, target: goal.amount, met: current >= goal.amount }
+    }
+    case 'reputation': {
+      const current = reputationChange(stats)
+      return { current, target: goal.points, met: current >= goal.points }
     }
   }
 }

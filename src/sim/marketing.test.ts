@@ -75,6 +75,12 @@ describe('trafficBoost', () => {
     expect(three - two).toBeLessThan(two - CHANNELS.tv.visitors)
     expect(three).toBeLessThan(CHANNELS.tv.visitors * 2)
   })
+
+  it('scales every channel by reputation', () => {
+    const boost = trafficBoost([run('tv', 1, 5), run('online', 1, 3)], 2, 1.5)
+    expect(boost.tv).toBeCloseTo(CHANNELS.tv.visitors * 1.5)
+    expect(boost.online).toBeCloseTo(CHANNELS.online.visitors * 1.5)
+  })
 })
 
 describe('sourceWeights', () => {
@@ -83,8 +89,8 @@ describe('sourceWeights', () => {
     expect(sourceWeights('walk-in')).toBeUndefined()
   })
 
-  it('skews who each channel brings', () => {
-    const share = (source: 'newspaper' | 'tv' | 'online', archetype: string) => {
+  it('skews who each channel (and each referral) brings', () => {
+    const share = (source: 'newspaper' | 'tv' | 'online' | 'referral', archetype: string) => {
       const rng = createRng(1)
       const weights = sourceWeights(source)
       const picks = Array.from({ length: 2000 }, () => pickArchetype(rng, weights))
@@ -95,5 +101,7 @@ describe('sourceWeights', () => {
     expect(share('newspaper', 'bargain')).toBeGreaterThan(usual('bargain') * 2)
     expect(share('tv', 'decisive')).toBeGreaterThan(usual('decisive') * 2)
     expect(share('online', 'couple')).toBeGreaterThan(usual('couple') * 2)
+    expect(share('referral', 'decisive')).toBeGreaterThan(usual('decisive') * 1.5)
+    expect(share('referral', 'tire-kicker')).toBeLessThan(usual('tire-kicker'))
   })
 })

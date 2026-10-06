@@ -68,6 +68,14 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
+import {
+  applyChange,
+  campaignScale,
+  referralVisitors,
+  reputationChange,
+  START_REPUTATION,
+  visitorScale,
+} from '../sim/reputation'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
@@ -149,6 +157,8 @@ interface GameState {
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
   improvements: OwnedImprovement[]
+  /** The dealership's good name, 0–100. Changes once a day, when the day is settled. */
+  reputation: number
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -365,7 +375,8 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Pays the day's staff once the doors are shut and the last customer has gone,
    * before the summary shows, so it reports cash after payroll. On an owner's
-   * day the day is judged against their goal, and any bonus is paid too.
+   * day the day is judged against their goal, and any bonus is paid too. The
+   * day's customers move reputation.
    */
   const settleDay = () => {
     const s = get()
@@ -374,9 +385,19 @@ export const useGame = create<GameState>((set, get) => {
     const interest = dailyInterest(s.inventory)
     // A goal the player never heard (the owner didn't make it in) isn't judged.
     const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
+    const reputation = applyChange(s.reputation, reputationChange(s.dayStats))
     set({
       cash: s.cash - wages - commissions - interest + (owner?.bonus ?? 0),
-      dayStats: { ...s.dayStats, wages, commissions, interest, owner, settled: true },
+      reputation,
+      dayStats: {
+        ...s.dayStats,
+        wages,
+        commissions,
+        interest,
+        owner,
+        reputation: reputation - s.reputation,
+        settled: true,
+      },
     })
   }
 
@@ -469,7 +490,6 @@ export const useGame = create<GameState>((set, get) => {
   const staffCustomer = (employeeId: string, phases: readonly CustomerPhase[]) =>
     get().customers.find((c) => c.handlerId === employeeId && phases.includes(c.phase))
 
-  /** Accept-chance bonus for whoever is selling to `c`. */
   /** What the improvements up today add up to. */
   const upEffects = () => {
     const s = get()
@@ -551,8 +571,8 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Opens the doors on `day`: sold cars are gone, the rest have gathered a
    * night's dust, yesterday's orders are parked in their slots, finished ad
-   * campaigns end, there are new arrivals (more while ads run) and applicants,
-   * and the staff head in.
+   * campaigns end, there are new arrivals (more while ads run, and more or
+   * fewer with reputation) and applicants, and the staff head in.
    */
   const beginDay = (day: number) => {
     customerRng = createRng(CUSTOMER_SEED + day)
@@ -576,7 +596,11 @@ export const useGame = create<GameState>((set, get) => {
       inventory,
       orders: [],
       campaigns,
-      arrivals: planArrivals(customerRng, trafficBoost(campaigns, day)),
+      arrivals: planArrivals(
+        customerRng,
+        trafficBoost(campaigns, day, campaignScale(s.reputation)),
+        { scale: visitorScale(s.reputation), referrals: referralVisitors(s.reputation) },
+      ),
       dayStats: emptyStats(),
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
@@ -603,6 +627,7 @@ export const useGame = create<GameState>((set, get) => {
     orders: [],
     campaigns: [],
     improvements: [],
+    reputation: START_REPUTATION,
     customers: [],
     arrivals: planArrivals(customerRng),
     dayStats: emptyStats(),
@@ -1000,6 +1025,7 @@ export const useGame = create<GameState>((set, get) => {
         orders: save.orders,
         campaigns: save.campaigns,
         improvements: save.improvements,
+        reputation: save.reputation,
       })
       beginDay(save.day + 1)
     },

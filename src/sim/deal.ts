@@ -235,6 +235,8 @@ export interface DayStats {
   improvements: number
   /** Customers who found none of the body types they wanted, by their first choice. */
   missed: Partial<Record<CarModel, number>>
+  /** What the day did to reputation (set when settled; see `reputationChange`). */
+  reputation: number
   /** Payroll has been paid for the day. */
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
@@ -256,6 +258,7 @@ export function emptyStats(): DayStats {
     marketing: 0,
     improvements: 0,
     missed: {},
+    reputation: 0,
     settled: false,
     owner: null,
   }

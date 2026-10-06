@@ -60,6 +60,20 @@ describe('planArrivals', () => {
       expect(boosted.minutes.every((m) => m <= LAST_ARRIVAL_MINUTE)).toBe(true)
     }
   })
+
+  it('scales the usual visitors and adds referrals with reputation', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      const plain = planArrivals(createRng(seed))
+      const word = planArrivals(createRng(seed), {}, { scale: 1.3, referrals: 1.5 })
+      const count = (s: string) => word.sources.filter((x) => x === s).length
+      expect(count('regular')).toBe(Math.round(plain.minutes.length * 1.3))
+      expect([1, 2]).toContain(count('referral'))
+      expect(word.minutes).toEqual([...word.minutes].sort((a, b) => a - b))
+    }
+    const quiet = planArrivals(createRng(1), {}, { scale: 0.7, referrals: 0 })
+    expect(quiet.sources.every((s) => s === 'regular')).toBe(true)
+    expect(quiet.minutes.length).toBeLessThan(planArrivals(createRng(1)).minutes.length)
+  })
 })
 
 describe('takeDue', () => {

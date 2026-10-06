@@ -2,7 +2,10 @@ import { goalLabel, goalProgress, type OwnerGoal } from '../sim/owner'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
-/** "1/2", "$35,000 of $80,000", "1 so far". */
+/** A signed change: "+3", "−2", "0". */
+const signed = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
+
+/** "1/2", "$35,000 of $80,000", "1 so far", "+2 of 4". */
 function progressText(goal: OwnerGoal, current: number, target: number): string {
   switch (goal.kind) {
     case 'revenue':
@@ -10,6 +13,8 @@ function progressText(goal: OwnerGoal, current: number, target: number): string 
       return `${formatMoney(current)} of ${formatMoney(target)}`
     case 'noImpatient':
       return current === 0 ? 'none so far' : `${current} so far`
+    case 'reputation':
+      return `${signed(current)} of ${target}`
     default:
       return `${Math.min(current, target)}/${target}`
   }

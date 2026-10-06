@@ -13,6 +13,7 @@ import {
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { goalLabel } from '../sim/owner'
+import { reputationLabel } from '../sim/reputation'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -26,10 +27,11 @@ export function DaySummary() {
   const stats = useGame((s) => s.dayStats)
   const cash = useGame((s) => s.cash)
   const arriving = useGame((s) => s.orders.length)
+  const reputation = useGame((s) => s.reputation)
   if (!open) return null
   const missed = missedSummary(stats.missed)
   const sources = salesBySource(stats)
-  // Worth a table once anyone came from an ad (walk-ins alone are in the visitor line).
+  // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
 
   return (
@@ -109,6 +111,25 @@ export function DaySummary() {
               </dd>
             </>
           )}
+          <dt>Reputation</dt>
+          <dd>
+            {reputation} <span className="muted">({reputationLabel(reputation)})</span>{' '}
+            <span
+              className={
+                stats.reputation > 0
+                  ? 'rep-change-up'
+                  : stats.reputation < 0
+                    ? 'rep-change-down'
+                    : 'muted'
+              }
+            >
+              {stats.reputation > 0
+                ? `▲ ${stats.reputation}`
+                : stats.reputation < 0
+                  ? `▼ ${-stats.reputation}`
+                  : 'no change'}
+            </span>
+          </dd>
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>

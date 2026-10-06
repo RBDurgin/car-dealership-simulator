@@ -1,4 +1,5 @@
 import { ARCHETYPES, type Archetype } from './archetypes'
+import { REFERRAL_SKEW } from './reputation'
 
 /**
  * Advertising: timed campaigns paid up front. While one runs it brings extra
@@ -9,8 +10,11 @@ import { ARCHETYPES, type Archetype } from './archetypes'
 
 export type Channel = 'newspaper' | 'radio' | 'tv' | 'online'
 
-/** Where a customer heard of us: a campaign, wandering in off the sidewalk, or neither. */
-export type Source = 'regular' | 'walk-in' | Channel
+/**
+ * Where a customer heard of us: a campaign, wandering in off the sidewalk, a
+ * friend who bought here (see `sim/reputation.ts`), or none of those.
+ */
+export type Source = 'regular' | 'walk-in' | 'referral' | Channel
 
 export interface ChannelInfo {
   label: string
@@ -90,12 +94,14 @@ export function unfinished(campaigns: readonly Campaign[], day: number): Campaig
 }
 
 /**
- * Extra visitors campaigns bring on `day`, by channel. Several runs of one
- * channel at once fall off: each adds `REPEAT_FALLOFF` of the run before.
+ * Extra visitors campaigns bring on `day`, by channel, times `scale` (from
+ * reputation; see `campaignScale`). Several runs of one channel at once fall
+ * off: each adds `REPEAT_FALLOFF` of the run before.
  */
 export function trafficBoost(
   campaigns: readonly Campaign[],
   day: number,
+  scale = 1,
 ): Partial<Record<Channel, number>> {
   const runs: Partial<Record<Channel, number>> = {}
   for (const c of activeCampaigns(campaigns, day)) runs[c.channel] = (runs[c.channel] ?? 0) + 1
@@ -105,15 +111,15 @@ export function trafficBoost(
     if (n === 0) continue
     // A geometric series: 1 + f + f² + … for n runs.
     const factor = (1 - REPEAT_FALLOFF ** n) / (1 - REPEAT_FALLOFF)
-    boost[channel] = CHANNELS[channel].visitors * factor
+    boost[channel] = CHANNELS[channel].visitors * factor * scale
   }
   return boost
 }
 
-/** Archetype odds for a customer from `source`: a channel's skew on the usual weights. */
+/** Archetype odds for a customer from `source`: a channel's (or referrals') skew on the usual weights. */
 export function sourceWeights(source: Source): Record<Archetype, number> | undefined {
   if (source === 'regular' || source === 'walk-in') return undefined
-  const { skew } = CHANNELS[source]
+  const skew = source === 'referral' ? REFERRAL_SKEW : CHANNELS[source].skew
   const weights = {} as Record<Archetype, number>
   for (const a of Object.keys(ARCHETYPES) as Archetype[]) {
     weights[a] = ARCHETYPES[a].weight * (skew[a] ?? 1)
@@ -147,5 +153,6 @@ export function launchCampaign(
 export function sourceLabel(source: Source): string {
   if (source === 'regular') return 'Regular traffic'
   if (source === 'walk-in') return 'Walked in'
+  if (source === 'referral') return 'Referral'
   return CHANNELS[source].label
 }
