@@ -25,9 +25,26 @@ function ReputationMeter() {
   )
 }
 
+/** The speaker: shows whether sound is muted and opens the sound settings. */
+function SoundButton() {
+  const muted = useGame((s) => s.audio.muted)
+  const open = useGame((s) => s.audioOpen)
+  const label = muted ? 'Sound settings (muted)' : 'Sound settings'
+  return (
+    <button
+      className={open ? 'btn btn-small btn-primary topbar-sound' : 'btn btn-small topbar-sound'}
+      aria-label={label}
+      title={`${label}. N mutes.`}
+      onClick={() => useGame.getState().toggleAudioPanel()}
+    >
+      {muted ? '🔇' : '🔊'}
+    </button>
+  )
+}
+
 /**
  * Day, time, cash, reputation, the owner's goal (on their days) and the office (stock,
- * marketing and upgrades) and staff buttons.
+ * marketing and upgrades), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {
@@ -61,6 +78,7 @@ export function TopBar() {
       >
         Staff
       </button>
+      <SoundButton />
     </div>
   )
 }

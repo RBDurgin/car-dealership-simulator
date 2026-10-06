@@ -1,3 +1,4 @@
+import { parseAudioSettings } from '../sim/audioSettings'
 import { isClosed } from '../sim/clock'
 import { createSave, parseSave, type SaveData } from '../sim/save'
 import { useGame } from './store'
@@ -74,6 +75,31 @@ export function startControlsPref(fallback: boolean): () => void {
       localStorage.setItem(CONTROLS_KEY, s.controlsOpen ? '1' : '0')
     } catch {
       // Not remembered; it still toggles.
+    }
+  })
+}
+
+const AUDIO_KEY = 'car-dealership-simulator.audio'
+
+/**
+ * Loads this device's volumes and mute (defaults on a first visit), then
+ * remembers each change. Like the controls hint, it's kept apart from the save slot.
+ */
+export function startAudioPref(): () => void {
+  let saved: unknown = null
+  try {
+    const json = localStorage.getItem(AUDIO_KEY)
+    saved = json ? JSON.parse(json) : null
+  } catch {
+    // No storage, or junk in it: use the defaults.
+  }
+  useGame.setState({ audio: parseAudioSettings(saved) })
+  return useGame.subscribe((s, prev) => {
+    if (s.audio === prev.audio) return
+    try {
+      localStorage.setItem(AUDIO_KEY, JSON.stringify(s.audio))
+    } catch {
+      // Not remembered; the change still applies.
     }
   })
 }

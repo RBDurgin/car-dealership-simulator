@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startControlsPref } from './persistence'
+import { DEFAULT_AUDIO_SETTINGS } from '../sim/audioSettings'
+import { startAudioPref, startControlsPref } from './persistence'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -45,5 +46,53 @@ describe('controls hint preference', () => {
     expect(game().controlsOpen).toBe(true)
     game().toggleControls()
     expect(game().controlsOpen).toBe(false)
+  })
+})
+
+describe('sound settings', () => {
+  let stop: () => void = () => {}
+  beforeEach(() => useGame.setState(initial, true))
+  afterEach(() => {
+    stop()
+    vi.unstubAllGlobals()
+  })
+
+  it('starts from the defaults on a first visit', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startAudioPref()
+    expect(game().audio).toEqual(DEFAULT_AUDIO_SETTINGS)
+  })
+
+  it('remembers volumes and mute for next time', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startAudioPref()
+    game().setVolume('music', 0.25)
+    game().toggleMute()
+    stop()
+
+    useGame.setState(initial, true)
+    stop = startAudioPref()
+    expect(game().audio).toMatchObject({ music: 0.25, muted: true })
+  })
+
+  it('ignores junk in storage', () => {
+    const storage = fakeStorage()
+    storage.setItem('car-dealership-simulator.audio', '{not json')
+    vi.stubGlobal('localStorage', storage)
+    stop = startAudioPref()
+    expect(game().audio).toEqual(DEFAULT_AUDIO_SETTINGS)
+  })
+
+  it('still works without storage', () => {
+    stop = startAudioPref()
+    game().toggleMute()
+    expect(game().audio.muted).toBe(true)
+  })
+
+  it('is not part of the save', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startAudioPref()
+    game().toggleMute()
+    expect(localStorage.getItem('car-dealership-simulator.save')).toBeNull()
   })
 })

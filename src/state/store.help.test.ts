@@ -54,3 +54,33 @@ describe('rotate-your-device prompt', () => {
     expect(isPaused(game())).toBe(false)
   })
 })
+
+describe('sound settings', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  it('sets a volume and mutes', () => {
+    game().setVolume('sfx', 0.5)
+    expect(game().audio.sfx).toBe(0.5)
+    game().toggleMute()
+    expect(game().audio.muted).toBe(true)
+    game().toggleMute(false)
+    expect(game().audio.muted).toBe(false)
+  })
+
+  it('panel is closed by Esc after the guide, before anything else', () => {
+    game().newGame()
+    game().toggleStaffPanel(true)
+    game().toggleAudioPanel(true)
+    game().cancelAll()
+    expect(game()).toMatchObject({ helpOpen: false, audioOpen: true, staffOpen: true })
+    game().cancelAll()
+    expect(game()).toMatchObject({ audioOpen: false, staffOpen: true })
+  })
+
+  it('does not pause the game', () => {
+    game().newGame()
+    game().toggleHelp(false)
+    game().toggleAudioPanel(true)
+    expect(isPaused(game())).toBe(false)
+  })
+})

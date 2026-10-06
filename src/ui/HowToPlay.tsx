@@ -245,6 +245,22 @@ export function HowToPlay() {
           </p>
         </section>
         <section>
+          <h3>Sound</h3>
+          <p>
+            The 🔊 button in the top bar opens the sound settings: a master volume, one each for
+            music, sound effects and voices, and a switch to mute it all
+            {touch ? (
+              '.'
+            ) : (
+              <>
+                {' '}
+                (or press <kbd>N</kbd>).
+              </>
+            )}{' '}
+            They&apos;re kept on this device, apart from your save.
+          </p>
+        </section>
+        <section>
           <h3>Controls</h3>
           <div className="how-controls">
             {controls.map(([key, label]) => (

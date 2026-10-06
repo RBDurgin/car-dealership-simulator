@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
 import { pickArchetype } from '../sim/archetypes'
+import {
+  DEFAULT_AUDIO_SETTINGS,
+  withVolume,
+  type AudioBus,
+  type AudioSettings,
+} from '../sim/audioSettings'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
@@ -185,6 +191,10 @@ interface GameState {
   controlsOpen: boolean
   /** A touch device is held upright: the game waits behind a "rotate your device" prompt. */
   rotatePrompt: boolean
+  /** Volumes and mute; a per-device preference kept apart from the save. */
+  audio: AudioSettings
+  /** The sound settings panel is open. */
+  audioOpen: boolean
   /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
   timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
@@ -270,6 +280,10 @@ interface GameState {
   toggleHelp: (open?: boolean) => void
   toggleControls: (open?: boolean) => void
   setRotatePrompt: (on: boolean) => void
+  /** Sets one bus's volume (0–1); turning it up unmutes. */
+  setVolume: (bus: AudioBus, volume: number) => void
+  toggleMute: (muted?: boolean) => void
+  toggleAudioPanel: (open?: boolean) => void
   cycleTimeScale: () => void
   /** From the title screen: plays the fresh day 1 the store starts with. */
   newGame: () => void
@@ -641,6 +655,8 @@ export const useGame = create<GameState>((set, get) => {
     helpOpen: false,
     controlsOpen: true,
     rotatePrompt: false,
+    audio: DEFAULT_AUDIO_SETTINGS,
+    audioOpen: false,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch({ type: 'cancel' })
@@ -682,6 +698,7 @@ export const useGame = create<GameState>((set, get) => {
     cancelAll: () => {
       const s = get()
       if (s.helpOpen) return set({ helpOpen: false })
+      if (s.audioOpen) return set({ audioOpen: false })
       if (s.menu) return set({ menu: null })
       if (s.staffOpen) return set({ staffOpen: false })
       if (s.stockOpen) return set({ stockOpen: false })
@@ -1007,6 +1024,9 @@ export const useGame = create<GameState>((set, get) => {
     toggleHelp: (open) => set((s) => ({ helpOpen: open ?? !s.helpOpen })),
     toggleControls: (open) => set((s) => ({ controlsOpen: open ?? !s.controlsOpen })),
     setRotatePrompt: (rotatePrompt) => set({ rotatePrompt }),
+    setVolume: (bus, volume) => set((s) => ({ audio: withVolume(s.audio, bus, volume) })),
+    toggleMute: (muted) => set((s) => ({ audio: { ...s.audio, muted: muted ?? !s.audio.muted } })),
+    toggleAudioPanel: (open) => set((s) => ({ audioOpen: open ?? !s.audioOpen })),
     cycleTimeScale: () =>
       set((s) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])

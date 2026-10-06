@@ -837,6 +837,53 @@ kbd {
   opacity: 0.75;
 }
 
+/* Sound settings */
+.topbar-sound {
+  padding: 2px 8px;
+  line-height: 1;
+}
+.audio-panel {
+  width: min(320px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+}
+.audio-panel h2 {
+  margin-bottom: 0;
+}
+.audio-panel kbd {
+  margin-left: 8px;
+}
+.audio-sliders {
+  display: grid;
+  gap: 8px;
+  transition: opacity 0.2s;
+}
+.audio-sliders.muted {
+  opacity: 0.45;
+}
+.audio-slider {
+  display: grid;
+  grid-template-columns: 96px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+}
+.audio-slider input {
+  width: 100%;
+  min-height: 24px;
+  accent-color: #3b82f6;
+  cursor: pointer;
+}
+.audio-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.audio-note {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
 /* How to play */
 .how-to-play {
   width: min(460px, calc(100vw - 32px));
@@ -925,6 +972,12 @@ kbd {
     min-width: 44px;
   }
   .topbar .btn {
+    min-height: 36px;
+  }
+  .topbar-sound {
+    min-width: 40px;
+  }
+  .audio-slider input {
     min-height: 36px;
   }
   .pie-item {
@@ -1033,6 +1086,12 @@ kbd {
   .day-summary h2 {
     margin-bottom: 8px;
     font-size: 18px;
+  }
+  .audio-panel {
+    gap: 8px;
+  }
+  .audio-sliders {
+    gap: 2px;
   }
   /* In-world overlays keep their pixel size as the camera zooms out, so on a
      phone they shrink to stop crowding the small figures. */

@@ -11,6 +11,7 @@ export const CONTROLS: [string, string][] = [
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away'],
+  ['N', 'Mute sound'],
   ['?', 'How to play'],
   ...(import.meta.env.DEV
     ? ([
@@ -29,5 +30,6 @@ export const TOUCH_CONTROLS: [string, string][] = [
   ['Office', 'Stock, marketing, upgrades'],
   ['Walls', 'Wall mode'],
   ['✕', 'Cancel'],
+  ['🔊', 'Sound settings and mute'],
   ['?', 'How to play'],
 ]

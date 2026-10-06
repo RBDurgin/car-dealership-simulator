@@ -6,6 +6,7 @@ import { ACTIONS } from '../sim/interactables'
 import { findInteractable } from '../scene/runtime'
 import { useGame } from '../state/store'
 import { ActionMenu } from './ActionMenu'
+import { AudioPanel } from './AudioPanel'
 import { ControlsHint } from './ControlsHint'
 import { CustomerPanel } from './CustomerPanel'
 import { DaySummary } from './DaySummary'
@@ -90,8 +91,22 @@ export function HUD() {
         if (!e.repeat) game.toggleHelp()
         return
       }
+      // N mutes from anywhere too.
+      if (e.code === 'KeyN') {
+        if (!e.repeat) {
+          game.toggleMute()
+          if (game.screen === 'playing') {
+            game.showNotice(useGame.getState().audio.muted ? 'Sound off' : 'Sound on')
+          }
+        }
+        return
+      }
       if (game.helpOpen) {
         if (e.code === 'Escape') game.toggleHelp(false)
+        return
+      }
+      if (game.audioOpen) {
+        if (e.code === 'Escape') game.toggleAudioPanel(false)
         return
       }
       if (game.screen === 'title') return
@@ -122,6 +137,7 @@ export function HUD() {
       <DaySummary />
       <TitleScreen />
       <HowToPlay />
+      <AudioPanel />
       <RotatePrompt />
     </div>
   )

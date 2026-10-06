@@ -37,7 +37,8 @@ export function useWasd(): RefObject<MoveAxes> {
       }
     }
     const down = (e: KeyboardEvent) => {
-      if (!KEYS[e.code]) return
+      // A focused slider (the sound settings) takes the arrow keys itself.
+      if (!KEYS[e.code] || e.target instanceof HTMLInputElement) return
       e.preventDefault()
       held.add(e.code)
       recompute()

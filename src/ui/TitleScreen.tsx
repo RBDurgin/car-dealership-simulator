@@ -38,6 +38,9 @@ export function TitleScreen() {
         <button className="btn" onClick={() => useGame.getState().toggleHelp(true)}>
           How to play
         </button>
+        <button className="btn" onClick={() => useGame.getState().toggleAudioPanel(true)}>
+          Sound
+        </button>
       </div>
     </div>
   )
