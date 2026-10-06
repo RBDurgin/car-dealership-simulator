@@ -214,8 +214,11 @@ const BULB_ON = new MeshStandardMaterial({
 })
 const BULB_OFF = new MeshStandardMaterial({ color: '#8a7f63', roughness: 0.4 })
 
-/** Chasing bulbs along the top and bottom edges of a board `w` by `h`, on both faces. */
-function Bulbs({ w, h }: { w: number; h: number }) {
+/**
+ * Chasing bulbs along the top and bottom edges of a board `w` by `h`, on both faces,
+ * leaving the bottom edge clear within `gap` of each post at ±`postX`.
+ */
+function Bulbs({ w, h, postX, gap }: { w: number; h: number; postX: number; gap: number }) {
   const bulbs = useRef<Mesh[]>([]).current
   const per = Math.floor(w / BULB_SPACING)
   useFrame(({ clock }) => {
@@ -228,7 +231,7 @@ function Bulbs({ w, h }: { w: number; h: number }) {
         -w / 2 + BULB_SPACING / 2 + i * (w / per),
         (edge * (h + 0.1)) / 2,
         face * 0.08,
-      ]),
+      ]).filter(([x]) => edge > 0 || Math.abs(Math.abs(x) - postX) > gap),
     ),
   )
   return (
@@ -257,13 +260,15 @@ function Sign({ width }: { width: number }) {
   const lit = tier >= 2
   const boardW = width - 0.2 + extraWidth
   const boardH = boardW / 3
-  // Posts stay inside the footprint whatever the board's width.
+  // Posts stay inside the footprint whatever the board's width, and stop under the
+  // frame: they're thicker than the board, so any higher pokes through its faces.
   const postX = (width - 0.2) / 2.6
+  const postH = boardY - (boardH + 0.1) / 2
   return (
     <group>
       {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * postX, boardY / 2, 0]} castShadow>
-          <boxGeometry args={[post, boardY, post]} />
+        <mesh key={side} position={[side * postX, postH / 2, 0]} castShadow>
+          <boxGeometry args={[post, postH, post]} />
           <meshStandardMaterial color="#3d4148" />
         </mesh>
       ))}
@@ -287,7 +292,7 @@ function Sign({ width }: { width: number }) {
       ))}
       {lit && (
         <group position-y={boardY}>
-          <Bulbs w={boardW} h={boardH} />
+          <Bulbs w={boardW} h={boardH} postX={postX} gap={post / 2 + 0.06} />
         </group>
       )}
     </group>
