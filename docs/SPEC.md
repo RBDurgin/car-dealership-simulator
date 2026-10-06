@@ -47,3 +47,7 @@ Nazma: Disgruntled former employee that tries to ruin your business. Some exampl
 - Stealing a car
 - Getting an employee to quit.
   You can hire a security guard to help deter Nazma
+
+## Phase 10
+
+Introduce a calendar and events. Days fall into weeks and months: traffic follows the week (busy Saturdays, slow Sundays), weather changes the lot (rain keeps customers away and dirties cars), the manufacturer sets a monthly sales quota with a holdback bonus, and holiday sale weekends and month-end closeouts come round.
