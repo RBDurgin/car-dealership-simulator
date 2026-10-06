@@ -905,7 +905,29 @@ kbd {
 
 /* How to play */
 .how-to-play {
+  display: flex;
+  flex-direction: column;
   width: min(460px, calc(100vw - 32px));
+  /* A fixed height, so switching tabs doesn't resize the dialog. */
+  height: min(640px, calc(100dvh - 32px));
+  overflow: hidden;
+}
+.how-to-play .panel-tabs {
+  flex-shrink: 0;
+}
+.how-to-play .panel-tabs .btn {
+  width: auto;
+}
+/* Only the tab's text scrolls; the tabs and Let's go stay put. */
+.how-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -6px 12px 0;
+  padding-right: 6px;
+}
+.how-to-play .how-lead {
+  margin: 0 0 10px;
 }
 .how-to-play section {
   margin: 0 0 12px;
@@ -930,6 +952,9 @@ kbd {
   font-size: 13px;
   line-height: 1.45;
   opacity: 0.85;
+}
+.how-to-play p + p {
+  margin-top: 6px;
 }
 .how-to-play p kbd {
   min-width: 0;
@@ -1105,6 +1130,19 @@ kbd {
   .day-summary h2 {
     margin-bottom: 8px;
     font-size: 18px;
+  }
+  .how-to-play {
+    height: calc(100dvh - 16px);
+  }
+  .how-to-play h2 {
+    display: none;
+  }
+  .how-to-play .panel-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .how-to-play .panel-tabs .btn {
+    flex-shrink: 0;
   }
   .audio-panel {
     gap: 8px;

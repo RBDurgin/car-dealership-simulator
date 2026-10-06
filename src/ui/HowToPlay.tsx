@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import {
@@ -25,307 +25,394 @@ import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
 import { effectLabel } from './improvementText'
 
-/** A short guide: shown when a new game starts, and again on `?` or from the title screen. */
+type GuideTab = 'basics' | 'selling' | 'business' | 'people' | 'controls'
+
+const TABS: [GuideTab, string][] = [
+  ['basics', 'Basics'],
+  ['selling', 'Selling'],
+  ['business', 'Business'],
+  ['people', 'People'],
+  ['controls', 'Controls'],
+]
+
+/** What every tab needs to word itself for mouse or touch. */
+interface TabProps {
+  touch: boolean
+  /** "Click" or "Tap". */
+  click: string
+}
+
+/** "press I or click Office" / "tap Office": how to open the office computer on a tab. */
+function OfficeKey({ touch, keyName }: { touch: boolean; keyName: string }) {
+  return touch ? (
+    <>tap Office</>
+  ) : (
+    <>
+      press <kbd>{keyName}</kbd> or click Office
+    </>
+  )
+}
+
+function BasicsTab({ touch, click }: TabProps) {
+  return (
+    <>
+      <section>
+        <h3>The goal</h3>
+        <p>
+          Sell cars, build a loyal client base and grow your cash. You start with{' '}
+          {formatMoney(STARTING_CASH)} and a lot full of cars.
+        </p>
+      </section>
+      <section>
+        <h3>The day</h3>
+        <p>
+          Doors open at 9:00 and close at 18:00. Customers browse, then wait for help and lose
+          patience if nobody comes. Some are passers-by off the sidewalk. Each day ends with a
+          summary, and your progress is saved then.
+        </p>
+      </section>
+      <section>
+        <h3>Making a sale</h3>
+        <p>
+          {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they
+          accept, <b>Close deal</b> at your desk. Walking away or {touch ? '✕' : 'Esc'} ends the
+          conversation.
+        </p>
+        <p>
+          Haggle in the customer panel: open with <b>Ask MSRP</b> or a little off, or set any price
+          with − and +. Ask more than they hoped and they counter (a <b>$?</b> over their head);
+          then <b>Hold</b>, <b>Split the difference</b> or <b>Accept</b>. Hold firm too long and
+          they may walk, and after a few rounds they&apos;ll only reluctantly pay over their hope.
+          The panel shows your margin at each price, in red below cost.
+        </p>
+        <p>
+          Every car shows its MSRP and <i>your cost</i>; the difference is your gross profit. The
+          day summary adds up revenue, cost and gross, then takes off wages, commissions and floor
+          plan interest for the net.
+        </p>
+        <p>
+          Clean cars sell better. Cars gather dust overnight (faster on the lot) and each time a
+          customer looks one over. Inspect a car to see how clean it is, and {click.toLowerCase()}{' '}
+          it to <b>Wash car</b>.
+        </p>
+      </section>
+    </>
+  )
+}
+
+function SellingTab() {
+  return (
+    <>
+      <section>
+        <h3>Customers</h3>
+        <p>
+          Greeting a customer tells you what kind they are. Someone <i>just looking</i> browses a
+          lot and rarely buys. Someone who <i>knows what they want</i> heads for one car, won&apos;t
+          wait long, and usually says yes. Customers <i>watching every dollar</i> have a tight
+          budget, and couples take their time over each car.
+        </p>
+        <p>
+          Bargain hunters want the most off and haggle longest. Decisive buyers want only a little
+          off and won&apos;t haggle for long, and neither will someone just looking.
+        </p>
+      </section>
+      <section>
+        <h3>Reputation</h3>
+        <p>
+          The ♥ meter in the top bar, 0 to 100, moves once a day at closing: each buyer adds{' '}
+          {REPUTATION_POINTS.sale}, each customer who walks out unhappy takes off{' '}
+          {-REPUTATION_POINTS.refused}, each who gives up waiting {-REPUTATION_POINTS.impatient},
+          and each who can&apos;t find the kind of car they want {-REPUTATION_POINTS.missed}.
+          Customers still on the lot at closing don&apos;t count, and a day moves it at most{' '}
+          {MAX_DAILY_CHANGE} either way.
+        </p>
+        <p>
+          A good name brings more visitors, sends friends of past buyers your way (up to{' '}
+          {MAX_REFERRALS} referrals a day at the top, mostly ready to buy) and makes every ad bring
+          more. A poor one means fewer visitors and weaker ads.
+        </p>
+      </section>
+    </>
+  )
+}
+
+function BusinessTab({ touch, click }: TabProps) {
+  return (
+    <>
+      <p className="how-lead">
+        Stock, ads and upgrades are all on the office computer: {click.toLowerCase()} the screen on
+        your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
+      </p>
+      <section>
+        <h3>Buying stock</h3>
+        <p>
+          Sold cars leave empty spaces. Order new ones on the <b>Stock</b> tab; they&apos;re
+          delivered the next morning, showroom platforms first, then the lot. You can cancel an
+          order until the day ends. One model each day is on incentive,{' '}
+          {Math.round(INCENTIVE_DISCOUNT * 100)}% off its invoice.
+        </p>
+        <p>
+          Pay in <b>cash</b>, or put the car on the <b>floor plan</b>: the bank pays for it (up to{' '}
+          {formatMoney(FLOOR_PLAN_LIMIT)} at once) and you pay{' '}
+          {(FLOOR_PLAN_DAILY_RATE * 100).toFixed(1)}% of its cost in interest each day it sits. When
+          it sells, the bank takes its cost out of the price. <b>Pay off</b> a car from cash to stop
+          the interest.
+        </p>
+        <p>
+          Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
+          the summary and the stock panel. Order what people ask for.
+        </p>
+      </section>
+      <section>
+        <h3>Advertising</h3>
+        <p>
+          Book a campaign on the <b>Marketing</b> tab
+          {touch ? (
+            ''
+          ) : (
+            <>
+              {' '}
+              (<kbd>M</kbd>)
+            </>
+          )}
+          . You pay up front, and it brings extra visitors every day it runs, from tomorrow. Each
+          channel draws its own crowd:
+        </p>
+        <ul>
+          {CHANNEL_IDS.map((id) => {
+            const c = CHANNELS[id]
+            return (
+              <li key={id}>
+                <b>{c.label}</b>: {formatMoney(c.cost)} for {c.days} days, about {c.visitors} extra
+                a day. {c.reaches}.
+              </li>
+            )
+          })}
+        </ul>
+        <p>
+          Booking a channel again while it runs brings fewer extra visitors. The summary shows how
+          many visitors each source brought and what they bought, so you can see which ads pay.
+        </p>
+      </section>
+      <section>
+        <h3>Improvements</h3>
+        <p>
+          About {Math.round(WALK_IN_CHANCE * 100)} in 100 passers-by turn in to start with. Buy
+          upgrades on the <b>Upgrades</b> tab
+          {touch ? (
+            ''
+          ) : (
+            <>
+              {' '}
+              (<kbd>U</kbd>)
+            </>
+          )}
+          : you pay once, it goes up overnight and stays for good. Out front, a sign or a tube man
+          draws more people in. In the showroom, buyers hope for less off and say yes a little more
+          often. A done-up waiting area keeps waiting customers there longer.
+        </p>
+        {(Object.keys(AREA_LABELS) as ImprovementArea[]).map((area) => (
+          <Fragment key={area}>
+            <h4>{AREA_LABELS[area]}</h4>
+            <ul>
+              {IMPROVEMENT_IDS.filter((id) => IMPROVEMENTS[id].area === area).map((id) => {
+                const u = IMPROVEMENTS[id]
+                return (
+                  <li key={id}>
+                    <b>{u.label}</b>: {formatMoney(u.cost)}. {effectLabel(id)}.
+                    {u.requires && (
+                      <> Replaces the {IMPROVEMENTS[u.requires].label.toLowerCase()}.</>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </Fragment>
+        ))}
+        <p>Ads and upgrades come off the net on the day you pay for them.</p>
+      </section>
+    </>
+  )
+}
+
+function PeopleTab({ touch, click }: TabProps) {
+  return (
+    <>
+      <section>
+        <h3>Staff</h3>
+        <p>
+          {touch ? (
+            <>Tap Staff</>
+          ) : (
+            <>
+              Press <kbd>H</kbd> or click Staff
+            </>
+          )}{' '}
+          to hire from the day&apos;s applicants. Everyone on the payroll is paid at closing.
+        </p>
+        <ul>
+          <li>
+            <b>Salespeople</b> greet, haggle and sign buyers at their own desk or hand them to
+            finance, for {Math.round(SALES_COMMISSION * 100)}% of the gross (at least{' '}
+            {formatMoney(MIN_COMMISSION)}). Seasoned ones hold nearer MSRP, get more yeses and greet
+            customers on arrival; green ones open lower and give in sooner. None sell below cost.
+            They leave alone a customer you&apos;re walking to, and a tick marks someone
+            they&apos;re helping.
+          </li>
+          <li>
+            A <b>receptionist</b> keeps waiting customers patient.
+          </li>
+          <li>
+            A <b>finance manager</b> signs buyers at your office desk for {formatMoney(FINANCE_FEE)}{' '}
+            a deal: lead a buyer there, {click.toLowerCase()} them and choose{' '}
+            <b>Hand off to finance</b>, and you&apos;re free for the next customer. Buyers wait in
+            the lounge if finance is busy.
+          </li>
+          <li>
+            A <b>lot porter</b> washes the dirtiest cars all day.
+          </li>
+          <li>
+            A <b>security guard</b> patrols the lot and deals with Nazma (below); the more skilled,
+            the further they see.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <h3>The owner</h3>
+        <p>
+          Every two or three days the owner drops by at opening and sets a goal for the day, shown
+          in the top bar: sales, revenue, gross profit, a body type, no impatient walk-outs or a
+          reputation boost. Meet it by closing for a {formatMoney(OWNER_BONUS)} bonus.
+        </p>
+      </section>
+      <section>
+        <h3>Nazma</h3>
+        <p>
+          A former employee with it in for the place, in a dark hoodie and a red badge. From day{' '}
+          {FIRST_NAZMA_DAY}, every few days he smears grime over two or three cars (lot first), or
+          has a quiet word with one of your staff, the more skilled the likelier, and offers them a
+          job.
+        </p>
+        <p>
+          {click} him and choose <b>Confront</b> to run him off before he does it. A security guard
+          makes his visits rarer and chases him off on sight; the porter cleans up after him.
+        </p>
+        <p>
+          Someone he talks round is <i>thinking of quitting</i> (a ? on their badge). Press{' '}
+          <b>Keep</b> in the staff panel before closing for a {Math.round(RETENTION_RAISE * 100)}%
+          raise (at least {formatMoney(MIN_RETENTION_RAISE)} a day), or they leave at closing, paid
+          for the day.
+        </p>
+        <p>
+          From day {FIRST_THEFT_DAY}, some nights he drives a lot car away, pricier ones first. It
+          is written off at cost, and a floored car&apos;s loan is called in the next morning. A
+          security guard on the payroll stops him.
+        </p>
+      </section>
+    </>
+  )
+}
+
+function ControlsTab({ touch }: TabProps) {
+  const controls = touch ? TOUCH_CONTROLS : CONTROLS
+  return (
+    <>
+      <section>
+        <h3>Controls</h3>
+        <div className="how-controls">
+          {controls.map(([key, label]) => (
+            <div key={key} className="control">
+              <kbd>{key}</kbd>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section>
+        <h3>Sound</h3>
+        <p>
+          The 🔊 button in the top bar sets master, music, effects and voice volumes, and mutes it
+          all
+          {touch ? (
+            '.'
+          ) : (
+            <>
+              {' '}
+              (or press <kbd>N</kbd>).
+            </>
+          )}{' '}
+          They&apos;re kept on this device, apart from your save.
+        </p>
+        <p>
+          Listen for the lot: a chime when a customer walks in, a jingle on a sale, a slammed door
+          from someone leaving unhappy, the hiss of a wash and the scuff of Nazma smudging a car.
+          The music follows the day and goes muffled while this guide is open.
+        </p>
+        <p>
+          Everyone talks in gibberish, each in their own voice: hellos, back and forth over a car, a
+          questioning counter, a happy yes or a grumble. You only hear the people near you.
+        </p>
+      </section>
+    </>
+  )
+}
+
+const TAB_BODIES: Record<GuideTab, (p: TabProps) => ReactNode> = {
+  basics: BasicsTab,
+  selling: SellingTab,
+  business: BusinessTab,
+  people: PeopleTab,
+  controls: ControlsTab,
+}
+
+/**
+ * A short guide in tabs: shown when a new game starts, and again on `?` or
+ * from the title screen. Reopening keeps the last tab; ← and → switch tabs.
+ */
 export function HowToPlay() {
   const open = useGame((s) => s.helpOpen)
   const touch = useMediaQuery(COARSE)
+  const [tab, setTab] = useState<GuideTab>('basics')
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') return
+      e.preventDefault()
+      const step = e.code === 'ArrowRight' ? 1 : -1
+      setTab((t) => {
+        const i = TABS.findIndex(([id]) => id === t)
+        return TABS[(i + step + TABS.length) % TABS.length][0]
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
   if (!open) return null
-  const click = touch ? 'Tap' : 'Click'
-  const controls = touch ? TOUCH_CONTROLS : CONTROLS
+  const Body = TAB_BODIES[tab]
 
   return (
     <div className="modal-backdrop">
       <div className="panel day-summary how-to-play" role="dialog" aria-label="How to play">
         <div className="info-kicker">How to play</div>
         <h2>Run the lot</h2>
-        <section>
-          <h3>The goal</h3>
-          <p>
-            Sell cars, build a loyal client base and grow your cash. You start with{' '}
-            {formatMoney(STARTING_CASH)} and a lot full of cars.
-          </p>
-        </section>
-        <section>
-          <h3>The day</h3>
-          <p>
-            Doors open at 9:00 and close at 18:00. Customers browse the lot, then wait for help and
-            lose patience if nobody comes. Some are passers-by who wander in off the sidewalk. Each
-            day ends with a summary, and your progress is saved then.
-          </p>
-        </section>
-        <section>
-          <h3>Customers</h3>
-          <p>
-            Not everyone shops the same way, and greeting a customer tells you what kind they are.
-            Someone who is <i>just looking</i> browses a lot and rarely buys. Someone who{' '}
-            <i>knows what they want</i> heads for one car, won&apos;t wait long, and usually says
-            yes. Customers <i>watching every dollar</i> have a tight budget, and couples shop
-            together and take their time over each car.
-          </p>
-          <p>
-            They haggle differently too. Bargain hunters want the most off and go back and forth the
-            longest. Decisive buyers want only a little off and won&apos;t haggle for long, and
-            neither will someone who is just looking.
-          </p>
-        </section>
-        <section>
-          <h3>The owner</h3>
-          <p>
-            Every two or three days the owner drops by at opening, walks to the office and sets a
-            goal for the day, shown in the top bar. It might be a number of sales, revenue, gross
-            profit, a body type, no impatient walk-outs or a boost to your reputation. Meet it by
-            closing for a {formatMoney(OWNER_BONUS)} bonus; miss it and you&apos;ll hear about it in
-            the summary.
-          </p>
-        </section>
-        <section>
-          <h3>Nazma</h3>
-          <p>
-            Nazma used to work here, and he has it in for the place. From day {FIRST_NAZMA_DAY} on,
-            every few days he walks onto the lot in a dark hoodie with a red badge and smears grime
-            over two or three cars, lot cars first, so they need washing again. Dirty cars sell
-            worse. Other days he comes to have a quiet word with one of your staff (never the
-            guard), the more skilled the likelier, and offers them a job.
-          </p>
-          <p>
-            {click} him and choose <b>Confront</b> to run him off. Catch him before he gets to a car
-            and it stays clean; catch him before he's done talking and nothing comes of it. The lot
-            porter cleans up after him. A security guard on the payroll makes his visits rarer, and
-            runs him off when they spot him.
-          </p>
-          <p>
-            From day {FIRST_THEFT_DAY} on, some nights he drives a car off the lot (the showroom is
-            locked), and the pricier ones tempt him most. A stolen car is written off at what you
-            paid for it, and if it was on the floor plan the bank calls in the loan the next
-            morning. He never gets one past a security guard on the payroll.
-          </p>
-          <p>
-            Someone he talks round is <i>thinking of quitting</i> (a ? on their badge). Open Staff
-            and press <b>Keep</b> before closing to give them a {Math.round(RETENTION_RAISE * 100)}%
-            raise (at least {formatMoney(MIN_RETENTION_RAISE)} a day) and they stay. Otherwise they
-            work out the day, are paid for it, and leave at closing for good.
-          </p>
-        </section>
-        <section>
-          <h3>Reputation</h3>
-          <p>
-            Your good name, from 0 to 100, is the ♥ meter in the top bar. It moves once a day, at
-            closing: each buyer adds {REPUTATION_POINTS.sale}, each customer who walks out unhappy
-            takes off {-REPUTATION_POINTS.refused}, each one who gives up waiting{' '}
-            {-REPUTATION_POINTS.impatient}, and each who can&apos;t find the kind of car they want{' '}
-            {-REPUTATION_POINTS.missed}. Customers still on the lot at closing don&apos;t count, and
-            one day can move it by at most {MAX_DAILY_CHANGE} either way. The day summary shows the
-            change.
-          </p>
-          <p>
-            A good name brings more of the usual visitors, sends friends of past buyers your way (up
-            to {MAX_REFERRALS} referrals a day at the top, mostly ready to buy) and makes every ad
-            bring more people. A poor one means fewer visitors and ads that do less.
-          </p>
-        </section>
-        <section>
-          <h3>Making a sale</h3>
-          <p>
-            {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they
-            accept, <b>Close deal</b> at your desk. Walking away or {touch ? '✕' : 'Esc'} ends the
-            conversation.
-          </p>
-          <p>
-            Prices are haggled in the customer panel. Open with <b>Ask MSRP</b> or a little off, or
-            set any price with − and +. Ask for more than they hoped to pay and they counter (a{' '}
-            <b>$?</b> over their head); then <b>Hold</b> your price, <b>Split the difference</b>, or{' '}
-            <b>Accept</b> their counter. Asking near what they hope for makes a yes likelier, but
-            every round has a catch: hold firm and they may walk out, and after a few rounds
-            they&apos;ll only reluctantly pay over their hope. The panel shows your margin at each
-            price, in red below cost.
-          </p>
-          <p>
-            Every car shows its MSRP and <i>your cost</i>, what the dealership paid for it. The
-            difference is your gross profit on the sale. The day summary adds up revenue, the cost
-            of the cars sold and gross profit, then takes off wages, commissions and floor plan
-            interest for the net.
-          </p>
-          <p>
-            Clean cars sell better. Cars gather dust overnight (faster out on the lot) and every
-            time a customer looks one over. Inspect a car to see if it&apos;s clean, dusty or dirty,
-            and {click.toLowerCase()} it to <b>Wash car</b>.
-          </p>
-        </section>
-        <section>
-          <h3>Buying stock</h3>
-          <p>
-            Sold cars leave empty spaces. Order new ones at the office computer (
-            {click.toLowerCase()} the screen on your desk and choose <b>Order stock</b>),{' '}
-            {touch ? (
-              <>or tap Office</>
-            ) : (
-              <>
-                press <kbd>I</kbd> or click Office
-              </>
-            )}
-            . Cars ordered today are delivered the next morning, showroom platforms first, then the
-            lot. You can cancel an order until the day ends. One model each day is on incentive,{' '}
-            {Math.round(INCENTIVE_DISCOUNT * 100)}% off its invoice.
-          </p>
-          <p>
-            Pay in <b>cash</b>, or put the car on the <b>floor plan</b>: the bank pays for it (up to{' '}
-            {formatMoney(FLOOR_PLAN_LIMIT)} at once) and you pay{' '}
-            {(FLOOR_PLAN_DAILY_RATE * 100).toFixed(1)}% of its cost in interest every day it sits in
-            stock. When it sells, the bank takes its cost out of the price and you keep the rest.
-            You can also <b>Pay off</b> a car from cash to stop the interest.
-          </p>
-          <p>
-            Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
-            the day summary and the stock panel. Order what people are asking for.
-          </p>
-        </section>
-        <section>
-          <h3>Advertising</h3>
-          <p>
-            More visitors means more sales. Book an ad campaign on the office computer&apos;s{' '}
-            <b>Marketing</b> tab ({click.toLowerCase()} the screen and choose <b>Marketing</b>
-            {touch ? (
-              <>, or tap Office and switch tabs</>
-            ) : (
-              <>
-                , or press <kbd>M</kbd>
-              </>
-            )}
-            ). You pay up front, and the campaign brings extra visitors every day it runs, starting
-            tomorrow morning. Each channel draws its own crowd:
-          </p>
-          <ul>
-            {CHANNEL_IDS.map((id) => {
-              const c = CHANNELS[id]
-              return (
-                <li key={id}>
-                  <b>{c.label}</b>: {formatMoney(c.cost)} for {c.days} days, about {c.visitors}{' '}
-                  extra a day. {c.reaches}.
-                </li>
-              )
-            })}
-          </ul>
-          <p>
-            Booking the same channel again while it runs brings fewer extra visitors the second
-            time, and a better reputation makes every ad bring more. The day summary takes the ad
-            spend off the net on the day you pay, and shows how many visitors each source brought
-            and what they bought, so you can see which ads pay.
-          </p>
-        </section>
-        <section>
-          <h3>Improvements</h3>
-          <p>
-            Passers-by on the sidewalk sometimes turn in: about {Math.round(WALK_IN_CHANCE * 100)}{' '}
-            in 100 to start with. Catch more of their eye on the office computer&apos;s{' '}
-            <b>Upgrades</b> tab
-            {touch ? (
-              <> (tap Office and switch tabs)</>
-            ) : (
-              <>
-                {' '}
-                (or press <kbd>U</kbd>)
-              </>
-            )}
-            . You pay once, it goes up overnight and stays for good. Out front, a sign or a tube man
-            draws more people and more of them in. In the showroom, buyers who like what they see
-            hope for less off (they still haggle) and say yes a little more often. A done-up waiting
-            area keeps customers who are waiting to be helped there longer.
-          </p>
-          {(Object.keys(AREA_LABELS) as ImprovementArea[]).map((area) => (
-            <Fragment key={area}>
-              <h4>{AREA_LABELS[area]}</h4>
-              <ul>
-                {IMPROVEMENT_IDS.filter((id) => IMPROVEMENTS[id].area === area).map((id) => {
-                  const u = IMPROVEMENTS[id]
-                  return (
-                    <li key={id}>
-                      <b>{u.label}</b>: {formatMoney(u.cost)}. {effectLabel(id)}.
-                      {u.requires && (
-                        <> Replaces the {IMPROVEMENTS[u.requires].label.toLowerCase()}.</>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
-            </Fragment>
+        <div className="panel-tabs" role="tablist">
+          {TABS.map(([t, label]) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              className={tab === t ? 'btn btn-small btn-primary' : 'btn btn-small'}
+              onClick={() => setTab(t)}
+            >
+              {label}
+            </button>
           ))}
-          <p>The day summary takes what you spent off the net on the day you buy.</p>
-        </section>
-        <section>
-          <h3>Staff</h3>
-          <p>
-            {touch ? (
-              <>Tap Staff</>
-            ) : (
-              <>
-                Press <kbd>H</kbd> or click Staff
-              </>
-            )}{' '}
-            to hire from the day&apos;s applicants. Salespeople sell on their own: they greet
-            customers, haggle over the price and sign buyers at their own desk, or hand them to
-            finance. They earn {Math.round(SALES_COMMISSION * 100)}% of the gross profit on each car
-            they sell (at least {formatMoney(MIN_COMMISSION)}), so a give-away costs them too. The
-            better they are, the more often customers say yes and the nearer MSRP they hold: green
-            salespeople open under MSRP and soon take the customer&apos;s counter, seasoned ones
-            give ground slowly. None of them sell below cost. The day summary shows how far off MSRP
-            each seller went. Seasoned salespeople greet customers as they arrive; newer ones wait
-            until a customer is looking at a car. They leave alone a customer you&apos;re walking
-            over to, and you can&apos;t greet someone they&apos;re helping (a tick over their head).
-            A receptionist keeps waiting customers patient. A finance manager sits at your office
-            desk: lead a buyer there, {click.toLowerCase()} them and choose{' '}
-            <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer while they
-            do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter washes the
-            dirtiest cars for you, all day long. A security guard walks a patrol round the lot and
-            chases off Nazma when they spot him; the more skilled, the further they see. They also
-            stop him stealing cars overnight. Everyone on the payroll is paid at closing, and the
-            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign. Anyone Nazma
-            has talked into quitting shows <b>Thinking of quitting</b> in the staff panel, with a{' '}
-            <b>Keep</b> button and the raise it costs.
-          </p>
-        </section>
-        <section>
-          <h3>Sound</h3>
-          <p>
-            The 🔊 button in the top bar opens the sound settings: a master volume, one each for
-            music, sound effects and voices, and a switch to mute it all
-            {touch ? (
-              '.'
-            ) : (
-              <>
-                {' '}
-                (or press <kbd>N</kbd>).
-              </>
-            )}{' '}
-            They&apos;re kept on this device, apart from your save.
-          </p>
-          <p>
-            Listen for the lot: a chime when a customer walks in, a jingle when a car sells, a door
-            slammed by someone leaving unhappy, the hiss of a car being washed and the scuff of
-            Nazma smudging one. Sounds out on the lot are quieter the farther they are from you.
-          </p>
-          <p>
-            The music follows the day: an easy bossa in the morning, another after noon, and a
-            livelier tune for the last hour before closing. The summary and the title screen have
-            their own. It goes muffled while this guide is open.
-          </p>
-          <p>
-            Everyone talks in gibberish, each in their own voice: hellos when a customer is greeted,
-            back and forth over a car, a questioning tone when they counter your price, a happy yes
-            or a grumble on the way out, and a murmur over the paperwork. You only hear the people
-            near you, and the Voices slider sets how loud they are.
-          </p>
-        </section>
-        <section>
-          <h3>Controls</h3>
-          <div className="how-controls">
-            {controls.map(([key, label]) => (
-              <div key={key} className="control">
-                <kbd>{key}</kbd>
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        </div>
+        <div className="how-body" key={tab} role="tabpanel">
+          <Body touch={touch} click={touch ? 'Tap' : 'Click'} />
+        </div>
         <button
           className="btn btn-primary"
           autoFocus
