@@ -7,6 +7,7 @@ import { isClosed } from '../sim/clock'
 import type { Tile } from '../sim/grid'
 import { CUSTOMER_SPEED } from '../sim/customers'
 import { OWNER_OFFICE_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import { OWNER_ID } from '../sim/owner'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { isPaused, useGame } from '../state/store'
 import { Character } from './Character'
@@ -21,7 +22,6 @@ import {
   type Walker,
 } from './walker'
 
-const OWNER_ID = 'owner'
 /** A dark suit, over whatever the model is wearing. */
 const SUIT_TINT = '#3b4258'
 /** Game minutes the owner looks around the office after setting the goal. */

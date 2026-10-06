@@ -19,6 +19,9 @@ export type OwnerGoal =
   /** Raise reputation by at least `points` today (see `reputationChange`). */
   | { kind: 'reputation'; points: number }
 
+/** The owner's id in the world (crowd, chatter). */
+export const OWNER_ID = 'owner'
+
 /** Today's visit: the goal, and whether the owner has reached the office and said it yet. */
 export interface OwnerVisit {
   goal: OwnerGoal

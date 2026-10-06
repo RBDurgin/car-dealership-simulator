@@ -2,6 +2,7 @@ import { Stats } from '@react-three/drei'
 import { Suspense } from 'react'
 import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
 import { CameraRig } from './CameraRig'
+import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
@@ -57,6 +58,7 @@ export function Scene() {
       <Staff />
       <Pedestrians />
       <Owner />
+      <Chatter />
       {SHOW_FPS && <Stats className="fps-stats" />}
     </>
   )

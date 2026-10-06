@@ -269,6 +269,12 @@ export function HowToPlay() {
             livelier tune for the last hour before closing. The summary and the title screen have
             their own. It goes muffled while this guide is open.
           </p>
+          <p>
+            Everyone talks in gibberish, each in their own voice: hellos when a customer is greeted,
+            back and forth over a car, a questioning tone when they counter your price, a happy yes
+            or a grumble on the way out, and a murmur over the paperwork. You only hear the people
+            near you, and the Voices slider sets how loud they are.
+          </p>
         </section>
         <section>
           <h3>Controls</h3>

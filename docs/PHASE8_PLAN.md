@@ -113,6 +113,8 @@ public/audio/
 
 ### 8d: Gibberish voices
 
+**Status:** Done 2026-10-05. Voices are synthesized: an oscillator through two bandpass formants with noise-burst consonants (`audio/voice.ts`), one line scheduled at a time on the audio clock. Female models get the higher pitch range; everyone else, the player included, gets the lower. `sim/chatter.ts` splits talk into conversations that take turns while a phase lasts (`conversationsOf` + `nextLine`: a pitch, signing, a couple browsing or waiting) and one-off lines a store change prompts (`reactionsFor`: greetings both ways, the receptionist's hello on arrival, a "hmm" over an offer, a question on a counter, a happy yes, a grumble on walking out, the owner's hello and goal). A sixth tone, `murmur`, covers the signing and the "hmm". `nextLine` takes a conversation and turn number rather than `(customer, handler, now)`. Voices fade out sooner than sound effects and are skipped past `VOICE_FAR`; lines nobody hears still take their turn. The head-bob is left for later.
+
 - `sim/gibberish.ts` + tests (determinism and ranges):
   - `voiceOf(id, variant)` gives a base pitch (a male or female range from the character variant, plus seeded jitter), a speech rate and a formant shift. The same character always sounds the same.
   - `utterance(rng, tone, syllables)` gives `{ consonant, vowel formants, ms, pitch }[]`, shaped by a `Tone` contour:
