@@ -24,6 +24,7 @@ import {
   revenue,
   salesBySeller,
   salesBySource,
+  theftLoss,
   type Sale,
   walkOuts,
 } from './deal'
@@ -282,6 +283,23 @@ describe('day stats', () => {
       owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
     expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 - 1_200 - 3_000 + 1_500)
+  })
+
+  it('writes off stolen stock, floored or not', () => {
+    const stats = {
+      ...emptyStats(),
+      sales: [sale(30_000, 27_000)],
+      nazma: {
+        ...emptyStats().nazma,
+        stolen: [
+          { model: 'suv' as const, cost: 36_000, floored: true },
+          { model: 'sedan' as const, cost: 22_000, floored: false },
+        ],
+      },
+    }
+    expect(theftLoss(emptyStats())).toBe(0)
+    expect(theftLoss(stats)).toBe(58_000)
+    expect(netIncome(stats)).toBe(3_000 - 58_000)
   })
 
   it('counts visitors by what brought them in', () => {

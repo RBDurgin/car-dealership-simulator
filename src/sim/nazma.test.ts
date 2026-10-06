@@ -5,11 +5,17 @@ import {
   confrontBlocker,
   emptyNazmaStats,
   FIRST_NAZMA_DAY,
+  FIRST_THEFT_DAY,
   isNazmaDay,
+  isTheftNight,
   nazmaSummary,
   nextTarget,
+  planTheft,
   planVisit,
   SMUDGE_TARGETS,
+  stolenRecord,
+  THEFT_CHANCE,
+  THEFT_GAP_DAYS,
   VISIT_CHANCE,
   type NazmaVisit,
 } from './nazma'
@@ -108,10 +114,82 @@ describe('confrontBlocker', () => {
   })
 })
 
+describe('isTheftNight', () => {
+  const nights = days(2000).filter((d) => isTheftNight(d))
+
+  it('starts on day 6 at the earliest and is the same for the same day', () => {
+    expect(nights[0]).toBeGreaterThanOrEqual(FIRST_THEFT_DAY)
+    for (const d of days(60)) expect(isTheftNight(d)).toBe(isTheftNight(d))
+  })
+
+  it('leaves a gap between tries', () => {
+    for (let i = 1; i < nights.length; i++) {
+      expect(nights[i] - nights[i - 1]).toBeGreaterThanOrEqual(THEFT_GAP_DAYS)
+    }
+  })
+
+  it('comes up a little less often than the raw chance, because of the gap', () => {
+    const share = nights.length / (2000 - FIRST_THEFT_DAY)
+    expect(share).toBeLessThan(THEFT_CHANCE)
+    expect(share).toBeGreaterThan(THEFT_CHANCE / 2)
+  })
+})
+
+describe('planTheft', () => {
+  const night = days(200).find((d) => isTheftNight(d))!
+  const quiet = days(200).find((d) => d > FIRST_THEFT_DAY && !isTheftNight(d))!
+  const lot = inventory.filter((c) => c.location === 'lot')
+
+  it('takes an available lot car on a theft night, never from the showroom', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const t = planTheft(createRng(seed), night, inventory, false)
+      expect(t?.outcome).toBe('stolen')
+      if (t?.outcome === 'stolen') expect(t.car.location).toBe('lot')
+    }
+    const showroomOnly = lot.reduce((acc, c) => sellCar(acc, c.id), inventory)
+    expect(planTheft(createRng(1), night, showroomOnly, false)).toBeNull()
+  })
+
+  it('does nothing on a quiet night', () => {
+    expect(planTheft(createRng(1), quiet, inventory, false)).toBeNull()
+    expect(planTheft(createRng(1), FIRST_THEFT_DAY - 1, inventory, false)).toBeNull()
+  })
+
+  it('is foiled by a guard', () => {
+    expect(planTheft(createRng(1), night, inventory, true)).toEqual({ outcome: 'foiled' })
+  })
+
+  it('goes for the pricier cars more often', () => {
+    const byPrice = [...lot].sort((a, b) => a.msrp - b.msrp)
+    const [cheap, dear] = [byPrice[0], byPrice[byPrice.length - 1]]
+    const two = inventory.filter((c) => c.location === 'showroom' || c === cheap || c === dear)
+    let dearTaken = 0
+    for (let seed = 1; seed <= 400; seed++) {
+      const t = planTheft(createRng(seed), night, two, false)
+      if (t?.outcome === 'stolen' && t.car === dear) dearTaken++
+    }
+    expect(dearTaken / 400).toBeGreaterThan(0.5)
+  })
+
+  it('records what was taken', () => {
+    expect(stolenRecord({ ...lot[0], floored: true })).toEqual({
+      model: lot[0].model,
+      cost: lot[0].cost,
+      floored: true,
+    })
+  })
+})
+
 describe('nazmaSummary', () => {
   const stats = emptyNazmaStats()
   it('says what he got up to', () => {
     expect(nazmaSummary(stats)).toBeNull()
+    const stolen = [{ model: 'suv' as const, cost: 30_000, floored: false }]
+    expect(nazmaSummary({ ...stats, stolen })).toMatch(/^Stole the .+ overnight$/)
+    expect(nazmaSummary({ ...stats, stolen, visited: true, smudged: 2 })).toMatch(
+      /overnight; smudged 2 cars$/,
+    )
+    expect(nazmaSummary({ ...stats, foiled: true })).toMatch(/guard ran him off/)
     expect(nazmaSummary({ ...stats, visited: true, smudged: 2 })).toBe('Smudged 2 cars')
     expect(nazmaSummary({ ...stats, visited: true, smudged: 1, runOff: 'player' })).toBe(
       'Run off by you (smudged 1 car first)',

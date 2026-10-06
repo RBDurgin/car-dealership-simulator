@@ -1,4 +1,5 @@
 import type { StaffVariant } from './characters'
+import { carName } from './interactables'
 import { CLOSE_MINUTE, CLOCK_STEP_MINUTES, OPEN_MINUTE } from './clock'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
@@ -7,8 +8,9 @@ import { createRng, type Rng } from './rng'
 /**
  * Nazma, a disgruntled former employee (he/him), out to ruin the business.
  * On some days he walks onto the lot and smudges a few cars, so they need
- * washing again. The player can confront him to run him off. His visits are
- * rebuilt from the day number, so nothing about him is saved.
+ * washing again. The player can confront him to run him off. Some nights he
+ * drives a car off the lot, unless a guard is on the payroll. His visits and
+ * thefts are rebuilt from the day number, so nothing about him is saved.
  */
 
 /** Nazma's id in the world (crowd, chatter, action target). */
@@ -52,7 +54,7 @@ export interface NazmaVisit {
 
 export type RunOffBy = 'player' | 'guard'
 
-/** A car Nazma drove off with overnight (from 9c). */
+/** A car Nazma drove off with overnight. */
 export interface StolenCar {
   model: CarModel
   cost: number
@@ -65,6 +67,8 @@ export interface NazmaStats {
   smudged: number
   runOff: RunOffBy | null
   stolen: StolenCar[]
+  /** A guard on the payroll stopped a theft last night. */
+  foiled: boolean
   /** Employees he talked into thinking of quitting (from 9d). */
   poached: string[]
   /** Employees who quit at closing (from 9d). */
@@ -72,7 +76,15 @@ export interface NazmaStats {
 }
 
 export function emptyNazmaStats(): NazmaStats {
-  return { visited: false, smudged: 0, runOff: null, stolen: [], poached: [], quit: [] }
+  return {
+    visited: false,
+    smudged: 0,
+    runOff: null,
+    stolen: [],
+    foiled: false,
+    poached: [],
+    quit: [],
+  }
 }
 
 /**
@@ -139,18 +151,87 @@ export function confrontBlocker(visit: NazmaVisit | null): string | null {
     : "Nazma isn't here."
 }
 
-const cars = (n: number) => `${n} car${n === 1 ? '' : 's'}`
+/** The first morning a car can be gone. */
+export const FIRST_THEFT_DAY = 6
+/** Chance he tries his luck on any night, once he can. */
+export const THEFT_CHANCE = 0.15
+/** He lies low for this many nights after a try, caught or not. */
+export const THEFT_GAP_DAYS = 3
+const THEFT_SEED = 19_000
 
 /**
- * The summary's line for Nazma: "Smudged 2 cars", "Run off by you (smudged 1
- * car first)". Null if he didn't visit.
+ * Whether Nazma tries to steal a car on the night before `day`'s morning: a
+ * seeded roll from `FIRST_THEFT_DAY` on, never within `THEFT_GAP_DAYS` of his
+ * last try. The gap is found by replaying earlier nights, so nothing is saved.
  */
-export function nazmaSummary(stats: NazmaStats): string | null {
+export function isTheftNight(day: number): boolean {
+  let last = -Infinity
+  for (let d = FIRST_THEFT_DAY; d <= day; d++) {
+    if (d - last < THEFT_GAP_DAYS) continue
+    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE) {
+      if (d === day) return true
+      last = d
+    }
+  }
+  return false
+}
+
+/** The seed for picking which car goes, apart from the roll in `isTheftNight`. */
+export const theftSeed = (day: number) => THEFT_SEED + 500 + day
+
+/** How a night's theft went: a car gone, or a guard ran him off. */
+export type NightTheft = { outcome: 'stolen'; car: InventoryCar } | { outcome: 'foiled' }
+
+/**
+ * The night before `day`: on a theft night Nazma goes for an available lot car
+ * (the showroom is locked), the pricier the likelier. A guard on the payroll
+ * stops him. Null on a quiet night, or with nothing on the lot to take.
+ */
+export function planTheft(
+  rng: Rng,
+  day: number,
+  inventory: readonly InventoryCar[],
+  guarded: boolean,
+): NightTheft | null {
+  if (!isTheftNight(day)) return null
+  const lot = availableCars(inventory).filter((c) => c.location === 'lot')
+  if (lot.length === 0) return null
+  if (guarded) return { outcome: 'foiled' }
+  let roll = rng.next() * lot.reduce((sum, c) => sum + c.msrp, 0)
+  const car = lot.find((c) => (roll -= c.msrp) < 0) ?? lot[lot.length - 1]
+  return { outcome: 'stolen', car }
+}
+
+/** What goes in the day's tally for a stolen `car`. */
+export function stolenRecord(car: InventoryCar): StolenCar {
+  return { model: car.model, cost: car.cost, floored: car.floored }
+}
+
+const cars = (n: number) => `${n} car${n === 1 ? '' : 's'}`
+
+function visitSummary(stats: NazmaStats): string | null {
   if (!stats.visited) return null
   const smudged = stats.smudged > 0 ? `smudged ${cars(stats.smudged)}` : null
   if (stats.runOff) {
     const by = stats.runOff === 'player' ? 'you' : 'your guard'
-    return smudged ? `Run off by ${by} (${smudged} first)` : `Run off by ${by} before he did harm`
+    return smudged ? `run off by ${by} (${smudged} first)` : `run off by ${by} before he did harm`
   }
-  return smudged ? smudged[0].toUpperCase() + smudged.slice(1) : 'Came and went'
+  return smudged ?? 'came and went'
+}
+
+function theftSummary(stats: NazmaStats): string | null {
+  if (stats.stolen.length > 0) {
+    return `stole ${stats.stolen.map((c) => `the ${carName(c.model)}`).join(' and ')} overnight`
+  }
+  return stats.foiled ? 'tried to steal a car overnight, but your guard ran him off' : null
+}
+
+/**
+ * The summary's line for Nazma: "Smudged 2 cars", "Run off by you (smudged 1
+ * car first)", "Stole the Summit Ridge overnight; smudged 2 cars". Null if he
+ * left the place alone.
+ */
+export function nazmaSummary(stats: NazmaStats): string | null {
+  const line = [theftSummary(stats), visitSummary(stats)].filter(Boolean).join('; ')
+  return line ? line[0].toUpperCase() + line.slice(1) : null
 }

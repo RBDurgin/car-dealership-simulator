@@ -5,6 +5,7 @@ import {
   grossProfit,
   missedSummary,
   netIncome,
+  theftLoss,
   revenue,
   salesBySeller,
   salesBySource,
@@ -77,6 +78,12 @@ export function DaySummary() {
             <>
               <dt>Improvements</dt>
               <dd className="price">{formatMoney(-stats.improvements)}</dd>
+            </>
+          )}
+          {theftLoss(stats) > 0 && (
+            <>
+              <dt>Stolen stock</dt>
+              <dd className="price">{formatMoney(-theftLoss(stats))}</dd>
             </>
           )}
           {!!stats.owner?.bonus && (

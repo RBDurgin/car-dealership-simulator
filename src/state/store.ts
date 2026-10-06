@@ -67,13 +67,18 @@ import {
 } from '../sim/marketing'
 import {
   confrontBlocker,
+  emptyNazmaStats,
   FIRST_NAZMA_DAY,
   isNazmaDay,
   NAZMA_ID,
   nextTarget,
+  planTheft,
   planVisit,
+  stolenRecord,
+  theftSeed,
   visitSeed,
   type NazmaStats,
+  type NightTheft,
   type NazmaVisit,
   type RunOffBy,
 } from '../sim/nazma'
@@ -335,6 +340,14 @@ let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
  */
 export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt'>): boolean {
   return s.screen === 'title' || s.helpOpen || s.rotatePrompt
+}
+
+/** The morning's word on a night's theft. */
+export function theftNotice(theft: NightTheft): string {
+  if (theft.outcome === 'foiled') return 'Your guard ran someone off the lot last night.'
+  const { car } = theft
+  const stole = `Nazma stole the ${carName(car.model)} off the lot overnight.`
+  return car.floored ? `${stole} The bank called in its ${formatMoney(car.cost)} loan.` : stole
 }
 
 /** "3 cars delivered: 2 on the lot, 1 in the showroom." */
@@ -628,8 +641,9 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Opens the doors on `day`: sold cars are gone, the rest have gathered a
-   * night's dust, yesterday's orders are parked in their slots, finished ad
+   * Opens the doors on `day`: sold cars are gone, Nazma may have stolen one
+   * off the lot (the bank calls in its loan if it was floored), the rest have
+   * gathered a night's dust, yesterday's orders are parked in their slots, finished ad
    * campaigns end, there are new arrivals (more while ads run, and more or
    * fewer with reputation) and applicants, and the staff head in.
    */
@@ -641,11 +655,16 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
-    const inventory = [...dirtyOvernight(dropSold(s.inventory)), ...delivered]
+    const kept = dropSold(s.inventory)
+    const guarded = isGuarded(s.roster)
+    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded)
+    const stolen = theft?.outcome === 'stolen' ? theft.car : null
+    const inventory = [
+      ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept),
+      ...delivered,
+    ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    const nazma = isNazmaDay(day, isGuarded(s.roster))
-      ? planVisit(createRng(visitSeed(day)), inventory)
-      : null
+    const nazma = isNazmaDay(day, guarded) ? planVisit(createRng(visitSeed(day)), inventory) : null
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
@@ -663,14 +682,26 @@ export const useGame = create<GameState>((set, get) => {
         trafficBoost(campaigns, day, campaignScale(s.reputation)),
         { scale: visitorScale(s.reputation), referrals: referralVisitors(s.reputation) },
       ),
-      dayStats: emptyStats(),
+      cash: s.cash - (stolen?.floored ? stolen.cost : 0),
+      dayStats: {
+        ...emptyStats(),
+        nazma: {
+          ...emptyNazmaStats(),
+          stolen: stolen ? [stolenRecord(stolen)] : [],
+          foiled: theft?.outcome === 'foiled',
+        },
+      },
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
       owner,
       nazma,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
-    if (delivered.length > 0) notify(deliveryNotice(delivered))
+    const notices = [
+      theft && theftNotice(theft),
+      delivered.length > 0 && deliveryNotice(delivered),
+    ].filter((t): t is string => !!t)
+    if (notices.length > 0) notify(notices.join(' '))
   }
 
   return {

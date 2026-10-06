@@ -10,7 +10,7 @@ import {
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
-import { FIRST_NAZMA_DAY } from '../sim/nazma'
+import { FIRST_NAZMA_DAY, FIRST_THEFT_DAY } from '../sim/nazma'
 import { OWNER_BONUS } from '../sim/owner'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
@@ -84,6 +84,12 @@ export function HowToPlay() {
             {click} him and choose <b>Confront</b> to run him off. Catch him before he gets to a car
             and it stays clean. The lot porter cleans up after him. A security guard on the payroll
             makes his visits rarer, and runs him off when they spot him.
+          </p>
+          <p>
+            From day {FIRST_THEFT_DAY} on, some nights he drives a car off the lot (the showroom is
+            locked), and the pricier ones tempt him most. A stolen car is written off at what you
+            paid for it, and if it was on the floor plan the bank calls in the loan the next
+            morning. He never gets one past a security guard on the payroll.
           </p>
         </section>
         <section>
@@ -256,9 +262,9 @@ export function HowToPlay() {
             <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer while they
             do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter washes the
             dirtiest cars for you, all day long. A security guard walks a patrol round the lot and
-            chases off Nazma when they spot him; the more skilled, the further they see. Everyone on
-            the payroll is paid at closing, and the finance manager also earns{' '}
-            {formatMoney(FINANCE_FEE)} per deal they sign.
+            chases off Nazma when they spot him; the more skilled, the further they see. They also
+            stop him stealing cars overnight. Everyone on the payroll is paid at closing, and the
+            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign.
           </p>
         </section>
         <section>

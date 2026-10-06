@@ -282,9 +282,14 @@ export function grossProfit(stats: DayStats): number {
   return revenue(stats) - costOfSales(stats)
 }
 
+/** The cost of the stock Nazma stole overnight, written off. */
+export function theftLoss(stats: DayStats): number {
+  return stats.nazma.stolen.reduce((sum, c) => sum + c.cost, 0)
+}
+
 /**
- * Gross profit less the day's staff costs, floor plan interest, ad spend and improvements,
- * plus any bonus from the owner.
+ * Gross profit less the day's staff costs, floor plan interest, ad spend, improvements
+ * and stolen stock, plus any bonus from the owner.
  */
 export function netIncome(stats: DayStats): number {
   return (
@@ -293,7 +298,8 @@ export function netIncome(stats: DayStats): number {
     stats.commissions -
     stats.interest -
     stats.marketing -
-    stats.improvements +
+    stats.improvements -
+    theftLoss(stats) +
     (stats.owner?.bonus ?? 0)
   )
 }
