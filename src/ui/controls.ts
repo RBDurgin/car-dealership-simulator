@@ -1,6 +1,6 @@
 /** Key bindings, listed in the corner hint and the how-to-play guide. */
 export const CONTROLS: [string, string][] = [
-  ['Click', 'Move / interact / greet'],
+  ['Click', 'Move / interact / greet / confront Nazma'],
   ['WASD', 'Walk'],
   ['Q / E', 'Rotate view'],
   ['Wheel', 'Zoom'],
@@ -23,7 +23,7 @@ export const CONTROLS: [string, string][] = [
 
 /** The same for a touch screen, where the on-screen buttons stand in for keys. */
 export const TOUCH_CONTROLS: [string, string][] = [
-  ['Tap', 'Move / interact / greet'],
+  ['Tap', 'Move / interact / greet / confront Nazma'],
   ['Pinch', 'Zoom'],
   ['Twist', 'Rotate view (two fingers)'],
   ['Staff', 'Staff'],

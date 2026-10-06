@@ -2,6 +2,7 @@ import { dayOver, type GameTime } from './clock'
 import type { Customer } from './customers'
 import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
+import { NAZMA_ID, type NazmaVisit } from './nazma'
 import type { Employee } from './staff'
 
 /** What a sound effect is for. `audio/samples.ts` maps each to a file (or a synth). */
@@ -18,10 +19,18 @@ export type SfxCue =
   | 'thud'
   | 'open'
   | 'close'
+  | 'scuff'
+  | 'shoo'
 
-/** Where a cue happens: a customer, an employee or a car. UI cues have none. */
+/**
+ * Where a cue happens: a customer, an employee, a car or someone the store
+ * doesn't place (Nazma). UI cues have none.
+ */
 export type SfxSubject =
-  { kind: 'customer'; id: string } | { kind: 'employee'; id: string } | { kind: 'car'; id: string }
+  | { kind: 'customer'; id: string }
+  | { kind: 'employee'; id: string }
+  | { kind: 'car'; id: string }
+  | { kind: 'ambient'; id: string }
 
 export interface SfxEvent {
   cue: SfxCue
@@ -38,6 +47,7 @@ export interface SfxState {
   orders: readonly unknown[]
   campaigns: readonly unknown[]
   improvements: readonly unknown[]
+  nazma: NazmaVisit | null
   notice: { id: number } | null
   staffOpen: boolean
   stockOpen: boolean
@@ -63,6 +73,8 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   thud: 800,
   open: 80,
   close: 80,
+  scuff: 500,
+  shoo: 1000,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -104,6 +116,21 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
       if (was !== undefined && car.cleanliness > was) {
         out.push({ cue: 'spray', subject: { kind: 'car', id: car.id } })
       }
+    }
+  }
+
+  if (next.nazma && prev.nazma && next.nazma !== prev.nazma) {
+    if (next.nazma.progress > prev.nazma.progress) {
+      const id = next.nazma.targets[next.nazma.progress - 1]
+      // Only a car he actually dirtied: a sold one he gives up on.
+      const car = next.inventory.find((c) => c.id === id)
+      const was = prev.inventory.find((c) => c.id === id)
+      if (car && was && car.cleanliness < was.cleanliness) {
+        out.push({ cue: 'scuff', subject: { kind: 'car', id } })
+      }
+    }
+    if (next.nazma.status === 'runOff' && prev.nazma.status !== 'runOff') {
+      out.push({ cue: 'shoo', subject: { kind: 'ambient', id: NAZMA_ID } })
     }
   }
 

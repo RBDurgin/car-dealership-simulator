@@ -31,7 +31,7 @@ function ActionStatus() {
 
   const def = ACTIONS[action.action]
   const performing = action.phase === 'performing'
-  const person = it.kind === 'customer' || it.kind === 'employee'
+  const person = it.kind === 'customer' || it.kind === 'employee' || it.kind === 'nazma'
   let label: string
   if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`

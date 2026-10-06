@@ -8,7 +8,7 @@ import {
   type AudioSettings,
 } from '../sim/audioSettings'
 import type { CustomerVariant } from '../sim/characters'
-import { browseDirt, dirtyOvernight, washCar } from '../sim/cleanliness'
+import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
 import {
   chooseTarget,
@@ -65,6 +65,18 @@ import {
   type Campaign,
   type Channel,
 } from '../sim/marketing'
+import {
+  confrontBlocker,
+  FIRST_NAZMA_DAY,
+  isNazmaDay,
+  NAZMA_ID,
+  nextTarget,
+  planVisit,
+  visitSeed,
+  type NazmaStats,
+  type NazmaVisit,
+  type RunOffBy,
+} from '../sim/nazma'
 import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
 import {
   cancelOrder,
@@ -177,6 +189,8 @@ interface GameState {
   candidates: Employee[]
   /** On an owner's day, their goal for it. Null on other days. */
   owner: OwnerVisit | null
+  /** On a day Nazma visits, his plan and how far he's got. Null on other days. */
+  nazma: NazmaVisit | null
   /** Yesterday's customers who found none of the body types they wanted (empty on a resumed game). */
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
@@ -242,6 +256,14 @@ interface GameState {
   walkIn: (variant: CustomerVariant) => string | null
   /** The owner reached the office and tells the player today's goal. */
   ownerArrived: () => void
+  /** Nazma stepped onto the lot. */
+  nazmaArrived: () => void
+  /** Nazma finished smudging car `carId`, the next of his targets. */
+  nazmaSmudge: (carId: string) => void
+  /** Nazma was caught on the lot and runs for the street. */
+  nazmaRunOff: (by: RunOffBy) => void
+  /** Nazma walked off the map. */
+  nazmaLeft: () => void
   /** Progress reported by the world (or the player) for one customer. */
   dispatchCustomer: (ev: CustomerEvent) => void
   /** A customer has thought over the offer on the table and answers it: accept, counter or walk. */
@@ -469,6 +491,28 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'marketing')
       case 'improve':
         return get().toggleStockPanel(true, 'upgrades')
+      case 'confront':
+        return get().nazmaRunOff('player')
+    }
+  }
+
+  /** Updates today's Nazma tally. */
+  const tallyNazma = (change: Partial<NazmaStats>) => {
+    const stats = get().dayStats
+    set({ dayStats: { ...stats, nazma: { ...stats.nazma, ...change } } })
+  }
+
+  /** Stores Nazma's visit, dropping a confront aimed at him once he's no longer on the lot. */
+  const setNazma = (nazma: NazmaVisit) => {
+    set({ nazma })
+    if (nazma.status === 'onLot') return
+    const s = get()
+    if (s.activeAction?.targetId === NAZMA_ID) dispatch({ type: 'cancel' })
+    if (s.menu?.targetId === NAZMA_ID || s.hoveredId === NAZMA_ID) {
+      set({
+        menu: s.menu?.targetId === NAZMA_ID ? null : s.menu,
+        hoveredId: s.hoveredId === NAZMA_ID ? null : s.hoveredId,
+      })
     }
   }
 
@@ -598,6 +642,8 @@ export const useGame = create<GameState>((set, get) => {
     const campaigns = unfinished(s.campaigns, day)
     const inventory = [...dirtyOvernight(dropSold(s.inventory)), ...delivered]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
+    // There's no security guard to deter him until Phase 9b.
+    const nazma = isNazmaDay(day, false) ? planVisit(createRng(visitSeed(day)), inventory) : null
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
@@ -619,6 +665,7 @@ export const useGame = create<GameState>((set, get) => {
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
       owner,
+      nazma,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
     if (delivered.length > 0) notify(deliveryNotice(delivered))
@@ -648,6 +695,7 @@ export const useGame = create<GameState>((set, get) => {
     roster: [],
     candidates: generateCandidates(staffRng, 1),
     owner: null,
+    nazma: null,
     missedYesterday: {},
     staffOpen: false,
     stockOpen: false,
@@ -678,7 +726,10 @@ export const useGame = create<GameState>((set, get) => {
     closeMenu: () => set({ menu: null }),
     requestAction: (targetId, action) => {
       const s = get()
-      const blocker = actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
+      const blocker =
+        action === 'confront'
+          ? confrontBlocker(s.nazma)
+          : actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
       if (blocker) {
         set({ menu: null })
         return notify(blocker)
@@ -881,6 +932,39 @@ export const useGame = create<GameState>((set, get) => {
       if (!owner || owner.announced) return
       set({ owner: { ...owner, announced: true } })
       notify(`The owner wants: ${goalLabel(owner.goal, formatMoney)}.`)
+    },
+    nazmaArrived: () => {
+      const s = get()
+      if (s.nazma?.status !== 'coming') return
+      setNazma({ ...s.nazma, status: 'onLot' })
+      tallyNazma({ visited: true })
+      notify(
+        s.clock.day === FIRST_NAZMA_DAY
+          ? "That's Nazma, who used to work here. He has it in for the place. Click him to run him off!"
+          : 'Nazma is back on the lot.',
+      )
+    },
+    nazmaSmudge: (carId) => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot' || nextTarget(s.nazma) !== carId) return
+      setNazma({ ...s.nazma, progress: s.nazma.progress + 1 })
+      const inventory = smudgeCar(s.inventory, carId)
+      if (inventory === s.inventory) return
+      set({ inventory })
+      tallyNazma({ smudged: get().dayStats.nazma.smudged + 1 })
+      const car = inventory.find((c) => c.id === carId)
+      if (car) notify(`Nazma smeared grime all over the ${carName(car.model)}.`)
+    },
+    nazmaRunOff: (by) => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot') return
+      setNazma({ ...s.nazma, status: 'runOff' })
+      tallyNazma({ runOff: by })
+      notify(by === 'player' ? 'You ran Nazma off the lot.' : 'Your guard ran Nazma off the lot.')
+    },
+    nazmaLeft: () => {
+      const s = get()
+      if (s.nazma?.status === 'onLot') setNazma({ ...s.nazma, status: 'done' })
     },
     dispatchCustomer: (ev) => commit(reduceCustomers(get().customers, ev)),
     answerOffer: (id) => {

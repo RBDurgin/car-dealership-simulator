@@ -17,6 +17,8 @@ const FILES: Record<Exclude<SfxId, 'spray'>, string> = {
   thud: 'sfx/thud.ogg',
   open: 'sfx/open.ogg',
   close: 'sfx/close.ogg',
+  scuff: 'sfx/scuff.ogg',
+  shoo: 'sfx/shoo.ogg',
 }
 
 const ALL_IDS = [...Object.keys(FILES), 'spray'] as SfxId[]

@@ -6,6 +6,7 @@ import { improvementFootprints, installed, type ImprovementId } from '../sim/imp
 import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { nearestStandable, PLAYER_RADIUS } from '../sim/movement'
+import { NAZMA_ID } from '../sim/nazma'
 import {
   buildLayout,
   createGrid,
@@ -95,7 +96,8 @@ export const staffPos = new Map<string, Vec2>()
 
 /**
  * Walkers the store doesn't know about: passers-by (scene/Pedestrians), a
- * couple's companion (scene/Customers) and the owner (scene/Owner). Here only
+ * couple's companion (scene/Customers), the owner (scene/Owner) and Nazma
+ * (scene/Nazma). Here only
  * so everyone else keeps their distance.
  */
 export const ambientPos = new Map<string, Vec2>()
@@ -143,7 +145,7 @@ for (const id of SEATS) {
 }
 
 /**
- * An action target by id: a prop or car, or a customer or employee approached
+ * An action target by id: a prop or car, or a customer, employee or Nazma approached
  * from where they're standing right now. Undefined if it's gone.
  */
 export function findInteractable(id: string): Interactable | undefined {
@@ -160,6 +162,11 @@ export function findInteractable(id: string): Interactable | undefined {
   if (e && ePos) {
     const tile = grid.worldToTile(ePos.x, ePos.z)
     return personInteractable(grid, e, 'employee', tile, employeeActions(e, game.roster))
+  }
+  const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined
+  if (nPos && game.nazma?.status === 'onLot') {
+    const tile = grid.worldToTile(nPos.x, nPos.z)
+    return personInteractable(grid, { id, name: 'Nazma' }, 'nazma', tile, ['confront'])
   }
   return undefined
 }

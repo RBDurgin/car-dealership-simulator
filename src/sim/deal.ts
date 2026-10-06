@@ -17,6 +17,7 @@ import {
 import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
+import { emptyNazmaStats, type NazmaStats } from './nazma'
 import type { OwnerVerdict } from './owner'
 import { financeOnDuty, type Employee } from './staff'
 
@@ -241,6 +242,8 @@ export interface DayStats {
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
   owner: OwnerVerdict | null
+  /** What Nazma got up to today. */
+  nazma: NazmaStats
 }
 
 export function emptyStats(): DayStats {
@@ -261,6 +264,7 @@ export function emptyStats(): DayStats {
     reputation: 0,
     settled: false,
     owner: null,
+    nazma: emptyNazmaStats(),
   }
 }
 

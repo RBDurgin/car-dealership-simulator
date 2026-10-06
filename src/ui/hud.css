@@ -387,6 +387,10 @@ kbd {
   background: #a16207;
 }
 
+.nazma-badge {
+  background: #b91c1c;
+}
+
 /* Customer bubbles are drei <Html> overlays, rendered outside .hud. */
 .bubble {
   position: relative;

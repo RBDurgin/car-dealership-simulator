@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, startOfDay } from './clock'
 import { generateCustomer, type Customer } from './customers'
 import { buildInventory } from './inventory'
+import { NAZMA_ID, type NazmaVisit } from './nazma'
 import { createRng } from './rng'
 import {
   allowCue,
@@ -40,6 +41,7 @@ const base: SfxState = {
   helpOpen: false,
   audioOpen: false,
   inspectedId: null,
+  nazma: null,
 }
 const cues = (next: Partial<SfxState>, prev: Partial<SfxState> = {}) =>
   sfxFor({ ...base, ...prev }, { ...base, ...next }).map((e) => e.cue)
@@ -105,6 +107,29 @@ describe('sfxFor', () => {
     )
     const events = sfxFor({ ...base, inventory: prev }, { ...base, inventory: next })
     expect(events).toEqual([{ cue: 'spray', subject: { kind: 'car', id: a.id } }])
+  })
+
+  it('scuffs the car Nazma dirtied, and shoos him when he is run off', () => {
+    const [a, b] = inventory
+    const visit: NazmaVisit = {
+      scheme: 'smudge',
+      targets: [a.id, b.id],
+      arrivalMinute: 600,
+      status: 'onLot',
+      progress: 0,
+    }
+    const dirtied = inventory.map((c) => (c.id === a.id ? { ...c, cleanliness: 0.4 } : c))
+    const smudged = sfxFor(
+      { ...base, nazma: visit },
+      { ...base, nazma: { ...visit, progress: 1 }, inventory: dirtied },
+    )
+    expect(smudged).toEqual([{ cue: 'scuff', subject: { kind: 'car', id: a.id } }])
+    // A car he skipped (sold, or out of reach) makes no sound.
+    expect(cues({ nazma: { ...visit, progress: 1 } }, { nazma: visit })).toEqual([])
+    expect(
+      sfxFor({ ...base, nazma: visit }, { ...base, nazma: { ...visit, status: 'runOff' } }),
+    ).toEqual([{ cue: 'shoo', subject: { kind: 'ambient', id: NAZMA_ID } }])
+    expect(cues({ nazma: { ...visit, status: 'done' } }, { nazma: visit })).toEqual([])
   })
 
   it('stamps a hire and a firing, but not a shift change', () => {

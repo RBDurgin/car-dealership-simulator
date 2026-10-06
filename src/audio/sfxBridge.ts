@@ -1,6 +1,13 @@
 import type { Vec2 } from '../sim/grid'
 import { allowCue, sfxFor, spatialMix, type SfxCue, type SfxSubject } from '../sim/sfxEvents'
-import { cameraState, customerPos, playerPos, rectBounds, staffPos } from '../scene/runtime'
+import {
+  ambientPos,
+  cameraState,
+  customerPos,
+  playerPos,
+  rectBounds,
+  staffPos,
+} from '../scene/runtime'
 import { useGame } from '../state/store'
 import { playSfx } from './samples'
 
@@ -18,6 +25,8 @@ const VOLUME: Record<SfxCue, number> = {
   thud: 0.5,
   open: 0.35,
   close: 0.35,
+  scuff: 0.6,
+  shoo: 0.6,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */
@@ -34,6 +43,8 @@ function positionOf(subject: SfxSubject): Vec2 | undefined {
       return customerPos.get(subject.id)
     case 'employee':
       return staffPos.get(subject.id)
+    case 'ambient':
+      return ambientPos.get(subject.id)
     case 'car': {
       const car = useGame.getState().inventory.find((c) => c.id === subject.id)
       return car && rectBounds(car.rect)

@@ -9,6 +9,7 @@ import { DebugGrid } from './DebugGrid'
 import { Floors } from './Floors'
 import { GameClock } from './GameClock'
 import { Ground } from './Ground'
+import { Nazma } from './Nazma'
 import { Owner } from './Owner'
 import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
@@ -58,6 +59,7 @@ export function Scene() {
       <Staff />
       <Pedestrians />
       <Owner />
+      <Nazma />
       <Chatter />
       {SHOW_FPS && <Stats className="fps-stats" />}
     </>

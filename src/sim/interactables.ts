@@ -21,6 +21,7 @@ export type ActionId =
   | 'orderStock'
   | 'advertise'
   | 'improve'
+  | 'confront'
 
 /**
  * How an action plays out once the player reaches the object:
@@ -66,9 +67,12 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   orderStock: { id: 'orderStock', label: 'Order stock', verb: 'Ordering stock', mode: 'instant' },
   advertise: { id: 'advertise', label: 'Marketing', verb: 'Planning ads', mode: 'instant' },
   improve: { id: 'improve', label: 'Upgrades', verb: 'Planning upgrades', mode: 'instant' },
+  // Reaching Nazma runs him off the lot (see scene/Player, which chases him as he moves).
+  confront: { id: 'confront', label: 'Confront', verb: 'Confronting', mode: 'instant' },
 }
 
-export type InteractableKind = 'car' | 'chair' | 'coffee' | 'computer' | 'customer' | 'employee'
+export type InteractableKind =
+  'car' | 'chair' | 'coffee' | 'computer' | 'customer' | 'employee' | 'nazma'
 
 export interface CarInfo {
   name: string

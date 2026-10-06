@@ -17,6 +17,8 @@ From [RPG Audio](https://kenney.nl/assets/rpg-audio):
 - `sfx/paper.ogg`: `bookFlip1.ogg`
 - `sfx/stamp.ogg`: `bookPlace2.ogg`
 - `sfx/thud.ogg`: `doorClose_4.ogg`
+- `sfx/scuff.ogg`: `cloth1.ogg`
+- `sfx/shoo.ogg`: `clothBelt2.ogg`
 
 From [Music Jingles](https://kenney.nl/assets/music-jingles):
 

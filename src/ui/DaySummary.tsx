@@ -12,6 +12,7 @@ import {
 } from '../sim/deal'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
+import { nazmaSummary } from '../sim/nazma'
 import { goalLabel } from '../sim/owner'
 import { reputationLabel } from '../sim/reputation'
 import { useGame } from '../state/store'
@@ -30,6 +31,7 @@ export function DaySummary() {
   const reputation = useGame((s) => s.reputation)
   if (!open) return null
   const missed = missedSummary(stats.missed)
+  const nazma = nazmaSummary(stats.nazma)
   const sources = salesBySource(stats)
   // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
@@ -95,6 +97,12 @@ export function DaySummary() {
               </span>
             )}
           </dd>
+          {nazma && (
+            <>
+              <dt>Nazma</dt>
+              <dd>{nazma}</dd>
+            </>
+          )}
           {missed && (
             <>
               <dt>Missed</dt>

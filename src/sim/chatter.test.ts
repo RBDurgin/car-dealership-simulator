@@ -14,6 +14,7 @@ import {
 import { OWNER_VARIANT } from './characters'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory } from './inventory'
+import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID } from './owner'
 import { createRng } from './rng'
 import { generateCandidates, type Employee } from './staff'
@@ -33,6 +34,7 @@ const state = (patch: Partial<ChatterState> = {}): ChatterState => ({
   customers: [],
   roster: [],
   owner: null,
+  nazma: null,
   ...patch,
 })
 const lines = (prev: ChatterState, next: ChatterState) => reactionsFor(prev, next, createRng(1))
@@ -46,6 +48,7 @@ describe('variantOf', () => {
     expect(variantOf(s, 'e-sales')).toBe(seller.variant)
     expect(variantOf(s, PLAYER_ID)).toBe('salesperson')
     expect(variantOf(s, OWNER_ID)).toBe(OWNER_VARIANT)
+    expect(variantOf(s, NAZMA_ID)).toBe(NAZMA_VARIANT)
     expect(variantOf(s, 'nobody')).toBeNull()
   })
 })
@@ -192,6 +195,20 @@ describe('reactionsFor', () => {
         state({ owner: { goal, announced: true } }),
       ),
     ).toEqual([])
+  })
+
+  it('has Nazma grumble when he is run off, not when he leaves on his own', () => {
+    const visit: NazmaVisit = {
+      scheme: 'smudge',
+      targets: [],
+      arrivalMinute: 600,
+      status: 'onLot',
+      progress: 0,
+    }
+    const prev = state({ nazma: visit })
+    const said = lines(prev, state({ nazma: { ...visit, status: 'runOff' } }))
+    expect(said).toEqual([[expect.objectContaining({ speaker: NAZMA_ID, tone: 'grumble' })]])
+    expect(lines(prev, state({ nazma: { ...visit, status: 'done' } }))).toEqual([])
   })
 
   it('is quiet when nothing changed', () => {

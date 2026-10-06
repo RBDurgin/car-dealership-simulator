@@ -10,6 +10,7 @@ import {
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
+import { FIRST_NAZMA_DAY } from '../sim/nazma'
 import { OWNER_BONUS } from '../sim/owner'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
@@ -69,6 +70,19 @@ export function HowToPlay() {
             profit, a body type, no impatient walk-outs or a boost to your reputation. Meet it by
             closing for a {formatMoney(OWNER_BONUS)} bonus; miss it and you&apos;ll hear about it in
             the summary.
+          </p>
+        </section>
+        <section>
+          <h3>Nazma</h3>
+          <p>
+            Nazma used to work here, and he has it in for the place. From day {FIRST_NAZMA_DAY} on,
+            every few days he walks onto the lot in a dark hoodie with a red badge and smears grime
+            over two or three cars, lot cars first, so they need washing again. Dirty cars sell
+            worse.
+          </p>
+          <p>
+            {click} him and choose <b>Confront</b> to run him off. Catch him before he gets to a car
+            and it stays clean. The lot porter cleans up after him.
           </p>
         </section>
         <section>
@@ -261,8 +275,8 @@ export function HowToPlay() {
           </p>
           <p>
             Listen for the lot: a chime when a customer walks in, a jingle when a car sells, a door
-            slammed by someone leaving unhappy, and the hiss of a car being washed. Sounds out on
-            the lot are quieter the farther they are from you.
+            slammed by someone leaving unhappy, the hiss of a car being washed and the scuff of
+            Nazma smudging one. Sounds out on the lot are quieter the farther they are from you.
           </p>
           <p>
             The music follows the day: an easy bossa in the morning, another after noon, and a

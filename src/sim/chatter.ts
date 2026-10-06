@@ -2,6 +2,7 @@ import { OWNER_VARIANT } from './characters'
 import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import type { Tone } from './gibberish'
 import type { Vec2 } from './grid'
+import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID, type OwnerVisit } from './owner'
 import type { Rng } from './rng'
 import { spatialMix } from './sfxEvents'
@@ -17,7 +18,7 @@ import type { Employee } from './staff'
 
 /** One line of gibberish: who says it, how, and how many syllables. */
 export interface Line {
-  /** A customer or employee id, `PLAYER_ID`, `OWNER_ID` or a companion's id. */
+  /** A customer or employee id, `PLAYER_ID`, `OWNER_ID`, `NAZMA_ID` or a companion's id. */
   speaker: string
   tone: Tone
   syllables: number
@@ -28,6 +29,7 @@ export interface ChatterState {
   customers: readonly Customer[]
   roster: readonly Employee[]
   owner: OwnerVisit | null
+  nazma: NazmaVisit | null
 }
 
 /** A couple's companion speaks as this id (their walker's id in scene/Customers). */
@@ -37,6 +39,7 @@ export const companionId = (customerId: string) => `${customerId}:companion`
 export function variantOf(s: ChatterState, speaker: string): string | null {
   if (speaker === PLAYER_ID) return 'salesperson'
   if (speaker === OWNER_ID) return OWNER_VARIANT
+  if (speaker === NAZMA_ID) return NAZMA_VARIANT
   const companionOf = speaker.endsWith(':companion') ? speaker.slice(0, -':companion'.length) : null
   if (companionOf) return s.customers.find((c) => c.id === companionOf)?.companion ?? null
   const c = s.customers.find((x) => x.id === speaker)
@@ -144,7 +147,8 @@ export const REACTION_GAP_MS = 250
  * - the receptionist's hello when someone reaches the lot;
  * - a "hmm" while a customer considers an offer, a question when they counter;
  * - a happy yes (and a happy seller) on accepting, a grumble on walking out;
- * - the owner's hello and goal when they reach the office.
+ * - the owner's hello and goal when they reach the office;
+ * - Nazma's grumble as he's run off.
  */
 export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): Line[][] {
   const out: Line[][] = []
@@ -186,6 +190,9 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       { speaker: OWNER_ID, tone: 'greeting', syllables: 2 },
       { speaker: OWNER_ID, tone: 'neutral', syllables: rng.int(6, 9) },
     ])
+  }
+  if (next.nazma?.status === 'runOff' && prev.nazma?.status === 'onLot') {
+    out.push([{ speaker: NAZMA_ID, tone: 'grumble', syllables: rng.int(4, 6) }])
   }
   return out
 }

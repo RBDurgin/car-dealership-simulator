@@ -8,6 +8,8 @@ import {
   dirtyOvernight,
   MAX_CLEAN_BONUS,
   NIGHTLY_DIRT,
+  SMUDGE_DIRT,
+  smudgeCar,
   SPOTLESS,
   WASH_BELOW,
   washBlocker,
@@ -88,6 +90,18 @@ describe('cleanliness', () => {
     // Unknown or already spotless: nothing changes.
     expect(washCar(dirty, 'nope')).toBe(dirty)
     expect(washCar(dirty, 'lot-car-2')).toBe(dirty)
+  })
+
+  it('smudges a car Nazma gets at, down to filthy and no further', () => {
+    const inv = withDirt({ 'lot-car-1': 0.9, 'lot-car-2': 0.2 })
+    expect(car(smudgeCar(inv, 'lot-car-1'), 'lot-car-1').cleanliness).toBeCloseTo(0.9 - SMUDGE_DIRT)
+    expect(car(smudgeCar(inv, 'lot-car-2'), 'lot-car-2').cleanliness).toBe(0)
+    // Unknown, sold or already filthy: nothing changes.
+    expect(smudgeCar(inv, 'nope')).toBe(inv)
+    const sold = sellCar(inv, 'lot-car-1')
+    expect(smudgeCar(sold, 'lot-car-1')).toBe(sold)
+    const filthy = withDirt({ 'lot-car-1': 0 })
+    expect(smudgeCar(filthy, 'lot-car-1')).toBe(filthy)
   })
 
   it('dirties a car a little each time a customer finishes looking it over', () => {
