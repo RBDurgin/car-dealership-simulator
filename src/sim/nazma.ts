@@ -4,11 +4,13 @@ import { CLOSE_MINUTE, CLOCK_STEP_MINUTES, OPEN_MINUTE } from './clock'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { createRng, type Rng } from './rng'
+import { isPoachable, type Employee } from './staff'
 
 /**
  * Nazma, a disgruntled former employee (he/him), out to ruin the business.
  * On some days he walks onto the lot and smudges a few cars, so they need
- * washing again. The player can confront him to run him off. Some nights he
+ * washing again, or has a word with one of the staff, who then thinks of
+ * quitting. The player can confront him to run him off. Some nights he
  * drives a car off the lot, unless a guard is on the payroll. His visits and
  * thefts are rebuilt from the day number, so nothing about him is saved.
  */
@@ -28,6 +30,10 @@ const NAZMA_SEED = 18_000
 
 /** Cars he means to smudge on a visit, if there are that many. */
 export const SMUDGE_TARGETS = { min: 2, max: 3 }
+/** Chance a visit is to poach one of the staff, when there's anyone he could. */
+export const POACH_CHANCE = 0.4
+/** Game seconds of chat it takes him to talk someone into quitting. */
+export const POACH_SECONDS = 6
 /** He turns up between 10:00 and 15:00, so there's time to deal with him. */
 export const ARRIVAL_WINDOW = { from: OPEN_MINUTE + 60, to: CLOSE_MINUTE - 3 * 60 }
 
@@ -43,13 +49,15 @@ export type NazmaStatus = 'coming' | 'onLot' | 'done' | 'runOff'
 
 export interface NazmaVisit {
   scheme: NazmaScheme
-  /** Car ids to smudge, in order. */
+  /** Car ids to smudge, in order, or the one employee id he's come to poach. */
   targets: string[]
   /** Game minute he steps onto the lot. */
   arrivalMinute: number
   status: NazmaStatus
   /** How many of `targets` he has dealt with so far. */
   progress: number
+  /** Poaching: he's reached his target and is talking them round. */
+  chatting: boolean
 }
 
 export type RunOffBy = 'player' | 'guard'
@@ -69,10 +77,12 @@ export interface NazmaStats {
   stolen: StolenCar[]
   /** A guard on the payroll stopped a theft last night. */
   foiled: boolean
-  /** Employees he talked into thinking of quitting (from 9d). */
+  /** Names of the employees he talked into thinking of quitting. */
   poached: string[]
-  /** Employees who quit at closing (from 9d). */
+  /** Names of those who quit at closing. */
   quit: string[]
+  /** Those the player kept with a raise (a day's wage added). */
+  kept: { name: string; raise: number }[]
 }
 
 export function emptyNazmaStats(): NazmaStats {
@@ -84,6 +94,7 @@ export function emptyNazmaStats(): NazmaStats {
     foiled: false,
     poached: [],
     quit: [],
+    kept: [],
   }
 }
 
@@ -111,12 +122,42 @@ function shuffled<T>(rng: Rng, items: readonly T[]): T[] {
   return out
 }
 
+/** When he turns up: a whole clock step in `ARRIVAL_WINDOW`. */
+function arrivalMinute(rng: Rng): number {
+  const steps = (ARRIVAL_WINDOW.to - ARRIVAL_WINDOW.from) / CLOCK_STEP_MINUTES
+  return ARRIVAL_WINDOW.from + rng.int(0, steps) * CLOCK_STEP_MINUTES
+}
+
+/** Someone from `staff` to poach, the more skilled the likelier (skill squared). */
+function pickPoachTarget(rng: Rng, staff: readonly Employee[]): Employee {
+  let roll = rng.next() * staff.reduce((sum, e) => sum + e.skill ** 2, 0)
+  return staff.find((e) => (roll -= e.skill ** 2) < 0) ?? staff[staff.length - 1]
+}
+
 /**
- * The day's visit: two or three cars to smudge, out on the lot first (they're
- * nearer the street), and when he turns up. Null when there's nothing in stock
- * for him to spoil.
+ * The day's visit. With anyone on the payroll he could poach (see
+ * `isPoachable`), it's sometimes (`POACH_CHANCE`) to talk one of them into
+ * quitting, the seasoned ones most of all. Otherwise it's two or three cars to
+ * smudge, out on the lot first (they're nearer the street). Either way, when he
+ * turns up. Null when there's nothing in stock for him to spoil and nobody to
+ * poach.
  */
-export function planVisit(rng: Rng, inventory: readonly InventoryCar[]): NazmaVisit | null {
+export function planVisit(
+  rng: Rng,
+  inventory: readonly InventoryCar[],
+  roster: readonly Employee[] = [],
+): NazmaVisit | null {
+  const staff = roster.filter(isPoachable)
+  if (staff.length > 0 && rng.next() < POACH_CHANCE) {
+    return {
+      scheme: 'poach',
+      targets: [pickPoachTarget(rng, staff).id],
+      arrivalMinute: arrivalMinute(rng),
+      status: 'coming',
+      progress: 0,
+      chatting: false,
+    }
+  }
   const cars = availableCars(inventory)
   if (cars.length === 0) return null
   const lot = shuffled(
@@ -128,17 +169,17 @@ export function planVisit(rng: Rng, inventory: readonly InventoryCar[]): NazmaVi
     cars.filter((c) => c.location === 'showroom'),
   )
   const count = rng.int(SMUDGE_TARGETS.min, SMUDGE_TARGETS.max)
-  const steps = (ARRIVAL_WINDOW.to - ARRIVAL_WINDOW.from) / CLOCK_STEP_MINUTES
   return {
     scheme: 'smudge',
     targets: [...lot, ...showroom].slice(0, count).map((c) => c.id),
-    arrivalMinute: ARRIVAL_WINDOW.from + rng.int(0, steps) * CLOCK_STEP_MINUTES,
+    arrivalMinute: arrivalMinute(rng),
     status: 'coming',
     progress: 0,
+    chatting: false,
   }
 }
 
-/** The car he's heading for next, or null once he's been round them all. */
+/** The car (or employee) he's heading for next, or null once he's been round them all. */
 export function nextTarget(visit: NazmaVisit): string | null {
   return visit.targets[visit.progress] ?? null
 }
@@ -209,14 +250,27 @@ export function stolenRecord(car: InventoryCar): StolenCar {
 
 const cars = (n: number) => `${n} car${n === 1 ? '' : 's'}`
 
-function visitSummary(stats: NazmaStats): string | null {
+const names = (list: readonly string[]) => list.join(' and ')
+
+function visitSummary(stats: NazmaStats, money: (n: number) => string): string | null {
   if (!stats.visited) return null
-  const smudged = stats.smudged > 0 ? `smudged ${cars(stats.smudged)}` : null
+  const keptNames = stats.kept.map((k) => k.name)
+  const lost = stats.poached.filter((n) => !keptNames.includes(n))
+  const kept = stats.poached.filter((n) => keptNames.includes(n))
+  const harm = [
+    stats.smudged > 0 && `smudged ${cars(stats.smudged)}`,
+    lost.length > 0 && `poached ${names(lost)}`,
+    kept.length > 0 && `tried to poach ${names(kept)}`,
+  ]
+    .filter(Boolean)
+    .join(', ')
+  let line: string
   if (stats.runOff) {
     const by = stats.runOff === 'player' ? 'you' : 'your guard'
-    return smudged ? `run off by ${by} (${smudged} first)` : `run off by ${by} before he did harm`
-  }
-  return smudged ?? 'came and went'
+    line = harm ? `run off by ${by} (${harm} first)` : `run off by ${by} before he did harm`
+  } else line = harm || 'came and went'
+  const raises = stats.kept.map((k) => `you kept ${k.name} (+${money(k.raise)}/day)`)
+  return [line, ...raises].join('; ')
 }
 
 function theftSummary(stats: NazmaStats): string | null {
@@ -228,10 +282,14 @@ function theftSummary(stats: NazmaStats): string | null {
 
 /**
  * The summary's line for Nazma: "Smudged 2 cars", "Run off by you (smudged 1
- * car first)", "Stole the Summit Ridge overnight; smudged 2 cars". Null if he
- * left the place alone.
+ * car first)", "Stole the Summit Ridge overnight; smudged 2 cars", "Poached
+ * Dana", "Tried to poach Dana; you kept Dana (+$25/day)". Null if he left the
+ * place alone.
  */
-export function nazmaSummary(stats: NazmaStats): string | null {
-  const line = [theftSummary(stats), visitSummary(stats)].filter(Boolean).join('; ')
+export function nazmaSummary(
+  stats: NazmaStats,
+  money: (n: number) => string = (n) => `$${n}`,
+): string | null {
+  const line = [theftSummary(stats), visitSummary(stats, money)].filter(Boolean).join('; ')
   return line ? line[0].toUpperCase() + line.slice(1) : null
 }

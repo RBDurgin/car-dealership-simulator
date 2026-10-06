@@ -12,6 +12,7 @@ import {
   nextTarget,
   planTheft,
   planVisit,
+  POACH_CHANCE,
   SMUDGE_TARGETS,
   stolenRecord,
   THEFT_CHANCE,
@@ -20,6 +21,7 @@ import {
   type NazmaVisit,
 } from './nazma'
 import { createRng } from './rng'
+import { wageFor, type Employee, type Role } from './staff'
 
 const inventory = buildInventory(createRng(42))
 const days = (n: number) => Array.from({ length: n }, (_, i) => i + 1)
@@ -87,12 +89,75 @@ describe('planVisit', () => {
   })
 })
 
+const hand = (id: string, role: Role, skill: number, over: Partial<Employee> = {}): Employee => ({
+  id,
+  name: id,
+  variant: 'male-e',
+  role,
+  skill,
+  wage: wageFor(role, skill),
+  status: 'off',
+  fired: false,
+  quitting: false,
+  ...over,
+})
+
+describe('planVisit with staff', () => {
+  const seeds = days(400)
+
+  it('plans the same visits as before with nobody he could poach', () => {
+    const guard = [hand('g', 'security', 5), hand('f', 'sales', 4, { fired: true })]
+    for (const seed of seeds.slice(0, 20)) {
+      expect(planVisit(createRng(seed), inventory, guard)).toEqual(
+        planVisit(createRng(seed), inventory),
+      )
+    }
+  })
+
+  it('sometimes comes to poach one employee, never a guard or a quitter', () => {
+    const roster = [
+      hand('s', 'sales', 3),
+      hand('g', 'security', 5),
+      hand('q', 'porter', 5, { quitting: true }),
+    ]
+    const visits = seeds.map((seed) => planVisit(createRng(seed), inventory, roster)!)
+    const poach = visits.filter((v) => v.scheme === 'poach')
+    expect(poach.length / visits.length).toBeGreaterThan(POACH_CHANCE - 0.07)
+    expect(poach.length / visits.length).toBeLessThan(POACH_CHANCE + 0.07)
+    for (const v of poach) {
+      expect(v.targets).toEqual(['s'])
+      expect(v).toMatchObject({ status: 'coming', progress: 0, chatting: false })
+      expect(v.arrivalMinute).toBeGreaterThanOrEqual(ARRIVAL_WINDOW.from)
+      expect(v.arrivalMinute).toBeLessThanOrEqual(ARRIVAL_WINDOW.to)
+    }
+  })
+
+  it('goes for the seasoned staff over the green', () => {
+    const roster = [hand('green', 'sales', 1), hand('pro', 'sales', 5)]
+    const targets = seeds
+      .map((seed) => planVisit(createRng(seed), inventory, roster)!)
+      .filter((v) => v.scheme === 'poach')
+      .map((v) => v.targets[0])
+    expect(targets.filter((t) => t === 'pro').length).toBeGreaterThan(
+      targets.filter((t) => t === 'green').length * 5,
+    )
+  })
+
+  it('can still come to poach with nothing in stock to spoil', () => {
+    const none = inventory.reduce((acc, c) => sellCar(acc, c.id), inventory)
+    const visits = seeds.map((seed) => planVisit(createRng(seed), none, [hand('s', 'sales', 3)]))
+    expect(visits.some((v) => v?.scheme === 'poach')).toBe(true)
+    expect(visits.every((v) => v === null || v.scheme === 'poach')).toBe(true)
+  })
+})
+
 const visit = (patch: Partial<NazmaVisit> = {}): NazmaVisit => ({
   scheme: 'smudge',
   targets: ['a', 'b'],
   arrivalMinute: 600,
   status: 'onLot',
   progress: 0,
+  chatting: false,
   ...patch,
 })
 
@@ -198,5 +263,16 @@ describe('nazmaSummary', () => {
       'Run off by your guard before he did harm',
     )
     expect(nazmaSummary({ ...stats, visited: true })).toBe('Came and went')
+  })
+
+  it('says who he poached, and who was kept with a raise', () => {
+    const poached = ['Dana R.']
+    expect(nazmaSummary({ ...stats, visited: true, poached })).toBe('Poached Dana R.')
+    expect(
+      nazmaSummary({ ...stats, visited: true, poached, kept: [{ name: 'Dana R.', raise: 25 }] }),
+    ).toBe('Tried to poach Dana R.; you kept Dana R. (+$25/day)')
+    expect(nazmaSummary({ ...stats, visited: true, poached, runOff: 'guard' })).toBe(
+      'Run off by your guard (poached Dana R. first)',
+    )
   })
 })

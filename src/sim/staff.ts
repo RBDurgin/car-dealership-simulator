@@ -14,7 +14,8 @@ import type { Rng } from './rng'
  *
  * `open` also sends anyone still walking out back to work (a new day started
  * before they reached the sidewalk). Firing an idle employee sends them home
- * now; a fired employee is removed once they've left.
+ * now; a fired employee is removed once they've left. Someone Nazma poached is
+ * `quitting` until kept with a raise; at `close` they walk out for good.
  */
 export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security'
 
@@ -86,6 +87,11 @@ export interface Employee {
   status: StaffStatus
   /** Let go: walks out and is removed once off the lot. Not paid for the day. */
   fired: boolean
+  /**
+   * Nazma talked them into leaving: they quit at closing unless kept with a
+   * raise. A quitter stays `quitting` once gone, so they're still paid for the day.
+   */
+  quitting: boolean
 }
 
 export const MIN_SKILL = 1
@@ -126,12 +132,22 @@ export const STAFF_SPEED = 1.8
 /** A security guard running after Nazma: quicker than he can run off. */
 export const GUARD_CHASE_SPEED = 3
 
+/** Share of their wage a raise to keep someone from quitting adds. */
+export const RETENTION_RAISE = 0.2
+/** The least such a raise can be, per day. */
+export const MIN_RETENTION_RAISE = 20
+
 /** Multiplier on waiting customers' patience drain while a receptionist is at the desk. */
 export const RECEPTION_PATIENCE_FACTOR = 0.5
 
 /** What a salesperson earns for selling a car that cost `cost` at `price`. */
 export function salesCommission(price: number, cost: number): number {
   return Math.max(MIN_COMMISSION, Math.round((price - cost) * SALES_COMMISSION))
+}
+
+/** What keeping someone on `wage` from quitting adds to it each day. */
+export function retentionRaise(wage: number): number {
+  return Math.max(MIN_RETENTION_RAISE, Math.round(wage * RETENTION_RAISE))
 }
 
 export function wageFor(role: Role, skill: number): number {
@@ -187,6 +203,7 @@ export function generateCandidates(rng: Rng, day: number): Employee[] {
       wage: wageFor(role, skill),
       status: 'off',
       fired: false,
+      quitting: false,
     }
   })
 }
@@ -208,13 +225,14 @@ export function canHire(roster: readonly Employee[], role: Role): string | null 
 
 /**
  * What the day's staff cost, paid at closing: wages for everyone still on the
- * payroll, and what staff earned on today's `sales` (even if let go since).
+ * payroll (and anyone who quit at closing, as they worked the day), and what
+ * staff earned on today's `sales` (even if let go since).
  */
 export function payroll(
   roster: readonly Employee[],
   sales: readonly Sale[],
 ): { wages: number; commissions: number } {
-  const wages = roster.filter((e) => !e.fired).reduce((sum, e) => sum + e.wage, 0)
+  const wages = roster.filter((e) => !e.fired || e.quitting).reduce((sum, e) => sum + e.wage, 0)
   const commissions = sales.reduce((sum, s) => sum + s.commission, 0)
   return { wages, commissions }
 }
@@ -236,6 +254,14 @@ export function isGuarded(roster: readonly Employee[]): boolean {
   return roster.some((e) => e.role === 'security' && !e.fired)
 }
 
+/**
+ * Whether Nazma could talk `e` into quitting: on the payroll, not a guard (who
+ * would rather run him off) and not already thinking of it.
+ */
+export function isPoachable(e: Employee): boolean {
+  return !e.fired && !e.quitting && e.role !== 'security'
+}
+
 /** Whether a receptionist is at the desk: waiting customers lose patience more slowly. */
 export function patienceFactor(roster: readonly Employee[]): number {
   return roster.some((e) => e.role === 'receptionist' && e.status === 'atPost')
@@ -251,8 +277,12 @@ export type StaffEvent =
   | { type: 'open' }
   /** Reached their post. */
   | { type: 'atPost'; id: string }
-  /** Closing time: everyone heads home. */
+  /** Closing time: everyone heads home, and anyone still quitting leaves for good. */
   | { type: 'close' }
+  /** Nazma talked them round: they're thinking of quitting. */
+  | { type: 'poached'; id: string }
+  /** Kept from quitting with a raise to `wage`. */
+  | { type: 'keep'; id: string; wage: number }
   /** Walked off the lot. */
   | { type: 'left'; id: string }
 
@@ -264,7 +294,10 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
   switch (ev.type) {
     case 'hire':
       if (roster.some((e) => e.id === ev.employee.id)) return roster
-      return [...roster, { ...ev.employee, status: ev.open ? 'arriving' : 'off', fired: false }]
+      return [
+        ...roster,
+        { ...ev.employee, status: ev.open ? 'arriving' : 'off', fired: false, quitting: false },
+      ]
     case 'open': {
       const kept = roster.filter((e) => !e.fired)
       const next = mapChanged(kept, (e) =>
@@ -273,9 +306,10 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
       return next === kept && kept.length === roster.length ? roster : next
     }
     case 'close':
-      return mapChanged(roster, (e) =>
-        e.status === 'arriving' || e.status === 'atPost' ? { ...e, status: 'leaving' } : e,
-      )
+      return mapChanged(roster, (e) => {
+        if (e.quitting && !e.fired) return { ...e, fired: true, status: 'leaving' }
+        return e.status === 'arriving' || e.status === 'atPost' ? { ...e, status: 'leaving' } : e
+      })
   }
   const e = roster.find((x) => x.id === ev.id)
   if (!e) return roster
@@ -284,7 +318,13 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
     case 'fire':
       if (e.fired) return roster
       if (e.status === 'off') n = null
-      else n = { ...e, fired: true, status: isBusy(e) ? e.status : 'leaving' }
+      else n = { ...e, fired: true, quitting: false, status: isBusy(e) ? e.status : 'leaving' }
+      break
+    case 'poached':
+      if (isPoachable(e) && e.status !== 'off') n = { ...e, quitting: true }
+      break
+    case 'keep':
+      if (e.quitting && !e.fired) n = { ...e, quitting: false, wage: ev.wage }
       break
     case 'atPost':
       if (e.status === 'arriving') n = { ...e, status: 'atPost' }

@@ -84,6 +84,37 @@ describe('conversationsOf', () => {
   })
 })
 
+describe('poaching chat', () => {
+  const poach: NazmaVisit = {
+    scheme: 'poach',
+    targets: ['e-sales'],
+    arrivalMinute: 600,
+    status: 'onLot',
+    progress: 0,
+    chatting: false,
+  }
+
+  it('has Nazma talk his target round only once he has reached them', () => {
+    expect(conversationsOf(state({ nazma: poach }))).toEqual([])
+    const chatting = { ...poach, chatting: true }
+    expect(conversationsOf(state({ nazma: chatting }))).toEqual([
+      { key: 'poach:e-sales', kind: 'poach', speakers: [NAZMA_ID, 'e-sales'] },
+    ])
+    expect(conversationsOf(state({ nazma: { ...chatting, status: 'runOff' } }))).toEqual([])
+    expect(conversationsOf(state({ nazma: { ...chatting, progress: 1 } }))).toEqual([])
+  })
+
+  it('takes turns: Nazma low and persuasive, the employee asking', () => {
+    const conv = conversationsOf(state({ nazma: { ...poach, chatting: true } }))[0]
+    const rng = createRng(3)
+    for (let turn = 0; turn < 20; turn++) {
+      const { line } = nextLine(conv, turn, rng)
+      expect(line.speaker).toBe(turn % 2 === 0 ? NAZMA_ID : 'e-sales')
+      expect(['murmur', 'neutral', 'question']).toContain(line.tone)
+    }
+  })
+})
+
 describe('nextLine', () => {
   const pitch = conversationsOf(
     state({ customers: [customer('c1', { phase: 'talking', handlerId: 'e-sales' })] }),
@@ -204,6 +235,7 @@ describe('reactionsFor', () => {
       arrivalMinute: 600,
       status: 'onLot',
       progress: 0,
+      chatting: false,
     }
     const prev = state({ nazma: visit })
     const said = lines(prev, state({ nazma: { ...visit, status: 'runOff' } }))

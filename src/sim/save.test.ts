@@ -18,6 +18,7 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   wage: 130,
   status: 'leaving',
   fired: false,
+  quitting: false,
   ...extra,
 })
 
@@ -155,6 +156,22 @@ describe('save data', () => {
       ...save,
       reputation: START_REPUTATION,
     })
+  })
+
+  it('upgrades a version 7 save: nobody is thinking of quitting', () => {
+    const save = createSave(source(), 123)
+    const v7 = {
+      ...save,
+      version: 7,
+      roster: save.roster.map((e) => ({ ...e, quitting: undefined })),
+    }
+    expect(parseSave(JSON.parse(JSON.stringify(v7)))).toEqual(save)
+  })
+
+  it('saves nobody as thinking of quitting', () => {
+    const s = source()
+    const save = createSave({ ...s, roster: [employee('staff-1-1', { quitting: true })] }, 123)
+    expect(save.roster[0].quitting).toBe(false)
   })
 
   it('keeps the reputation', () => {

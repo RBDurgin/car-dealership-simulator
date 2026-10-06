@@ -117,6 +117,7 @@ describe('sfxFor', () => {
       arrivalMinute: 600,
       status: 'onLot',
       progress: 0,
+      chatting: false,
     }
     const dirtied = inventory.map((c) => (c.id === a.id ? { ...c, cleanliness: 0.4 } : c))
     const smudged = sfxFor(

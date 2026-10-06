@@ -2,7 +2,7 @@ import { OWNER_VARIANT } from './characters'
 import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import type { Tone } from './gibberish'
 import type { Vec2 } from './grid'
-import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
+import { NAZMA_ID, NAZMA_VARIANT, nextTarget, type NazmaVisit } from './nazma'
 import { OWNER_ID, type OwnerVisit } from './owner'
 import type { Rng } from './rng'
 import { spatialMix } from './sfxEvents'
@@ -47,7 +47,7 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
   return s.roster.find((e) => e.id === speaker)?.variant ?? null
 }
 
-export type ConversationKind = 'pitch' | 'signing' | 'couple'
+export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach'
 
 /** Two people talking back and forth; `speakers[0]` opens. */
 export interface Conversation {
@@ -71,6 +71,11 @@ export function conversationsOf(s: ChatterState): Conversation[] {
       out.push({ key: `couple:${c.id}`, kind: 'couple', speakers: [c.id, companionId(c.id)] })
     }
   }
+  const n = s.nazma
+  const poached = n?.scheme === 'poach' && n.status === 'onLot' && n.chatting && nextTarget(n)
+  if (poached) {
+    out.push({ key: `poach:${poached}`, kind: 'poach', speakers: [NAZMA_ID, poached] })
+  }
   return out
 }
 
@@ -82,6 +87,7 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   pitch: [600, 1200],
   signing: [800, 2000],
   couple: [2000, 9000],
+  poach: [300, 800],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -94,8 +100,9 @@ export const COUPLE_PAUSE_MS: readonly [number, number] = [7000, 16000]
 /**
  * Line number `turn` (from 0) of `conv`, and the silence after it in ms. The
  * two sides take turns: in a pitch the seller talks up the car and the
- * customer chimes in, at the desk it's a murmur over the paperwork, and a
- * couple trade a remark now and then.
+ * customer chimes in, at the desk it's a murmur over the paperwork, a
+ * couple trade a remark now and then, and Nazma talks someone round in a low
+ * voice while they ask questions.
  */
 export function nextLine(
   conv: Conversation,
@@ -134,6 +141,17 @@ export function nextLine(
           : 'neutral'
       const gapMs = first ? between(rng, [250, 600]) : between(rng, COUPLE_PAUSE_MS)
       return { line: { speaker, tone, syllables: rng.int(2, 5) }, gapMs }
+    }
+    case 'poach': {
+      const tone: Tone = first
+        ? rng.next() < 0.6
+          ? 'murmur'
+          : 'neutral'
+        : rng.next() < 0.5
+          ? 'question'
+          : 'murmur'
+      const syllables = first ? rng.int(4, 8) : rng.int(2, 4)
+      return { line: { speaker, tone, syllables }, gapMs: between(rng, [400, 1200]) }
     }
   }
 }

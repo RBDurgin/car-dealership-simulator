@@ -109,6 +109,7 @@ import {
   generateCandidates,
   isGuarded,
   patienceFactor,
+  retentionRaise,
   payroll,
   reduceStaff,
   ROLE_LABELS,
@@ -266,6 +267,13 @@ interface GameState {
   nazmaArrived: () => void
   /** Nazma finished smudging car `carId`, the next of his targets. */
   nazmaSmudge: (carId: string) => void
+  /** Nazma reached the employee he came to poach and starts talking them round. */
+  nazmaChat: () => void
+  /**
+   * Nazma finished talking to employee `employeeId`, his target: they're
+   * thinking of quitting (if they still work here and could be poached).
+   */
+  nazmaPoach: (employeeId: string) => void
   /** Nazma was caught on the lot and runs for the street. */
   nazmaRunOff: (by: RunOffBy) => void
   /** Nazma walked off the map. */
@@ -297,6 +305,8 @@ interface GameState {
   hire: (id: string) => void
   /** Lets an employee go. They walk out and aren't paid for the day. */
   fire: (id: string) => void
+  /** Keeps an employee who's thinking of quitting, with a raise (see `retentionRaise`). */
+  keepEmployee: (id: string) => void
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
@@ -449,6 +459,16 @@ export const useGame = create<GameState>((set, get) => {
         settled: true,
       },
     })
+  }
+
+  /** Closing time: the staff head home, and anyone still thinking of quitting goes for good. */
+  const closeUp = () => {
+    const before = get().roster
+    setRoster(reduceStaff(before, { type: 'close' }))
+    const quit = before.filter((e) => e.quitting && !e.fired).map((e) => e.name)
+    if (quit.length === 0) return
+    tallyNazma({ quit: [...get().dayStats.nazma.quit, ...quit] })
+    notify(`${quit.join(' and ')} quit and won't be back.`)
   }
 
   /** Stores a new roster, dropping hovers, menus and panels aimed at anyone who's gone. */
@@ -664,7 +684,9 @@ export const useGame = create<GameState>((set, get) => {
       ...delivered,
     ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    const nazma = isNazmaDay(day, guarded) ? planVisit(createRng(visitSeed(day)), inventory) : null
+    const nazma = isNazmaDay(day, guarded)
+      ? planVisit(createRng(visitSeed(day)), inventory, s.roster)
+      : null
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
@@ -833,7 +855,7 @@ export const useGame = create<GameState>((set, get) => {
         arrivals: schedule,
         dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived),
       })
-      if (isClosed(step)) setRoster(reduceStaff(get().roster, { type: 'close' }))
+      if (isClosed(step)) closeUp()
       commit(customers)
       settleDay()
     },
@@ -988,10 +1010,28 @@ export const useGame = create<GameState>((set, get) => {
       const car = inventory.find((c) => c.id === carId)
       if (car) notify(`Nazma smeared grime all over the ${carName(car.model)}.`)
     },
+    nazmaChat: () => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot' || s.nazma.scheme !== 'poach' || s.nazma.chatting) return
+      setNazma({ ...s.nazma, chatting: true })
+    },
+    nazmaPoach: (employeeId) => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot' || nextTarget(s.nazma) !== employeeId) return
+      setNazma({ ...s.nazma, progress: s.nazma.progress + 1, chatting: false })
+      const roster = reduceStaff(s.roster, { type: 'poached', id: employeeId })
+      if (roster === s.roster) return
+      setRoster(roster)
+      const e = roster.find((x) => x.id === employeeId)!
+      tallyNazma({ poached: [...get().dayStats.nazma.poached, e.name] })
+      notify(
+        `${e.name} is thinking of quitting. Nazma made them an offer. Keep them from the staff panel before closing.`,
+      )
+    },
     nazmaRunOff: (by) => {
       const s = get()
       if (s.nazma?.status !== 'onLot') return
-      setNazma({ ...s.nazma, status: 'runOff' })
+      setNazma({ ...s.nazma, status: 'runOff', chatting: false })
       tallyNazma({ runOff: by })
       notify(by === 'player' ? 'You ran Nazma off the lot.' : 'Your guard ran Nazma off the lot.')
     },
@@ -1120,6 +1160,14 @@ export const useGame = create<GameState>((set, get) => {
       if (hasBuyersInHand(get().customers, id)) {
         notify(`You let ${e.name} go. They'll finish their paperwork first.`)
       } else notify(`You let ${e.name} go.`)
+    },
+    keepEmployee: (id) => {
+      const e = get().roster.find((x) => x.id === id)
+      if (!e?.quitting || e.fired) return
+      const raise = retentionRaise(e.wage)
+      setRoster(reduceStaff(get().roster, { type: 'keep', id, wage: e.wage + raise }))
+      tallyNazma({ kept: [...get().dayStats.nazma.kept, { name: e.name, raise }] })
+      notify(`${e.name} is staying, for ${formatMoney(raise)} a day more.`)
     },
     dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
     // The staff and stock panels share the left edge, so one closes the other.

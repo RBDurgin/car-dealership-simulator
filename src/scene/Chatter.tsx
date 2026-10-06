@@ -42,7 +42,7 @@ const talks = new Map<string, { conv: Conversation; turn: number; nextAt: number
 const busyUntil = new Map<string, number>()
 let queue: Queued[] = []
 const voices = new Map<string, Voice>()
-let convCache: { customers: unknown; list: Conversation[] } | null = null
+let convCache: { customers: unknown; nazma: unknown; list: Conversation[] } | null = null
 
 function voiceFor(s: ChatterState, speaker: string): Voice | null {
   let v = voices.get(speaker)
@@ -77,8 +77,8 @@ function enqueue(s: ChatterState, lines: Line[]): void {
 
 /** Keeps `talks` in step with the conversations the store implies, starting new ones' timers. */
 function syncTalks(s: ChatterState): void {
-  if (convCache?.customers !== s.customers) {
-    convCache = { customers: s.customers, list: conversationsOf(s) }
+  if (convCache?.customers !== s.customers || convCache.nazma !== s.nazma) {
+    convCache = { customers: s.customers, nazma: s.nazma, list: conversationsOf(s) }
     const keys = new Set(convCache.list.map((c) => c.key))
     for (const key of talks.keys()) if (!keys.has(key)) talks.delete(key)
     for (const conv of convCache.list) {

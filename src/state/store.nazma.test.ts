@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SMUDGE_DIRT } from '../sim/cleanliness'
 import { FIRST_NAZMA_DAY, isNazmaDay, isTheftNight, NAZMA_ID, type NazmaVisit } from '../sim/nazma'
 import { theftLoss, netIncome } from '../sim/deal'
+import { CLOSE_MINUTE } from '../sim/clock'
 import { createSave } from '../sim/save'
-import { wageFor, type Employee } from '../sim/staff'
+import { retentionRaise, wageFor, type Employee } from '../sim/staff'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -19,6 +20,7 @@ const guard: Employee = {
   wage: wageFor('security', 3),
   status: 'off',
   fired: false,
+  quitting: false,
 }
 
 /** Resumes the game on the morning of `day`. */
@@ -34,6 +36,7 @@ function onLot(targets: string[]): NazmaVisit {
     arrivalMinute: 600,
     status: 'coming',
     progress: 0,
+    chatting: false,
   }
   useGame.setState({ nazma: visit })
   game().nazmaArrived()
@@ -216,5 +219,119 @@ describe('overnight theft', () => {
     startDay(night + 1)
     expect(game().inventory).toHaveLength(count)
     expect(game().dayStats.nazma.stolen).toEqual([])
+  })
+})
+
+describe('poaching', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  const dana: Employee = {
+    id: 'staff-1-2',
+    name: 'Dana R.',
+    variant: 'female-a',
+    role: 'sales',
+    skill: 4,
+    wage: wageFor('sales', 4),
+    status: 'atPost',
+    fired: false,
+    quitting: false,
+  }
+  const dana_ = () => game().roster.find((e) => e.id === dana.id)
+
+  /** Puts Nazma on the lot today, come to poach Dana. */
+  function poaching() {
+    useGame.setState({
+      roster: [dana],
+      clock: { day: FIRST_NAZMA_DAY + 1, minute: 720 },
+      // Nobody else turns up, so the day settles at closing.
+      arrivals: { minutes: [], sources: [], spawned: 0 },
+      nazma: {
+        scheme: 'poach',
+        targets: [dana.id],
+        arrivalMinute: 600,
+        status: 'coming',
+        progress: 0,
+        chatting: false,
+      },
+    })
+    game().nazmaArrived()
+  }
+
+  const close = () => game().tickClock({ day: game().clock.day, minute: CLOSE_MINUTE })
+
+  it('plans visits to poach once there are staff he could talk round', () => {
+    const days = Array.from({ length: 80 }, (_, i) => FIRST_NAZMA_DAY + 1 + i)
+    const schemes = days
+      .filter((d) => isNazmaDay(d, false))
+      .map((d) => {
+        useGame.setState(initial, true)
+        useGame.setState({ roster: [{ ...dana, status: 'off' }] })
+        startDay(d)
+        return game().nazma!
+      })
+    const poach = schemes.filter((v) => v.scheme === 'poach')
+    expect(poach.length).toBeGreaterThan(0)
+    for (const v of poach) expect(v.targets).toEqual([dana.id])
+  })
+
+  it('has an employee think of quitting after his chat', () => {
+    poaching()
+    game().nazmaChat()
+    expect(game().nazma?.chatting).toBe(true)
+    game().nazmaPoach(dana.id)
+    expect(dana_()?.quitting).toBe(true)
+    expect(game().nazma).toMatchObject({ progress: 1, chatting: false })
+    expect(game().dayStats.nazma.poached).toEqual(['Dana R.'])
+    expect(game().notice?.text).toMatch(
+      /Dana R\. is thinking of quitting\. Nazma made them an offer/,
+    )
+  })
+
+  it('does no harm when he is run off before the chat ends', () => {
+    poaching()
+    game().nazmaChat()
+    game().nazmaRunOff('player')
+    expect(game().nazma?.chatting).toBe(false)
+    game().nazmaPoach(dana.id)
+    expect(dana_()?.quitting).toBe(false)
+    expect(game().dayStats.nazma.poached).toEqual([])
+  })
+
+  it('moves on without harm from someone let go in the meantime', () => {
+    poaching()
+    game().fire(dana.id)
+    game().nazmaPoach(dana.id)
+    expect(game().nazma?.progress).toBe(1)
+    expect(game().dayStats.nazma.poached).toEqual([])
+  })
+
+  it('keeps them with a raise', () => {
+    poaching()
+    game().nazmaPoach(dana.id)
+    const raise = retentionRaise(dana.wage)
+    game().keepEmployee(dana.id)
+    expect(dana_()).toMatchObject({ quitting: false, wage: dana.wage + raise })
+    expect(game().dayStats.nazma.kept).toEqual([{ name: 'Dana R.', raise }])
+    expect(game().notice?.text).toMatch(/Dana R\. is staying/)
+    close()
+    expect(dana_()).toMatchObject({ fired: false, status: 'leaving' })
+    expect(game().dayStats.nazma.quit).toEqual([])
+    // Keeping someone who isn't quitting does nothing.
+    game().keepEmployee(dana.id)
+    expect(dana_()?.wage).toBe(dana.wage + raise)
+  })
+
+  it('loses them at closing if not kept, after paying the day', () => {
+    poaching()
+    game().nazmaPoach(dana.id)
+    const cash = game().cash
+    close()
+    expect(dana_()).toMatchObject({ fired: true, status: 'leaving' })
+    expect(game().dayStats.nazma.quit).toEqual(['Dana R.'])
+    expect(game().dayStats.wages).toBe(dana.wage)
+    expect(game().cash).toBe(cash - dana.wage)
+    expect(createSave(game(), 0).roster).toEqual([])
+    startDay(game().clock.day + 1)
+    expect(game().roster).toEqual([])
   })
 })

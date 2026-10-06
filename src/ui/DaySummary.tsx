@@ -32,7 +32,7 @@ export function DaySummary() {
   const reputation = useGame((s) => s.reputation)
   if (!open) return null
   const missed = missedSummary(stats.missed)
-  const nazma = nazmaSummary(stats.nazma)
+  const nazma = nazmaSummary(stats.nazma, formatMoney)
   const sources = salesBySource(stats)
   // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')

@@ -17,7 +17,7 @@ import { ROLES, type Employee } from './staff'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 
 export interface SaveData {
   version: number
@@ -49,7 +49,10 @@ export interface SaveSource {
   reputation: number
 }
 
-/** A save of the day that just ended. The fired are gone and everyone else is off for the night. */
+/**
+ * A save of the day that just ended. The fired (and those who quit) are gone
+ * and everyone else is off for the night, nobody still thinking of quitting.
+ */
 export function createSave(s: SaveSource, now: number): SaveData {
   return {
     version: SAVE_VERSION,
@@ -57,7 +60,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     day: s.clock.day,
     cash: s.cash,
     inventory: s.inventory,
-    roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off' })),
+    roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off', quitting: false })),
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
     improvements: s.improvements,
@@ -102,6 +105,13 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   5: (raw) => ({ ...raw, improvements: [] }),
   // v7: reputation, starting where a new game does.
   6: (raw) => ({ ...raw, reputation: START_REPUTATION }),
+  // v8: employees can be thinking of quitting (never at the end of a day).
+  7: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e: unknown) => (isObject(e) ? { ...e, quitting: false } : e))
+      : raw.roster,
+  }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -156,7 +166,8 @@ function isEmployee(v: unknown): boolean {
     typeof v.name === 'string' &&
     (ROLES as readonly unknown[]).includes(v.role) &&
     isNumber(v.wage) &&
-    isNumber(v.skill)
+    isNumber(v.skill) &&
+    typeof v.quitting === 'boolean'
   )
 }
 

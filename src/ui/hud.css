@@ -391,6 +391,12 @@ kbd {
   background: #b91c1c;
 }
 
+/* Thinking of quitting (Nazma's offer): a "?" after the role. */
+.quitting-badge::after {
+  content: ' ?';
+  color: #fca5a5;
+}
+
 /* Customer bubbles are drei <Html> overlays, rendered outside .hud. */
 .bubble {
   position: relative;
@@ -576,9 +582,18 @@ kbd {
   grid-area: status;
   font-size: 12px;
 }
-.staff-row > .btn {
+.staff-row > .btn,
+.staff-row > .staff-actions {
   grid-area: action;
   justify-self: end;
+}
+.staff-actions {
+  display: flex;
+  gap: 6px;
+}
+.staff-quitting {
+  color: #fca5a5;
+  font-weight: 600;
 }
 .staff-empty {
   margin: 0;

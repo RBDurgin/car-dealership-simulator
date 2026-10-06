@@ -406,11 +406,13 @@ function update(
   }
 }
 
-/** Role label over an employee's head, so staff read as staff. */
-function StaffBadge({ role }: { role: Role }) {
+/** Role label over an employee's head, so staff read as staff; a "?" while they think of quitting. */
+function StaffBadge({ role, quitting }: { role: Role; quitting: boolean }) {
   return (
     <Html position={[0, BADGE_HEIGHT, 0]} center zIndexRange={[1, 0]} pointerEvents="none">
-      <div className="staff-badge">{ROLE_BADGES[role]}</div>
+      <div className={quitting ? 'staff-badge quitting-badge' : 'staff-badge'}>
+        {ROLE_BADGES[role]}
+      </div>
     </Html>
   )
 }
@@ -434,7 +436,7 @@ const StaffFigure = memo(function StaffFigure({
           <Character variant={employee.variant} anim={anim} moveSpeed={STAFF_SPEED} />
         </Suspense>
       </Interactable>
-      <StaffBadge role={employee.role} />
+      <StaffBadge role={employee.role} quitting={employee.quitting} />
     </group>
   )
 })

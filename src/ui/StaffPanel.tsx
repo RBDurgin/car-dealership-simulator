@@ -3,6 +3,7 @@ import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import {
   canHire,
   MAX_SKILL,
+  retentionRaise,
   ROLE_BLURBS,
   ROLE_LABELS,
   type Employee,
@@ -78,10 +79,25 @@ export function StaffPanel() {
         <ul className="staff-list">
           {employed.map((e) => (
             <StaffRow key={e.id} e={e}>
-              <span className="staff-status muted">{STATUS_LABELS[e.status]}</span>
-              <button className="btn btn-small" onClick={() => game.fire(e.id)}>
-                Fire
-              </button>
+              {e.quitting ? (
+                <span className="staff-status staff-quitting">Thinking of quitting</span>
+              ) : (
+                <span className="staff-status muted">{STATUS_LABELS[e.status]}</span>
+              )}
+              <div className="staff-actions">
+                {e.quitting && (
+                  <button
+                    className="btn btn-small btn-primary"
+                    title="A raise to stay. Otherwise they leave at closing."
+                    onClick={() => game.keepEmployee(e.id)}
+                  >
+                    Keep (+{formatMoney(retentionRaise(e.wage))}/day)
+                  </button>
+                )}
+                <button className="btn btn-small" onClick={() => game.fire(e.id)}>
+                  Fire
+                </button>
+              </div>
             </StaffRow>
           ))}
         </ul>

@@ -10,6 +10,7 @@ import {
   financeSeconds,
   generateCandidates,
   isGuarded,
+  isPoachable,
   MAX_SKILL,
   MIN_COMMISSION,
   MIN_SKILL,
@@ -21,6 +22,7 @@ import {
   skillSeconds,
   RECEPTION_PATIENCE_FACTOR,
   reduceStaff,
+  retentionRaise,
   ROLES,
   wageFor,
   type Employee,
@@ -37,6 +39,7 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
   wage: wageFor(role, 3),
   status: 'off',
   fired: false,
+  quitting: false,
   ...over,
 })
 
@@ -247,5 +250,58 @@ describe('isGuarded', () => {
   it('pays a guard more as their skill goes up', () => {
     expect(wageFor('security', 1)).toBe(100)
     expect(wageFor('security', 5)).toBe(180)
+  })
+})
+
+describe('poaching', () => {
+  it('only targets staff on the payroll, not guards or anyone already quitting', () => {
+    expect(isPoachable(hand('sales'))).toBe(true)
+    expect(isPoachable(hand('porter'))).toBe(true)
+    expect(isPoachable(hand('security'))).toBe(false)
+    expect(isPoachable(hand('sales', { fired: true }))).toBe(false)
+    expect(isPoachable(hand('sales', { quitting: true }))).toBe(false)
+  })
+
+  it('has someone at work think of quitting, but not a guard or someone off shift', () => {
+    const e = hand('sales', { status: 'atPost' })
+    const r = reduceStaff([e], { type: 'poached', id: e.id })
+    expect(r[0].quitting).toBe(true)
+    expect(reduceStaff(r, { type: 'poached', id: e.id })).toBe(r)
+    const guard = [hand('security', { status: 'atPost' })]
+    expect(reduceStaff(guard, { type: 'poached', id: guard[0].id })).toBe(guard)
+    const off = [hand('sales')]
+    expect(reduceStaff(off, { type: 'poached', id: off[0].id })).toBe(off)
+  })
+
+  it('keeps a quitter with a raise, and ignores a keep for anyone else', () => {
+    const e = hand('sales', { status: 'atPost', quitting: true })
+    const r = reduceStaff([e], { type: 'keep', id: e.id, wage: e.wage + 36 })
+    expect(r[0]).toMatchObject({ quitting: false, wage: e.wage + 36 })
+    expect(reduceStaff(r, { type: 'keep', id: e.id, wage: 999 })).toBe(r)
+  })
+
+  it('sends a quitter home for good at closing, still paid for the day', () => {
+    const q = hand('sales', { status: 'atPost', quitting: true })
+    const stay = hand('porter', { status: 'atPost' })
+    let r = reduceStaff([q, stay], { type: 'close' })
+    expect(r[0]).toMatchObject({ fired: true, status: 'leaving' })
+    expect(r[1]).toMatchObject({ fired: false, status: 'leaving' })
+    expect(payroll(r, []).wages).toBe(q.wage + stay.wage)
+    // The slot is free again for a new hire.
+    expect(canHire([...r, hand('sales')], 'sales')).toBeNull()
+    r = reduceStaff(r, { type: 'left', id: q.id })
+    expect(r.map((e) => e.id)).toEqual([stay.id])
+  })
+
+  it('does not pay a quitter who is let go before closing', () => {
+    const q = hand('sales', { status: 'atPost', quitting: true })
+    const r = reduceStaff([q], { type: 'fire', id: q.id })
+    expect(r[0]).toMatchObject({ fired: true, quitting: false })
+    expect(payroll(r, []).wages).toBe(0)
+  })
+
+  it('raises a wage by a fifth to keep someone, at least $20', () => {
+    expect(retentionRaise(180)).toBe(36)
+    expect(retentionRaise(80)).toBe(20)
   })
 })

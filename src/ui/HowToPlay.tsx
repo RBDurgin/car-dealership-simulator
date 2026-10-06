@@ -13,7 +13,13 @@ import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_NAZMA_DAY, FIRST_THEFT_DAY } from '../sim/nazma'
 import { OWNER_BONUS } from '../sim/owner'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
-import { FINANCE_FEE, MIN_COMMISSION, SALES_COMMISSION } from '../sim/staff'
+import {
+  FINANCE_FEE,
+  MIN_COMMISSION,
+  MIN_RETENTION_RAISE,
+  RETENTION_RAISE,
+  SALES_COMMISSION,
+} from '../sim/staff'
 import { useGame, STARTING_CASH } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -78,18 +84,26 @@ export function HowToPlay() {
             Nazma used to work here, and he has it in for the place. From day {FIRST_NAZMA_DAY} on,
             every few days he walks onto the lot in a dark hoodie with a red badge and smears grime
             over two or three cars, lot cars first, so they need washing again. Dirty cars sell
-            worse.
+            worse. Other days he comes to have a quiet word with one of your staff (never the
+            guard), the more skilled the likelier, and offers them a job.
           </p>
           <p>
             {click} him and choose <b>Confront</b> to run him off. Catch him before he gets to a car
-            and it stays clean. The lot porter cleans up after him. A security guard on the payroll
-            makes his visits rarer, and runs him off when they spot him.
+            and it stays clean; catch him before he's done talking and nothing comes of it. The lot
+            porter cleans up after him. A security guard on the payroll makes his visits rarer, and
+            runs him off when they spot him.
           </p>
           <p>
             From day {FIRST_THEFT_DAY} on, some nights he drives a car off the lot (the showroom is
             locked), and the pricier ones tempt him most. A stolen car is written off at what you
             paid for it, and if it was on the floor plan the bank calls in the loan the next
             morning. He never gets one past a security guard on the payroll.
+          </p>
+          <p>
+            Someone he talks round is <i>thinking of quitting</i> (a ? on their badge). Open Staff
+            and press <b>Keep</b> before closing to give them a {Math.round(RETENTION_RAISE * 100)}%
+            raise (at least {formatMoney(MIN_RETENTION_RAISE)} a day) and they stay. Otherwise they
+            work out the day, are paid for it, and leave at closing for good.
           </p>
         </section>
         <section>
@@ -264,7 +278,9 @@ export function HowToPlay() {
             dirtiest cars for you, all day long. A security guard walks a patrol round the lot and
             chases off Nazma when they spot him; the more skilled, the further they see. They also
             stop him stealing cars overnight. Everyone on the payroll is paid at closing, and the
-            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign.
+            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign. Anyone Nazma
+            has talked into quitting shows <b>Thinking of quitting</b> in the staff panel, with a{' '}
+            <b>Keep</b> button and the raise it costs.
           </p>
         </section>
         <section>

@@ -45,6 +45,7 @@ const fm: Employee = {
   wage: 215,
   status: 'atPost',
   fired: false,
+  quitting: false,
 }
 
 const base: Customer = {

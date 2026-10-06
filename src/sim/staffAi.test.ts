@@ -50,6 +50,7 @@ const staff = (id: string, role: Role, over: Partial<Employee> = {}): Employee =
   wage: wageFor(role, 3),
   status: 'atPost',
   fired: false,
+  quitting: false,
   ...over,
 })
 
