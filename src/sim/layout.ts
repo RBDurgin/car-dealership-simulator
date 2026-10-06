@@ -30,6 +30,18 @@ export const PORTER_STANDBY_TILES: Tile[] = [
   { tx: 34, tz: 17 },
 ]
 
+/**
+ * The security guard's patrol, walked in order and round again: the west lot,
+ * by the driveway, outside the showroom door and the east lot. Each stop is
+ * clear of the parking spaces and of the walk from the gate to the door.
+ */
+export const GUARD_PATROL_TILES: Tile[] = [
+  { tx: 6, tz: 17 },
+  { tx: 15, tz: 18 },
+  { tx: 25, tz: 15 },
+  { tx: 32, tz: 18 },
+]
+
 /** Where the owner stands on a visit: in the office, by the desk, clear of both chairs. */
 export const OWNER_OFFICE_TILES: Tile[] = [
   { tx: 34, tz: 6 },

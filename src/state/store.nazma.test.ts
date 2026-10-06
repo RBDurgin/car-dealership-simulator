@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { SMUDGE_DIRT } from '../sim/cleanliness'
 import { FIRST_NAZMA_DAY, isNazmaDay, NAZMA_ID, type NazmaVisit } from '../sim/nazma'
 import { createSave } from '../sim/save'
+import { wageFor, type Employee } from '../sim/staff'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -54,6 +55,36 @@ describe('Nazma', () => {
     const quiet = [5, 6, 7, 8, 9, 10, 11, 12].find((d) => !isNazmaDay(d, false))!
     startDay(quiet)
     expect(game().nazma).toBeNull()
+  })
+
+  it('comes less often with a security guard on the payroll', () => {
+    const guard: Employee = {
+      id: 'staff-1-1',
+      name: 'Gus K.',
+      variant: 'male-c',
+      role: 'security',
+      skill: 3,
+      wage: wageFor('security', 3),
+      status: 'off',
+      fired: false,
+    }
+    const deterred = Array.from({ length: 60 }, (_, i) => FIRST_NAZMA_DAY + 1 + i).find(
+      (d) => isNazmaDay(d, false) && !isNazmaDay(d, true),
+    )!
+    startDay(deterred)
+    expect(game().nazma).not.toBeNull()
+    useGame.setState(initial, true)
+    useGame.setState({ roster: [guard] })
+    startDay(deterred)
+    expect(game().nazma).toBeNull()
+  })
+
+  it('is run off by the guard', () => {
+    onLot(['lot-car-1'])
+    game().nazmaRunOff('guard')
+    expect(game().nazma?.status).toBe('runOff')
+    expect(game().dayStats.nazma.runOff).toBe('guard')
+    expect(game().notice?.text).toMatch(/Your guard ran Nazma off/)
   })
 
   it('introduces himself on his first visit', () => {

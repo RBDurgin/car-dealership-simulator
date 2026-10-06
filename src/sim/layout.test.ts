@@ -4,6 +4,7 @@ import {
   createGrid,
   DESK_CHAIR_ID,
   DISPLAY_CARS,
+  GUARD_PATROL_TILES,
   GUEST_CHAIR_ID,
   LOT_ENTRY_TILES,
   OPENINGS,
@@ -57,6 +58,22 @@ describe('dealership layout', () => {
     for (const t of PORTER_STANDBY_TILES) {
       expect(zoneAt(layout, t.tx, t.tz)).toBe('asphalt')
       expect(findPath(grid, LOT_ENTRY_TILES[0], t), `${t.tx},${t.tz}`).not.toBeNull()
+    }
+  })
+
+  it('gives the guard a reachable patrol on the lot, off the parking and the walk in', () => {
+    const door = OPENINGS[0]
+    const walkIn = findPathToAny(grid, LOT_ENTRY_TILES[0], [{ tx: door.tx, tz: door.tz + 1 }])!
+    const parked = PARKING_SPACES.flatMap((s) => tiles(s.rect))
+    // Any space may hold a car once stock is ordered, so stay off all their approaches.
+    const cars = PARKING_SPACES.flatMap((s) => approachTilesFor(grid, parkedCarRect(s)))
+    for (const t of GUARD_PATROL_TILES) {
+      const at = `${t.tx},${t.tz}`
+      expect(zoneAt(layout, t.tx, t.tz), at).toBe('asphalt')
+      expect(findPath(grid, LOT_ENTRY_TILES[0], t), at).not.toBeNull()
+      expect(walkIn, at).not.toContainEqual(t)
+      expect(parked, at).not.toContainEqual([t.tx, t.tz])
+      expect(cars, at).not.toContainEqual(t)
     }
   })
 

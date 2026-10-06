@@ -16,21 +16,23 @@ import type { Rng } from './rng'
  * before they reached the sidewalk). Firing an idle employee sends them home
  * now; a fired employee is removed once they've left.
  */
-export type Role = 'sales' | 'receptionist' | 'finance' | 'porter'
+export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security'
 
-export const ROLES: readonly Role[] = ['sales', 'receptionist', 'finance', 'porter']
+export const ROLES: readonly Role[] = ['sales', 'receptionist', 'finance', 'porter', 'security']
 
 export const ROLE_LABELS: Record<Role, string> = {
   sales: 'Salesperson',
   receptionist: 'Receptionist',
   finance: 'Finance manager',
   porter: 'Lot porter',
+  security: 'Security guard',
 }
 const ROLE_PLURALS: Record<Role, string> = {
   sales: 'salespeople',
   receptionist: 'receptionist',
   finance: 'finance manager',
   porter: 'lot porter',
+  security: 'security guard',
 }
 /** What each role does, for applicants in the staff panel. */
 export const ROLE_BLURBS: Record<Role, string> = {
@@ -38,6 +40,7 @@ export const ROLE_BLURBS: Record<Role, string> = {
   receptionist: 'Keeps waiting customers patient.',
   finance: 'Signs buyers at your office desk, so you can sell to the next one.',
   porter: 'Washes the dirtiest cars on the lot.',
+  security: 'Patrols the lot, chases off Nazma and makes his visits rarer.',
 }
 /** Short label for the badge over their head. */
 export const ROLE_BADGES: Record<Role, string> = {
@@ -45,6 +48,7 @@ export const ROLE_BADGES: Record<Role, string> = {
   receptionist: 'Reception',
   finance: 'Finance',
   porter: 'Porter',
+  security: 'Security',
 }
 
 /** Most of each role on the payroll at once. */
@@ -53,6 +57,7 @@ export const ROLE_LIMITS: Record<Role, number> = {
   receptionist: 1,
   finance: 1,
   porter: 1,
+  security: 1,
 }
 
 /**
@@ -64,6 +69,7 @@ export const POSTS: Record<Role, string | null> = {
   receptionist: RECEPTION_CHAIR_ID,
   finance: DESK_CHAIR_ID,
   porter: null,
+  security: null,
 }
 
 export type StaffStatus = 'off' | 'arriving' | 'atPost' | 'leaving'
@@ -91,6 +97,7 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   receptionist: { base: 70, perSkill: 20 },
   finance: { base: 110, perSkill: 35 },
   porter: { base: 60, perSkill: 15 },
+  security: { base: 80, perSkill: 20 },
 }
 
 /** Share of a sale's gross profit (price less cost) a salesperson earns for making it. */
@@ -116,6 +123,8 @@ const SKILL_TIME_STEP = 0.15
 
 /** Walking speed in the world, units per second: a touch brisker than customers. */
 export const STAFF_SPEED = 1.8
+/** A security guard running after Nazma: quicker than he can run off. */
+export const GUARD_CHASE_SPEED = 3
 
 /** Multiplier on waiting customers' patience drain while a receptionist is at the desk. */
 export const RECEPTION_PATIENCE_FACTOR = 0.5
@@ -220,6 +229,11 @@ export function financeOnDuty(roster: readonly Employee[]): Employee | null {
       (e) => e.role === 'finance' && !e.fired && (e.status === 'arriving' || e.status === 'atPost'),
     ) ?? null
   )
+}
+
+/** Whether a security guard is on the payroll (not let go), which keeps Nazma away more often. */
+export function isGuarded(roster: readonly Employee[]): boolean {
+  return roster.some((e) => e.role === 'security' && !e.fired)
 }
 
 /** Whether a receptionist is at the desk: waiting customers lose patience more slowly. */

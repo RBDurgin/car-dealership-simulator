@@ -6,10 +6,12 @@ import type { Customer } from '../sim/customers'
 import { hasBuyersInHand } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { PORTER_STANDBY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import { GUARD_PATROL_TILES, PORTER_STANDBY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import {
   financeSeconds,
+  GUARD_CHASE_SPEED,
   PORTER_WASH_SECONDS,
   postChairId,
   ROLE_BADGES,
@@ -21,11 +23,11 @@ import {
   type Employee,
   type Role,
 } from '../sim/staff'
-import { nextPorterTask, nextSalesTask, type SalesTask } from '../sim/staffAi'
+import { nextGuardTask, nextPorterTask, nextSalesTask, type SalesTask } from '../sim/staffAi'
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
-import { customerPos, customersAtCar, grid, interactables, staffPos } from './runtime'
+import { ambientPos, customerPos, customersAtCar, grid, interactables, staffPos } from './runtime'
 import {
   createWalker,
   frameSeconds,
@@ -53,12 +55,18 @@ const STANDBY_TILES: Tile[] = [
 const SHOWROOM_CENTER = grid.tileToWorld(22, 8)
 /** What the porter faces while waiting for a car to need a wash: the lot. */
 const LOT_CENTER = grid.tileToWorld(20, 18)
+/** Game seconds the guard stands at each patrol stop, looking over the lot. */
+const PATROL_PAUSE_SECONDS = 5
+/** Close enough to Nazma for the guard to run him off. */
+const CATCH_REACH = 1.2
+/** Chasing Nazma: game seconds between new paths to where he is now. */
+const CHASE_REPLAN_SECONDS = 0.4
 
 /** Where staff without a chair wait, and what they face. */
 function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
-  return e.role === 'porter'
-    ? { tiles: PORTER_STANDBY_TILES, faceTo: LOT_CENTER }
-    : { tiles: STANDBY_TILES, faceTo: SHOWROOM_CENTER }
+  if (e.role === 'porter') return { tiles: PORTER_STANDBY_TILES, faceTo: LOT_CENTER }
+  if (e.role === 'security') return { tiles: GUARD_PATROL_TILES, faceTo: LOT_CENTER }
+  return { tiles: STANDBY_TILES, faceTo: SHOWROOM_CENTER }
 }
 
 /** An employee's body in the world. Positions stay here, never in the store. */
@@ -73,8 +81,13 @@ interface StaffWalker extends Walker {
   task: string | null
   /** Finance: the buyer whose paperwork is under way, and game seconds left on it. */
   paperwork: { customerId: string; left: number } | null
-  /** Game seconds spent on the current task (a salesperson's pitch or paperwork, a wash). */
+  /**
+   * Game seconds spent on the current task (a salesperson's pitch or paperwork,
+   * a wash, a guard's stop), or until a chasing guard's next new path.
+   */
   timer: number
+  /** A guard's patrol stops reached so far. */
+  leg: number
   /** Customers (or, for the porter, cars) they couldn't get to; they leave them be. */
   unreachableIds: Set<string>
 }
@@ -95,6 +108,7 @@ function walkerFor(e: Employee): StaffWalker {
     task: null,
     paperwork: null,
     timer: 0,
+    leg: 0,
     unreachableIds: new Set(),
   }
   walkers.set(e.id, w)
@@ -308,6 +322,61 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.timer >= skillSeconds(PORTER_WASH_SECONDS, e.skill)) game.staffWash(e.id, task.carId)
 }
 
+/**
+ * The security guard's rounds: stop by stop round the patrol, pausing at each
+ * to look over the lot. Once Nazma comes within sight they run after him and,
+ * on reaching him, run him off.
+ */
+function updateGuard(e: Employee, w: StaffWalker, seconds: number): void {
+  const game = useGame.getState()
+  const nazma = game.nazma?.status === 'onLot' ? ambientPos.get(NAZMA_ID) : undefined
+  const task = nextGuardTask(e, {
+    nazma: nazma ? grid.worldToTile(nazma.x, nazma.z) : null,
+    at: grid.worldToTile(w.pos.x, w.pos.z),
+    leg: w.leg,
+    chasing: w.task === 'chase',
+  })
+  if (task.kind === 'idle') {
+    if (w.task !== 'post') plan(e, w, 'post')
+    return updatePost(e, w, seconds)
+  }
+  if (task.kind === 'chase' && nazma) {
+    if (w.task !== 'chase') {
+      w.task = 'chase'
+      w.timer = 0
+      w.faceTo = null
+      standUp(w)
+    }
+    if (Math.hypot(nazma.x - w.pos.x, nazma.z - w.pos.z) < CATCH_REACH) {
+      w.waypoints = []
+      game.nazmaRunOff('guard')
+      return
+    }
+    // He keeps moving: head for where he is now.
+    if ((w.timer -= seconds) <= 0) {
+      w.timer = CHASE_REPLAN_SECONDS
+      const tile = grid.worldToTile(nazma.x, nazma.z)
+      pathTo(w, approachTilesFor(grid, { ...tile, w: 1, h: 1 }))
+    }
+    const moving = walk(w, GUARD_CHASE_SPEED, seconds, nazma)
+    w.anim.current = moving ? 'sprint' : 'idle'
+    return
+  }
+  if (task.kind !== 'patrol') return
+  const key = `patrol:${w.leg}`
+  if (key !== w.task) {
+    w.task = key
+    w.timer = 0
+    w.faceTo = LOT_CENTER
+    standUp(w)
+    pathTo(w, [task.tile])
+  }
+  walk(w, STAFF_SPEED, seconds, w.faceTo)
+  if (w.waypoints.length > 0) return
+  w.timer += seconds
+  if (w.unreachable || w.timer >= PATROL_PAUSE_SECONDS) w.leg++
+}
+
 /** Going to or working from their post, and reporting in on arrival. */
 function updatePost(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.seat) {
@@ -328,6 +397,7 @@ function update(
   const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
   if (e.role === 'porter' && !leaving) return updatePorter(e, w, seconds)
+  if (e.role === 'security' && !leaving) return updateGuard(e, w, seconds)
   const task = leaving ? 'leave' : 'post'
   if (task !== w.task) plan(e, w, task)
   updatePost(e, w, seconds)
@@ -376,7 +446,7 @@ const onLot = (e: Employee) => e.status !== 'off'
  * Every employee in the world, moved by one `useFrame` (like Customers): they
  * walk in from the sidewalk at opening (or when hired), work from their post
  * (the finance manager signs buyers' paperwork at the office desk, the porter
- * washes the dirtiest cars), and walk
+ * washes the dirtiest cars, the guard patrols the lot and chases off Nazma), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */

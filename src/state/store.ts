@@ -102,6 +102,7 @@ import {
   FINANCE_FEE,
   financeOnDuty,
   generateCandidates,
+  isGuarded,
   patienceFactor,
   payroll,
   reduceStaff,
@@ -642,8 +643,9 @@ export const useGame = create<GameState>((set, get) => {
     const campaigns = unfinished(s.campaigns, day)
     const inventory = [...dirtyOvernight(dropSold(s.inventory)), ...delivered]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    // There's no security guard to deter him until Phase 9b.
-    const nazma = isNazmaDay(day, false) ? planVisit(createRng(visitSeed(day)), inventory) : null
+    const nazma = isNazmaDay(day, isGuarded(s.roster))
+      ? planVisit(createRng(visitSeed(day)), inventory)
+      : null
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),

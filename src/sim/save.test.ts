@@ -180,6 +180,9 @@ describe('save data', () => {
     const { cost: __, ...uncosted } = save.inventory[0]
     expect(parseSave({ ...save, inventory: [uncosted] })).toBeNull()
     expect(parseSave({ ...save, roster: 'nobody' })).toBeNull()
+    expect(parseSave({ ...save, roster: [{ ...save.roster[0], role: 'janitor' }] })).toBeNull()
+    const guard = { ...save.roster[0], role: 'security' }
+    expect(parseSave({ ...save, roster: [guard] })?.roster).toEqual([guard])
     expect(parseSave({ ...save, orders: undefined })).toBeNull()
     expect(parseSave({ ...save, orders: [{ ...order, financing: 'lease' }] })).toBeNull()
     expect(

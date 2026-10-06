@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { WASH_BELOW } from './cleanliness'
 import { PLAYER_ID, type Customer } from './customers'
 import { buildInventory, sellCar, type InventoryCar } from './inventory'
-import { GUEST_CHAIR_ID, SALES_DESKS } from './layout'
+import { GUARD_PATROL_TILES, GUEST_CHAIR_ID, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
 import {
   EARLY_GREET_SKILL,
+  guardSight,
   leadChoice,
+  nextGuardTask,
   nextPorterTask,
   nextSalesTask,
   pickSalesCustomer,
@@ -235,5 +237,47 @@ describe('nextPorterTask', () => {
       kind: 'wash',
       carId: 'lot-car-2',
     })
+  })
+})
+
+describe('nextGuardTask', () => {
+  const guard = staff('gus', 'security')
+  const at = { tx: 20, tz: 18 }
+  const patrol = (leg: number) => ({ kind: 'patrol', tile: GUARD_PATROL_TILES[leg] })
+
+  it('walks the patrol stop by stop, and round again', () => {
+    expect(nextGuardTask(guard, { nazma: null, at, leg: 0 })).toEqual(patrol(0))
+    expect(nextGuardTask(guard, { nazma: null, at, leg: 2 })).toEqual(patrol(2))
+    const n = GUARD_PATROL_TILES.length
+    expect(nextGuardTask(guard, { nazma: null, at, leg: n + 1 })).toEqual(patrol(1))
+  })
+
+  it('chases Nazma once he comes within sight', () => {
+    const sight = guardSight(guard.skill)
+    const near = { tx: at.tx + sight, tz: at.tz }
+    const far = { tx: at.tx + sight + 1, tz: at.tz }
+    expect(nextGuardTask(guard, { nazma: near, at, leg: 0 })).toEqual({ kind: 'chase' })
+    expect(nextGuardTask(guard, { nazma: far, at, leg: 0 })).toEqual(patrol(0))
+  })
+
+  it('sees further with more skill', () => {
+    expect(guardSight(5)).toBeGreaterThan(guardSight(1))
+    const nazma = { tx: at.tx + guardSight(1) + 1, tz: at.tz }
+    expect(nextGuardTask({ ...guard, skill: 1 }, { nazma, at, leg: 0 }).kind).toBe('patrol')
+    expect(nextGuardTask({ ...guard, skill: 5 }, { nazma, at, leg: 0 }).kind).toBe('chase')
+  })
+
+  it("keeps after him once chasing, until he's off the lot", () => {
+    const nazma = { tx: 0, tz: 0 }
+    expect(nextGuardTask(guard, { nazma, at, leg: 0, chasing: true })).toEqual({ kind: 'chase' })
+    expect(nextGuardTask(guard, { nazma: null, at, leg: 0, chasing: true })).toEqual(patrol(0))
+  })
+
+  it('only works while at work', () => {
+    const ctx = { nazma: at, at, leg: 0 }
+    for (const status of ['arriving', 'leaving', 'off'] as const) {
+      expect(nextGuardTask({ ...guard, status }, ctx)).toEqual({ kind: 'idle' })
+    }
+    expect(nextGuardTask({ ...guard, fired: true }, ctx)).toEqual({ kind: 'idle' })
   })
 })

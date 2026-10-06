@@ -82,7 +82,8 @@ export function HowToPlay() {
           </p>
           <p>
             {click} him and choose <b>Confront</b> to run him off. Catch him before he gets to a car
-            and it stays clean. The lot porter cleans up after him.
+            and it stays clean. The lot porter cleans up after him. A security guard on the payroll
+            makes his visits rarer, and runs him off when they spot him.
           </p>
         </section>
         <section>
@@ -254,8 +255,10 @@ export function HowToPlay() {
             desk: lead a buyer there, {click.toLowerCase()} them and choose{' '}
             <b>Hand off to finance</b>, and you&apos;re free to sell to the next customer while they
             do the paperwork. Buyers wait in the lounge if finance is busy. A lot porter washes the
-            dirtiest cars for you, all day long. Everyone on the payroll is paid at closing, and the
-            finance manager also earns {formatMoney(FINANCE_FEE)} per deal they sign.
+            dirtiest cars for you, all day long. A security guard walks a patrol round the lot and
+            chases off Nazma when they spot him; the more skilled, the further they see. Everyone on
+            the payroll is paid at closing, and the finance manager also earns{' '}
+            {formatMoney(FINANCE_FEE)} per deal they sign.
           </p>
         </section>
         <section>

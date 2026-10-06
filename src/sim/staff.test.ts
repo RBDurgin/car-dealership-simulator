@@ -9,6 +9,7 @@ import {
   financeOnDuty,
   financeSeconds,
   generateCandidates,
+  isGuarded,
   MAX_SKILL,
   MIN_COMMISSION,
   MIN_SKILL,
@@ -43,8 +44,8 @@ describe('candidates', () => {
   it('offers every role each day, with valid skills, wages and staff-only models', () => {
     for (let day = 1; day <= 20; day++) {
       const cands = generateCandidates(createRng(day), day)
-      expect(cands.length).toBeGreaterThanOrEqual(4)
-      expect(cands.length).toBeLessThanOrEqual(5)
+      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length)
+      expect(cands.length).toBeLessThanOrEqual(ROLES.length + 1)
       for (const role of ROLES) expect(cands.some((c) => c.role === role)).toBe(true)
       for (const c of cands) {
         expect(c.skill).toBeGreaterThanOrEqual(MIN_SKILL)
@@ -232,5 +233,19 @@ describe('reduceStaff', () => {
   it('sends someone still walking out back to work when the doors open', () => {
     const r = [hand('receptionist', { status: 'leaving' })]
     expect(reduceStaff(r, { type: 'open' })[0].status).toBe('arriving')
+  })
+})
+
+describe('isGuarded', () => {
+  it('is true with a security guard on the payroll who has not been let go', () => {
+    expect(isGuarded([hand('sales'), hand('porter')])).toBe(false)
+    expect(isGuarded([hand('security')])).toBe(true)
+    expect(isGuarded([hand('security', { status: 'atPost' })])).toBe(true)
+    expect(isGuarded([hand('security', { fired: true })])).toBe(false)
+  })
+
+  it('pays a guard more as their skill goes up', () => {
+    expect(wageFor('security', 1)).toBe(100)
+    expect(wageFor('security', 5)).toBe(180)
   })
 })

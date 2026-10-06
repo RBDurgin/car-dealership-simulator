@@ -2,7 +2,8 @@ import { dirtiestCar, SPOTLESS } from './cleanliness'
 import type { Customer } from './customers'
 import { financeBusy } from './deal'
 import type { InventoryCar } from './inventory'
-import { SALES_DESKS } from './layout'
+import type { Tile } from './grid'
+import { GUARD_PATROL_TILES, SALES_DESKS } from './layout'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 
 /**
@@ -169,3 +170,43 @@ export function nextPorterTask(
 }
 
 const IDLE_PORTER: PorterTask = { kind: 'idle' }
+
+/**
+ * A security guard's next step:
+ * - patrol: walk to the next stop on the patrol (`leg` counts the stops so far)
+ * - chase: run after Nazma, who's been spotted on the lot
+ * - idle: not at work
+ */
+export type GuardTask = { kind: 'idle' } | { kind: 'patrol'; tile: Tile } | { kind: 'chase' }
+
+/** How far (in tiles) a guard of `skill` spots Nazma from. */
+export function guardSight(skill: number): number {
+  return GUARD_SIGHT_BASE + skill
+}
+const GUARD_SIGHT_BASE = 4
+
+/** What the guard needs to know beyond themselves. */
+export interface GuardContext {
+  /** Nazma's tile while he's on the lot and can be run off, else null. */
+  nazma: Tile | null
+  /** The guard's own tile. */
+  at: Tile
+  /** Patrol stops reached so far today. */
+  leg: number
+  /** Already after him: they keep going until he's caught or gone. */
+  chasing?: boolean
+}
+
+/**
+ * Guard `e`'s next task while at work: chase Nazma once he's within sight (and
+ * keep at it), otherwise walk the patrol.
+ */
+export function nextGuardTask(e: Employee, ctx: GuardContext): GuardTask {
+  if (e.status !== 'atPost' || e.fired) return { kind: 'idle' }
+  const { nazma, at } = ctx
+  if (nazma) {
+    const seen = Math.hypot(nazma.tx - at.tx, nazma.tz - at.tz) <= guardSight(e.skill)
+    if (seen || ctx.chasing) return { kind: 'chase' }
+  }
+  return { kind: 'patrol', tile: GUARD_PATROL_TILES[ctx.leg % GUARD_PATROL_TILES.length] }
+}

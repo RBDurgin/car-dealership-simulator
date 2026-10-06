@@ -5,7 +5,7 @@ import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import type { Order } from './ordering'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
-import type { Employee } from './staff'
+import { ROLES, type Employee } from './staff'
 
 /**
  * The saved game. Saves are only made at the end of a day, so nothing mid-day
@@ -154,7 +154,7 @@ function isEmployee(v: unknown): boolean {
     isObject(v) &&
     typeof v.id === 'string' &&
     typeof v.name === 'string' &&
-    typeof v.role === 'string' &&
+    (ROLES as readonly unknown[]).includes(v.role) &&
     isNumber(v.wage) &&
     isNumber(v.skill)
   )
