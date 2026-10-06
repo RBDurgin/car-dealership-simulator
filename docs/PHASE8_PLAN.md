@@ -81,6 +81,8 @@ public/audio/
 
 ### 8b: Sound effects
 
+**Status:** Done 2026-10-05. Kenney has no cash register or water, so a sale plays a rising sax jingle (Music Jingles `SAX10`), the morning bell is a steel-drum jingle (`STEEL10`), and the wash is filtered noise made in `audio/samples.ts`. The upset walk-out is a door closing. Starting or resuming a game only rings the bell, so a loaded save doesn't replay its hires and purchases. A notice's pop yields to a bigger cue that just played for the same event (a sale, a hire, an order), and a button's click yields to the panel it opened or closed. The listener is the player (the camera follows them). The optional ambient beds are left for later.
+
 - Choose about 12 CC0 cues from Kenney's Interface / Impact / RPG audio packs into `public/audio/sfx/`, and credit them in `public/audio/LICENSE.md`.
 - `sim/sfxEvents.ts` + tests: `sfxFor(prev, next)` diffs two store states into cues:
   - cash register: a sale

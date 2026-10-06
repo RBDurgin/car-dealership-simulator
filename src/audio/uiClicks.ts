@@ -1,21 +1,18 @@
-import { playSfx } from './samples'
-
-const CLICK_VOLUME = 0.5
+import { playUiCue } from './sfxBridge'
 
 /**
  * A soft click for every HUD button pressed, and when a volume slider is let
  * go so the new level can be heard. One delegated listener, so no component
- * needs to know about sound.
+ * needs to know about sound. A button that opens or closes a panel is heard
+ * as the panel instead.
  */
 export function startUiClicks(): () => void {
   const onClick = (e: Event) => {
-    if (e.target instanceof Element && e.target.closest('.hud button')) {
-      playSfx('click', CLICK_VOLUME)
-    }
+    if (e.target instanceof Element && e.target.closest('.hud button')) playUiCue('click')
   }
   const onChange = (e: Event) => {
     if (e.target instanceof Element && e.target.closest('.hud input[type="range"]')) {
-      playSfx('click', CLICK_VOLUME)
+      playUiCue('click')
     }
   }
   document.addEventListener('click', onClick)

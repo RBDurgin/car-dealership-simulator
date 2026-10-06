@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { startAudio } from './audio/engine'
 import { preloadSfx } from './audio/samples'
+import { startSfx } from './audio/sfxBridge'
 import { startUiClicks } from './audio/uiClicks'
 import { COARSE, COMPACT, matchesMedia } from './input/useMediaQuery'
 import { startAudioPref, startAutosave, startControlsPref } from './state/persistence'
@@ -16,6 +17,7 @@ startAudioPref()
 // Silent until the first gesture; then the sounds load.
 startAudio(() => preloadSfx())
 startUiClicks()
+startSfx()
 
 // Console access while developing, e.g. `game.getState().sellCar('lot-car-1')`.
 if (import.meta.env.DEV) Object.assign(window, { game: useGame })

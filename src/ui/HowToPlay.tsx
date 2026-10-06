@@ -259,6 +259,11 @@ export function HowToPlay() {
             )}{' '}
             They&apos;re kept on this device, apart from your save.
           </p>
+          <p>
+            Listen for the lot: a chime when a customer walks in, a jingle when a car sells, a door
+            slammed by someone leaving unhappy, and the hiss of a car being washed. Sounds out on
+            the lot are quieter the farther they are from you.
+          </p>
         </section>
         <section>
           <h3>Controls</h3>
