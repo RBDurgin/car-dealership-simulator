@@ -1,6 +1,6 @@
 # Audio credits
 
-All sounds in this folder are by [Kenney](https://www.kenney.nl) and released under
+All sound effects in this folder are by [Kenney](https://www.kenney.nl) and released under
 [Creative Commons Zero (CC0)](http://creativecommons.org/publicdomain/zero/1.0/).
 
 From [Interface Sounds](https://kenney.nl/assets/interface-sounds) 1.0:
@@ -28,3 +28,19 @@ The water spray of a car wash has no file: it's filtered noise made in
 
 Only the sounds the game uses are copied here, renamed for what they do. To add more,
 download the pack, copy the file across and register it in `src/audio/samples.ts`.
+
+## Music
+
+The tracks in `music/` are from [OpenGameArt](https://opengameart.org), all released under
+[CC0](http://creativecommons.org/publicdomain/zero/1.0/). Credit isn't required, but the
+authors asked for it kindly, so here it is. Each was loudness-matched (about −16 LUFS) and
+re-encoded as OGG Vorbis and 128 kbps MP3 (for browsers without OGG); nothing else was changed.
+
+- `music/title`: [Buy Something!](https://opengameart.org/content/shop-theme) by Cleyton Kauffman
+- `music/morning`: [Which Brand Of Mustard Shall I Buy](https://opengameart.org/content/which-brand-of-mustard-shall-i-buy) by congusbongus
+- `music/afternoon`: [Two Left Socks](https://opengameart.org/content/two-left-socks) by congusbongus
+- `music/closing`: [Jazz n' brass loop](https://opengameart.org/content/jazz-n-brass-loop) by Emma_MA
+- `music/summary`: [Slow Stride](https://opengameart.org/content/slow-stride) by isaiah658
+
+To swap a track, keep its name (both `.ogg` and `.mp3`); `src/audio/music.ts` picks the
+format the browser plays.

@@ -1,4 +1,4 @@
-import { formatTime, isClosed } from '../sim/clock'
+import { dayOver, formatTime } from '../sim/clock'
 import {
   averageDiscount,
   costOfSales,
@@ -22,7 +22,7 @@ import { formatMoney } from './format'
  * left. Starting the next day resets the clock and the day's arrivals.
  */
 export function DaySummary() {
-  const open = useGame((s) => isClosed(s.clock) && s.customers.length === 0)
+  const open = useGame(dayOver)
   const day = useGame((s) => s.clock.day)
   const stats = useGame((s) => s.dayStats)
   const cash = useGame((s) => s.cash)

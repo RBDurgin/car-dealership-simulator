@@ -264,6 +264,11 @@ export function HowToPlay() {
             slammed by someone leaving unhappy, and the hiss of a car being washed. Sounds out on
             the lot are quieter the farther they are from you.
           </p>
+          <p>
+            The music follows the day: an easy bossa in the morning, another after noon, and a
+            livelier tune for the last hour before closing. The summary and the title screen have
+            their own. It goes muffled while this guide is open.
+          </p>
         </section>
         <section>
           <h3>Controls</h3>

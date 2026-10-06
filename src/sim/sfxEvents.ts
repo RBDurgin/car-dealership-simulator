@@ -1,4 +1,4 @@
-import { isClosed, type GameTime } from './clock'
+import { dayOver, type GameTime } from './clock'
 import type { Customer } from './customers'
 import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
@@ -65,9 +65,6 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   close: 80,
 }
 
-/** Mirrors `ui/DaySummary`: the doors are shut and the last customer has gone. */
-const summaryUp = (s: SfxState) => isClosed(s.clock) && s.customers.length === 0
-
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
 
 /**
@@ -81,7 +78,7 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   const out: SfxEvent[] = []
 
   if (next.clock.day > prev.clock.day) out.push({ cue: 'bell' })
-  if (summaryUp(next) && !summaryUp(prev)) out.push({ cue: 'paper' })
+  if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
 
   if (next.customers !== prev.customers) {
     const before = new Map(prev.customers.map((c) => [c.id, c]))

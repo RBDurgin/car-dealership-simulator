@@ -23,6 +23,14 @@ export function isClosed(t: GameTime): boolean {
   return t.minute >= CLOSE_MINUTE
 }
 
+/**
+ * The day is done: the doors are shut and the last customer has gone, so the
+ * day summary shows until the next day is started.
+ */
+export function dayOver(s: { clock: GameTime; customers: readonly unknown[] }): boolean {
+  return isClosed(s.clock) && s.customers.length === 0
+}
+
 /** Moves the clock forward by `dtMs` of real time, stopping at closing. */
 export function advance(t: GameTime, dtMs: number, dayMs = DEFAULT_DAY_MS): GameTime {
   if (dtMs <= 0 || isClosed(t)) return t

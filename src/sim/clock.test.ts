@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advance,
   CLOSE_MINUTE,
+  dayOver,
   DEFAULT_DAY_MS,
   formatTime,
   isClosed,
@@ -55,5 +56,14 @@ describe('game clock', () => {
     expect(formatTime(CLOSE_MINUTE)).toBe('6:00 PM')
     expect(formatTime(0)).toBe('12:00 AM')
     expect(formatTime(OPEN_MINUTE + 0.99)).toBe('9:00 AM')
+  })
+})
+
+describe('dayOver', () => {
+  const closed = { day: 1, minute: CLOSE_MINUTE }
+  it('waits for closing and for the last customer to leave', () => {
+    expect(dayOver({ clock: startOfDay(1), customers: [] })).toBe(false)
+    expect(dayOver({ clock: closed, customers: [{}] })).toBe(false)
+    expect(dayOver({ clock: closed, customers: [] })).toBe(true)
   })
 })

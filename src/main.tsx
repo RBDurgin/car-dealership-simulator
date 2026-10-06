@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { startAudio } from './audio/engine'
+import { startMusic, syncMusic } from './audio/music'
 import { preloadSfx } from './audio/samples'
 import { startSfx } from './audio/sfxBridge'
 import { startUiClicks } from './audio/uiClicks'
@@ -14,8 +15,12 @@ startAutosave()
 // The controls hint starts collapsed on phones and touch screens.
 startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
 startAudioPref()
-// Silent until the first gesture; then the sounds load.
-startAudio(() => preloadSfx())
+// Silent until the first gesture; then the sounds load and the music starts.
+startAudio(() => {
+  preloadSfx()
+  syncMusic()
+})
+startMusic()
 startUiClicks()
 startSfx()
 

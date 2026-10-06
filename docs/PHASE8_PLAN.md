@@ -101,6 +101,8 @@ public/audio/
 
 ### 8c: Music
 
+**Status:** Done 2026-10-05. The tracks are CC0 bossa / jazz loops from OpenGameArt (credited in `public/audio/LICENSE.md`), loudness-matched and encoded as OGG and MP3. Each track has its own `HTMLAudioElement` and fader, so it resumes where it stopped; the outgoing one pauses after its fade. The closing rush carries on past 18:00 until the last customer leaves, then the summary takes over. "Full-screen panel" means the how-to-play guide and the rotate prompt (`isMuffled`); the staff, office and sound panels leave the music alone. A browser that refuses to start a stream outside a gesture gets it started on the next tap or key. `dayOver` in `sim/clock.ts` is now the one test for "the summary is up".
+
 - Choose five CC0 loops (light jazz / lounge): title, morning, afternoon, closing rush (last hour) and summary. They're OGG with MP3 for Safari, streamed through `HTMLAudioElement` rather than decoded whole.
 - `sim/musicPlan.ts` + tests: `trackFor(state)` → `TrackId`. The day parts come from `minute`: morning before 12:00, afternoon before 17:00, then the closing rush.
 - `audio/music.ts`:
