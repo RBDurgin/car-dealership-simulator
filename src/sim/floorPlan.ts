@@ -26,9 +26,12 @@ export function floorBalance(inventory: readonly InventoryCar[], orders: readonl
   return flooredStock(inventory) + pending
 }
 
-/** One day's interest, to the dollar, on the floored cars in stock. Orders accrue nothing. */
-export function dailyInterest(inventory: readonly InventoryCar[]): number {
-  return Math.round(flooredStock(inventory) * FLOOR_PLAN_DAILY_RATE)
+/**
+ * One day's interest, to the dollar, on the floored cars in stock, with the
+ * level's `rate` factor. Orders accrue nothing.
+ */
+export function dailyInterest(inventory: readonly InventoryCar[], rate = 1): number {
+  return Math.round(flooredStock(inventory) * FLOOR_PLAN_DAILY_RATE * rate)
 }
 
 /** What goes back to the bank out of the sale price when `car` is sold. */

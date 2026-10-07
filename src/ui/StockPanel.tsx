@@ -14,7 +14,7 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
-import { useGame, type ComputerTab } from '../state/store'
+import { levelTuning, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
@@ -51,7 +51,8 @@ function CatalogRow({
   explain: boolean
   missed: string | null
 }) {
-  const cost = orderCost(model, day)
+  const invoice = useGame(levelTuning).invoice
+  const cost = orderCost(model, day, invoice)
   const msrp = BASE_MSRP[model]
   const onIncentive = dailyIncentive(day) === model
   const onCloseout = closeoutOn(day) === model
@@ -126,6 +127,7 @@ function OrderRow({ o }: { o: Order }) {
 
 function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: number }) {
   const short = cash < car.cost
+  const rate = useGame(levelTuning).interest
   return (
     <li className="stock-row">
       <div className="stock-who">
@@ -133,7 +135,7 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
           {carName(car.model)}
           {car.floored && (
             <span className="stock-badge">
-              Floor plan · {formatMoney(Math.round(car.cost * FLOOR_PLAN_DAILY_RATE))}/day
+              Floor plan · {formatMoney(Math.round(car.cost * FLOOR_PLAN_DAILY_RATE * rate))}/day
             </span>
           )}
         </div>
@@ -232,12 +234,13 @@ function StockTab() {
   const orders = useGame((s) => s.orders)
   const missedToday = useGame((s) => s.dayStats.missed)
   const missedYesterday = useGame((s) => s.missedYesterday)
+  const invoice = useGame(levelTuning).invoice
 
   const book = { cash, inventory, orders }
   const free = freeSlots(inventory, orders)
   const freeIn = (where: 'lot' | 'showroom') => free.filter((s) => s.location === where).length
   const blocker = (model: CarModel, financing: Financing) => {
-    const r = placeOrder(book, model, financing, day)
+    const r = placeOrder(book, model, financing, day, invoice)
     return r.ok ? null : r.reason
   }
   const stock = availableCars(inventory).sort(

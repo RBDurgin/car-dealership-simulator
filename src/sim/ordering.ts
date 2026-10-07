@@ -57,13 +57,14 @@ export function dailyIncentive(day: number): CarModel {
 /**
  * What ordering `model` costs on `day`: the invoice, less the day's incentive
  * and the month-end closeout rebate if it's that model (both, if it's both).
+ * `invoice` scales the invoice for the difficulty level.
  */
-export function orderCost(model: CarModel, day: number): number {
-  let factor = 1
+export function orderCost(model: CarModel, day: number, invoice = 1): number {
+  let factor = invoice
   if (dailyIncentive(day) === model) factor *= 1 - INCENTIVE_DISCOUNT
   if (closeoutOn(day) === model) factor *= 1 - CLOSEOUT_REBATE
-  const invoice = invoicePrice(model)
-  return factor === 1 ? invoice : roundTo100(invoice * factor)
+  const price = invoicePrice(model)
+  return factor === 1 ? price : roundTo100(price * factor)
 }
 
 /** Every slot on the premises: the showroom platforms first, then the lot spaces. */
@@ -126,17 +127,19 @@ function nextOrderId(orders: readonly Order[], day: number): string {
 /**
  * Orders a `model` on `day`, into the first free slot. Paid in cash now, or on
  * the floor plan. Fails with the reason when there's no room, not enough cash,
- * or the floor plan would go over its limit.
+ * or the floor plan would go over its limit. `invoice` is the level's invoice
+ * factor (see `orderCost`).
  */
 export function placeOrder(
   book: OrderBook,
   model: CarModel,
   financing: Financing,
   day: number,
+  invoice = 1,
 ): OrderResult {
   const slot = freeSlots(book.inventory, book.orders)[0]
   if (!slot) return { ok: false, reason: 'No room: every space is taken or on order.' }
-  const cost = orderCost(model, day)
+  const cost = orderCost(model, day, invoice)
   if (financing === 'cash' && book.cash < cost) {
     return { ok: false, reason: 'Not enough cash.' }
   }

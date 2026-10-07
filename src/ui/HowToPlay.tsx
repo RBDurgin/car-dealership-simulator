@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
+import { TUNING } from '../sim/difficulty'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import {
   AREA_LABELS,
@@ -28,7 +29,7 @@ import {
   RETENTION_RAISE,
   SALES_COMMISSION,
 } from '../sim/staff'
-import { useGame, STARTING_CASH } from '../state/store'
+import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
 import { effectLabel } from './improvementText'
@@ -61,14 +62,32 @@ function OfficeKey({ touch, keyName }: { touch: boolean; keyName: string }) {
   )
 }
 
+/** "40%" for a factor of 0.6. */
+const percentOff = (factor: number) => `${Math.round((1 - factor) * 100)}%`
+/** "50%" for a factor of 1.5. */
+const percentOn = (factor: number) => `${Math.round((factor - 1) * 100)}%`
+
 function BasicsTab({ touch, click }: TabProps) {
+  const { startingCash } = useGame(levelTuning)
   return (
     <>
       <section>
         <h3>The goal</h3>
         <p>
           Sell cars, build a loyal client base and grow your cash. You start with{' '}
-          {formatMoney(STARTING_CASH)} and a lot full of cars.
+          {formatMoney(startingCash)} and a lot full of cars.
+        </p>
+      </section>
+      <section>
+        <h3>Difficulty</h3>
+        <p>
+          Pick <b>Easy</b>, <b>Medium</b> or <b>Hard</b> when you start a new game; it stays for
+          that game. Easy starts you with {formatMoney(TUNING.easy.startingCash)}, cars cost{' '}
+          {percentOff(TUNING.easy.invoice)} less to order and floor plan interest is{' '}
+          {percentOff(TUNING.easy.interest)} lower. Hard starts with{' '}
+          {formatMoney(TUNING.hard.startingCash)}, cars cost {percentOn(TUNING.hard.invoice)} more
+          and interest is {percentOn(TUNING.hard.interest)} higher. Medium is in between, with{' '}
+          {formatMoney(TUNING.medium.startingCash)}.
         </p>
       </section>
       <section>
@@ -165,6 +184,7 @@ function SellingTab() {
 }
 
 function BusinessTab({ touch, click }: TabProps) {
+  const { interest } = useGame(levelTuning)
   return (
     <>
       <p className="how-lead">
@@ -184,9 +204,9 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>
           Pay in <b>cash</b>, or put the car on the <b>floor plan</b>: the bank pays for it (up to{' '}
           {formatMoney(FLOOR_PLAN_LIMIT)} at once) and you pay{' '}
-          {(FLOOR_PLAN_DAILY_RATE * 100).toFixed(1)}% of its cost in interest each day it sits. When
-          it sells, the bank takes its cost out of the price. <b>Pay off</b> a car from cash to stop
-          the interest.
+          {(FLOOR_PLAN_DAILY_RATE * interest * 100).toFixed(2).replace(/0$/, '')}% of its cost in
+          interest each day it sits. When it sells, the bank takes its cost out of the price.{' '}
+          <b>Pay off</b> a car from cash to stop the interest.
         </p>
         <p>
           Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in

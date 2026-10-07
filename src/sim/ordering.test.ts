@@ -62,6 +62,19 @@ describe('catalog', () => {
     expect(models.size).toBeGreaterThan(1)
   })
 
+  it('scales the invoice by the level’s factor, on top of the incentive', () => {
+    const day = 4
+    const model = dailyIncentive(day)
+    const other = (Object.keys(BASE_MSRP) as CarModel[]).find((m) => m !== model)!
+    expect(orderCost(other, day, 1)).toBe(invoicePrice(other))
+    expect(orderCost(other, day, 1.02)).toBe(Math.round((invoicePrice(other) * 1.02) / 100) * 100)
+    expect(orderCost(model, day, 0.98)).toBe(
+      Math.round((invoicePrice(model) * 0.98 * 0.95) / 100) * 100,
+    )
+    const r = placeOrder(book({ cash: 100_000 }), other, 'cash', day, 1.02)
+    expect(r.ok && r.order.cost).toBe(orderCost(other, day, 1.02))
+  })
+
   it('takes the closeout rebate off one model at month end, stacking with the incentive', () => {
     const models = Object.keys(BASE_MSRP) as CarModel[]
     for (let day = 26; day <= 28; day++) {

@@ -1,4 +1,5 @@
 import { calendarOf, longDate } from '../sim/calendar'
+import { difficultyLabel } from '../sim/difficulty'
 import { eventOn } from '../sim/events'
 import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { dayOver, formatTime } from '../sim/clock'
@@ -37,6 +38,7 @@ export function DaySummary() {
   const weather = useGame((s) => s.weather)
   const monthSold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
+  const difficulty = useGame((s) => s.difficulty)
   if (!open) return null
   const event = eventOn(day)
   const missed = missedSummary(stats.missed)
@@ -50,7 +52,7 @@ export function DaySummary() {
       <div className="panel day-summary" role="dialog" aria-label={`${longDate(day)} summary`}>
         <div className="info-kicker">
           End of day {day} · {WEATHER_ICONS[weather]} {WEATHER_LABELS[weather]}
-          {event && ` · ${event.label} sale`}
+          {event && ` · ${event.label} sale`} · {difficultyLabel(difficulty)}
         </div>
         <h2>{longDate(day)}</h2>
         <dl className="summary-stats">

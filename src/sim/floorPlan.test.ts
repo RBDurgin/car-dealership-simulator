@@ -37,6 +37,8 @@ describe('floor plan', () => {
     expect(dailyInterest(inventory)).toBe(80_000 * FLOOR_PLAN_DAILY_RATE)
     expect(dailyInterest(inventory)).toBe(160)
     expect(dailyInterest(sellCar(inventory, 'lot-car-2'))).toBe(80)
+    // A level's rate factor.
+    expect(dailyInterest(inventory, 1.5)).toBe(240)
   })
 
   it('repays a floored car out of its sale', () => {

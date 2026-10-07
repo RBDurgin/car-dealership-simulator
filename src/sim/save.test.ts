@@ -36,6 +36,8 @@ const source = () => ({
   // As a v8 save upgrades, so the older upgrades compare equal.
   monthSales: { count: 0, msrp: 0 },
   quota: monthlyQuota(0, ALL_SLOTS.length, 62),
+  // As a v9 save upgrades, so the older upgrades compare equal.
+  difficulty: 'medium' as const,
 })
 
 const order: Order = {
@@ -182,6 +184,19 @@ describe('save data', () => {
       monthSales: { count: 0, msrp: 0 },
       quota: monthlyQuota(0, ALL_SLOTS.length, 62),
     })
+  })
+
+  it('upgrades a version 9 save to Medium', () => {
+    const save = createSave({ ...source(), difficulty: 'hard' }, 123)
+    const v9 = { ...save, version: 9, difficulty: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v9)))).toEqual({ ...save, difficulty: 'medium' })
+  })
+
+  it('keeps the difficulty level, and rejects one it doesn’t know', () => {
+    const save = createSave({ ...source(), difficulty: 'easy' }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.difficulty).toBe('easy')
+    expect(parseSave({ ...save, difficulty: 'nightmare' })).toBeNull()
+    expect(parseSave({ ...save, difficulty: undefined })).toBeNull()
   })
 
   it('keeps the month’s sales and quota', () => {

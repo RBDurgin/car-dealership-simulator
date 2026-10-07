@@ -41,6 +41,7 @@ import {
 import { eventNotice, eventOn } from '../sim/events'
 import { carName, type ActionId } from '../sim/interactables'
 import { clampAsk, respondToAsk, staffAsk, suggestedAsk, walkLine } from '../sim/negotiation'
+import { DEFAULT_DIFFICULTY, TUNING, type Difficulty, type Tuning } from '../sim/difficulty'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
 import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
 import {
@@ -149,7 +150,8 @@ export type Screen = 'title' | 'playing'
 /** The office computer panel's tabs. */
 export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar'
 
-export const STARTING_CASH = 25_000
+/** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
+export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash
 const INVENTORY_SEED = 2026
 const CUSTOMER_SEED = 7_000
 const DEAL_SEED = 9_000
@@ -164,6 +166,8 @@ export const DEV_TIME_SCALES = [1, 4, 16] as const
 interface GameState {
   /** The title screen is up: the clock and the player wait until a game is started. */
   screen: Screen
+  /** Picked at New game and kept with the save. Never changes mid-game. */
+  difficulty: Difficulty
   moveOrder: MoveOrder | null
   showGrid: boolean
   wallMode: WallMode
@@ -334,8 +338,8 @@ interface GameState {
   toggleMute: (muted?: boolean) => void
   toggleAudioPanel: (open?: boolean) => void
   cycleTimeScale: () => void
-  /** From the title screen: plays the fresh day 1 the store starts with. */
-  newGame: () => void
+  /** From the title screen: plays a fresh day 1 at `difficulty` (Medium if not given). */
+  newGame: (difficulty?: Difficulty) => void
   /** From the title screen: resumes a saved game on the morning after its last day. */
   loadGame: (save: SaveData) => void
 }
@@ -363,6 +367,11 @@ export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePromp
   return s.screen === 'title' || s.helpOpen || s.rotatePrompt
 }
 
+/** The levers of the game's difficulty level; a stable object, so fine as a selector. */
+export function levelTuning(s: Pick<GameState, 'difficulty'>): Tuning {
+  return TUNING[s.difficulty]
+}
+
 /** The morning's word on a night's theft. */
 export function theftNotice(theft: NightTheft): string {
   if (theft.outcome === 'foiled') return 'Your guard ran someone off the lot last night.'
@@ -381,6 +390,28 @@ export function deliveryNotice(cars: readonly InventoryCar[]): string {
   return cars.length === 1
     ? `A ${carName(cars[0].model)} was delivered ${lot ? 'to the lot' : 'to the showroom'}.`
     : `${cars.length} cars delivered: ${where}.`
+}
+
+/**
+ * What a new game's day 1 starts with at `difficulty`. The day's rng streams
+ * start afresh, so day 1 plays out the same however often it's built.
+ */
+function dayOne(difficulty: Difficulty) {
+  customerRng = createRng(CUSTOMER_SEED + 1)
+  dealRng = createRng(DEAL_SEED + 1)
+  staffRng = createRng(STAFF_SEED + 1)
+  walkInRng = createRng(WALK_IN_SEED + 1)
+  return {
+    difficulty,
+    cash: TUNING[difficulty].startingCash,
+    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION),
+    arrivals: planArrivals(
+      customerRng,
+      {},
+      { scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic, referrals: 0 },
+    ),
+    candidates: generateCandidates(staffRng, 1),
+  }
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -454,7 +485,7 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
     const { wages, commissions } = payroll(s.roster, s.dayStats.sales)
-    const interest = dailyInterest(s.inventory)
+    const interest = dailyInterest(s.inventory, tuning().interest)
     // A goal the player never heard (the owner didn't make it in) isn't judged.
     const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
     const reputation = applyChange(s.reputation, reputationChange(s.dayStats))
@@ -604,6 +635,9 @@ export const useGame = create<GameState>((set, get) => {
   /** The customer salesperson `employeeId` is dealing with in `phases`, if any. */
   const staffCustomer = (employeeId: string, phases: readonly CustomerPhase[]) =>
     get().customers.find((c) => c.handlerId === employeeId && phases.includes(c.phase))
+
+  /** The levers of the game's difficulty level. */
+  const tuning = () => levelTuning(get())
 
   /** What the improvements up today add up to. */
   const upEffects = () => {
@@ -795,8 +829,8 @@ export const useGame = create<GameState>((set, get) => {
     menu: null,
     inspectedId: null,
     notice: null,
+    ...dayOne(DEFAULT_DIFFICULTY),
     clock: startOfDay(1),
-    cash: STARTING_CASH,
     inventory: buildInventory(createRng(INVENTORY_SEED)),
     orders: [],
     campaigns: [],
@@ -804,16 +838,9 @@ export const useGame = create<GameState>((set, get) => {
     reputation: START_REPUTATION,
     weather: weatherOn(1),
     monthSales: emptyMonthSales(),
-    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION),
     customers: [],
-    arrivals: planArrivals(
-      customerRng,
-      {},
-      { scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic, referrals: 0 },
-    ),
     dayStats: emptyStats(),
     roster: [],
-    candidates: generateCandidates(staffRng, 1),
     owner: null,
     nazma: null,
     missedYesterday: {},
@@ -956,7 +983,7 @@ export const useGame = create<GameState>((set, get) => {
     },
     orderCar: (model, financing) => {
       const s = get()
-      const result = placeOrder(s, model, financing, s.clock.day)
+      const result = placeOrder(s, model, financing, s.clock.day, tuning().invoice)
       if (!result.ok) {
         notify(result.reason)
         return false
@@ -1275,12 +1302,14 @@ export const useGame = create<GameState>((set, get) => {
         return { timeScale: DEV_TIME_SCALES[(i + 1) % DEV_TIME_SCALES.length] }
       }),
     // A new player gets the guide before day 1 starts.
-    newGame: () => set({ screen: 'playing', helpOpen: true }),
+    newGame: (difficulty = DEFAULT_DIFFICULTY) =>
+      set({ screen: 'playing', helpOpen: true, ...dayOne(difficulty) }),
     loadGame: (save) => {
       // Only offered before the clock has run, so there are no customers,
       // actions or panels to clear.
       set({
         screen: 'playing',
+        difficulty: save.difficulty,
         cash: save.cash,
         inventory: save.inventory,
         roster: save.roster,
