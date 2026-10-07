@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { longDate } from '../sim/calendar'
 import { clearSave, readSave } from '../state/persistence'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -28,7 +29,7 @@ export function TitleScreen() {
           >
             Continue
             <span className="title-save">
-              Day {save.day + 1} · {formatMoney(save.cash)}
+              {longDate(save.day + 1)} · {formatMoney(save.cash)}
             </span>
           </button>
         )}

@@ -115,6 +115,7 @@ export function HUD() {
       else if (e.code === 'KeyI' && !e.repeat) game.toggleStockPanel(undefined, 'stock')
       else if (e.code === 'KeyM' && !e.repeat) game.toggleStockPanel(undefined, 'marketing')
       else if (e.code === 'KeyU' && !e.repeat) game.toggleStockPanel(undefined, 'upgrades')
+      else if (e.code === 'KeyC' && !e.repeat) game.toggleStockPanel(undefined, 'calendar')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

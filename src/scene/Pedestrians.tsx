@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { memo, Suspense, useState } from 'react'
 import type { Group } from 'three'
+import { weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { effectsOf, installed } from '../sim/improvements'
 import {
@@ -119,11 +120,12 @@ export function Pedestrians() {
       const day = game.clock.day
       Object.assign(today, {
         day,
-        // Improvements bought today go up tonight, so today's crowd is set now.
+        // Improvements bought today go up tonight, so today's crowd is set now. Busier on weekends.
         plan: planPedestrians(
           createRng(PEDESTRIAN_SEED + day),
           day,
           effectsOf(installed(game.improvements, day)),
+          weekdayTraffic(day),
         ),
         next: 0,
       })

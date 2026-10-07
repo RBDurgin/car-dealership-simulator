@@ -1,6 +1,6 @@
 # Phase 10 Plan: Calendar & events
 
-**Status:** planned 2026-10-06, to be built after Phase 9. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** planned 2026-10-06. 10a done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 

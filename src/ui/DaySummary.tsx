@@ -1,3 +1,4 @@
+import { longDate } from '../sim/calendar'
 import { dayOver, formatTime } from '../sim/clock'
 import {
   averageDiscount,
@@ -39,9 +40,9 @@ export function DaySummary() {
 
   return (
     <div className="modal-backdrop">
-      <div className="panel day-summary" role="dialog" aria-label={`Day ${day} summary`}>
-        <div className="info-kicker">End of day</div>
-        <h2>Day {day} summary</h2>
+      <div className="panel day-summary" role="dialog" aria-label={`${longDate(day)} summary`}>
+        <div className="info-kicker">End of day {day}</div>
+        <h2>{longDate(day)}</h2>
         <dl className="summary-stats">
           <dt>Visitors</dt>
           <dd>

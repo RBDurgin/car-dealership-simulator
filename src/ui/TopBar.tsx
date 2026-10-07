@@ -1,3 +1,4 @@
+import { formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
 import { reputationLabel } from '../sim/reputation'
 import { useGame } from '../state/store'
@@ -25,6 +26,17 @@ function ReputationMeter() {
   )
 }
 
+/** "Sat · Wk 2 · Mar"; compact screens keep only the weekday. */
+function TopBarDate({ day }: { day: number }) {
+  const [weekday, ...rest] = formatDate(day).split(' · ')
+  return (
+    <span className="topbar-date" title={`${longDate(day)} (day ${day})`}>
+      {weekday}
+      <span className="topbar-date-rest"> · {rest.join(' · ')}</span>
+    </span>
+  )
+}
+
 /** The speaker: shows whether sound is muted and opens the sound settings. */
 function SoundButton() {
   const muted = useGame((s) => s.audio.muted)
@@ -43,8 +55,8 @@ function SoundButton() {
 }
 
 /**
- * Day, time, cash, reputation, the owner's goal (on their days) and the office (stock,
- * marketing and upgrades), staff and sound buttons.
+ * Date, time, cash, reputation, the owner's goal (on their days) and the office (stock,
+ * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {
@@ -55,7 +67,7 @@ export function TopBar() {
   const stockOpen = useGame((s) => s.stockOpen)
   return (
     <div className="panel topbar">
-      <span>Day {clock.day}</span>
+      <TopBarDate day={clock.day} />
       <span className="topbar-sep">·</span>
       <span className="topbar-time">{formatTime(clock.minute)}</span>
       {isClosed(clock) && <span className="topbar-closed">Closed</span>}

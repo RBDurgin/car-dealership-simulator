@@ -72,6 +72,16 @@ function BasicsTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>The week</h3>
+        <p>
+          The top bar shows the date: weeks run Monday to Sunday and every month has four of them.
+          You&apos;re open every day, but weekends are busiest: Saturday brings about twice
+          Sunday&apos;s visitors and passers-by, and early in the week is quiet. The <b>Calendar</b>{' '}
+          tab on the office computer (<OfficeKey touch={touch} keyName="C" />) shows this week and
+          next, so you can stock up and book ads ahead of the rush.
+        </p>
+      </section>
+      <section>
         <h3>Making a sale</h3>
         <p>
           {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they
@@ -140,8 +150,8 @@ function BusinessTab({ touch, click }: TabProps) {
   return (
     <>
       <p className="how-lead">
-        Stock, ads and upgrades are all on the office computer: {click.toLowerCase()} the screen on
-        your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
+        Stock, ads, upgrades and the calendar are all on the office computer: {click.toLowerCase()}{' '}
+        the screen on your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
       </p>
       <section>
         <h3>Buying stock</h3>

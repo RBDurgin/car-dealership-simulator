@@ -7,6 +7,7 @@ import {
   type AudioBus,
   type AudioSettings,
 } from '../sim/audioSettings'
+import { weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
@@ -142,7 +143,7 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing' | 'upgrades'
+export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar'
 
 export const STARTING_CASH = 25_000
 const INVENTORY_SEED = 2026
@@ -202,7 +203,7 @@ interface GameState {
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
-  /** The office computer panel (stock, marketing and upgrades) is open. */
+  /** The office computer panel (stock, marketing, upgrades and calendar) is open. */
   stockOpen: boolean
   /** Which tab of it shows. */
   computerTab: ComputerTab
@@ -525,6 +526,8 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'marketing')
       case 'improve':
         return get().toggleStockPanel(true, 'upgrades')
+      case 'calendar':
+        return get().toggleStockPanel(true, 'calendar')
       case 'confront':
         return get().nazmaRunOff('player')
     }
@@ -665,7 +668,7 @@ export const useGame = create<GameState>((set, get) => {
    * off the lot (the bank calls in its loan if it was floored), the rest have
    * gathered a night's dust, yesterday's orders are parked in their slots, finished ad
    * campaigns end, there are new arrivals (more while ads run, and more or
-   * fewer with reputation) and applicants, and the staff head in.
+   * fewer with reputation and the weekday) and applicants, and the staff head in.
    */
   const beginDay = (day: number) => {
     customerRng = createRng(CUSTOMER_SEED + day)
@@ -702,7 +705,10 @@ export const useGame = create<GameState>((set, get) => {
       arrivals: planArrivals(
         customerRng,
         trafficBoost(campaigns, day, campaignScale(s.reputation)),
-        { scale: visitorScale(s.reputation), referrals: referralVisitors(s.reputation) },
+        {
+          scale: visitorScale(s.reputation) * weekdayTraffic(day),
+          referrals: referralVisitors(s.reputation),
+        },
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
       dayStats: {
@@ -745,7 +751,7 @@ export const useGame = create<GameState>((set, get) => {
     improvements: [],
     reputation: START_REPUTATION,
     customers: [],
-    arrivals: planArrivals(customerRng),
+    arrivals: planArrivals(customerRng, {}, { scale: weekdayTraffic(1), referrals: 0 }),
     dayStats: emptyStats(),
     roster: [],
     candidates: generateCandidates(staffRng, 1),
