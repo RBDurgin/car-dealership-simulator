@@ -191,6 +191,19 @@ export const PARKING_SPACES: ParkingSpace[] = [
   ...spaceRow(6, { tx: 9, tz: 2 }, { tx: 0, tz: 2 }, { w: 4, h: 2 }, 1),
 ]
 
+/**
+ * Where visitors who drive in park: three spaces in the open asphalt between
+ * the showroom and the east front row, noses to the building. Never stock
+ * slots. Cars drive in along the aisle south of them (`sim/driving.ts`).
+ */
+export const CUSTOMER_PARKING: ParkingSpace[] = spaceRow(
+  3,
+  { tx: 26, tz: 15 },
+  { tx: 2, tz: 0 },
+  { w: 2, h: 4 },
+  2,
+)
+
 /** Opening lot stock: which spaces hold which car. Cars are inventory (`sim/inventory.ts`). */
 export const LOT_CARS: { space: number; model: CarModel }[] = [
   { space: 0, model: 'sedan' },

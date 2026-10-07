@@ -30,6 +30,7 @@ const browser: Customer = {
   handlerId: null,
   chairId: null,
   sellerId: null,
+  vehicle: null,
 }
 
 /** Sets car `id`'s cleanliness directly. */

@@ -5,7 +5,7 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare'
+type Synth = 'spray' | 'fanfare' | 'engine' | 'door'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -24,7 +24,7 @@ const FILES: Record<Exclude<SfxId, Synth>, string> = {
   shoo: 'sfx/shoo.ogg',
 }
 
-const ALL_IDS = [...Object.keys(FILES), 'spray', 'fanfare'] as SfxId[]
+const ALL_IDS = [...Object.keys(FILES), 'spray', 'fanfare', 'engine', 'door'] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
 
@@ -86,18 +86,70 @@ function fanfareBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+const ENGINE_SECONDS = 1.8
+
+/**
+ * A car pulling away: a low, lumpy rumble that revs up, settles and fades as
+ * it drives off. A few harmonics of the firing note, wobbled so it doesn't
+ * sound like an organ, with a little noise. Made here because the packs have
+ * no cars in them.
+ */
+function engineBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(ENGINE_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  let phase = 0
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate
+    // Revs from idle to about 70 Hz, then eases back as it cruises off.
+    const hz = t < 0.45 ? 38 + (t / 0.45) * 32 : 70 - Math.min(1, (t - 0.45) / 0.6) * 18
+    phase += (2 * Math.PI * hz) / rate
+    let tone = 0
+    for (let k = 1; k <= 6; k++) tone += Math.sin(k * phase) / k
+    const lump = 0.7 + 0.3 * Math.sin(phase * 0.5)
+    const envelope = Math.min(1, t / 0.06) * Math.min(1, (ENGINE_SECONDS - t) / 0.9)
+    data[i] = (tone * lump * 0.45 + (Math.random() * 2 - 1) * 0.12) * envelope
+  }
+  return buffer
+}
+
+const DOOR_SECONDS = 0.4
+
+/** A car door shutting: the latch's click on top of a dull, quickly damped thump. */
+function doorBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(DOOR_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate
+    const thump = Math.sin(2 * Math.PI * 70 * t) * Math.exp(-t / 0.07)
+    const slam = (Math.random() * 2 - 1) * Math.exp(-t / 0.015) * 0.6
+    const latch = t >= 0.035 ? (Math.random() * 2 - 1) * Math.exp(-(t - 0.035) / 0.005) * 0.35 : 0
+    data[i] = (thump + slam + latch) * 0.8
+  }
+  return buffer
+}
+
+const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
+  spray: sprayBuffer,
+  fanfare: fanfareBuffer,
+  engine: engineBuffer,
+  door: doorBuffer,
+}
+
+/** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */
+const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500 }
+
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)
   if (!buffer) {
     buffer =
-      id === 'spray'
-        ? Promise.resolve(sprayBuffer(ctx))
-        : id === 'fanfare'
-          ? Promise.resolve(fanfareBuffer(ctx))
-          : fetch(BASE + FILES[id])
-              .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
-              .then((data) => ctx.decodeAudioData(data))
-              .catch(() => null)
+      id in SYNTHS
+        ? Promise.resolve(SYNTHS[id as Synth](ctx))
+        : fetch(BASE + FILES[id as Exclude<SfxId, Synth>])
+            .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
+            .then((data) => ctx.decodeAudioData(data))
+            .catch(() => null)
     cache.set(id, buffer)
   }
   return buffer
@@ -131,6 +183,13 @@ export function playSfx(id: SfxId, volume = 1, pan = 0): void {
       filter.type = 'bandpass'
       filter.frequency.value = 3500
       filter.Q.value = 0.8
+      head = head.connect(filter)
+    }
+    const cutoff = LOWPASS[id]
+    if (cutoff) {
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.value = cutoff
       head = head.connect(filter)
     }
     if (pan !== 0) {

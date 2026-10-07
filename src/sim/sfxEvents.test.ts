@@ -48,6 +48,33 @@ const cues = (next: Partial<SfxState>, prev: Partial<SfxState> = {}) =>
   sfxFor({ ...base, ...prev }, { ...base, ...next }).map((e) => e.cue)
 
 describe('sfxFor', () => {
+  const car = { model: 'suv' as const, year: 2018, miles: 90_000, condition: 0.5, acquiredDay: 1 }
+  const driving = customer('d1', { phase: 'arriving', vehicle: { car, spot: 2, parked: false } })
+  const parked = { ...driving, phase: 'browsing' as const, vehicle: { car, spot: 2, parked: true } }
+  const vehicle = { kind: 'vehicle', id: 'd1', spot: 2 }
+
+  it('hears a driver come up the road, get out and drive off', () => {
+    const arrive = sfxFor(base, { ...base, customers: [...base.customers, driving] })
+    expect(arrive).toContainEqual({ cue: 'chime', subject: { kind: 'customer', id: 'd1' } })
+    expect(arrive).toContainEqual({ cue: 'engine', subject: vehicle })
+    expect(cues({ customers: [parked] }, { customers: [driving] })).toEqual(['door'])
+    const leaving = { ...parked, phase: 'leaving' as const, leaveReason: 'closing' as const }
+    expect(sfxFor({ ...base, customers: [leaving] }, { ...base, customers: [] })).toEqual([
+      { cue: 'door', subject: vehicle },
+      { cue: 'engine', subject: vehicle },
+    ])
+  })
+
+  it('has no door to shut for a driver who never got out', () => {
+    const leaving = { ...driving, phase: 'leaving' as const, leaveReason: 'closing' as const }
+    expect(cues({ customers: [] }, { customers: [leaving] })).toEqual(['engine'])
+  })
+
+  it('is quiet when someone on foot walks off', () => {
+    const leaving = customer('w1', { phase: 'leaving', leaveReason: 'closing' })
+    expect(cues({ customers: [] }, { customers: [leaving] })).toEqual([])
+  })
+
   it('is quiet when nothing it listens to changed', () => {
     expect(sfxFor(base, { ...base })).toEqual([])
     expect(cues({ clock: { day: 1, minute: 700 } })).toEqual([])

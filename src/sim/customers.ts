@@ -1,6 +1,7 @@
 import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
+import type { Vehicle } from './driving'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
@@ -103,6 +104,11 @@ export interface Customer {
   chairId: string | null
   /** Who greeted them and made the sale, whoever ends up signing it. Null until greeted. */
   sellerId: string | null
+  /**
+   * The car they drove in, parked in customer parking, or null for anyone who
+   * came on foot. They leave the way they came.
+   */
+  vehicle: Vehicle | null
 }
 
 const FIRST_NAMES = [
@@ -243,6 +249,7 @@ export function generateCustomer(
     handlerId: null,
     chairId: null,
     sellerId: null,
+    vehicle: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -366,8 +373,10 @@ export const CUSTOMER_SPEED = 1.6
 export const LINGER_MINUTES = { min: 8, max: 20 }
 
 export type CustomerEvent =
-  /** Reached the lot. */
+  /** Reached the lot on foot. */
   | { type: 'arrive'; id: string }
+  /** Drove in, parked and got out: on the lot, like `arrive`. */
+  | { type: 'parked'; id: string }
   /** Finished looking at the current browse car. */
   | { type: 'browsed'; id: string }
   /** Salesperson `by` is on their way over to help: nobody else takes them. */
@@ -391,6 +400,8 @@ export type CustomerEvent =
   | { type: 'cancel'; id: string }
   /** Walked off the map. Removes them. */
   | { type: 'despawn'; id: string }
+  /** Got back in their car to drive off. Removes them; the car leaves in the world. */
+  | { type: 'droveOff'; id: string }
   /**
    * Game time passed. Applies to everyone except `except`, the customer the
    * player is on their way to help, who doesn't give up while being greeted.
@@ -428,8 +439,16 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
   if ('id' in ev && ev.id !== c.id) return c
   switch (ev.type) {
     case 'arrive':
-      if (c.phase !== 'arriving') return c
+      // A driver arrives by parking.
+      if (c.phase !== 'arriving' || c.vehicle) return c
       return { ...c, phase: c.browseCarIds.length > 0 ? 'browsing' : 'waiting' }
+    case 'parked':
+      if (c.phase !== 'arriving' || !c.vehicle || c.vehicle.parked) return c
+      return {
+        ...c,
+        phase: c.browseCarIds.length > 0 ? 'browsing' : 'waiting',
+        vehicle: { ...c.vehicle, parked: true },
+      }
     case 'browsed': {
       if (c.phase !== 'browsing') return c
       const browsed = c.browsed + 1
@@ -495,6 +514,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       }
     case 'despawn':
       return c.phase === 'leaving' ? null : c
+    case 'droveOff':
+      return c.phase === 'leaving' && c.vehicle ? null : c
     case 'tick': {
       // Nobody gives up while someone is on their way to help them.
       if (c.phase !== 'waiting' || ev.minutes <= 0 || ev.except === c.id) return c

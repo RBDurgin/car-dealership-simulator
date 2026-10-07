@@ -14,6 +14,7 @@ import {
   type CustomerVariant,
 } from '../sim/customers'
 import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
+import { doorTile } from '../sim/driving'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS, type Prop } from '../sim/layout'
@@ -108,9 +109,13 @@ const groups = new Map<string, Group>()
 const companions = new Map<string, Companion>()
 const companionGroups = new Map<string, Group>()
 
+/** Still driving in: they're in their car (scene/DrivenCar), not on foot. */
+const inCar = (c: Customer) => !!c.vehicle && !c.vehicle.parked
+
 /**
- * The customer's walker, created on first sight: at a sidewalk end, or where
- * they were on the sidewalk if they're a passer-by who walked in.
+ * The customer's walker, created on first sight: at a sidewalk end, where
+ * they were on the sidewalk if they're a passer-by who walked in, or behind
+ * their car once they've parked.
  */
 function walkerFor(c: Customer): CustomerWalker {
   let w = walkers.get(c.id)
@@ -118,11 +123,19 @@ function walkerFor(c: Customer): CustomerWalker {
   const rng = createRng(hashSeed(c.id))
   const walkIn = walkInSpawns.get(c.id)
   walkInSpawns.delete(c.id)
-  const spawn = walkIn ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z) : rng.pick(SIDEWALK_ENDS)
-  // They leave the way they came, on either lane; a passer-by carries on their way.
-  const exit = walkIn?.exit ?? rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx))
+  const spawn = c.vehicle
+    ? doorTile(c.vehicle.spot)
+    : walkIn
+      ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z)
+      : rng.pick(SIDEWALK_ENDS)
+  // They leave the way they came: back to their car, or on either lane of the
+  // sidewalk; a passer-by carries on their way.
+  const exit = c.vehicle
+    ? spawn
+    : (walkIn?.exit ?? rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx)))
   w = {
-    ...createWalker(c.id, spawn, walkIn?.heading ?? inwardHeading(spawn)),
+    // A driver steps out facing the showroom.
+    ...createWalker(c.id, spawn, c.vehicle ? Math.PI : (walkIn?.heading ?? inwardHeading(spawn))),
     rng,
     exit,
     task: null,
@@ -229,6 +242,7 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
       break
     }
     case 'leaving':
+      // Back to their car, if they came in one.
       goals = [w.exit]
       w.faceTo = null
       break
@@ -298,7 +312,8 @@ function onArrived(c: Customer, w: CustomerWalker): void {
       break
     case 'leaving':
       removeWalker(c.id)
-      game.dispatchCustomer({ type: 'despawn', id: c.id })
+      // A driver gets in, and scene/DrivenCar takes the car away.
+      game.dispatchCustomer({ type: c.vehicle ? 'droveOff' : 'despawn', id: c.id })
       break
   }
 }
@@ -469,6 +484,7 @@ export function Customers() {
     }
     const live = new Set<string>()
     for (const c of game.customers) {
+      if (inCar(c)) continue
       live.add(c.id)
       const w = walkerFor(c)
       update(c, w, seconds, realSeconds, player)
@@ -484,20 +500,22 @@ export function Customers() {
 
   return (
     <>
-      {customers.map((c) => {
-        const w = walkerFor(c)
-        const m = companionFor(c, w)
-        return (
-          <CustomerFigure
-            key={c.id}
-            id={c.id}
-            variant={c.variant}
-            anim={w.anim}
-            companionVariant={c.companion}
-            companionAnim={m?.anim ?? null}
-          />
-        )
-      })}
+      {customers
+        .filter((c) => !inCar(c))
+        .map((c) => {
+          const w = walkerFor(c)
+          const m = companionFor(c, w)
+          return (
+            <CustomerFigure
+              key={c.id}
+              id={c.id}
+              variant={c.variant}
+              anim={w.anim}
+              companionVariant={c.companion}
+              companionAnim={m?.anim ?? null}
+            />
+          )
+        })}
     </>
   )
 }

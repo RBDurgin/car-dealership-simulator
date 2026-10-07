@@ -42,6 +42,7 @@ import { eventNotice, eventOn } from '../sim/events'
 import { carName, type ActionId } from '../sim/interactables'
 import { clampAsk, respondToAsk, staffAsk, suggestedAsk, walkLine } from '../sim/negotiation'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty, type Tuning } from '../sim/difficulty'
+import { assignVehicles } from '../sim/driving'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
 import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
 import {
@@ -164,6 +165,7 @@ const STAFF_SEED = 11_000
 const OWNER_SEED = 12_000
 const WALK_IN_SEED = 14_000
 const DELIVERY_SEED = 16_000
+const DRIVE_SEED = 18_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -371,6 +373,8 @@ let dealRng: Rng = createRng(DEAL_SEED + 1)
 let staffRng: Rng = createRng(STAFF_SEED + 1)
 /** Passers-by who walk in. Apart from `customerRng`, as they turn up on frames, not clock steps. */
 let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
+/** Which arrivals come by car, and what they drive. Apart, so the rest of the day plays as before. */
+let driveRng: Rng = createRng(DRIVE_SEED + 1)
 
 /**
  * Time stands still and the player can't move behind the title screen, the
@@ -444,6 +448,7 @@ function dayOne(difficulty: Difficulty) {
   dealRng = createRng(DEAL_SEED + 1)
   staffRng = createRng(STAFF_SEED + 1)
   walkInRng = createRng(WALK_IN_SEED + 1)
+  driveRng = createRng(DRIVE_SEED + 1)
   const tuning = TUNING[difficulty]
   return {
     difficulty,
@@ -808,6 +813,7 @@ export const useGame = create<GameState>((set, get) => {
     dealRng = createRng(DEAL_SEED + day)
     staffRng = createRng(STAFF_SEED + day)
     walkInRng = createRng(WALK_IN_SEED + day)
+    driveRng = createRng(DRIVE_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
@@ -1013,11 +1019,17 @@ export const useGame = create<GameState>((set, get) => {
       })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
-      const arrived = due.map((source) =>
-        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-          source,
-          ...arrivalOpts(),
-        }),
+      // Some drive in, while there's room in customer parking.
+      const arrived = assignVehicles(
+        due.map((source) =>
+          generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+            source,
+            ...arrivalOpts(),
+          }),
+        ),
+        customers,
+        driveRng,
+        step.day,
       )
       customers = [...customers, ...arrived]
       set({

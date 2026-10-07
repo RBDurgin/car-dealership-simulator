@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLayout,
   createGrid,
+  CUSTOMER_PARKING,
   DESK_CHAIR_ID,
   DISPLAY_CARS,
   GUARD_PATROL_TILES,
@@ -23,6 +24,8 @@ import {
 } from './layout'
 import { applyToGrid, buildInventory, carProp } from './inventory'
 import { approachTilesFor } from './interactables'
+import { doorTile } from './driving'
+import { IMPROVEMENTS, improvementFootprints, type ImprovementId } from './improvements'
 import { findPath, findPathToAny } from './pathfinding'
 import { createRng } from './rng'
 
@@ -75,6 +78,49 @@ describe('dealership layout', () => {
       expect(parked, at).not.toContainEqual([t.tx, t.tz])
       expect(cars, at).not.toContainEqual(t)
     }
+  })
+
+  it('keeps customer parking on open asphalt, clear of the walk in, staff spots and stock', () => {
+    const door = OPENINGS[0]
+    const walkIn = findPathToAny(grid, LOT_ENTRY_TILES[0], [{ tx: door.tx, tz: door.tz + 1 }])!
+    const stock = PARKING_SPACES.flatMap((s) => tiles(s.rect))
+    const improvements = improvementFootprints(Object.keys(IMPROVEMENTS) as ImprovementId[])
+    const staffSpots = [...PORTER_STANDBY_TILES, ...GUARD_PATROL_TILES]
+    const used = new Set<string>()
+    for (const space of CUSTOMER_PARKING) {
+      for (const [tx, tz] of tiles(space.rect)) {
+        const at = `${tx},${tz}`
+        expect(zoneAt(layout, tx, tz), at).toBe('asphalt')
+        expect(grid.isWalkable(tx, tz), at).toBe(true)
+        expect(walkIn, at).not.toContainEqual({ tx, tz })
+        expect(stock, at).not.toContainEqual([tx, tz])
+        expect(staffSpots, at).not.toContainEqual({ tx, tz })
+        expect(improvements.some((r) => tiles(r).some(([x, z]) => x === tx && z === tz))).toBe(
+          false,
+        )
+        expect(used.has(at), at).toBe(false)
+        used.add(at)
+      }
+    }
+  })
+
+  it('lets a driver walk from their car to the showroom and back, with every space taken', () => {
+    const parked = createGrid(layout)
+    applyToGrid(parked, inventory)
+    for (const space of CUSTOMER_PARKING) {
+      const r = parkedCarRect(space)
+      parked.blockRect(r.tx, r.tz, r.w, r.h)
+    }
+    const door = OPENINGS[0]
+    const entrance = { tx: door.tx, tz: door.tz + 1 }
+    CUSTOMER_PARKING.forEach((_, n) => {
+      const t = doorTile(n)
+      expect(parked.isWalkable(t.tx, t.tz)).toBe(true)
+      expect(findPath(parked, t, entrance), `${n}`).not.toBeNull()
+      expect(findPath(parked, entrance, t)).not.toBeNull()
+    })
+    // The porter still gets out to the lot from standby.
+    expect(findPath(parked, PORTER_STANDBY_TILES[0], LOT_ENTRY_TILES[0])).not.toBeNull()
   })
 
   it("gives the owner a reachable spot in the office, off the chairs' approaches", () => {

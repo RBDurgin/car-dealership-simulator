@@ -6,6 +6,7 @@ import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
+import { DrivenCars } from './DrivenCar'
 import { Floors } from './Floors'
 import { GameClock } from './GameClock'
 import { Ground } from './Ground'
@@ -46,6 +47,7 @@ export function Scene() {
       <ClickMarker />
       <Player />
       <Customers />
+      <DrivenCars />
       <Staff />
       <Pedestrians />
       <Owner />

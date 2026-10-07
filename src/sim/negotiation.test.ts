@@ -51,6 +51,7 @@ const base: Customer = {
   handlerId: 'player',
   chairId: null,
   sellerId: 'player',
+  vehicle: null,
 }
 
 /** In the middle of a haggle: they countered `counter` to `lastAsk`. */

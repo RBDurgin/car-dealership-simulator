@@ -115,8 +115,9 @@ function BasicsTab({ touch, click }: TabProps) {
         <h3>The day</h3>
         <p>
           Doors open at 9:00 and close at 18:00. Customers browse, then wait for help and lose
-          patience if nobody comes. Some are passers-by off the sidewalk. Each day ends with a
-          summary, and your progress is saved then.
+          patience if nobody comes. Some are passers-by off the sidewalk, and some drive in and park
+          in the three customer spaces by the showroom; they walk back to their car to leave. Each
+          day ends with a summary, and your progress is saved then.
         </p>
       </section>
       <section>

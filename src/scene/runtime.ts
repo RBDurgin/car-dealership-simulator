@@ -1,5 +1,6 @@
 import { Reservations, type Agent } from '../sim/crowd'
 import { PLAYER_ID } from '../sim/customers'
+import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { improvementFootprints, installed, type ImprovementId } from '../sim/improvements'
@@ -10,8 +11,10 @@ import { NAZMA_ID } from '../sim/nazma'
 import {
   buildLayout,
   createGrid,
+  CUSTOMER_PARKING,
   DESK_CHAIR_ID,
   GUEST_CHAIR_ID,
+  parkedCarRect,
   SALES_DESKS,
   SPAWN_TILE,
   type Rect,
@@ -69,6 +72,24 @@ useGame.subscribe((s, prev) => {
   }
 })
 
+/** Customer-parking spaces with a car parked in them, which block its footprint. */
+let parkedSpots = new Set<number>()
+
+useGame.subscribe((s, prev) => {
+  if (s.customers === prev.customers) return
+  const parked = spotsInUse(s.customers.filter((c) => c.vehicle?.parked))
+  if (parked.size === parkedSpots.size && [...parked].every((n) => parkedSpots.has(n))) return
+  CUSTOMER_PARKING.forEach((space, n) => {
+    if (parked.has(n) === parkedSpots.has(n)) return
+    const rect = parkedCarRect(space)
+    grid.setRectBlocked(rect, parked.has(n))
+    if (parked.has(n) && touches(rect, playerPos)) {
+      Object.assign(playerPos, nearestStandable(grid, playerPos))
+    }
+  })
+  parkedSpots = parked
+})
+
 /** Whether someone standing at `pos` overlaps the tiles of `rect`. */
 function touches(rect: Rect, pos: Vec2): boolean {
   return [-PLAYER_RADIUS, PLAYER_RADIUS].some((ox) =>
@@ -93,6 +114,17 @@ export const customersAtCar = new Set<string>()
 
 /** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
 export const staffPos = new Map<string, Vec2>()
+
+/**
+ * Visitors' cars in the world, by their customer's id: where each one's
+ * centre is, which way it faces, and whether it's on the move. Owned by
+ * scene/DrivenCar. A moving car counts as people along its length, so walkers
+ * step around it.
+ */
+export const vehiclePos = new Map<string, { pos: Vec2; heading: number; moving: boolean }>()
+
+/** Points along a moving car, either side of its centre, that walkers keep clear of. */
+const CAR_BODY_OFFSETS = [-1, 0, 1]
 
 /**
  * Walkers the store doesn't know about: passers-by (scene/Pedestrians), a
@@ -125,6 +157,14 @@ export function crowdAgents(): Agent[] {
   for (const [id, pos] of customerPos) add(id, pos)
   for (const [id, pos] of staffPos) add(id, pos)
   for (const [id, pos] of ambientPos) add(id, pos)
+  for (const [id, car] of vehiclePos) {
+    if (!car.moving) continue
+    const fx = Math.sin(car.heading)
+    const fz = Math.cos(car.heading)
+    CAR_BODY_OFFSETS.forEach((d, i) =>
+      add(`${id}:car${i}`, { x: car.pos.x + fx * d, z: car.pos.z + fz * d }),
+    )
+  }
   return agents
 }
 

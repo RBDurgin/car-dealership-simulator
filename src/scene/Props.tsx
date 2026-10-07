@@ -22,6 +22,7 @@ import {
   DISPLAY_CARS,
   FURNITURE_SCALE,
   PROPS,
+  type CarModel,
   type Prop,
   type PropModel,
   type Rect,
@@ -380,6 +381,31 @@ function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps)
       ) : (
         body
       )}
+    </group>
+  )
+}
+
+/**
+ * A car's model on its own, centred on the origin and nose to +z, for a
+ * visitor's car on the move (scene/DrivenCar).
+ */
+export function CarBody({
+  model,
+  cleanliness,
+  condition,
+}: {
+  model: CarModel
+  cleanliness: number
+  condition: number
+}) {
+  return (
+    <group onPointerDown={swallowClick} onPointerUp={swallowClick}>
+      <Model
+        def={MODELS[model]}
+        footprint={{ w: 2, h: 3 }}
+        cleanliness={cleanliness}
+        condition={condition}
+      />
     </group>
   )
 }

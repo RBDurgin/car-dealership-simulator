@@ -70,6 +70,7 @@ const base: Customer = {
   handlerId: null,
   chairId: null,
   sellerId: null,
+  vehicle: null,
 }
 
 const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({

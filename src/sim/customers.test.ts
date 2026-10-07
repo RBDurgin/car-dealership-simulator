@@ -51,6 +51,7 @@ const base: Customer = {
   handlerId: null,
   chairId: null,
   sellerId: null,
+  vehicle: null,
 }
 
 const run = (c: Customer, ...events: CustomerEvent[]) =>
@@ -325,6 +326,27 @@ describe('reduceCustomer', () => {
     const waiting = run(second, { type: 'browsed', id: 'c1' })!
     expect(waiting.phase).toBe('waiting')
     expect(currentBrowseCarId(waiting)).toBeNull()
+  })
+
+  it('arrives by parking when they drove in, and drives off when they leave', () => {
+    const car = { model: 'van' as const, year: 2019, miles: 80_000, condition: 0.5, acquiredDay: 1 }
+    const driver = { ...base, vehicle: { car, spot: 1, parked: false } }
+    // Walking in isn't how a driver arrives.
+    expect(run(driver, { type: 'arrive', id: 'c1' })).toBe(driver)
+    const parked = run(driver, { type: 'parked', id: 'c1' })!
+    expect(parked.phase).toBe('browsing')
+    expect(parked.vehicle).toEqual({ car, spot: 1, parked: true })
+    expect(run(parked, { type: 'parked', id: 'c1' })).toBe(parked)
+    // Someone on foot can't park.
+    expect(run(base, { type: 'parked', id: 'c1' })).toBe(base)
+
+    const leaving = run(parked, { type: 'close' })!
+    expect(leaving.phase).toBe('leaving')
+    expect(run(leaving, { type: 'droveOff', id: 'c1' })).toBeNull()
+    expect(run(parked, { type: 'droveOff', id: 'c1' })).toBe(parked)
+    expect(run({ ...base, phase: 'leaving' }, { type: 'droveOff', id: 'c1' })?.phase).toBe(
+      'leaving',
+    )
   })
 
   it('goes straight to waiting with nothing to browse', () => {
@@ -633,6 +655,7 @@ describe('salespeople', () => {
       handlerId: null,
       chairId: null,
       sellerId: null,
+      vehicle: null,
     })
   })
 

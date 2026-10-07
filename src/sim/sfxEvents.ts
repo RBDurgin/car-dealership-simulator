@@ -23,15 +23,19 @@ export type SfxCue =
   | 'scuff'
   | 'shoo'
   | 'fanfare'
+  | 'engine'
+  | 'door'
 
 /**
- * Where a cue happens: a customer, an employee, a car or someone the store
+ * Where a cue happens: a customer, an employee, a car in stock, a visitor's
+ * car (by its customer's id, with the space it parks in) or someone the store
  * doesn't place (Nazma). UI cues have none.
  */
 export type SfxSubject =
   | { kind: 'customer'; id: string }
   | { kind: 'employee'; id: string }
   | { kind: 'car'; id: string }
+  | { kind: 'vehicle'; id: string; spot: number }
   | { kind: 'ambient'; id: string }
 
 export interface SfxEvent {
@@ -78,6 +82,8 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   scuff: 500,
   shoo: 1000,
   fanfare: 2000,
+  engine: 800,
+  door: 300,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -100,18 +106,31 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
 
   if (next.customers !== prev.customers) {
     const before = new Map(prev.customers.map((c) => [c.id, c]))
+    const after = new Set(next.customers.map((c) => c.id))
+    const car = (c: Customer, spot: number): SfxSubject => ({ kind: 'vehicle', id: c.id, spot })
     for (const c of next.customers) {
       const was = before.get(c.id)
       const subject: SfxSubject = { kind: 'customer', id: c.id }
       if (!was) {
         out.push({ cue: 'chime', subject })
+        // A driver is heard coming up the road.
+        if (c.vehicle) out.push({ cue: 'engine', subject: car(c, c.vehicle.spot) })
         continue
+      }
+      if (c.vehicle?.parked && !was.vehicle?.parked) {
+        out.push({ cue: 'door', subject: car(c, c.vehicle.spot) })
       }
       if (c.phase !== 'leaving' || was.phase === 'leaving') continue
       if (c.leaveReason === 'bought') out.push({ cue: 'sale', subject })
       else if (c.leaveReason === 'refused' || c.leaveReason === 'impatient') {
         out.push({ cue: 'thud', subject })
       }
+    }
+    // A driver got back in and is pulling away.
+    for (const c of prev.customers) {
+      if (after.has(c.id) || !c.vehicle || c.phase !== 'leaving') continue
+      if (c.vehicle.parked) out.push({ cue: 'door', subject: car(c, c.vehicle.spot) })
+      out.push({ cue: 'engine', subject: car(c, c.vehicle.spot) })
     }
   }
 

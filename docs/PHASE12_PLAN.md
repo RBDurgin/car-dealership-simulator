@@ -76,6 +76,12 @@ Every car on the lot today is new, ordered from the manufacturer. Phase 12 adds 
 - Sound: new `SfxCue`s `engine` and `door`, with the car as subject, played through `spatialMix`. Credit both in `public/audio/LICENSE.md`.
 - No per-frame store state. The store only gets `parked` and `droveOff` events.
 - Drive-ins come out of the day's planned arrivals, so weekday, weather and event traffic already applies to them.
+- **As built (2026-10-07):**
+  - The spaces are tx 26–31, tz 15–18, noses to the showroom, and the driver gets out at the tile behind the car (`doorTile`).
+  - About 35% of planned arrivals drive in (`DRIVE_IN_CHANCE`), rolled on their own `driveRng` so the rest of the day is unchanged. Passers-by who walk in never drive.
+  - `Customer.vehicle` also has `parked`. `parked` stands in for `arrive`, and `droveOff` for `despawn`.
+  - Changed from the plan: a moving car doesn't block its path on the grid, because walkers aiming for the gate would find no path and give up. Instead the car stops for anyone in front of it (`blockedAhead`) and pushes on after 4 seconds, and walkers step around it as crowd agents.
+  - `engine` and `door` are synthesized, like the spray and the fanfare.
 
 ### 12c: Sellers (we buy your car)
 
