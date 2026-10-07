@@ -49,6 +49,7 @@ import {
   buildInventory,
   dropSold,
   restock,
+  roundTo100,
   sellCar as markSold,
   type InventoryCar,
 } from '../sim/inventory'
@@ -91,6 +92,7 @@ import {
   claimedByOrder,
   deliver,
   ALL_SLOTS,
+  freeSlots,
   placeOrder,
   type Financing,
   type Order,
@@ -127,6 +129,7 @@ import { leadChoice } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { WEATHER_EFFECTS, waitingOutside, weatherOn, type Weather } from '../sim/weather'
 import type { TipId } from '../sim/tips'
+import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
 
 export interface MoveOrder {
@@ -277,6 +280,8 @@ interface GameState {
   payOff: (carId: string) => void
   /** Dev cheat: refills sold spaces, skipping any `canPlace` vetoes. */
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
+  /** Dev cheat: a random used car on the first free lot space `canPlace` allows. */
+  devUsedCar: (canPlace?: (car: InventoryCar) => boolean) => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
   /**
@@ -748,7 +753,8 @@ export const useGame = create<GameState>((set, get) => {
     }
     set({
       dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] },
-      monthSales: addSale(get().monthSales, car.msrp),
+      // Only new cars count toward the manufacturer's quota.
+      monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
     })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))
     return sale
@@ -1114,6 +1120,20 @@ export const useGame = create<GameState>((set, get) => {
         (car) => !claimedByOrder(car.rect, orders) && (canPlace?.(car) ?? true),
       )
       if (inventory !== get().inventory) set({ inventory })
+    },
+    devUsedCar: (canPlace) => {
+      const s = get()
+      const day = s.clock.day
+      const spec = rollUsedCar(createRng(Date.now()), day)
+      const id = nextUsedId(s.inventory, day)
+      const cars = freeSlots(s.inventory, s.orders)
+        .filter((slot) => slot.location === 'lot')
+        .map((slot) => usedStockCar(id, spec, slot, 0, day, 0.5))
+      const car = cars.find((c) => canPlace?.(c) ?? true)
+      if (!car) return notify('No free lot space for a used car.')
+      set({
+        inventory: [...s.inventory, { ...car, cost: roundTo100(stockValue(car, day)! * 0.9) }],
+      })
     },
     devSpawnCustomers: (n) => {
       const s = get()

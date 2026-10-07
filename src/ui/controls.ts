@@ -17,6 +17,7 @@ export const CONTROLS: [string, string][] = [
   ...(import.meta.env.DEV
     ? ([
         ['R', 'Restock (dev)'],
+        ['Shift R', 'Add a used car (dev)'],
         ['T', 'Game speed (dev)'],
       ] as [string, string][])
     : []),

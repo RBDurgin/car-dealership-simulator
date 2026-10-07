@@ -789,6 +789,12 @@ kbd {
 .stock-closeout {
   background: #b45309;
 }
+.stock-used {
+  background: #475569;
+}
+.stock-value {
+  color: #fca5a5;
+}
 .stock-missed {
   font-size: 12px;
   color: #fcd34d;

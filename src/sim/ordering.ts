@@ -195,6 +195,7 @@ export function deliver(orders: readonly Order[], rng: Rng, day: number): Invent
       cleanliness: 1,
       arrivedDay: day,
       floored: o.financing === 'floor',
+      used: null,
     }
   })
 }

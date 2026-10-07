@@ -19,6 +19,7 @@ import { CalendarTab } from './CalendarTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
 import { UpgradesTab } from './UpgradesTab'
+import { DAILY_DEPRECIATION, stockValue, usedTag } from '../sim/usedCars'
 
 const WHERE = { showroom: 'Showroom', lot: 'Lot' } as const
 
@@ -128,6 +129,7 @@ function OrderRow({ o }: { o: Order }) {
 function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: number }) {
   const short = cash < car.cost
   const rate = useGame(levelTuning).interest
+  const value = stockValue(car, day)
   return (
     <li className="stock-row">
       <div className="stock-who">
@@ -138,10 +140,19 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
               Floor plan · {formatMoney(Math.round(car.cost * FLOOR_PLAN_DAILY_RATE * rate))}/day
             </span>
           )}
+          {car.used && <span className="stock-badge stock-used">{usedTag(car.used)}</span>}
         </div>
         <div className="staff-meta">
           {WHERE[car.location]} · {daysOnLot(car, day)} · cost {formatMoney(car.cost)}
         </div>
+        {value !== null && (
+          <div
+            className="staff-meta stock-value"
+            title={`Used cars lose about ${(DAILY_DEPRECIATION * 100).toFixed(1)}% of their value a day.`}
+          >
+            Worth {formatMoney(value)} today ↓
+          </div>
+        )}
       </div>
       <div className="staff-wage price">{formatMoney(car.msrp)}</div>
       {car.floored && (

@@ -247,7 +247,7 @@ function BusinessTab({ touch, click }: TabProps) {
           price of every car sold that month. Nothing below {Math.round(HOLDBACK_FLOOR * 100)}% of
           the target, a little from there, {(HOLDBACK_RATE * 100).toFixed(2)}% for hitting it and{' '}
           {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
-          sale counts, whoever makes it.
+          new car sold counts, whoever makes it; used cars don&apos;t.
         </p>
       </section>
       <section>

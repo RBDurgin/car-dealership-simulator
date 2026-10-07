@@ -21,7 +21,7 @@ import { isTipId, type TipId } from './tips'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 11
+export const SAVE_VERSION = 12
 
 export interface SaveData {
   version: number
@@ -152,6 +152,13 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   9: (raw) => ({ ...raw, difficulty: 'medium' }),
   // v11: Easy's safety net and guided tips, neither used yet.
   10: (raw) => ({ ...raw, bailoutUsed: false, tipsSeen: [] }),
+  // v12: used cars. Every car before them was new.
+  11: (raw) => ({
+    ...raw,
+    inventory: Array.isArray(raw.inventory)
+      ? raw.inventory.map((c: unknown) => (isObject(c) ? { ...c, used: null } : c))
+      : raw.inventory,
+  }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -204,7 +211,20 @@ function isCar(v: unknown): boolean {
     isNumber(v.arrivedDay) &&
     typeof v.floored === 'boolean' &&
     isObject(v.rect) &&
-    (v.status === 'available' || v.status === 'sold')
+    (v.status === 'available' || v.status === 'sold') &&
+    (v.used === null || isUsedInfo(v.used))
+  )
+}
+
+function isUsedInfo(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.year) &&
+    isNumber(v.miles) &&
+    isNumber(v.condition) &&
+    v.condition >= 0 &&
+    v.condition <= 1 &&
+    isNumber(v.acquiredDay)
   )
 }
 

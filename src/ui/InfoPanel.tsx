@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
 import { conditionOf } from '../sim/cleanliness'
 import { ROLE_LABELS } from '../sim/staff'
+import { usedTag } from '../sim/usedCars'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 import { Skill } from './StaffPanel'
@@ -50,13 +51,14 @@ export function InfoPanel() {
     <Panel>
       <div className="info-kicker">{car.location}</div>
       <h2>{car.name}</h2>
+      {stock.used && <div className="customer-type">{usedTag(stock.used)}</div>}
       <dl>
         <dt>Color</dt>
         <dd>
           <span className="swatch" style={{ background: car.colorHex }} />
           {car.color}
         </dd>
-        <dt>MSRP</dt>
+        <dt>{stock.used ? 'Used price' : 'MSRP'}</dt>
         <dd className="price">{formatMoney(stock.msrp)}</dd>
         <dt>Your cost</dt>
         <dd className="price">{formatMoney(stock.cost)}</dd>

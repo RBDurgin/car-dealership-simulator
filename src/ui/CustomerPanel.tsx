@@ -7,6 +7,7 @@ import { carName } from '../sim/interactables'
 import type { InventoryCar } from '../sim/inventory'
 import { ASK_STEP, clampAsk, dealWarmth, suggestedAsk, type Warmth } from '../sim/negotiation'
 import { financeOnDuty } from '../sim/staff'
+import { usedTag } from '../sim/usedCars'
 import { levelTuning, sellerBonusFor, useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -136,8 +137,11 @@ export function CustomerPanel() {
       </p>
       <dl>
         <dt className="customer-car">Car</dt>
-        <dd className="customer-car">{carName(car.model)}</dd>
-        <dt>MSRP</dt>
+        <dd className="customer-car">
+          {carName(car.model)}
+          {car.used && ` (${usedTag(car.used)})`}
+        </dd>
+        <dt>{car.used ? 'Used price' : 'MSRP'}</dt>
         <dd className="price">{formatMoney(car.msrp)}</dd>
         <dt>Your cost</dt>
         <dd className="price">{formatMoney(car.cost)}</dd>

@@ -179,6 +179,22 @@ describe('selling to a customer', () => {
     expect(game().monthSales).toEqual({ count: 1, msrp: price })
   })
 
+  it("a used car's sale doesn't count toward the manufacturer's quota", () => {
+    const used = { year: 2020, miles: 70_000, condition: 0.6, acquiredDay: 1 }
+    useGame.setState({
+      inventory: game().inventory.map((c) => (c.id === 'lot-car-1' ? { ...c, used } : c)),
+    })
+    greetAndOffer()
+    game().requestAction('office-chair', 'closeDeal')
+    const id = game().activeAction!.id
+    game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
+    game().arriveAction(id)
+    game().completeAction(id)
+    expect(car('lot-car-1').status).toBe('sold')
+    expect(game().dayStats.sales).toHaveLength(1)
+    expect(game().monthSales).toEqual({ count: 0, msrp: 0 })
+  })
+
   it("won't close a deal without a buyer", () => {
     game().requestAction('office-chair', 'closeDeal')
     expect(game().activeAction).toBeNull()

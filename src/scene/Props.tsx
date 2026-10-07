@@ -112,6 +112,9 @@ const CLEAN_TINT = new Color('#ffffff')
 const DIRTY_TINT = new Color('#8c7a5e')
 const CLEAN_ROUGHNESS = 0.55
 const DIRTY_ROUGHNESS = 1
+/** A worn used car's paint fades toward this, by up to `MAX_FADE` for a wreck. */
+const FADED_TINT = new Color('#c9c4ba')
+const MAX_FADE = 0.5
 
 /** Calls `fn` with each of a model's own (single) materials. */
 function eachMaterial(object: Object3D, fn: (m: MeshStandardMaterial) => void): void {
@@ -121,16 +124,20 @@ function eachMaterial(object: Object3D, fn: (m: MeshStandardMaterial) => void): 
   })
 }
 
-/** Dulls a car's paint toward a dusty brown as it gets dirtier. */
-function useDirt(object: Object3D, cleanliness: number | undefined): void {
+/**
+ * Fades a worn used car's paint by its `condition` (1 for a new car), then
+ * dulls it toward a dusty brown as it gets dirtier.
+ */
+function useDirt(object: Object3D, cleanliness: number | undefined, condition = 1): void {
   useEffect(() => {
     if (cleanliness === undefined) return
     const dirt = 1 - cleanliness
+    const base = CLEAN_TINT.clone().lerp(FADED_TINT, (1 - condition) * MAX_FADE)
     eachMaterial(object, (m) => {
-      m.color.copy(CLEAN_TINT).lerp(DIRTY_TINT, dirt)
+      m.color.copy(base).lerp(DIRTY_TINT, dirt)
       m.roughness = CLEAN_ROUGHNESS + (DIRTY_ROUGHNESS - CLEAN_ROUGHNESS) * dirt
     })
-  }, [object, cleanliness])
+  }, [object, cleanliness, condition])
   // The materials are this copy's own: free them with it.
   const isCar = cleanliness !== undefined
   useEffect(() => {
@@ -152,18 +159,23 @@ function fitScale(size: Vector3, def: ModelDef, footprint: Footprint): number {
   return Math.min(def.scale, footprint.w / w, footprint.h / h)
 }
 
-/** A prop's model; cars pass their `cleanliness` to look as dirty as they are. */
+/**
+ * A prop's model; cars pass their `cleanliness` to look as dirty as they are,
+ * and used cars their `condition` to look as worn.
+ */
 function Model({
   def,
   footprint,
   cleanliness,
+  condition,
 }: {
   def: ModelDef
   footprint: Footprint
   cleanliness?: number
+  condition?: number
 }) {
   const { object, size } = useCenteredModel(def.url, cleanliness !== undefined)
-  useDirt(object, cleanliness)
+  useDirt(object, cleanliness, condition)
   return (
     <group rotation-y={def.yaw ?? 0} scale={fitScale(size, def, footprint)}>
       <primitive object={object} />
@@ -304,12 +316,15 @@ const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 interface PropViewProps {
   prop: Prop
   cleanliness?: number
+  /** A used car's condition, which fades its paint. */
+  condition?: number
   /** Its display platform is a turntable (the turntables upgrade). */
   turntable?: boolean
 }
 
-function PropView({ prop, cleanliness, turntable }: PropViewProps) {
-  const content = <PropContent prop={prop} cleanliness={cleanliness} turntable={turntable} />
+function PropView(props: PropViewProps) {
+  const { prop } = props
+  const content = <PropContent {...props} />
   return interactables.has(prop.id) ? (
     <Interactable id={prop.id}>{content}</Interactable>
   ) : (
@@ -319,7 +334,7 @@ function PropView({ prop, cleanliness, turntable }: PropViewProps) {
   )
 }
 
-function PropContent({ prop, cleanliness, turntable }: PropViewProps) {
+function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps) {
   const b = rectBounds(prop.rect)
   const turned = prop.facing % 2 === 1
   const y = (prop.elevation ?? 0) + (prop.platform ? PLATFORM_HEIGHT : 0)
@@ -332,6 +347,7 @@ function PropContent({ prop, cleanliness, turntable }: PropViewProps) {
           def={MODELS[prop.model]}
           footprint={turned ? { w: b.h, h: b.w } : { w: b.w, h: b.h }}
           cleanliness={cleanliness}
+          condition={condition}
         />
       )}
     </group>
@@ -467,7 +483,9 @@ function useDevRestockKey() {
   useEffect(() => {
     if (!import.meta.env.DEV) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyR' && !e.repeat) useGame.getState().devRestock(nobodyIn)
+      if (e.code !== 'KeyR' || e.repeat) return
+      if (e.shiftKey) useGame.getState().devUsedCar(nobodyIn)
+      else useGame.getState().devRestock(nobodyIn)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -488,7 +506,13 @@ function Cars({ turntables }: { turntables: boolean }) {
   return (
     <>
       {cars.map(({ prop, car }) => (
-        <PropView key={prop.id} prop={prop} cleanliness={car.cleanliness} turntable={turntables} />
+        <PropView
+          key={prop.id}
+          prop={prop}
+          cleanliness={car.cleanliness}
+          condition={car.used?.condition}
+          turntable={turntables}
+        />
       ))}
     </>
   )

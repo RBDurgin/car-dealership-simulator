@@ -10,6 +10,7 @@ import {
   type Rect,
 } from './layout'
 import type { Rng } from './rng'
+import type { UsedInfo } from './usedCars'
 
 export type CarStatus = 'available' | 'sold'
 export type CarLocation = 'showroom' | 'lot'
@@ -32,6 +33,8 @@ export interface InventoryCar {
   arrivedDay: number
   /** Bought on the floor plan: the bank is owed its cost until it's sold or paid off. */
   floored: boolean
+  /** A used car's year, miles and condition (see `sim/usedCars`), or null for a new one. */
+  used: UsedInfo | null
 }
 
 /** List price per model before per-car variation (trim, options). */
@@ -64,7 +67,7 @@ function rollCost(msrp: number, rng: Rng): number {
   return roundTo100(msrp * (min + rng.next() * (max - min)))
 }
 
-type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored'>
+type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used'>
 
 /**
  * Opening stock: the showroom displays plus the lot cars, priced from `rng`.
@@ -102,6 +105,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
     cost: rollCost(c.msrp, rng),
     arrivedDay: 1,
     floored: false,
+    used: null,
   }))
 }
 

@@ -206,6 +206,28 @@ describe('save data', () => {
     })
   })
 
+  it('upgrades a version 11 save: every car is new', () => {
+    const save = createSave(source(), 123)
+    const v11 = {
+      ...save,
+      version: 11,
+      inventory: save.inventory.map((car) => ({ ...car, used: undefined })),
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v11)))
+    expect(upgraded).toEqual(save)
+    expect(upgraded?.inventory.every((c) => c.used === null)).toBe(true)
+  })
+
+  it('keeps a used car, and rejects one whose condition is out of range', () => {
+    const used = { year: 2019, miles: 64_000, condition: 0.55, acquiredDay: 2 }
+    const base = source()
+    const inventory = base.inventory.map((c, i) => (i === 0 ? { ...c, used } : c))
+    const save = createSave({ ...base, inventory }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.inventory[0].used).toEqual(used)
+    const bad = inventory.map((c, i) => (i === 0 ? { ...c, used: { ...used, condition: 2 } } : c))
+    expect(parseSave({ ...save, inventory: bad })).toBeNull()
+  })
+
   it('keeps the safety net and tips seen, and rejects a tip it doesn’t know', () => {
     const save = createSave({ ...source(), bailoutUsed: true, tipsSeen: ['wash', 'nazma'] }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))).toMatchObject({
