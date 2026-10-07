@@ -148,7 +148,9 @@ describe('buying their car', () => {
       sellerName: p.sellerName,
       price: 8_000,
       value,
+      trade: false,
     })
+    expect(boughtRecord(p, 3, true).trade).toBe(true)
     expect(boughtSpend([record, record])).toBe(16_000)
   })
 })

@@ -231,16 +231,16 @@ function update(
  * store hears `parked` once the driver gets out. Once they've got back in
  * (`droveOff`, from scene/Customers) it backs out and drives off the way it
  * came. A car we bought stays in its space until it goes into stock at
- * closing, and a seller's car can be clicked to appraise. A moving car waits
+ * closing, and a seller's car (or a trade-in) can be clicked to appraise. A moving car waits
  * for anyone in front of it; walkers step around it through `vehiclePos`. Re-renders only when a car appears or leaves.
  */
 export function DrivenCars() {
   const [ids, setIds] = useState<string[]>([])
-  // A seller's car can be clicked to appraise while they're waiting by it.
+  // A seller's car, or a trade-in, can be clicked to appraise while they're on the lot.
   const appraisable = useGame(
     useShallow((s) =>
       s.customers
-        .filter((c) => c.selling && c.vehicle?.parked && c.phase !== 'leaving')
+        .filter((c) => (c.selling || c.trade) && c.vehicle?.parked && c.phase !== 'leaving')
         .map((c) => c.id),
     ),
   )

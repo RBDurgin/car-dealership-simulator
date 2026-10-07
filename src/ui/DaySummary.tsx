@@ -47,6 +47,7 @@ export function DaySummary() {
   const sources = salesBySource(stats)
   // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
+  const traded = stats.sales.some((s) => s.trade)
 
   return (
     <div className="modal-backdrop">
@@ -125,7 +126,10 @@ export function DaySummary() {
                 <ul className="summary-bought">
                   {stats.bought.map((b, i) => (
                     <li key={i}>
-                      {b.year} {carName(b.model)} from {b.sellerName} for {formatMoney(b.price)}{' '}
+                      {b.year} {carName(b.model)}{' '}
+                      {b.trade
+                        ? `taken in trade from ${b.sellerName} at ${formatMoney(b.price)}`
+                        : `from ${b.sellerName} for ${formatMoney(b.price)}`}{' '}
                       <span className="muted">(worth {formatMoney(b.value)})</span>
                     </li>
                   ))}
@@ -246,6 +250,9 @@ export function DaySummary() {
                 <th>Off MSRP</th>
                 <th>Gross</th>
                 <th>Commission</th>
+                {traded && (
+                  <th title="Trade allowances over (or under) the cars' value">Trades ±</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -257,6 +264,11 @@ export function DaySummary() {
                   <td>{(averageDiscount(t) * 100).toFixed(1)}%</td>
                   <td className="price">{formatMoney(t.gross)}</td>
                   <td className="price">{formatMoney(t.commission)}</td>
+                  {traded && (
+                    <td className={t.tradeOver > 0 ? 'price margin-loss' : 'price'}>
+                      {t.trades > 0 ? formatMoney(t.tradeOver) : '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -270,6 +282,12 @@ export function DaySummary() {
                 {s.customerName} <span className="price">{formatMoney(s.price)}</span>
                 {s.soldBy && <span className="muted"> · sold by {s.soldBy}</span>}
                 {s.signedBy && <span className="muted"> · signed by {s.signedBy}</span>}
+                {s.trade && (
+                  <span className="muted">
+                    {' '}
+                    · {carName(s.trade.model)} in trade at {formatMoney(s.trade.allowance)}
+                  </span>
+                )}
               </li>
             ))}
           </ul>

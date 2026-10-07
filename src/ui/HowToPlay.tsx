@@ -92,15 +92,16 @@ function BasicsTab({ touch, click }: TabProps) {
           customers come in, they wait longer and are readier to buy. Nazma turns up less often and
           not before day {TUNING.easy.firstNazmaDay}, the quota is {percentOff(TUNING.easy.quota)}{' '}
           lower, the owner pays {formatMoney(ownerBonus(TUNING.easy.ownerBonus))} for a goal met and
-          unhappy customers cost less reputation. Sellers hope for a little less, and your estimates
-          of a used car&apos;s value are closer.
+          unhappy customers cost less reputation. Sellers hope for a little less, buyers expect a
+          little less for their trade-ins, and your estimates of a used car&apos;s value are closer.
         </p>
         <p>
           Easy also helps you learn. While you haggle, a chip shows how warm the customer (or a
-          seller) is to the price on the stepper: <b>hot</b> (likely to take it), <b>warm</b>{' '}
-          (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day ends in the red,
-          the bank tops your cash back up to $0; it only does this once. And tips pop up the first
-          time things happen, such as a counter-offer, a dirty car or a visit from Nazma.
+          seller) is to the numbers on the steppers, after any trade-in: <b>hot</b> (likely to take
+          it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day
+          ends in the red, the bank tops your cash back up to $0; it only does this once. And tips
+          pop up the first time things happen, such as a counter-offer, a dirty car or a visit from
+          Nazma.
         </p>
         <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
@@ -110,7 +111,8 @@ function BasicsTab({ touch, click }: TabProps) {
           from day {TUNING.hard.firstNazmaDay} and steals and poaches more, the quota is{' '}
           {percentOn(TUNING.hard.quota)} higher, the owner pays only{' '}
           {formatMoney(ownerBonus(TUNING.hard.ownerBonus))} and reputation is harder to win and
-          easier to lose. Sellers want more for their cars, and your estimates are rougher.
+          easier to lose. Sellers want more for their cars, buyers want more for their trade-ins,
+          and your estimates are rougher.
         </p>
       </section>
       <section>
@@ -119,8 +121,8 @@ function BasicsTab({ touch, click }: TabProps) {
           Doors open at 9:00 and close at 18:00. Customers browse, then wait for help and lose
           patience if nobody comes. Some are passers-by off the sidewalk, and some drive in and park
           in the three customer spaces by the showroom; they walk back to their car to leave. Some
-          drivers come to sell you their car instead (see <b>Selling</b>). Each day ends with a
-          summary, and your progress is saved then.
+          drivers come to sell you their car instead, and some bring one to trade in (see{' '}
+          <b>Selling</b>). Each day ends with a summary, and your progress is saved then.
         </p>
       </section>
       <section>
@@ -199,14 +201,35 @@ function SellingTab({ click }: TabProps) {
         <p>
           The haggle runs the other way round: open under your estimate, and if they want more they
           name their price; <b>Hold</b>, <b>Split the difference</b> or <b>Accept</b>. A lowball may
-          insult them into leaving. The panel shows your margin against your estimate. Your
-          salespeople leave sellers to you.
+          insult them into leaving. The panel shows your margin against your estimate. Salespeople
+          buy from sellers too when there&apos;s room, never paying over their own appraisal.
         </p>
         <p>
           Buying needs a free lot space and the cash, paid on the spot. The car stays in customer
           parking until closing, then goes on the lot as a used car costing what you paid. The
           summary lists what you bought and what each car was really worth; the spend is stock, not
           an expense, so it isn&apos;t taken off the day&apos;s net.
+        </p>
+      </section>
+      <section>
+        <h3>Trade-ins</h3>
+        <p>
+          Some drivers who come to buy want to trade their car in. The customer panel shows it and
+          your estimate, and you can {click.toLowerCase()} their parked car to <b>Appraise</b> it
+          too. The haggle then has two numbers: the price, and the <i>allowance</i> you give for
+          their car, set with its own − and +. They judge what they&apos;d pay after the trade, so
+          their counters are in those terms. An allowance far under what they hoped for offends them
+          and wastes a round; a generous allowance with a firm price pleases regulars and couples
+          most.
+        </p>
+        <p>
+          When the deal is signed you take the price less the allowance, and their car goes on the
+          lot at closing, costing the allowance. Over-allowing isn&apos;t a loss on the day: it
+          shows up as a thin gross when that used car sells. With no free lot space you can&apos;t
+          take the trade, and they&apos;re less likely to buy. Salespeople set allowances by their
+          skill: green ones give buyers what they ask, seasoned ones start low and stay under their
+          appraisal. The summary&apos;s seller table shows how far over or under value each one
+          allowed.
         </p>
       </section>
       <section>
@@ -379,8 +402,8 @@ function PeopleTab({ touch, click }: TabProps) {
             finance, for {Math.round(SALES_COMMISSION * 100)}% of the gross (at least{' '}
             {formatMoney(MIN_COMMISSION)}). Seasoned ones hold nearer MSRP, get more yeses and greet
             customers on arrival; green ones open lower and give in sooner. None sell below cost.
-            They leave alone a customer you&apos;re walking to, and a tick marks someone
-            they&apos;re helping.
+            They take trade-ins and buy from sellers too (see <b>Selling</b>). They leave alone a
+            customer you&apos;re walking to, and a tick marks someone they&apos;re helping.
           </li>
           <li>
             A <b>receptionist</b> keeps waiting customers patient.

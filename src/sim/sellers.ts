@@ -4,7 +4,7 @@ import { drivenCleanliness } from './driving'
 import { roundTo100, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { freeSlots, type Order, type Slot } from './ordering'
-import type { Rng } from './rng'
+import { createRng, hashSeed, type Rng } from './rng'
 import {
   appraisalNoise,
   estimateValue,
@@ -100,7 +100,7 @@ export function assignSellers(
   )
 }
 
-/** A seller's car as the player sizes it up properly, at `noise` × the player's skill. */
+/** A driver's car (a seller's, or a trade-in) sized up properly, at `noise` × an appraiser of `skill`. */
 export function appraiseFor(
   c: Customer,
   day: number,
@@ -110,6 +110,19 @@ export function appraiseFor(
 ): Appraisal | null {
   const car = c.vehicle?.car
   return car ? estimateValue(car.model, car, day, appraisalNoise(skill) * noise, rng) : null
+}
+
+/**
+ * Salesperson `employeeId`'s (of `skill`) appraisal of customer `c`'s car on
+ * `day`, the same every time they're asked, or null if there's no car.
+ */
+export function staffAppraisal(
+  c: Customer,
+  employeeId: string,
+  day: number,
+  skill: number,
+): Appraisal | null {
+  return appraiseFor(c, day, skill, createRng(hashSeed(`${c.id}:${employeeId}:appraise`)))
 }
 
 /** The low and high ends of an estimate. */
@@ -141,6 +154,8 @@ export interface BoughtCar {
   price: number
   /** What it was really worth that day. */
   value: number
+  /** Taken in trade on a sale (at its allowance), rather than bought for cash. */
+  trade: boolean
 }
 
 /** What buying needs to know about the dealership. */
@@ -197,9 +212,13 @@ export function purchaseOf(
   }
 }
 
-/** For the summary: what was bought, for how much and what it was worth on `day`. */
-export function boughtRecord(p: Purchase, day: number): BoughtCar {
+/**
+ * For the summary: what was bought (or, `trade`, taken in trade), for how
+ * much and what it was worth on `day`.
+ */
+export function boughtRecord(p: Purchase, day: number, trade = false): BoughtCar {
   return {
+    trade,
     model: p.car.model,
     year: p.car.year,
     sellerName: p.sellerName,
@@ -213,7 +232,7 @@ export function stockPurchases(purchases: readonly Purchase[], day: number): Inv
   return purchases.map((p) => usedStockCar(p.id, p.car, p.slot, p.price, day, p.cleanliness))
 }
 
-/** What the day's used-car purchases cost. */
+/** What the day's used-car purchases cost, trade-ins at their allowance. */
 export function boughtSpend(bought: readonly BoughtCar[]): number {
   return bought.reduce((sum, b) => sum + b.price, 0)
 }

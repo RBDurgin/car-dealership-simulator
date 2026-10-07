@@ -41,6 +41,8 @@ export interface SalesContext {
   exclude?: ReadonlySet<string>
   /** Browsing customers who are standing at a car, looking it over. */
   atCar?: ReadonlySet<string>
+  /** There's lot space and cash to buy a seller's car; otherwise sellers are left alone. */
+  buying?: boolean
 }
 
 const IDLE: SalesTask = { kind: 'idle' }
@@ -48,20 +50,22 @@ const IDLE: SalesTask = { kind: 'idle' }
 /**
  * The customer a salesperson should go to: the one nobody is helping who has
  * the least patience left (waiting customers before browsing ones, who don't
- * lose patience), earliest on the lot on a tie. Skips sellers, anyone in `exclude`,
- * and browsing customers that `canGreetBrowsing` rules out.
+ * lose patience), earliest on the lot on a tie. Skips anyone in `exclude`,
+ * browsing customers that `canGreetBrowsing` rules out, and sellers unless
+ * we're `buying`.
  */
 export function pickSalesCustomer(
   customers: readonly Customer[],
   exclude: ReadonlySet<string> = new Set(),
   canGreetBrowsing: (c: Customer) => boolean = () => true,
+  buying = true,
 ): Customer | null {
   let best: Customer | null = null
   for (const c of customers) {
     if (c.phase !== 'browsing' && c.phase !== 'waiting') continue
     if (c.handlerId !== null || exclude.has(c.id)) continue
-    // Sellers are the player's to buy from.
-    if (c.selling) continue
+    // No room or cash for their car.
+    if (c.selling && !buying) continue
     if (c.phase === 'browsing' && !canGreetBrowsing(c)) continue
     if (!best || c.patienceLeft < best.patienceLeft) best = c
   }
@@ -128,7 +132,12 @@ export function nextSalesTask(
   if (ctx.playerTargetId) exclude.add(ctx.playerTargetId)
   // Newer salespeople let customers get to a car before going over.
   const early = e.skill >= EARLY_GREET_SKILL
-  const next = pickSalesCustomer(customers, exclude, (c) => early || !!ctx.atCar?.has(c.id))
+  const next = pickSalesCustomer(
+    customers,
+    exclude,
+    (c) => early || !!ctx.atCar?.has(c.id),
+    ctx.buying ?? true,
+  )
   return next ? { kind: 'greet', customerId: next.id } : IDLE
 }
 

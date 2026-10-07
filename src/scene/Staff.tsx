@@ -9,6 +9,7 @@ import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { GUARD_PATROL_TILES, PORTER_STANDBY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
 import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
+import { buyBlocker } from '../sim/sellers'
 import {
   financeSeconds,
   GUARD_CHASE_SPEED,
@@ -204,6 +205,7 @@ function updateSales(
     playerTargetId: game.activeAction?.targetId ?? null,
     exclude: w.unreachableIds,
     atCar: customersAtCar,
+    buying: !buyBlocker(game),
   })
   if (
     task.kind === 'greet' &&

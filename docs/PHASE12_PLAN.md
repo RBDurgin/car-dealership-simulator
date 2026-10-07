@@ -1,6 +1,6 @@
 # Phase 12 Plan: Trade-ins and Used Cars
 
-**Status:** planned 2026-10-07. 12c done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
+**Status:** planned 2026-10-07. 12c done 2026-10-07. 12d done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
 
 ## Context
 
@@ -139,6 +139,15 @@ Every car on the lot today is new, ordered from the manufacturer. Phase 12 adds 
   - Add `Tuning.tradeHope` (× the allowance a buyer hopes for: Easy 0.95, Medium 1, Hard 1.05).
   - On Easy, the deal hint judges the net (price − allowance).
   - A first-time `TipId` `tradeIn` the first time a buyer brings a trade.
+
+- **As built (2026-10-07):**
+  - `sim/tradeIns.ts`: 35% of drivers who aren't sellers have a trade (`TRADE_CHANCE`), hoping for 5–15% over its value (× `Tuning.tradeHope`). It starts with a glance estimate, and **Appraise** works on their parked car as for a seller.
+  - The haggle is in nets: `respondToAsk(…, allowance)` weighs `price − allowance` against `hopePrice − trade.hope`, and with a trade `Haggle.lastAsk`/`counter` are nets (`Haggle.allowance` keeps the last allowance). The customer counters with a net ("…after my trade").
+  - An allowance under 80% of their hope (`TRADE_INSULT`) gets a counter that costs an extra round (`respond`'s `insulted`), or a walk on the last round. At or over their hope, `TRADE_PRIDE` adds to the odds (regulars +8%, couples +10%). No lot space: the trade is left out and `NO_TRADE_PENALTY` (15%) comes off the odds.
+  - The player opens at 95% of their estimate (`suggestedAllowance`). The panel has an allowance stepper, "They pay after trade" and an estimated trade margin.
+  - At signing, the trade takes a lot space through `purchaseOf` (no space left: the deal falls through). Cash comes in as price − allowance, `Sale.trade` records it, `DayStats.bought` lists it with `trade: true`, and the buyer walks off down the sidewalk (`signed`'s `traded` clears `vehicle`).
+  - Staff: `staffAllowance` (skill ≤ 2 gives the buyer's hope; better ones open 3% per skill over 2 under their appraisal and come up half the gap a round, never past it). `staffBuyOffer` opens 5–15% under the appraisal, never offers over it. A salesperson's appraisal is seeded by customer and employee (`staffAppraisal`). They take sellers only while `buyBlocker` is clear (`SalesContext.buying`).
+  - The per-seller summary table has a "Trades ±" column (allowance − value), shown once a trade was taken.
 
 ### 12e: Used-car buyers and aging
 

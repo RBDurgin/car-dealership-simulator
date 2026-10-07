@@ -40,6 +40,7 @@ const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   sellerId: null,
   vehicle: null,
   selling: null,
+  trade: null,
   ...extra,
 })
 
@@ -87,9 +88,11 @@ describe('pickSalesCustomer', () => {
     expect(pickSalesCustomer(list)).toBeNull()
   })
 
-  it('leaves sellers to the player', () => {
+  it('takes sellers like anyone else, unless there is no room or cash to buy', () => {
     const selling = { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false }
-    expect(pickSalesCustomer([shopper('a', { patienceLeft: 5, selling })])).toBeNull()
+    const list = [shopper('a', { patienceLeft: 5, selling })]
+    expect(pickSalesCustomer(list)?.id).toBe('a')
+    expect(pickSalesCustomer(list, new Set(), () => true, false)).toBeNull()
   })
 })
 

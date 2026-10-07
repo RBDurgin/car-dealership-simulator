@@ -8,14 +8,16 @@ import type { InventoryCar } from '../sim/inventory'
 import {
   ASK_STEP,
   buyWarmth,
+  clampAllowance,
   clampAsk,
   clampBuy,
   dealWarmth,
+  suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
   type Warmth,
 } from '../sim/negotiation'
-import { buyBlocker, estimateRange, SELLER_HINTS } from '../sim/sellers'
+import { buyBlocker, estimateRange, lotSlotFor, SELLER_HINTS } from '../sim/sellers'
 import { financeOnDuty } from '../sim/staff'
 import { usedTag } from '../sim/usedCars'
 import { levelTuning, sellerBonusFor, useGame } from '../state/store'
@@ -38,10 +40,20 @@ const WARMTH_LABELS: Record<Warmth, string> = {
   cold: 'Cold: likely to walk',
 }
 
-/** Easy's deal hint: how the customer would take an ask of `price`. */
-function WarmthChip({ c, car, price }: { c: Customer; car: InventoryCar; price: number }) {
+/** Easy's deal hint: how the customer would take an ask of `price` (with `allowance` for their trade). */
+function WarmthChip({
+  c,
+  car,
+  price,
+  allowance,
+}: {
+  c: Customer
+  car: InventoryCar
+  price: number
+  allowance?: number
+}) {
   const bonus = useGame((s) => sellerBonusFor(s, c))
-  const warmth = dealWarmth(c, car, price, bonus)
+  const warmth = dealWarmth(c, car, price, bonus, allowance)
   return (
     <div className={`warmth-chip warmth-${warmth}`} role="status">
       {WARMTH_LABELS[warmth]}
@@ -49,44 +61,82 @@ function WarmthChip({ c, car, price }: { c: Customer; car: InventoryCar; price: 
   )
 }
 
+/** What we'd make on their trade-in at `allowance`, against our estimate of its value. */
+function TradeMargin({ c, allowance }: { c: Customer; allowance: number }) {
+  const margin = (c.trade?.estimate.estimate ?? 0) - allowance
+  return (
+    <>
+      <dt>Est. trade margin</dt>
+      <dd className={margin < 0 ? 'price margin-loss' : 'price'}>{formatMoney(margin)}</dd>
+    </>
+  )
+}
+
 /**
  * Naming a price: MSRP or 3% off to open; later, holding, splitting the
  * difference or taking their counter. A stepper sets any price in between.
- * Remounted each round (`key`), so the stepper starts at the suggested ask.
- * On Easy a chip shows how warm they are to the stepper's price.
+ * With a trade-in (and room on the lot for it) a second stepper sets the
+ * allowance, and the haggle is over what they pay after it: their counter
+ * and our last ask are nets, and the buttons keep the allowance as set.
+ * Remounted each round (`key`), so the steppers start at the suggestions.
+ * On Easy a chip shows how warm they are to the steppers' numbers.
  */
 function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
-  const [price, setPrice] = useState(() => suggestedAsk(c, car))
+  const room = useGame((s) => !!lotSlotFor(s))
+  const trading = !!c.trade && room
+  const [allowance, setAllowance] = useState(() => suggestedAllowance(c))
+  const allow = trading ? allowance : undefined
+  const [rawPrice, setPrice] = useState(() => suggestedAsk(c, car, allow))
+  const price = clampAsk(c, car, rawPrice, allow)
   const hint = useGame((s) => levelTuning(s).dealHint)
   const game = useGame.getState()
-  const ask = (p: number) => game.ask(p)
-  const step = (d: number) => setPrice((p) => clampAsk(c, car, p + d))
+  const ask = (p: number) => game.ask(p, allow)
+  const step = (d: number) => setPrice(clampAsk(c, car, price + d, allow))
+  const stepAllowance = (d: number) => setAllowance((a) => clampAllowance(c, a + d))
   const h = c.haggle
+  // The haggle's numbers are nets with a trade: add the allowance back for a price.
+  const add = allow ?? 0
+  const net = trading && h?.allowance !== undefined
+  const after = net ? ' after trade' : ''
   return (
     <>
       <dl className="haggle-figures">
         {h && (
           <>
             {/* Hidden on compact screens: the Hold button names it. */}
-            <dt className="haggle-last">Your last ask</dt>
+            <dt className="haggle-last">Your last ask{after}</dt>
             <dd className="price haggle-last">{formatMoney(h.lastAsk)}</dd>
-            <dt>Their counter</dt>
+            <dt>Their counter{after}</dt>
             <dd className="price">{formatMoney(h.counter)}</dd>
           </>
         )}
         <Margin car={car} price={price} />
+        {trading && (
+          <>
+            <TradeMargin c={c} allowance={allowance} />
+            <dt>They pay after trade</dt>
+            <dd className="price">{formatMoney(price - allowance)}</dd>
+          </>
+        )}
       </dl>
+      {c.trade && !room && (
+        <div className="status-hint">
+          No room on the lot for their trade, so they&apos;re less keen.
+        </div>
+      )}
       <div className="customer-actions">
         {h ? (
           <>
-            <button className="btn" onClick={() => ask(h.lastAsk)}>
+            <button className="btn" onClick={() => ask(h.lastAsk + (net ? add : 0))}>
               Hold at {formatMoney(h.lastAsk)}
+              {after}
             </button>
-            <button className="btn btn-primary" onClick={() => ask(suggestedAsk(c, car))}>
+            <button className="btn btn-primary" onClick={() => ask(suggestedAsk(c, car, allow))}>
               Split the difference
             </button>
-            <button className="btn" onClick={() => ask(h.counter)}>
+            <button className="btn" onClick={() => ask(h.counter + (net ? add : 0))}>
               Accept {formatMoney(h.counter)}
+              {after}
             </button>
           </>
         ) : (
@@ -100,7 +150,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           </>
         )}
       </div>
-      {hint && <WarmthChip c={c} car={car} price={price} />}
+      {hint && <WarmthChip c={c} car={car} price={price} allowance={allow} />}
       <div className="haggle-stepper">
         <button className="btn" aria-label="Lower" onClick={() => step(-ASK_STEP)}>
           −
@@ -112,6 +162,25 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           +
         </button>
       </div>
+      {trading && (
+        <div className="haggle-stepper">
+          <button
+            className="btn"
+            aria-label="Lower allowance"
+            onClick={() => stepAllowance(-ASK_STEP)}
+          >
+            −
+          </button>
+          <span className="haggle-allowance">Allow {formatMoney(allowance)} for trade</span>
+          <button
+            className="btn"
+            aria-label="Raise allowance"
+            onClick={() => stepAllowance(ASK_STEP)}
+          >
+            +
+          </button>
+        </div>
+      )}
       <div className="customer-actions">
         <button className="btn btn-small" onClick={() => game.walkAway()}>
           Walk away
@@ -269,6 +338,24 @@ function SellerPanel({ c }: { c: Customer }) {
   )
 }
 
+/** A buyer's trade-in: the car, and what we make of its value (closer once appraised). */
+function TradeFigures({ c }: { c: Customer }) {
+  const car = c.vehicle!.car
+  const { low, high } = estimateRange(c.trade!.estimate)
+  return (
+    <>
+      <dt className="customer-car">Trade-in</dt>
+      <dd className="customer-car">
+        {carName(car.model)} ({usedTag(car)})
+      </dd>
+      <dt>{c.trade!.appraised ? 'Appraised' : 'At a glance'}</dt>
+      <dd className="price">
+        {formatMoney(low)}–{formatMoney(high)}
+      </dd>
+    </>
+  )
+}
+
 /**
  * The customer the player is dealing with: what kind of shopper they are, the
  * car they want, its price, roughly what they want to spend, and where the
@@ -304,7 +391,13 @@ export function CustomerPanel() {
         <dd className="price">{formatMoney(car.msrp)}</dd>
         <dt>Your cost</dt>
         <dd className="price">{formatMoney(car.cost)}</dd>
+        {c.trade && c.vehicle && <TradeFigures c={c} />}
       </dl>
+      {c.trade && c.vehicle && !c.trade.appraised && c.phase === 'talking' && (
+        <div className="status-hint">
+          {touch ? 'Tap' : 'Click'} their car and choose <b>Appraise</b> for a closer estimate.
+        </div>
+      )}
       {c.phase === 'talking' && <Haggle key={c.haggle?.round ?? 1} c={c} car={car} />}
       {c.phase === 'considering' && c.offer && (
         <>
@@ -312,6 +405,12 @@ export function CustomerPanel() {
             <dt>You asked</dt>
             <dd className="price">{formatMoney(c.offer.price)}</dd>
             <Margin car={car} price={c.offer.price} />
+            {c.offer.allowance !== undefined && (
+              <>
+                <dt>Allowed for trade</dt>
+                <dd className="price">{formatMoney(c.offer.allowance)}</dd>
+              </>
+            )}
           </dl>
           <div className="customer-status">Thinking it over…</div>
         </>

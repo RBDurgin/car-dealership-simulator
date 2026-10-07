@@ -51,6 +51,7 @@ const seller = (extra: Partial<Customer> = {}): Customer => ({
   sellerId: null,
   vehicle: { car: CAR, spot: 1, parked: true },
   selling: { hope: 11_000, estimate: { estimate: 10_000, margin: 2_500 }, appraised: false },
+  trade: null,
   ...extra,
 })
 
@@ -163,11 +164,6 @@ describe('buying a car from a seller', () => {
     offer(9_000)
     expect(game().notice?.text).toBe('No room on the lot.')
     expect(answer.offers).toEqual([])
-  })
-
-  it('staff leave sellers alone', () => {
-    expect(game().staffClaim('nobody', 'seller-a')).toBe(false)
-    expect(customer()!.handlerId).toBeNull()
   })
 
   it('the car goes into stock when the day is settled, costing what we paid', () => {

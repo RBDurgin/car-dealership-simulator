@@ -11,7 +11,7 @@ import type { OwnerVisit } from './owner'
  * shows the tip and marks it seen.
  */
 export type TipId =
-  'wash' | 'haggle' | 'restock' | 'missed' | 'nazma' | 'owner' | 'lowCash' | 'seller'
+  'wash' | 'haggle' | 'restock' | 'missed' | 'nazma' | 'owner' | 'lowCash' | 'seller' | 'tradeIn'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -30,6 +30,8 @@ export const TIPS: Record<TipId, string> = {
     'Someone left because none of the body types they wanted was in stock. Keep a mix of models to catch more buyers.',
   wash: 'Dirty cars sell less often. Go up to one and choose Wash car, or hire a lot porter to keep them clean.',
   seller: 'A seller drove in wanting cash for their car. Appraise it before you make an offer.',
+  tradeIn:
+    'This buyer brought a car to trade. Appraise it, then set an allowance as you haggle. They weigh what they pay after the trade, and a lowball allowance offends them.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -85,11 +87,12 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     }
     case 'missed':
       return missedCount(next) > missedCount(prev)
-    case 'seller': {
+    case 'seller':
+    case 'tradeIn': {
       if (next.customers === prev.customers) return false
       return next.customers.some(
         (c) =>
-          c.selling &&
+          (id === 'seller' ? c.selling : c.trade) &&
           c.vehicle?.parked &&
           !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
       )
