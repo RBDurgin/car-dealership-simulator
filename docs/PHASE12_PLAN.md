@@ -1,6 +1,6 @@
 # Phase 12 Plan: Trade-ins and Used Cars
 
-**Status:** planned 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
+**Status:** planned 2026-10-07. 12c done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
 
 ## Context
 
