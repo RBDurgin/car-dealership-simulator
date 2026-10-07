@@ -2,7 +2,7 @@ import { grossProfit, revenue, type DayStats } from './deal'
 import { carName } from './interactables'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
-import { MAX_DAILY_CHANGE, reputationChange } from './reputation'
+import { MAX_DAILY_CHANGE, reputationChange, type RepScale } from './reputation'
 import { createRng, type Rng } from './rng'
 
 /**
@@ -115,10 +115,12 @@ export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string
 /**
  * How far along the day is: `current` toward `target` (for no walk-outs, the
  * walk-outs so far against none allowed), and whether it's met as things stand.
+ * A reputation goal counts the change at the level's `rep` scale.
  */
 export function goalProgress(
   goal: OwnerGoal,
   stats: DayStats,
+  rep?: RepScale,
 ): { current: number; target: number; met: boolean } {
   switch (goal.kind) {
     case 'sales': {
@@ -140,7 +142,7 @@ export function goalProgress(
       return { current, target: goal.amount, met: current >= goal.amount }
     }
     case 'reputation': {
-      const current = reputationChange(stats)
+      const current = reputationChange(stats, rep)
       return { current, target: goal.points, met: current >= goal.points }
     }
   }
@@ -154,9 +156,23 @@ const GRUMBLES = [
   'My accountant is going to hear about this, and so are you.',
 ]
 
-/** Judges the day against the owner's goal at closing. */
-export function judgeDay(goal: OwnerGoal, stats: DayStats, day: number): OwnerVerdict {
-  const { met } = goalProgress(goal, stats)
+/**
+ * Judges the day against the owner's goal at closing. The level scales the
+ * bonus (`bonus` × `OWNER_BONUS`, rounded to $100) and reputation (`rep`).
+ */
+export function judgeDay(
+  goal: OwnerGoal,
+  stats: DayStats,
+  day: number,
+  bonus = 1,
+  rep?: RepScale,
+): OwnerVerdict {
+  const { met } = goalProgress(goal, stats, rep)
   const lines = met ? PRAISE : GRUMBLES
-  return { goal, met, bonus: met ? OWNER_BONUS : 0, line: lines[day % lines.length] }
+  return { goal, met, bonus: met ? ownerBonus(bonus) : 0, line: lines[day % lines.length] }
+}
+
+/** The bonus for a goal met at the level's `factor`, rounded to $100. */
+export function ownerBonus(factor = 1): number {
+  return Math.round((OWNER_BONUS * factor) / 100) * 100
 }

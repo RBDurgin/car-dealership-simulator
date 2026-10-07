@@ -12,8 +12,8 @@ import { CLOSEOUT_REBATE, EVENTS } from '../sim/events'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
-import { FIRST_NAZMA_DAY, FIRST_THEFT_DAY } from '../sim/nazma'
-import { OWNER_BONUS } from '../sim/owner'
+import { FIRST_THEFT_DAY } from '../sim/nazma'
+import { ownerBonus } from '../sim/owner'
 import {
   HOLDBACK_FLOOR,
   HOLDBACK_RATE,
@@ -82,12 +82,26 @@ function BasicsTab({ touch, click }: TabProps) {
         <h3>Difficulty</h3>
         <p>
           Pick <b>Easy</b>, <b>Medium</b> or <b>Hard</b> when you start a new game; it stays for
-          that game. Easy starts you with {formatMoney(TUNING.easy.startingCash)}, cars cost{' '}
+          that game. Medium starts you with {formatMoney(TUNING.medium.startingCash)}.
+        </p>
+        <p>
+          <b>Easy</b> starts with {formatMoney(TUNING.easy.startingCash)}, cars cost{' '}
           {percentOff(TUNING.easy.invoice)} less to order and floor plan interest is{' '}
-          {percentOff(TUNING.easy.interest)} lower. Hard starts with{' '}
-          {formatMoney(TUNING.hard.startingCash)}, cars cost {percentOn(TUNING.hard.invoice)} more
-          and interest is {percentOn(TUNING.hard.interest)} higher. Medium is in between, with{' '}
-          {formatMoney(TUNING.medium.startingCash)}.
+          {percentOff(TUNING.easy.interest)} lower. About {percentOn(TUNING.easy.traffic)} more
+          customers come in, they wait longer and are readier to buy. Nazma turns up less often and
+          not before day {TUNING.easy.firstNazmaDay}, the quota is {percentOff(TUNING.easy.quota)}{' '}
+          lower, the owner pays {formatMoney(ownerBonus(TUNING.easy.ownerBonus))} for a goal met and
+          unhappy customers cost less reputation.
+        </p>
+        <p>
+          <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
+          {percentOn(TUNING.hard.invoice)} more and interest is {percentOn(TUNING.hard.interest)}{' '}
+          higher. About {percentOff(TUNING.hard.traffic)} fewer customers come in, they run out of
+          patience sooner, want a bigger discount and are slower to say yes. Nazma comes more often
+          from day {TUNING.hard.firstNazmaDay} and steals and poaches more, the quota is{' '}
+          {percentOn(TUNING.hard.quota)} higher, the owner pays only{' '}
+          {formatMoney(ownerBonus(TUNING.hard.ownerBonus))} and reputation is harder to win and
+          easier to lose.
         </p>
       </section>
       <section>
@@ -312,6 +326,7 @@ function BusinessTab({ touch, click }: TabProps) {
 }
 
 function PeopleTab({ touch, click }: TabProps) {
+  const level = useGame(levelTuning)
   return (
     <>
       <section>
@@ -358,16 +373,17 @@ function PeopleTab({ touch, click }: TabProps) {
         <p>
           Every two or three days the owner drops by at opening and sets a goal for the day, shown
           in the top bar: sales, revenue, gross profit, a body type, no impatient walk-outs or a
-          reputation boost. Meet it by closing for a {formatMoney(OWNER_BONUS)} bonus.
+          reputation boost. Meet it by closing for a {formatMoney(ownerBonus(level.ownerBonus))}{' '}
+          bonus.
         </p>
       </section>
       <section>
         <h3>Nazma</h3>
         <p>
           A former employee with it in for the place, in a dark hoodie and a red badge. From day{' '}
-          {FIRST_NAZMA_DAY}, every few days he smears grime over two or three cars (lot first), or
-          has a quiet word with one of your staff, the more skilled the likelier, and offers them a
-          job.
+          {level.firstNazmaDay}, every few days he smears grime over two or three cars (lot first),
+          or has a quiet word with one of your staff, the more skilled the likelier, and offers them
+          a job.
         </p>
         <p>
           {click} him and choose <b>Confront</b> to run him off before he does it. A security guard

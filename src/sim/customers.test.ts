@@ -184,6 +184,37 @@ describe('generateCustomer', () => {
     }
   })
 
+  it('is more or less patient at the level’s factor', () => {
+    for (let i = 0; i < 30; i++) {
+      const plain = generateCustomer('x', inventory, createRng(i))
+      expect(generateCustomer('x', inventory, createRng(i), { patienceFactor: 1 })).toEqual(plain)
+      const easy = generateCustomer('x', inventory, createRng(i), { patienceFactor: 1.25 })
+      const hard = generateCustomer('x', inventory, createRng(i), { patienceFactor: 0.8 })
+      expect(easy.patience).toBeGreaterThanOrEqual(plain.patience)
+      expect(hard.patience).toBeLessThanOrEqual(plain.patience)
+      expect(hard.patience).toBeGreaterThanOrEqual(MIN_PATIENCE)
+      expect(easy.patience % 5).toBe(0)
+      expect({ ...easy, patience: 0, patienceLeft: 0 }).toEqual({
+        ...plain,
+        patience: 0,
+        patienceLeft: 0,
+      })
+    }
+  })
+
+  it('shifts the hoped-for discount by the level, before the showroom cut, never below 0', () => {
+    for (let i = 0; i < 30; i++) {
+      const plain = generateCustomer('x', inventory, createRng(i), { expectCut: 0.25 })
+      const hard = generateCustomer('x', inventory, createRng(i), {
+        expectCut: 0.25,
+        expectShift: 0.015,
+      })
+      expect(hard.expect).toBeCloseTo(plain.expect + 0.015 * 0.75, 2)
+      const easy = generateCustomer('x', inventory, createRng(i), { expectShift: -0.05 })
+      expect(easy.expect).toBeGreaterThanOrEqual(0)
+    }
+  })
+
   it('leans toward the archetypes a sale skews to', () => {
     const count = (skew?: { bargain: number }) =>
       Array.from({ length: 300 }, (_, i) =>

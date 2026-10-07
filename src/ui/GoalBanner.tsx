@@ -1,5 +1,5 @@
 import { goalLabel, goalProgress, type OwnerGoal } from '../sim/owner'
-import { useGame } from '../state/store'
+import { levelTuning, repScale, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /** A signed change: "+3", "−2", "0". */
@@ -28,8 +28,9 @@ function progressText(goal: OwnerGoal, current: number, target: number): string 
 export function GoalBanner() {
   const goal = useGame((s) => (s.owner?.announced ? s.owner.goal : null))
   const stats = useGame((s) => s.dayStats)
+  const level = useGame(levelTuning)
   if (!goal) return null
-  const { current, target, met } = goalProgress(goal, stats)
+  const { current, target, met } = goalProgress(goal, stats, repScale(level))
   const label = goalLabel(goal, formatMoney)
   return (
     <span

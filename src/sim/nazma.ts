@@ -98,14 +98,23 @@ export function emptyNazmaStats(): NazmaStats {
   }
 }
 
+/** The difficulty level's say in his visits: `chance` × `VISIT_CHANCE`, from `firstDay`. */
+export interface VisitOdds {
+  chance: number
+  firstDay: number
+}
+
+const MEDIUM_ODDS: VisitOdds = { chance: 1, firstDay: FIRST_NAZMA_DAY }
+
 /**
- * Whether Nazma visits on `day`: never before `FIRST_NAZMA_DAY`, always on it,
- * then a seeded roll against `VISIT_CHANCE`, less with a guard on the payroll.
+ * Whether Nazma visits on `day`: never before `odds.firstDay`, always on it,
+ * then a seeded roll against `VISIT_CHANCE` (times `odds.chance`), less with a
+ * guard on the payroll.
  */
-export function isNazmaDay(day: number, guarded: boolean): boolean {
-  if (day < FIRST_NAZMA_DAY) return false
-  if (day === FIRST_NAZMA_DAY) return true
-  const chance = VISIT_CHANCE * (guarded ? GUARD_DETERRENCE : 1)
+export function isNazmaDay(day: number, guarded: boolean, odds: VisitOdds = MEDIUM_ODDS): boolean {
+  if (day < odds.firstDay) return false
+  if (day === odds.firstDay) return true
+  const chance = VISIT_CHANCE * odds.chance * (guarded ? GUARD_DETERRENCE : 1)
   return createRng(NAZMA_SEED + day).next() < chance
 }
 
@@ -137,7 +146,7 @@ function pickPoachTarget(rng: Rng, staff: readonly Employee[]): Employee {
 /**
  * The day's visit. With anyone on the payroll he could poach (see
  * `isPoachable`), it's sometimes (`POACH_CHANCE`) to talk one of them into
- * quitting, the seasoned ones most of all. Otherwise it's two or three cars to
+ * quitting, the seasoned ones most of all (`POACH_CHANCE` × `poachChance`). Otherwise it's two or three cars to
  * smudge, out on the lot first (they're nearer the street). Either way, when he
  * turns up. Null when there's nothing in stock for him to spoil and nobody to
  * poach.
@@ -146,9 +155,10 @@ export function planVisit(
   rng: Rng,
   inventory: readonly InventoryCar[],
   roster: readonly Employee[] = [],
+  poachChance = 1,
 ): NazmaVisit | null {
   const staff = roster.filter(isPoachable)
-  if (staff.length > 0 && rng.next() < POACH_CHANCE) {
+  if (staff.length > 0 && rng.next() < POACH_CHANCE * poachChance) {
     return {
       scheme: 'poach',
       targets: [pickPoachTarget(rng, staff).id],
@@ -203,13 +213,15 @@ const THEFT_SEED = 19_000
 /**
  * Whether Nazma tries to steal a car on the night before `day`'s morning: a
  * seeded roll from `FIRST_THEFT_DAY` on, never within `THEFT_GAP_DAYS` of his
- * last try. The gap is found by replaying earlier nights, so nothing is saved.
+ * last try. The gap is found by replaying earlier nights, so nothing is saved;
+ * they replay at the same `chance` (× `THEFT_CHANCE`), as the level never
+ * changes mid-game.
  */
-export function isTheftNight(day: number): boolean {
+export function isTheftNight(day: number, chance = 1): boolean {
   let last = -Infinity
   for (let d = FIRST_THEFT_DAY; d <= day; d++) {
     if (d - last < THEFT_GAP_DAYS) continue
-    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE) {
+    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE * chance) {
       if (d === day) return true
       last = d
     }
@@ -227,14 +239,16 @@ export type NightTheft = { outcome: 'stolen'; car: InventoryCar } | { outcome: '
  * The night before `day`: on a theft night Nazma goes for an available lot car
  * (the showroom is locked), the pricier the likelier. A guard on the payroll
  * stops him. Null on a quiet night, or with nothing on the lot to take.
+ * `chance` scales the odds of a theft night (see `isTheftNight`).
  */
 export function planTheft(
   rng: Rng,
   day: number,
   inventory: readonly InventoryCar[],
   guarded: boolean,
+  chance = 1,
 ): NightTheft | null {
-  if (!isTheftNight(day)) return null
+  if (!isTheftNight(day, chance)) return null
   const lot = availableCars(inventory).filter((c) => c.location === 'lot')
   if (lot.length === 0) return null
   if (guarded) return { outcome: 'foiled' }

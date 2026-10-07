@@ -50,6 +50,18 @@ describe('isNazmaDay', () => {
     expect(guarded.length).toBeLessThan(later.filter((d) => isNazmaDay(d, false)).length * 0.6)
     for (const d of guarded) expect(isNazmaDay(d, false)).toBe(true)
   })
+
+  it('follows the level’s first day and odds', () => {
+    const later = days(1000).filter((d) => d > 7)
+    const share = (chance: number) =>
+      later.filter((d) => isNazmaDay(d, false, { chance, firstDay: 7 })).length / later.length
+    expect(days(6).some((d) => isNazmaDay(d, false, { chance: 0.5, firstDay: 7 }))).toBe(false)
+    expect(isNazmaDay(7, true, { chance: 0.5, firstDay: 7 })).toBe(true)
+    expect(share(0.5)).toBeGreaterThan(VISIT_CHANCE * 0.5 - 0.05)
+    expect(share(0.5)).toBeLessThan(VISIT_CHANCE * 0.5 + 0.05)
+    expect(share(1.4)).toBeGreaterThan(VISIT_CHANCE * 1.4 - 0.06)
+    expect(isNazmaDay(3, false, { chance: 1.4, firstDay: 3 })).toBe(true)
+  })
 })
 
 describe('planVisit', () => {
@@ -124,6 +136,11 @@ describe('planVisit with staff', () => {
     const poach = visits.filter((v) => v.scheme === 'poach')
     expect(poach.length / visits.length).toBeGreaterThan(POACH_CHANCE - 0.07)
     expect(poach.length / visits.length).toBeLessThan(POACH_CHANCE + 0.07)
+    const rare = seeds.filter(
+      (seed) => planVisit(createRng(seed), inventory, roster, 0.5)!.scheme === 'poach',
+    )
+    expect(rare.length / seeds.length).toBeGreaterThan(POACH_CHANCE * 0.5 - 0.07)
+    expect(rare.length / seeds.length).toBeLessThan(POACH_CHANCE * 0.5 + 0.07)
     for (const v of poach) {
       expect(v.targets).toEqual(['s'])
       expect(v).toMatchObject({ status: 'coming', progress: 0, chatting: false })
@@ -197,6 +214,15 @@ describe('isTheftNight', () => {
     const share = nights.length / (2000 - FIRST_THEFT_DAY)
     expect(share).toBeLessThan(THEFT_CHANCE)
     expect(share).toBeGreaterThan(THEFT_CHANCE / 2)
+  })
+
+  it('comes up more often at a higher chance, and the same with none given', () => {
+    expect(days(2000).filter((d) => isTheftNight(d, 1))).toEqual(nights)
+    const hard = days(2000).filter((d) => isTheftNight(d, 1.5))
+    const easy = days(2000).filter((d) => isTheftNight(d, 0.5))
+    expect(hard.length).toBeGreaterThan(nights.length)
+    expect(easy.length).toBeLessThan(nights.length)
+    expect(easy[0]).toBeGreaterThanOrEqual(FIRST_THEFT_DAY)
   })
 })
 

@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
+import { emptyStats } from '../sim/deal'
 import { TUNING } from '../sim/difficulty'
 import { FLOOR_PLAN_DAILY_RATE } from '../sim/floorPlan'
-import { orderCost } from '../sim/ordering'
+import { FIRST_NAZMA_DAY } from '../sim/nazma'
+import { ALL_SLOTS, orderCost } from '../sim/ordering'
+import { OWNER_BONUS } from '../sim/owner'
+import { monthlyQuota } from '../sim/quota'
+import { REPUTATION_POINTS, START_REPUTATION } from '../sim/reputation'
 import { createSave } from '../sim/save'
 import { useGame } from './store'
 
@@ -65,6 +70,65 @@ describe('difficulty levels', () => {
     endDay()
     expect(game().dayStats.interest).toBe(
       Math.round(cost * FLOOR_PLAN_DAILY_RATE * TUNING.easy.interest),
+    )
+  })
+
+  it('brings more visitors on Easy than on Hard, and sets the level’s quota', () => {
+    const day1 = (d: 'easy' | 'medium' | 'hard') => {
+      useGame.setState(initial, true)
+      game().newGame(d)
+      return game()
+    }
+    const medium = day1('medium').arrivals.minutes.length
+    expect(day1('easy').arrivals.minutes.length).toBeGreaterThan(medium)
+    expect(day1('hard').arrivals.minutes.length).toBeLessThan(medium)
+    expect(day1('hard').quota).toBe(
+      monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, TUNING.hard.quota),
+    )
+  })
+
+  it('makes customers patient and modest on Easy, impatient and greedy on Hard', () => {
+    const walkIn = (d: 'easy' | 'medium' | 'hard') => {
+      useGame.setState(initial, true)
+      game().newGame(d)
+      const id = game().walkIn('male-a')!
+      return game().customers.find((c) => c.id === id)!
+    }
+    const medium = walkIn('medium')
+    const easy = walkIn('easy')
+    const hard = walkIn('hard')
+    expect(easy.archetype).toBe(medium.archetype)
+    expect(easy.patience).toBeGreaterThan(medium.patience)
+    expect(hard.patience).toBeLessThan(medium.patience)
+    expect(easy.expect).toBeLessThan(medium.expect)
+    expect(hard.expect).toBeGreaterThan(medium.expect)
+  })
+
+  it('brings Nazma at the level’s first day', () => {
+    const nazmaOn = (d: 'easy' | 'hard', day: number) => {
+      useGame.setState(initial, true)
+      game().newGame(d)
+      game().loadGame({ ...createSave(game(), 0), day: day - 1 })
+      return game().nazma
+    }
+    expect(nazmaOn('easy', FIRST_NAZMA_DAY)).toBeNull()
+    expect(nazmaOn('easy', TUNING.easy.firstNazmaDay)).not.toBeNull()
+    expect(nazmaOn('hard', TUNING.hard.firstNazmaDay)).not.toBeNull()
+  })
+
+  it('pays the level’s owner bonus and scales reputation at closing', () => {
+    game().newGame('easy')
+    useGame.setState({
+      owner: { goal: { kind: 'noImpatient' }, announced: true },
+      dayStats: { ...emptyStats(), refused: 5 },
+    })
+    const cash = game().cash
+    endDay()
+    expect(game().dayStats.owner?.bonus).toBe(2_000)
+    expect(game().dayStats.owner?.bonus).toBeGreaterThan(OWNER_BONUS)
+    expect(game().cash).toBe(cash + 2_000)
+    expect(game().reputation).toBe(
+      START_REPUTATION + Math.round(5 * REPUTATION_POINTS.refused * TUNING.easy.repLoss),
     )
   })
 

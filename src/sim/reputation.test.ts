@@ -50,6 +50,21 @@ describe('reputationChange', () => {
     expect(reputationChange(stats({ closing: 4 }))).toBe(0)
   })
 
+  it('scales gains and losses separately for the level, then rounds', () => {
+    const day = stats({ sales: [sale, sale], impatient: 1, refused: 1 })
+    expect(reputationChange(day, { gain: 1, loss: 1 })).toBe(reputationChange(day))
+    // Easy: +4 gained, −3 lost × 0.6.
+    expect(reputationChange(day, { gain: 1, loss: 0.6 })).toBe(Math.round(4 - 3 * 0.6))
+    // Hard: +4 × 0.85, −3 × 1.3.
+    expect(reputationChange(day, { gain: 0.85, loss: 1.3 })).toBe(Math.round(4 * 0.85 - 3 * 1.3))
+  })
+
+  it('caps a scaled change too', () => {
+    expect(reputationChange(stats({ impatient: 4 }), { gain: 1, loss: 1.3 })).toBe(
+      -MAX_DAILY_CHANGE,
+    )
+  })
+
   it('caps a day’s change either way', () => {
     expect(reputationChange(stats({ sales: Array(20).fill(sale) }))).toBe(MAX_DAILY_CHANGE)
     expect(reputationChange(stats({ impatient: 20 }))).toBe(-MAX_DAILY_CHANGE)

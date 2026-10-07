@@ -181,6 +181,10 @@ export interface CustomerOptions {
   extraDiscount?: number
   /** Multipliers on the archetype odds, on a sale weekend (`SaleEvent.skew`). */
   skew?: Partial<Record<Archetype, number>>
+  /** × their patience, from the difficulty level (`Tuning.patience`). */
+  patienceFactor?: number
+  /** Added to the discount they hope for, from the difficulty level (`Tuning.expect`). */
+  expectShift?: number
 }
 
 /**
@@ -212,7 +216,10 @@ export function generateCustomer(
   const budget = Math.round((top * factor) / 500) * 500
 
   const rolled = rng.int(PATIENCE_MINUTES.min / 5, PATIENCE_MINUTES.max / 5) * 5
-  const patience = Math.max(MIN_PATIENCE, Math.round((rolled * traits.patience) / 5) * 5)
+  const patience = Math.max(
+    MIN_PATIENCE,
+    Math.round((rolled * traits.patience * (opts.patienceFactor ?? 1)) / 5) * 5,
+  )
 
   const customer: Customer = {
     id,
@@ -248,14 +255,11 @@ export function generateCustomer(
   const target = favourite(customer, browse)
   const ordered = target ? [...browse.filter((car) => car !== target), target] : []
   const jitter = (rng.next() * 2 - 1) * EXPECT_JITTER
+  const hoped = traits.haggle.expect + jitter + (opts.extraDiscount ?? 0) + (opts.expectShift ?? 0)
   return {
     ...customer,
-    expect:
-      Math.round(
-        (traits.haggle.expect + jitter + (opts.extraDiscount ?? 0)) *
-          (1 - (opts.expectCut ?? 0)) *
-          1000,
-      ) / 1000,
+    // Never above MSRP, however easy the level.
+    expect: Math.round(Math.max(0, hoped) * (1 - (opts.expectCut ?? 0)) * 1000) / 1000,
     browseCarIds: ordered.map((car) => car.id),
     targetCarId: target?.id ?? null,
   }

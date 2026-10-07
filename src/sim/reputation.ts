@@ -41,17 +41,27 @@ export const REFERRAL_SKEW: Partial<Record<Archetype, number>> = {
   'tire-kicker': 0.5,
 }
 
+/** The difficulty level's multipliers on the day's gains and losses. */
+export interface RepScale {
+  gain: number
+  loss: number
+}
+
+const MEDIUM_SCALE: RepScale = { gain: 1, loss: 1 }
+
 /**
- * What the day has done to reputation so far, capped at `MAX_DAILY_CHANGE`
- * either way. Customers sent home at closing don't count.
+ * What the day has done to reputation so far: gains and losses scaled by the
+ * level (`scale`), rounded, and capped at `MAX_DAILY_CHANGE` either way.
+ * Customers sent home at closing don't count.
  */
-export function reputationChange(stats: DayStats): number {
+export function reputationChange(stats: DayStats, scale: RepScale = MEDIUM_SCALE): number {
   const missed = Object.values(stats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
-  const raw =
-    stats.sales.length * REPUTATION_POINTS.sale +
+  const gain = stats.sales.length * REPUTATION_POINTS.sale
+  const loss =
     stats.refused * REPUTATION_POINTS.refused +
     stats.impatient * REPUTATION_POINTS.impatient +
     missed * REPUTATION_POINTS.missed
+  const raw = Math.round(gain * scale.gain + loss * scale.loss)
   return Math.max(-MAX_DAILY_CHANGE, Math.min(MAX_DAILY_CHANGE, raw))
 }
 

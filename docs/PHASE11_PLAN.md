@@ -1,6 +1,6 @@
 # Phase 11 Plan: Difficulty levels
 
-**Status:** planned 2026-10-06. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** planned 2026-10-06. 11a done 2026-10-07. 11b done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 

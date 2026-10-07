@@ -38,6 +38,25 @@ describe('monthly quota', () => {
   })
 })
 
+describe('monthly quota by level', () => {
+  it('is the same with a factor of 1 as with none', () => {
+    for (let month = 0; month < 12; month++) {
+      expect(monthlyQuota(month, SLOTS, 60, 1)).toBe(monthlyQuota(month, SLOTS, 60))
+    }
+  })
+
+  it('scales after the range clamp, and rounds', () => {
+    const top = monthlyQuota(11, SLOTS, MAX_REPUTATION)
+    expect(top).toBe(QUOTA_RANGE.max)
+    expect(monthlyQuota(11, SLOTS, MAX_REPUTATION, 1.15)).toBe(Math.round(QUOTA_RANGE.max * 1.15))
+    expect(monthlyQuota(2, SLOTS, START_REPUTATION, 0.8)).toBe(12)
+  })
+
+  it('asks for at least one car', () => {
+    expect(monthlyQuota(0, SLOTS, 0, 0.01)).toBe(1)
+  })
+})
+
 describe('holdback', () => {
   it('pays nothing below 80% of quota, a little from there, more at and past it', () => {
     expect(holdbackRate(12, 16)).toBe(0)

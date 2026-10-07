@@ -71,7 +71,6 @@ import {
 import {
   confrontBlocker,
   emptyNazmaStats,
-  FIRST_NAZMA_DAY,
   isNazmaDay,
   NAZMA_ID,
   nextTarget,
@@ -84,6 +83,7 @@ import {
   type NightTheft,
   type NazmaVisit,
   type RunOffBy,
+  type VisitOdds,
 } from '../sim/nazma'
 import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
 import {
@@ -103,6 +103,7 @@ import {
   reputationChange,
   START_REPUTATION,
   visitorScale,
+  type RepScale,
 } from '../sim/reputation'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
@@ -372,6 +373,16 @@ export function levelTuning(s: Pick<GameState, 'difficulty'>): Tuning {
   return TUNING[s.difficulty]
 }
 
+/** The level's scale on reputation gains and losses. */
+export function repScale(t: Tuning): RepScale {
+  return { gain: t.repGain, loss: t.repLoss }
+}
+
+/** The level's odds of a visit from Nazma. */
+function visitOdds(t: Tuning): VisitOdds {
+  return { chance: t.nazmaChance, firstDay: t.firstNazmaDay }
+}
+
 /** The morning's word on a night's theft. */
 export function theftNotice(theft: NightTheft): string {
   if (theft.outcome === 'foiled') return 'Your guard ran someone off the lot last night.'
@@ -401,14 +412,18 @@ function dayOne(difficulty: Difficulty) {
   dealRng = createRng(DEAL_SEED + 1)
   staffRng = createRng(STAFF_SEED + 1)
   walkInRng = createRng(WALK_IN_SEED + 1)
+  const tuning = TUNING[difficulty]
   return {
     difficulty,
-    cash: TUNING[difficulty].startingCash,
-    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION),
+    cash: tuning.startingCash,
+    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
       {},
-      { scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic, referrals: 0 },
+      {
+        scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic * tuning.traffic,
+        referrals: 0,
+      },
     ),
     candidates: generateCandidates(staffRng, 1),
   }
@@ -485,10 +500,13 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
     const { wages, commissions } = payroll(s.roster, s.dayStats.sales)
-    const interest = dailyInterest(s.inventory, tuning().interest)
+    const level = tuning()
+    const interest = dailyInterest(s.inventory, level.interest)
     // A goal the player never heard (the owner didn't make it in) isn't judged.
-    const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
-    const reputation = applyChange(s.reputation, reputationChange(s.dayStats))
+    const owner = s.owner?.announced
+      ? judgeDay(s.owner.goal, s.dayStats, s.clock.day, level.ownerBonus, repScale(level))
+      : null
+    const reputation = applyChange(s.reputation, reputationChange(s.dayStats, repScale(level)))
     const quota =
       calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
         ? {
@@ -646,21 +664,24 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * What a new customer brings in with them today: the showroom's cut to the
-   * discount they hope for, and on a sale weekend a bigger hoped-for discount
-   * and a lean toward bargain hunters.
+   * What a new customer brings in with them today: the level's patience and
+   * hoped-for discount, the showroom's cut to that discount, and on a sale
+   * weekend a bigger hoped-for discount and a lean toward bargain hunters.
    */
   const arrivalOpts = () => {
     const event = eventOn(get().clock.day)
+    const level = tuning()
     return {
+      patienceFactor: level.patience,
+      expectShift: level.expect,
       expectCut: upEffects().expectCut,
       ...(event && { extraDiscount: event.extraDiscount, skew: event.skew }),
     }
   }
 
-  /** The seller's skill bonus plus what the showroom improvements add. */
+  /** The seller's skill bonus plus what the showroom improvements and the level add. */
   const sellerBonus = (c: Customer) => {
-    const showroom = upEffects().acceptBonus
+    const showroom = upEffects().acceptBonus + tuning().acceptBonus
     if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + showroom
     const e = get().roster.find((x) => x.id === c.handlerId)
     return (e ? skillBonus(e.skill) : 0) + showroom
@@ -756,16 +777,17 @@ export const useGame = create<GameState>((set, get) => {
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
     const kept = dropSold(s.inventory)
+    const level = tuning()
     const guarded = isGuarded(s.roster)
-    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded)
+    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, level.theftChance)
     const stolen = theft?.outcome === 'stolen' ? theft.car : null
     const inventory = [
       ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
       ...delivered,
     ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    const nazma = isNazmaDay(day, guarded)
-      ? planVisit(createRng(visitSeed(day)), inventory, s.roster)
+    const nazma = isNazmaDay(day, guarded, visitOdds(level))
+      ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance)
       : null
     const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
@@ -779,7 +801,9 @@ export const useGame = create<GameState>((set, get) => {
       clock: startOfDay(day),
       weather,
       monthSales: newMonth ? emptyMonthSales() : s.monthSales,
-      quota: newMonth ? monthlyQuota(date.month, ALL_SLOTS.length, s.reputation) : s.quota,
+      quota: newMonth
+        ? monthlyQuota(date.month, ALL_SLOTS.length, s.reputation, level.quota)
+        : s.quota,
       inventory,
       orders: [],
       campaigns,
@@ -791,7 +815,8 @@ export const useGame = create<GameState>((set, get) => {
             visitorScale(s.reputation) *
             weekdayTraffic(day) *
             effects.traffic *
-            (event?.traffic ?? 1),
+            (event?.traffic ?? 1) *
+            level.traffic,
           referrals: referralVisitors(s.reputation),
         },
       ),
@@ -1098,7 +1123,7 @@ export const useGame = create<GameState>((set, get) => {
       setNazma({ ...s.nazma, status: 'onLot' })
       tallyNazma({ visited: true })
       notify(
-        s.clock.day === FIRST_NAZMA_DAY
+        s.clock.day === tuning().firstNazmaDay
           ? "That's Nazma, who used to work here. He has it in for the place. Click him to run him off!"
           : 'Nazma is back on the lot.',
       )

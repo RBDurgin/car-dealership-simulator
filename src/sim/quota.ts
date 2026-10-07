@@ -52,11 +52,15 @@ export function emptyMonthSales(): MonthSales {
   return { count: 0, msrp: 0 }
 }
 
-/** `month`'s target: half a car per slot, nudged by the season and reputation. */
-export function monthlyQuota(month: number, slots: number, reputation: number): number {
+/**
+ * `month`'s target: half a car per slot, nudged by the season and reputation,
+ * then scaled by the difficulty level's `factor` (at least 1 car).
+ */
+export function monthlyQuota(month: number, slots: number, reputation: number, factor = 1): number {
   const base = slots * CARS_PER_SLOT * MONTH_QUOTA[month]
   const nudge = (reputation - START_REPUTATION) * REPUTATION_SLOPE
-  return Math.max(QUOTA_RANGE.min, Math.min(QUOTA_RANGE.max, Math.round(base + nudge)))
+  const clamped = Math.max(QUOTA_RANGE.min, Math.min(QUOTA_RANGE.max, Math.round(base + nudge)))
+  return Math.max(1, Math.round(clamped * factor))
 }
 
 /** The share of the month's sold `msrp` the manufacturer pays for `sold` cars against `quota`. */

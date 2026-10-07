@@ -156,6 +156,8 @@ describe('goalProgress', () => {
       met: true,
     })
     expect(goalProgress(goal, { ...twoSales, impatient: 1 }).met).toBe(false)
+    // On Easy the walk-out costs less, so the goal holds.
+    expect(goalProgress(goal, { ...twoSales, impatient: 1 }, { gain: 1, loss: 0.6 }).met).toBe(true)
   })
 })
 
@@ -167,5 +169,14 @@ describe('judgeDay', () => {
     const missed = judgeDay(goal, emptyStats(), 4)
     expect(missed).toMatchObject({ goal, met: false, bonus: 0 })
     expect(missed.line).not.toBe(met.line)
+  })
+
+  it('pays the level’s bonus, rounded to $100', () => {
+    const goal: OwnerGoal = { kind: 'sales', count: 1 }
+    const day = withSales(sale('van', 1))
+    expect(judgeDay(goal, day, 4, 1).bonus).toBe(OWNER_BONUS)
+    expect(judgeDay(goal, day, 4, 1.33).bonus).toBe(2_000)
+    expect(judgeDay(goal, day, 4, 0.67).bonus).toBe(1_000)
+    expect(judgeDay(goal, emptyStats(), 4, 1.33).bonus).toBe(0)
   })
 })
