@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CUSTOMER_VARIANTS, GUARD_VARIANT, STAFF_VARIANTS } from './characters'
+import { GUARD_VARIANT, STAFF_VARIANTS } from './characters'
 import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import {
@@ -44,7 +44,7 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
 })
 
 describe('candidates', () => {
-  it('offers every role each day, with valid skills, wages and staff-only models', () => {
+  it('offers every role each day, with valid skills, wages and staff models', () => {
     for (let day = 1; day <= 20; day++) {
       const cands = generateCandidates(createRng(day), day)
       expect(cands.length).toBeGreaterThanOrEqual(ROLES.length)
@@ -55,7 +55,6 @@ describe('candidates', () => {
         expect(c.skill).toBeLessThanOrEqual(MAX_SKILL)
         expect(c.wage).toBe(wageFor(c.role, c.skill))
         expect(STAFF_VARIANTS).toContain(c.variant)
-        expect(CUSTOMER_VARIANTS).not.toContain(c.variant)
         expect(c.variant === GUARD_VARIANT).toBe(c.role === 'security')
         expect(c.status).toBe('off')
       }

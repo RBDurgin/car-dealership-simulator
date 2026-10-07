@@ -18,7 +18,7 @@ import { isPoachable, type Employee } from './staff'
 /** Nazma's id in the world (crowd, chatter, action target). */
 export const NAZMA_ID = 'nazma'
 /** A staff model, as he used to work here, in a dark hoodie (see scene/Nazma). */
-export const NAZMA_VARIANT: StaffVariant = 'male-c'
+export const NAZMA_VARIANT: StaffVariant = 'male-e'
 
 /** His first visit, always: the day he's introduced. */
 export const FIRST_NAZMA_DAY = 4

@@ -9,10 +9,20 @@ export const CUSTOMER_VARIANTS = [
 ] as const
 
 /**
- * Models only staff wear, so employees never look like customers. Kenney's
- * female-a holds crutches, so nobody wears it.
+ * Models staff wear. The men's are staff-only; the women's are shared with
+ * customers (the role badge tells staff apart), as Kenney's other female
+ * model, female-a, holds crutches.
  */
-export const STAFF_VARIANTS = ['male-c', 'male-e', 'male-f', 'female-e'] as const
+export const STAFF_VARIANTS = [
+  'male-c',
+  'male-e',
+  'male-f',
+  'female-b',
+  'female-c',
+  'female-d',
+  'female-e',
+  'female-f',
+] as const
 
 /** Kenney's police officer: every security guard, and nobody else on staff. */
 export const GUARD_VARIANT: StaffVariant = 'male-c'
