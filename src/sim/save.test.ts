@@ -12,7 +12,7 @@ import type { Employee } from './staff'
 const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   id,
   name: 'Sam T.',
-  variant: 'female-a',
+  variant: 'female-e',
   role: 'receptionist',
   skill: 3,
   wage: 130,
@@ -166,6 +166,17 @@ describe('save data', () => {
       roster: save.roster.map((e) => ({ ...e, quitting: undefined })),
     }
     expect(parseSave(JSON.parse(JSON.stringify(v7)))).toEqual(save)
+  })
+
+  it('dresses staff in a dropped model in one still in use, and guards in uniform', () => {
+    const save = createSave(source(), 123)
+    const roster = [
+      { ...save.roster[0], variant: 'female-a' },
+      { ...save.roster[0], id: 'staff-1-2', variant: 'male-c' },
+      { ...save.roster[0], id: 'staff-1-3', role: 'security', variant: 'female-e' },
+    ]
+    const loaded = parseSave(JSON.parse(JSON.stringify({ ...save, roster })))
+    expect(loaded?.roster.map((e) => e.variant)).toEqual(['male-e', 'male-e', 'male-c'])
   })
 
   it('saves nobody as thinking of quitting', () => {

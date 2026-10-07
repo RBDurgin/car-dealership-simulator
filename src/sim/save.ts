@@ -5,7 +5,7 @@ import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import type { Order } from './ordering'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
-import { ROLES, type Employee } from './staff'
+import { dressFor, ROLES, type Employee } from './staff'
 
 /**
  * The saved game. Saves are only made at the end of a day, so nothing mid-day
@@ -141,6 +141,8 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
   if (!Array.isArray(improvements) || !improvements.every(isImprovement)) return null
   if (!isNumber(reputation) || reputation < 0 || reputation > MAX_REPUTATION) return null
+  // Older saves may have a dropped model (female-a), or the police uniform off a guard.
+  for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   return raw as unknown as SaveData
 }
 

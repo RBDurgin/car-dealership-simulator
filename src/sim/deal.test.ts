@@ -39,7 +39,7 @@ import type { Employee } from './staff'
 const fm: Employee = {
   id: 'staff-1',
   name: 'Jordan K.',
-  variant: 'female-a',
+  variant: 'female-e',
   role: 'finance',
   skill: 3,
   wage: 215,

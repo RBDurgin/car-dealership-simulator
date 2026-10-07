@@ -1,4 +1,4 @@
-import { STAFF_VARIANTS, type StaffVariant } from './characters'
+import { GUARD_VARIANT, STAFF_VARIANTS, type StaffVariant } from './characters'
 import { randomName } from './customers'
 import type { Sale } from './deal'
 import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS, type SalesDesk } from './layout'
@@ -181,6 +181,18 @@ export function postChairId(e: Employee, roster: readonly Employee[]): string | 
   return e.role === 'sales' ? (salesDeskOf(roster, e.id)?.chairId ?? null) : POSTS[e.role]
 }
 
+/** Staff models for everyone but the guard, who wears the police uniform. */
+const WORKER_VARIANTS = STAFF_VARIANTS.filter((v) => v !== GUARD_VARIANT)
+
+/**
+ * The model someone in `role` wears: the police uniform for a guard, otherwise
+ * `variant`, or a stand-in when that's the uniform or a model no longer used.
+ */
+export function dressFor(role: Role, variant: unknown): StaffVariant {
+  if (role === 'security') return GUARD_VARIANT
+  return WORKER_VARIANTS.find((v) => v === variant) ?? WORKER_VARIANTS[0]
+}
+
 /**
  * The day's applicants: one for each role in random order, sometimes plus one
  * more of any role, so every role can be filled on any day.
@@ -197,7 +209,7 @@ export function generateCandidates(rng: Rng, day: number): Employee[] {
     return {
       id: `staff-${day}-${i + 1}`,
       name: randomName(rng),
-      variant: rng.pick(STAFF_VARIANTS),
+      variant: role === 'security' ? GUARD_VARIANT : rng.pick(WORKER_VARIANTS),
       role,
       skill,
       wage: wageFor(role, skill),

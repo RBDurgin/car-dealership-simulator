@@ -228,7 +228,7 @@ describe('poaching', () => {
   const dana: Employee = {
     id: 'staff-1-2',
     name: 'Dana R.',
-    variant: 'female-a',
+    variant: 'female-e',
     role: 'sales',
     skill: 4,
     wage: wageFor('sales', 4),

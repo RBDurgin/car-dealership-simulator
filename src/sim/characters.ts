@@ -8,8 +8,14 @@ export const CUSTOMER_VARIANTS = [
   'female-f',
 ] as const
 
-/** Models only staff wear, so employees never look like customers. */
-export const STAFF_VARIANTS = ['male-c', 'male-e', 'male-f', 'female-a', 'female-e'] as const
+/**
+ * Models only staff wear, so employees never look like customers. Kenney's
+ * female-a holds crutches, so nobody wears it.
+ */
+export const STAFF_VARIANTS = ['male-c', 'male-e', 'male-f', 'female-e'] as const
+
+/** Kenney's police officer: every security guard, and nobody else on staff. */
+export const GUARD_VARIANT: StaffVariant = 'male-c'
 
 /** The dealership's owner, in a dark suit (see scene/Owner). */
 export const OWNER_VARIANT: StaffVariant = 'male-f'

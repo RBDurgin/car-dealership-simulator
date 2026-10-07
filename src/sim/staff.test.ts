@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CUSTOMER_VARIANTS, STAFF_VARIANTS } from './characters'
+import { CUSTOMER_VARIANTS, GUARD_VARIANT, STAFF_VARIANTS } from './characters'
 import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import {
@@ -56,6 +56,7 @@ describe('candidates', () => {
         expect(c.wage).toBe(wageFor(c.role, c.skill))
         expect(STAFF_VARIANTS).toContain(c.variant)
         expect(CUSTOMER_VARIANTS).not.toContain(c.variant)
+        expect(c.variant === GUARD_VARIANT).toBe(c.role === 'security')
         expect(c.status).toBe('off')
       }
       expect(new Set(cands.map((c) => c.id)).size).toBe(cands.length)
