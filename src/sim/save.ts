@@ -9,6 +9,7 @@ import { ALL_SLOTS, type Order } from './ordering'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { dressFor, ROLES, type Employee } from './staff'
+import { isTipId, type TipId } from './tips'
 
 /**
  * The saved game. Saves are only made at the end of a day, so nothing mid-day
@@ -20,7 +21,7 @@ import { dressFor, ROLES, type Employee } from './staff'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 10
+export const SAVE_VERSION = 11
 
 export interface SaveData {
   version: number
@@ -45,6 +46,10 @@ export interface SaveData {
   quota: number
   /** The level picked at New game. */
   difficulty: Difficulty
+  /** The bank's one-time safety net (Easy) has been used. */
+  bailoutUsed: boolean
+  /** Guided tips already shown (Easy), so a resumed game doesn't repeat them. */
+  tipsSeen: TipId[]
 }
 
 export interface SaveSource {
@@ -59,6 +64,8 @@ export interface SaveSource {
   monthSales: MonthSales
   quota: number
   difficulty: Difficulty
+  bailoutUsed: boolean
+  tipsSeen: TipId[]
 }
 
 /**
@@ -80,6 +87,8 @@ export function createSave(s: SaveSource, now: number): SaveData {
     monthSales: s.monthSales,
     quota: s.quota,
     difficulty: s.difficulty,
+    bailoutUsed: s.bailoutUsed,
+    tipsSeen: s.tipsSeen,
   }
 }
 
@@ -141,6 +150,8 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   }),
   // v10: difficulty levels. Every game before them was Medium.
   9: (raw) => ({ ...raw, difficulty: 'medium' }),
+  // v11: Easy's safety net and guided tips, neither used yet.
+  10: (raw) => ({ ...raw, bailoutUsed: false, tipsSeen: [] }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -163,7 +174,7 @@ export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
-  const { monthSales, quota, difficulty } = raw
+  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -175,6 +186,8 @@ export function parseSave(input: unknown): SaveData | null {
     return null
   if (!isNumber(quota) || quota < 1) return null
   if (!isDifficulty(difficulty)) return null
+  if (typeof bailoutUsed !== 'boolean') return null
+  if (!Array.isArray(tipsSeen) || !tipsSeen.every(isTipId)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   return raw as unknown as SaveData

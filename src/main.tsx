@@ -11,11 +11,13 @@ import { startUiClicks } from './audio/uiClicks'
 import { COARSE, COMPACT, matchesMedia } from './input/useMediaQuery'
 import { startAudioPref, startAutosave, startControlsPref } from './state/persistence'
 import { useGame } from './state/store'
+import { startTips } from './state/tips'
 
 startAutosave()
 // The controls hint starts collapsed on phones and touch screens.
 startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
 startAudioPref()
+startTips()
 // Silent until the first gesture; then the sounds load and the music starts.
 startAudio(() => {
   preloadSfx()

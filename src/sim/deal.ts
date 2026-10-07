@@ -247,6 +247,11 @@ export interface DayStats {
   nazma: NazmaStats
   /** On the month's last day, the quota and the holdback it paid (set when settled). */
   quota: QuotaResult | null
+  /**
+   * What the bank put in to bring a negative balance back to $0 (Easy's
+   * one-time safety net), set when settled. A rescue, not income.
+   */
+  bailout: number
 }
 
 export function emptyStats(): DayStats {
@@ -269,6 +274,7 @@ export function emptyStats(): DayStats {
     owner: null,
     nazma: emptyNazmaStats(),
     quota: null,
+    bailout: 0,
   }
 }
 

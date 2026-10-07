@@ -21,6 +21,8 @@ import { ViewControls } from './ViewControls'
 import './hud.css'
 
 const NOTICE_MS = 2200
+/** Longer notices (tips, a busy morning) stay up long enough to read. */
+const NOTICE_MS_PER_CHAR = 50
 
 function ActionStatus() {
   const action = useGame((s) => s.activeAction)
@@ -70,7 +72,8 @@ function NoticeToast() {
   const notice = useGame((s) => s.notice)
   useEffect(() => {
     if (!notice) return
-    const t = setTimeout(() => useGame.getState().clearNotice(notice.id), NOTICE_MS)
+    const ms = Math.max(NOTICE_MS, notice.text.length * NOTICE_MS_PER_CHAR)
+    const t = setTimeout(() => useGame.getState().clearNotice(notice.id), ms)
     return () => clearTimeout(t)
   }, [notice])
   if (!notice) return null

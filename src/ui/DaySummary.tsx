@@ -181,6 +181,11 @@ export function DaySummary() {
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>
+        {stats.bailout > 0 && (
+          <div className="summary-bailout">
+            The bank covered your {formatMoney(stats.bailout)} shortfall. It won&apos;t next time.
+          </div>
+        )}
         {stats.owner && (
           <div className={stats.owner.met ? 'summary-owner goal-met' : 'summary-owner'}>
             <div>

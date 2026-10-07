@@ -9,6 +9,7 @@ import { ALL_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
+import type { TipId } from './tips'
 import type { Employee } from './staff'
 
 const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
@@ -38,6 +39,9 @@ const source = () => ({
   quota: monthlyQuota(0, ALL_SLOTS.length, 62),
   // As a v9 save upgrades, so the older upgrades compare equal.
   difficulty: 'medium' as const,
+  // As a v10 save upgrades, so the older upgrades compare equal.
+  bailoutUsed: false,
+  tipsSeen: [] as TipId[],
 })
 
 const order: Order = {
@@ -190,6 +194,26 @@ describe('save data', () => {
     const save = createSave({ ...source(), difficulty: 'hard' }, 123)
     const v9 = { ...save, version: 9, difficulty: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v9)))).toEqual({ ...save, difficulty: 'medium' })
+  })
+
+  it('upgrades a version 10 save with the safety net unused and no tips seen', () => {
+    const save = createSave({ ...source(), bailoutUsed: true, tipsSeen: ['wash'] }, 123)
+    const v10 = { ...save, version: 10, bailoutUsed: undefined, tipsSeen: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v10)))).toEqual({
+      ...save,
+      bailoutUsed: false,
+      tipsSeen: [],
+    })
+  })
+
+  it('keeps the safety net and tips seen, and rejects a tip it doesn’t know', () => {
+    const save = createSave({ ...source(), bailoutUsed: true, tipsSeen: ['wash', 'nazma'] }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toMatchObject({
+      bailoutUsed: true,
+      tipsSeen: ['wash', 'nazma'],
+    })
+    expect(parseSave({ ...save, tipsSeen: ['juggle'] })).toBeNull()
+    expect(parseSave({ ...save, bailoutUsed: 'yes' })).toBeNull()
   })
 
   it('keeps the difficulty level, and rejects one it doesn’t know', () => {

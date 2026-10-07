@@ -94,6 +94,31 @@ export function respondToAsk(
   return roll(LAST_ROUND_FACTOR)
 }
 
+/** How a customer is likely to take an ask, for Easy's deal hint. */
+export type Warmth = 'cold' | 'warm' | 'hot'
+
+/** At or above these odds of a yes, an ask is hot (or at least warm). */
+export const HOT_CHANCE = 0.6
+export const WARM_CHANCE = 0.3
+
+/**
+ * How `c` would take `ask` for `car`, from the same numbers `respondToAsk`
+ * uses, without rolling: hot when they'd likely say yes, warm when they'd
+ * maybe say yes or will counter, cold when they'd likely walk. Over budget,
+ * or holding at the last ask (they may walk off in a huff), is cold.
+ */
+export function dealWarmth(c: Customer, car: InventoryCar, ask: number, bonus = 0): Warmth {
+  const odds = (factor: number): Warmth => {
+    const chance = acceptChance(c, car, ask, bonus) * factor
+    return chance >= HOT_CHANCE ? 'hot' : chance >= WARM_CHANCE ? 'warm' : 'cold'
+  }
+  if (ask <= hopePrice(c, car) || (c.haggle && ask <= c.haggle.counter)) return odds(1)
+  if (ask > c.budget) return 'cold'
+  if (c.haggle && ask >= c.haggle.lastAsk) return 'cold'
+  if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) return 'warm'
+  return odds(LAST_ROUND_FACTOR)
+}
+
 /** The prices a seller can ask now: up to MSRP at first, then between their counter and the last ask. */
 export function askRange(c: Customer, car: InventoryCar): { min: number; max: number } {
   if (!c.haggle) return { min: PRICE_STEP, max: car.msrp }

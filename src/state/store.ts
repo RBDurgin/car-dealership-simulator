@@ -126,6 +126,7 @@ import {
 import { leadChoice } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { WEATHER_EFFECTS, waitingOutside, weatherOn, type Weather } from '../sim/weather'
+import type { TipId } from '../sim/tips'
 import { formatMoney } from '../ui/format'
 
 export interface MoveOrder {
@@ -200,6 +201,10 @@ interface GameState {
   monthSales: MonthSales
   /** The manufacturer's sales target for the month, set on the 1st. */
   quota: number
+  /** The bank's one-time safety net (Easy) has covered a shortfall. Saved. */
+  bailoutUsed: boolean
+  /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
+  tipsSeen: TipId[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -255,6 +260,8 @@ interface GameState {
   closeInspect: () => void
   showNotice: (text: string) => void
   clearNotice: (id: number) => void
+  /** Guided tip `id` was shown; it won't be again this game. */
+  markTipSeen: (id: TipId) => void
   tickClock: (t: GameTime) => void
   /** Sells a car at `price` (default MSRP). False if it isn't for sale. */
   sellCar: (id: string, price?: number) => boolean
@@ -373,6 +380,21 @@ export function levelTuning(s: Pick<GameState, 'difficulty'>): Tuning {
   return TUNING[s.difficulty]
 }
 
+/**
+ * What `c`'s seller adds to the odds of a yes: their skill bonus, plus what
+ * the showroom improvements up today and the level add.
+ */
+export function sellerBonusFor(
+  s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster'>,
+  c: Pick<Customer, 'handlerId'>,
+): number {
+  const showroom =
+    effectsOf(installed(s.improvements, s.clock.day)).acceptBonus + levelTuning(s).acceptBonus
+  if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + showroom
+  const e = s.roster.find((x) => x.id === c.handlerId)
+  return (e ? skillBonus(e.skill) : 0) + showroom
+}
+
 /** The level's scale on reputation gains and losses. */
 export function repScale(t: Tuning): RepScale {
   return { gain: t.repGain, loss: t.repLoss }
@@ -389,6 +411,11 @@ export function theftNotice(theft: NightTheft): string {
   const { car } = theft
   const stole = `Nazma stole the ${carName(car.model)} off the lot overnight.`
   return car.floored ? `${stole} The bank called in its ${formatMoney(car.cost)} loan.` : stole
+}
+
+/** The morning's word on the bank covering yesterday's shortfall. */
+export function bailoutNotice(amount: number): string {
+  return `Yesterday the bank covered your ${formatMoney(amount)} shortfall. It won't do it again.`
 }
 
 /** "3 cars delivered: 2 on the lot, 1 in the showroom." */
@@ -416,6 +443,8 @@ function dayOne(difficulty: Difficulty) {
   return {
     difficulty,
     cash: tuning.startingCash,
+    bailoutUsed: false,
+    tipsSeen: [] as TipId[],
     quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
@@ -515,8 +544,13 @@ export const useGame = create<GameState>((set, get) => {
             payout: holdback(s.monthSales.count, s.quota, s.monthSales.msrp),
           }
         : null
+    const cash =
+      s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
+    // On Easy the bank covers the first time the day ends in the red.
+    const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
     set({
-      cash: s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0),
+      cash: cash + bailout,
+      bailoutUsed: s.bailoutUsed || bailout > 0,
       reputation,
       dayStats: {
         ...s.dayStats,
@@ -526,6 +560,7 @@ export const useGame = create<GameState>((set, get) => {
         owner,
         reputation: reputation - s.reputation,
         quota,
+        bailout,
         settled: true,
       },
     })
@@ -679,13 +714,7 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
-  /** The seller's skill bonus plus what the showroom improvements and the level add. */
-  const sellerBonus = (c: Customer) => {
-    const showroom = upEffects().acceptBonus + tuning().acceptBonus
-    if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + showroom
-    const e = get().roster.find((x) => x.id === c.handlerId)
-    return (e ? skillBonus(e.skill) : 0) + showroom
-  }
+  const sellerBonus = (c: Customer) => sellerBonusFor(get(), c)
 
   /**
    * Signs `c`'s paperwork: sells the car at the offer price, logs the sale and
@@ -836,6 +865,7 @@ export const useGame = create<GameState>((set, get) => {
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
     const notices = [
+      s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
       eventNotice(day),
       theft && theftNotice(theft),
       delivered.length > 0 && deliveryNotice(delivered),
@@ -947,6 +977,10 @@ export const useGame = create<GameState>((set, get) => {
     showNotice: (text) => set({ notice: { id: nextNoticeId++, text } }),
     clearNotice: (id) => {
       if (get().notice?.id === id) set({ notice: null })
+    },
+    markTipSeen: (id) => {
+      const seen = get().tipsSeen
+      if (!seen.includes(id)) set({ tipsSeen: [...seen, id] })
     },
     tickClock: (t) => {
       const step = toStep(t)
@@ -1344,6 +1378,8 @@ export const useGame = create<GameState>((set, get) => {
         reputation: save.reputation,
         monthSales: save.monthSales,
         quota: save.quota,
+        bailoutUsed: save.bailoutUsed,
+        tipsSeen: save.tipsSeen,
       })
       beginDay(save.day + 1)
     },

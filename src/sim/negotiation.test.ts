@@ -6,6 +6,7 @@ import {
   askRange,
   clampAsk,
   counterPrice,
+  dealWarmth,
   FIRST_COUNTER_DROP,
   hopePrice,
   LAST_ROUND_FACTOR,
@@ -71,6 +72,46 @@ describe('hopePrice', () => {
 
   it('never goes over budget', () => {
     expect(hopePrice({ ...base, budget: 25_000 }, sedan)).toBe(25_000)
+  })
+})
+
+describe('dealWarmth', () => {
+  it('is hot at what they hope to pay when they like the car', () => {
+    expect(acceptChance(base, sedan, 28_800)).toBeGreaterThan(0.6)
+    expect(dealWarmth(base, sedan, 28_800)).toBe('hot')
+  })
+
+  it('is cold at what they hope to pay when they’d likely pass anyway', () => {
+    const kicker = { ...base, archetype: 'tire-kicker' as const, preferredModels: [] }
+    expect(acceptChance(kicker, sedan, 28_800)).toBeLessThan(0.3)
+    expect(dealWarmth(kicker, sedan, 28_800)).toBe('cold')
+  })
+
+  it('takes the seller’s bonus into account', () => {
+    const lukewarm = { ...base, preferredModels: [], budget: 30_000 }
+    const chance = acceptChance(lukewarm, sedan, 28_800)
+    expect(chance).toBeGreaterThanOrEqual(0.3)
+    expect(chance).toBeLessThan(0.6)
+    expect(dealWarmth(lukewarm, sedan, 28_800)).toBe('warm')
+    expect(dealWarmth(lukewarm, sedan, 28_800, 0.6 - chance)).toBe('hot')
+  })
+
+  it('is warm above their hope while they’ll still counter', () => {
+    expect(dealWarmth(base, sedan, 30_000)).toBe('warm')
+    expect(dealWarmth(haggling(2, 30_000, 28_000), sedan, 29_500)).toBe('warm')
+  })
+
+  it('is cold over budget, or holding at the last ask', () => {
+    expect(dealWarmth({ ...base, budget: 27_000, expect: 0 }, sedan, 29_000)).toBe('cold')
+    expect(dealWarmth(haggling(2, 30_000, 28_000), sedan, 30_000)).toBe('cold')
+  })
+
+  it('on their last round goes by the half-hearted roll', () => {
+    const last = haggling(ARCHETYPES.regular.haggle.rounds, 30_000, 28_500)
+    const chance = acceptChance(last, sedan, 29_500) * LAST_ROUND_FACTOR
+    expect(dealWarmth(last, sedan, 29_500)).toBe(chance >= 0.6 ? 'hot' : 'warm')
+    // At or under their counter it's the full roll.
+    expect(dealWarmth(last, sedan, 28_500)).toBe('hot')
   })
 })
 

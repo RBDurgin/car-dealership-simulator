@@ -5,9 +5,9 @@ import { PLAYER_ID, type Customer } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
 import type { InventoryCar } from '../sim/inventory'
-import { ASK_STEP, clampAsk, suggestedAsk } from '../sim/negotiation'
+import { ASK_STEP, clampAsk, dealWarmth, suggestedAsk, type Warmth } from '../sim/negotiation'
 import { financeOnDuty } from '../sim/staff'
-import { useGame } from '../state/store'
+import { levelTuning, sellerBonusFor, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /** Gross on the car at `price`, red when it's a loss. */
@@ -21,13 +21,32 @@ function Margin({ car, price }: { car: InventoryCar; price: number }) {
   )
 }
 
+const WARMTH_LABELS: Record<Warmth, string> = {
+  hot: 'Hot: likely to take it',
+  warm: "Warm: they'll talk",
+  cold: 'Cold: likely to walk',
+}
+
+/** Easy's deal hint: how the customer would take an ask of `price`. */
+function WarmthChip({ c, car, price }: { c: Customer; car: InventoryCar; price: number }) {
+  const bonus = useGame((s) => sellerBonusFor(s, c))
+  const warmth = dealWarmth(c, car, price, bonus)
+  return (
+    <div className={`warmth-chip warmth-${warmth}`} role="status">
+      {WARMTH_LABELS[warmth]}
+    </div>
+  )
+}
+
 /**
  * Naming a price: MSRP or 3% off to open; later, holding, splitting the
  * difference or taking their counter. A stepper sets any price in between.
  * Remounted each round (`key`), so the stepper starts at the suggested ask.
+ * On Easy a chip shows how warm they are to the stepper's price.
  */
 function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
   const [price, setPrice] = useState(() => suggestedAsk(c, car))
+  const hint = useGame((s) => levelTuning(s).dealHint)
   const game = useGame.getState()
   const ask = (p: number) => game.ask(p)
   const step = (d: number) => setPrice((p) => clampAsk(c, car, p + d))
@@ -70,6 +89,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           </>
         )}
       </div>
+      {hint && <WarmthChip c={c} car={car} price={price} />}
       <div className="haggle-stepper">
         <button className="btn" aria-label="Lower" onClick={() => step(-ASK_STEP)}>
           −

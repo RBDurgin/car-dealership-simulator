@@ -94,6 +94,13 @@ function BasicsTab({ touch, click }: TabProps) {
           unhappy customers cost less reputation.
         </p>
         <p>
+          Easy also helps you learn. While you haggle, a chip shows how warm the customer is to the
+          price on the stepper: <b>hot</b> (likely to take it), <b>warm</b> (they&apos;ll talk) or{' '}
+          <b>cold</b> (likely to walk). The first time a day ends in the red, the bank tops your
+          cash back up to $0; it only does this once. And tips pop up the first time things happen,
+          such as a counter-offer, a dirty car or a visit from Nazma.
+        </p>
+        <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
           {percentOn(TUNING.hard.invoice)} more and interest is {percentOn(TUNING.hard.interest)}{' '}
           higher. About {percentOff(TUNING.hard.traffic)} fewer customers come in, they run out of
