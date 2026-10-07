@@ -3,6 +3,7 @@ import { emptyStats, type DayStats, type Sale } from './deal'
 import { buildInventory, sellCar } from './inventory'
 import {
   FIRST_OWNER_DAY,
+  EVENT_SALES_EXTRA,
   generateGoal,
   goalLabel,
   goalProgress,
@@ -76,6 +77,16 @@ describe('generateGoal', () => {
         .filter((g) => g.kind === 'sales')
         .reduce((sum, g) => sum + (g.kind === 'sales' ? g.count : 0), 0)
     expect(count(2)).toBeGreaterThan(count(0))
+  })
+
+  it('sets more and bigger sales goals on a sale weekend', () => {
+    const goals = (onSale: boolean) =>
+      Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 1, onSale))
+    const sales = (onSale: boolean) => goals(onSale).filter((g) => g.kind === 'sales')
+    expect(sales(true).length).toBeGreaterThan(sales(false).length)
+    for (const g of sales(true)) {
+      if (g.kind === 'sales') expect(g.count).toBeGreaterThanOrEqual(2 + 1 + EVENT_SALES_EXTRA)
+    }
   })
 
   it("never asks for a body type that isn't for sale", () => {

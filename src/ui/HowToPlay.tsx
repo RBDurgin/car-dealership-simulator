@@ -7,6 +7,7 @@ import {
   IMPROVEMENTS,
   type ImprovementArea,
 } from '../sim/improvements'
+import { CLOSEOUT_REBATE, EVENTS } from '../sim/events'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
@@ -176,7 +177,9 @@ function BusinessTab({ touch, click }: TabProps) {
           Sold cars leave empty spaces. Order new ones on the <b>Stock</b> tab; they&apos;re
           delivered the next morning, showroom platforms first, then the lot. You can cancel an
           order until the day ends. One model each day is on incentive,{' '}
-          {Math.round(INCENTIVE_DISCOUNT * 100)}% off its invoice.
+          {Math.round(INCENTIVE_DISCOUNT * 100)}% off its invoice, and in the last three days of
+          each month the manufacturer clears out one model at {Math.round(CLOSEOUT_REBATE * 100)}%
+          off (both, if it&apos;s on incentive too).
         </p>
         <p>
           Pay in <b>cash</b>, or put the car on the <b>floor plan</b>: the bank pays for it (up to{' '}
@@ -204,6 +207,16 @@ function BusinessTab({ touch, click }: TabProps) {
           the target, a little from there, {(HOLDBACK_RATE * 100).toFixed(2)}% for hitting it and{' '}
           {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
           sale counts, whoever makes it.
+        </p>
+      </section>
+      <section>
+        <h3>Sale weekends</h3>
+        <p>
+          A few holiday weekends a year (Friday to Sunday) are sales:{' '}
+          {EVENTS.map((e) => e.label).join(', ')}. They bring up to twice the visitors, more of them
+          bargain hunters, and everyone expects a bigger discount, so you sell more cars at thinner
+          margins. You get a week&apos;s warning: stock up and book ads beforehand. The Calendar tab
+          shows when the next one is, and the owner may ask for more sales that day.
         </p>
       </section>
       <section>

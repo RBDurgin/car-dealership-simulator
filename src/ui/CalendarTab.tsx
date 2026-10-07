@@ -9,6 +9,8 @@ import {
   weekdayTraffic,
   weekStart,
 } from '../sim/calendar'
+import { CLOSEOUT_REBATE, closeoutOn, EVENTS, eventOn, nextEvent } from '../sim/events'
+import { carName } from '../sim/interactables'
 import {
   daysLeft,
   holdback,
@@ -26,19 +28,27 @@ import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
 const PEAK =
-  Math.max(...WEEKDAY_TRAFFIC) * Math.max(...Object.values(WEATHER_EFFECTS).map((e) => e.traffic))
+  Math.max(...WEEKDAY_TRAFFIC) *
+  Math.max(...Object.values(WEATHER_EFFECTS).map((e) => e.traffic)) *
+  Math.max(...EVENTS.map((e) => e.traffic))
 
 function DayRow({ day, today }: { day: number; today: number }) {
   const c = calendarOf(day)
   // What happened, or what the forecast says for the next few days.
   const weather = forecastFor(day, today)
-  const traffic = weekdayTraffic(day) * (weather ? WEATHER_EFFECTS[weather].traffic : 1)
+  const event = eventOn(day)
+  const traffic =
+    weekdayTraffic(day) * (weather ? WEATHER_EFFECTS[weather].traffic : 1) * (event?.traffic ?? 1)
   const when = day === today ? 'today' : day < today ? 'past' : 'ahead'
   const sky = weather
     ? `${day > today ? 'Forecast: ' : ''}${WEATHER_LABELS[weather].toLowerCase()}`
     : 'No forecast yet'
+  const sale = event ? ` · ${event.label} sale` : ''
   return (
-    <li className={`cal-day cal-${when}`} title={`${longDate(day)} · ${sky}`}>
+    <li
+      className={`cal-day cal-${when}${event ? ' cal-sale' : ''}`}
+      title={`${longDate(day)} · ${sky}${sale}`}
+    >
       <span className="cal-name">
         {weekdayLabel(c.weekday)} <span className="muted">{c.dayOfMonth}</span>
       </span>
@@ -50,6 +60,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
       </span>
       <span className="cal-label">
         {day === today ? 'Today · ' : ''}
+        {event ? 'Sale · ' : ''}
         {trafficLabel(traffic)}
       </span>
     </li>
@@ -109,6 +120,40 @@ function MonthQuota({ day }: { day: number }) {
   )
 }
 
+/** The next sale weekend, and this month's closeout model once it's on. */
+function SalesAndCloseouts({ day }: { day: number }) {
+  const today = eventOn(day)
+  const next = nextEvent(day)
+  const opens = calendarOf(next.day)
+  const closeout = closeoutOn(day)
+  return (
+    <>
+      <h3>Sales and closeouts</h3>
+      <p className="muted cal-intro">
+        {today ? (
+          <>
+            The <b>{today.label}</b> sale is on: more visitors, mostly bargain hunters, hoping for
+            about {Math.round(today.extraDiscount * 100)}% more off.{' '}
+          </>
+        ) : null}
+        Next sale: <b>{next.event.label}</b>, Friday to Sunday of week {opens.week} of{' '}
+        {monthLabel(opens.month, true)} (in {next.day - day} days).{' '}
+        {closeout ? (
+          <>
+            Month-end closeout: the <b>{carName(closeout)}</b> is{' '}
+            {Math.round(CLOSEOUT_REBATE * 100)}% off invoice until the month ends.
+          </>
+        ) : (
+          <>
+            In the last three days of each month one model is {Math.round(CLOSEOUT_REBATE * 100)}%
+            off invoice.
+          </>
+        )}
+      </p>
+    </>
+  )
+}
+
 /** This week and next, with each day's weather (forecast a few days ahead) and expected traffic. */
 export function CalendarTab() {
   const day = useGame((s) => s.clock.day)
@@ -122,6 +167,7 @@ export function CalendarTab() {
       </p>
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
+      <SalesAndCloseouts day={day} />
       <MonthQuota day={day} />
     </>
   )

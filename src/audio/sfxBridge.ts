@@ -27,6 +27,7 @@ const VOLUME: Record<SfxCue, number> = {
   close: 0.35,
   scuff: 0.6,
   shoo: 0.6,
+  fanfare: 0.5,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */

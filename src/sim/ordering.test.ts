@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CLOSEOUT_REBATE, closeoutOn } from './events'
 import { FLOOR_PLAN_LIMIT } from './floorPlan'
 import { BASE_MSRP, buildInventory, MSRP_VARIATION, sellCar, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES, parkedCarRect, type CarModel } from './layout'
@@ -7,6 +8,7 @@ import {
   cancelOrder,
   dailyIncentive,
   deliver,
+  INCENTIVE_DISCOUNT,
   freeSlots,
   invoicePrice,
   orderCost,
@@ -58,6 +60,19 @@ describe('catalog', () => {
     // Not the same model every day.
     const models = new Set(Array.from({ length: 20 }, (_, d) => dailyIncentive(d + 1)))
     expect(models.size).toBeGreaterThan(1)
+  })
+
+  it('takes the closeout rebate off one model at month end, stacking with the incentive', () => {
+    const models = Object.keys(BASE_MSRP) as CarModel[]
+    for (let day = 26; day <= 28; day++) {
+      const model = closeoutOn(day)!
+      const incentive = dailyIncentive(day) === model ? 1 - INCENTIVE_DISCOUNT : 1
+      const factor = incentive * (1 - CLOSEOUT_REBATE)
+      expect(orderCost(model, day)).toBe(Math.round((invoicePrice(model) * factor) / 100) * 100)
+      for (const other of models.filter((m) => m !== model && m !== dailyIncentive(day))) {
+        expect(orderCost(other, day)).toBe(invoicePrice(other))
+      }
+    }
   })
 })
 

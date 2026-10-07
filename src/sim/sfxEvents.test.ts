@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, startOfDay } from './clock'
 import { generateCustomer, type Customer } from './customers'
+import { nextEvent } from './events'
 import { buildInventory } from './inventory'
 import { NAZMA_ID, type NazmaVisit } from './nazma'
 import { createRng } from './rng'
@@ -63,6 +64,11 @@ describe('sfxFor', () => {
 
   it('rings the bell on a new morning', () => {
     expect(cues({ clock: startOfDay(2) })).toEqual(['bell'])
+  })
+
+  it('opens a sale weekend with a fanfare instead', () => {
+    const { day } = nextEvent(1)
+    expect(cues({ clock: startOfDay(day) }, { clock: startOfDay(day - 1) })).toEqual(['fanfare'])
   })
 
   it('turns the page when the day summary comes up', () => {

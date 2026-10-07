@@ -53,21 +53,30 @@ export function isOwnerDay(day: number): boolean {
   return visit === day
 }
 
+/** On a sale weekend the owner is likelier to set a sales goal, and this many cars bigger. */
+export const EVENT_SALES_EXTRA = 2
+
 /**
  * A goal the day's team can reasonably meet: more sales, revenue and profit with more
- * salespeople on the payroll, and a body type only if one is for sale.
+ * salespeople on the payroll, and a body type only if one is for sale. On a
+ * sale weekend (`onSale`) a sales goal is likelier, and bigger.
  */
 export function generateGoal(
   rng: Rng,
   inventory: readonly InventoryCar[],
   salesStaff: number,
+  onSale = false,
 ): OwnerGoal {
   const models = [...new Set(availableCars(inventory).map((c) => c.model))]
   const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'profit', 'noImpatient', 'reputation']
   if (models.length > 0) kinds.push('model')
+  if (onSale) kinds.push('sales', 'sales')
   switch (rng.pick(kinds)) {
     case 'sales':
-      return { kind: 'sales', count: rng.int(2, 3) + salesStaff }
+      return {
+        kind: 'sales',
+        count: rng.int(2, 3) + salesStaff + (onSale ? EVENT_SALES_EXTRA : 0),
+      }
     case 'revenue':
       return { kind: 'revenue', amount: (rng.int(6, 9) + 3 * salesStaff) * 10_000 }
     case 'profit':

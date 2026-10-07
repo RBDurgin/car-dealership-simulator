@@ -1,5 +1,6 @@
 import { calendarOf, formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
+import { eventOn } from '../sim/events'
 import { daysLeft, QUOTA_STATUS_LABELS, quotaLine, quotaStatus } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
@@ -73,6 +74,21 @@ function WeatherIcon() {
   )
 }
 
+/** On a sale weekend, a tag naming the sale; compact screens keep the icon. */
+function SaleBadge({ day }: { day: number }) {
+  const event = eventOn(day)
+  if (!event) return null
+  const text = `${event.label} sale: about ${event.traffic}× the visitors, hoping for a bigger discount.`
+  return (
+    <span className="sale-badge" title={text} aria-label={text}>
+      <span aria-hidden>🏷️</span>
+      <span className="sale-label" aria-hidden>
+        {event.label}
+      </span>
+    </span>
+  )
+}
+
 /** The speaker: shows whether sound is muted and opens the sound settings. */
 function SoundButton() {
   const muted = useGame((s) => s.audio.muted)
@@ -91,7 +107,7 @@ function SoundButton() {
 }
 
 /**
- * Date, weather, time, cash, reputation, the month's quota, the owner's goal (on their days) and the office (stock,
+ * Date, weather, any sale, time, cash, reputation, the month's quota, the owner's goal (on their days) and the office (stock,
  * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
@@ -105,6 +121,7 @@ export function TopBar() {
     <div className="panel topbar">
       <TopBarDate day={clock.day} />
       <WeatherIcon />
+      <SaleBadge day={clock.day} />
       <span className="topbar-sep">·</span>
       <span className="topbar-time">{formatTime(clock.minute)}</span>
       {isClosed(clock) && <span className="topbar-closed">Closed</span>}

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
-import { pickArchetype } from '../sim/archetypes'
+import { pickArchetype, skewWeights } from '../sim/archetypes'
 import {
   DEFAULT_AUDIO_SETTINGS,
   withVolume,
@@ -38,6 +38,7 @@ import {
   type DayStats,
   type Sale,
 } from '../sim/deal'
+import { eventNotice, eventOn } from '../sim/events'
 import { carName, type ActionId } from '../sim/interactables'
 import { clampAsk, respondToAsk, staffAsk, suggestedAsk, walkLine } from '../sim/negotiation'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
@@ -610,6 +611,19 @@ export const useGame = create<GameState>((set, get) => {
     return effectsOf(installed(s.improvements, s.clock.day))
   }
 
+  /**
+   * What a new customer brings in with them today: the showroom's cut to the
+   * discount they hope for, and on a sale weekend a bigger hoped-for discount
+   * and a lean toward bargain hunters.
+   */
+  const arrivalOpts = () => {
+    const event = eventOn(get().clock.day)
+    return {
+      expectCut: upEffects().expectCut,
+      ...(event && { extraDiscount: event.extraDiscount, skew: event.skew }),
+    }
+  }
+
   /** The seller's skill bonus plus what the showroom improvements add. */
   const sellerBonus = (c: Customer) => {
     const showroom = upEffects().acceptBonus
@@ -688,14 +702,17 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Opens the doors on `day`: sold cars are gone, Nazma may have stolen one
    * off the lot (the bank calls in its loan if it was floored), the rest have
-   * gathered a night's dust (more out on the lot after rain), yesterday's orders are parked in their slots, finished ad
-   * campaigns end, there are new arrivals (more while ads run, and more or
-   * fewer with reputation, the weekday and the weather) and applicants, and the staff head in.
-   * On the 1st the manufacturer sets the month's quota, from reputation.
+   * gathered a night's dust (more out on the lot after rain), yesterday's
+   * orders are parked in their slots, finished ad campaigns end, there are new
+   * arrivals (more while ads run, and more or fewer with reputation, the
+   * weekday, the weather and any sale weekend) and applicants, and the staff
+   * head in. On the 1st the manufacturer sets the month's quota, from
+   * reputation. A sale weekend is announced a week ahead and on its first day.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
     const date = calendarOf(day)
+    const event = eventOn(day)
     const effects = WEATHER_EFFECTS[weather]
     customerRng = createRng(CUSTOMER_SEED + day)
     dealRng = createRng(DEAL_SEED + day)
@@ -719,7 +736,7 @@ export const useGame = create<GameState>((set, get) => {
     const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
       ? {
-          goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
+          goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff, !!event),
           announced: false,
         }
       : null
@@ -736,7 +753,11 @@ export const useGame = create<GameState>((set, get) => {
         customerRng,
         trafficBoost(campaigns, day, campaignScale(s.reputation)),
         {
-          scale: visitorScale(s.reputation) * weekdayTraffic(day) * effects.traffic,
+          scale:
+            visitorScale(s.reputation) *
+            weekdayTraffic(day) *
+            effects.traffic *
+            (event?.traffic ?? 1),
           referrals: referralVisitors(s.reputation),
         },
       ),
@@ -756,6 +777,7 @@ export const useGame = create<GameState>((set, get) => {
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
     const notices = [
+      eventNotice(day),
       theft && theftNotice(theft),
       delivered.length > 0 && deliveryNotice(delivered),
     ].filter((t): t is string => !!t)
@@ -885,7 +907,7 @@ export const useGame = create<GameState>((set, get) => {
       // area keeps them happy, so they last longer. Rain and heat wear down
       // those left waiting out on the lot.
       const except = s.activeAction?.targetId
-      const { patienceSaved, expectCut } = upEffects()
+      const { patienceSaved } = upEffects()
       const drain = minutes * patienceFactor(s.roster) * (1 - patienceSaved)
       const outsideFactor = WEATHER_EFFECTS[s.weather].lotPatience
       let customers = reduceCustomers(s.customers, {
@@ -900,7 +922,10 @@ export const useGame = create<GameState>((set, get) => {
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
       const arrived = due.map((source) =>
-        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, { source, expectCut }),
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+          source,
+          ...arrivalOpts(),
+        }),
       )
       customers = [...customers, ...arrived]
       set({
@@ -1009,9 +1034,7 @@ export const useGame = create<GameState>((set, get) => {
       if (isClosed(s.clock) || n <= 0) return
       const stock = availableCars(s.inventory)
       const arrived = Array.from({ length: n }, () =>
-        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-          expectCut: upEffects().expectCut,
-        }),
+        generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, arrivalOpts()),
       )
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived) })
       commit([...s.customers, ...arrived])
@@ -1022,14 +1045,15 @@ export const useGame = create<GameState>((set, get) => {
         return null
       }
       // Passers-by come alone: a couple would need a companion out of thin air.
-      const picked = pickArchetype(walkInRng)
+      const opts = arrivalOpts()
+      const picked = pickArchetype(walkInRng, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = `customer-${nextCustomerId++}`
       const c = generateCustomer(id, availableCars(s.inventory), walkInRng, {
+        ...opts,
         variant,
         archetype,
         source: 'walk-in',
-        expectCut: upEffects().expectCut,
       })
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...s.customers, c])

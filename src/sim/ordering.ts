@@ -1,4 +1,5 @@
 import { CAR_MODELS } from './customers'
+import { CLOSEOUT_REBATE, closeoutOn } from './events'
 import { FLOOR_PLAN_LIMIT, floorBalance } from './floorPlan'
 import { BASE_MSRP, rollMsrp, roundTo100, type CarLocation, type InventoryCar } from './inventory'
 import {
@@ -13,8 +14,8 @@ import { createRng, type Rng } from './rng'
 
 /**
  * Buying stock from the manufacturer: the catalog's invoice prices, the day's
- * incentive, where a new car can go, and placing, cancelling and delivering
- * orders. Orders are delivered the next morning.
+ * incentive and month-end closeout, where a new car can go, and placing,
+ * cancelling and delivering orders. Orders are delivered the next morning.
  */
 
 /** The manufacturer's invoice is this fraction of a model's base MSRP. */
@@ -53,10 +54,16 @@ export function dailyIncentive(day: number): CarModel {
   return createRng(INCENTIVE_SEED + day).pick(CAR_MODELS)
 }
 
-/** What ordering `model` costs on `day`, with the incentive taken off if it's that model. */
+/**
+ * What ordering `model` costs on `day`: the invoice, less the day's incentive
+ * and the month-end closeout rebate if it's that model (both, if it's both).
+ */
 export function orderCost(model: CarModel, day: number): number {
+  let factor = 1
+  if (dailyIncentive(day) === model) factor *= 1 - INCENTIVE_DISCOUNT
+  if (closeoutOn(day) === model) factor *= 1 - CLOSEOUT_REBATE
   const invoice = invoicePrice(model)
-  return dailyIncentive(day) === model ? roundTo100(invoice * (1 - INCENTIVE_DISCOUNT)) : invoice
+  return factor === 1 ? invoice : roundTo100(invoice * factor)
 }
 
 /** Every slot on the premises: the showroom platforms first, then the lot spaces. */

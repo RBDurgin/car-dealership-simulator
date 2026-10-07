@@ -100,3 +100,16 @@ export function pickArchetype(rng: Rng, weights?: Record<Archetype, number>): Ar
   }
   return ALL[ALL.length - 1]
 }
+
+/**
+ * `weights` (or the usual odds) with each archetype's multiplied by `skew`,
+ * e.g. a sale weekend's lean toward bargain hunters.
+ */
+export function skewWeights(
+  skew: Partial<Record<Archetype, number>>,
+  weights?: Record<Archetype, number>,
+): Record<Archetype, number> {
+  const out = {} as Record<Archetype, number>
+  for (const a of ALL) out[a] = (weights?.[a] ?? ARCHETYPES[a].weight) * (skew[a] ?? 1)
+  return out
+}

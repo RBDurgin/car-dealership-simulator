@@ -1,4 +1,4 @@
-import { ARCHETYPES, EXPECT_JITTER, pickArchetype, type Archetype } from './archetypes'
+import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import { BASE_MSRP, type InventoryCar } from './inventory'
@@ -177,6 +177,10 @@ export interface CustomerOptions {
   source?: Source
   /** Share taken off the discount they hope for, from showroom improvements (`Effects.expectCut`). */
   expectCut?: number
+  /** Added to the discount they hope for, on a sale weekend (`SaleEvent.extraDiscount`). */
+  extraDiscount?: number
+  /** Multipliers on the archetype odds, on a sale weekend (`SaleEvent.skew`). */
+  skew?: Partial<Record<Archetype, number>>
 }
 
 /**
@@ -190,7 +194,9 @@ export function generateCustomer(
   opts: CustomerOptions = {},
 ): Customer {
   const source = opts.source ?? 'regular'
-  const archetype = opts.archetype ?? pickArchetype(rng, sourceWeights(source))
+  const weights = sourceWeights(source)
+  const archetype =
+    opts.archetype ?? pickArchetype(rng, opts.skew ? skewWeights(opts.skew, weights) : weights)
   const traits = ARCHETYPES[archetype]
   const name = randomName(rng)
   const variant = opts.variant ?? rng.pick(CUSTOMER_VARIANTS)
@@ -244,7 +250,12 @@ export function generateCustomer(
   const jitter = (rng.next() * 2 - 1) * EXPECT_JITTER
   return {
     ...customer,
-    expect: Math.round((traits.haggle.expect + jitter) * (1 - (opts.expectCut ?? 0)) * 1000) / 1000,
+    expect:
+      Math.round(
+        (traits.haggle.expect + jitter + (opts.extraDiscount ?? 0)) *
+          (1 - (opts.expectCut ?? 0)) *
+          1000,
+      ) / 1000,
     browseCarIds: ordered.map((car) => car.id),
     targetCarId: target?.id ?? null,
   }

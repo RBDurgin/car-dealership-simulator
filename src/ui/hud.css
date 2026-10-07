@@ -367,6 +367,18 @@ kbd {
 .topbar-weather {
   cursor: default;
 }
+/* A sale weekend's tag next to the date */
+.sale-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  white-space: nowrap;
+  cursor: default;
+}
 .cal-weather {
   text-align: center;
 }
@@ -384,7 +396,7 @@ kbd {
 }
 .cal-day {
   display: grid;
-  grid-template-columns: 56px 22px 1fr 108px;
+  grid-template-columns: 56px 22px 1fr 150px;
   align-items: center;
   gap: 8px;
   padding: 3px 6px;
@@ -397,6 +409,12 @@ kbd {
 }
 .cal-past {
   opacity: 0.45;
+}
+.cal-sale .cal-fill {
+  background: #f87171;
+}
+.cal-sale .cal-label {
+  color: #fca5a5;
 }
 .cal-bar {
   height: 8px;
@@ -765,6 +783,9 @@ kbd {
 }
 .stock-incentive {
   background: #15803d;
+}
+.stock-closeout {
+  background: #b45309;
 }
 .stock-missed {
   font-size: 12px;
@@ -1144,7 +1165,8 @@ kbd {
     min-width: 0;
   }
   .rep-bar,
-  .quota-left {
+  .quota-left,
+  .sale-label {
     display: none;
   }
   .goal-icon {

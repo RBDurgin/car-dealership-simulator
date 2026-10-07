@@ -1,5 +1,6 @@
 import { dayOver, type GameTime } from './clock'
 import type { Customer } from './customers'
+import { eventOn } from './events'
 import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
 import { NAZMA_ID, type NazmaVisit } from './nazma'
@@ -21,6 +22,7 @@ export type SfxCue =
   | 'close'
   | 'scuff'
   | 'shoo'
+  | 'fanfare'
 
 /**
  * Where a cue happens: a customer, an employee, a car or someone the store
@@ -75,6 +77,7 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   close: 80,
   scuff: 500,
   shoo: 1000,
+  fanfare: 2000,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -89,7 +92,10 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if (prev.screen !== 'playing') return [{ cue: 'bell' }]
   const out: SfxEvent[] = []
 
-  if (next.clock.day > prev.clock.day) out.push({ cue: 'bell' })
+  // A sale weekend opens each of its days with a fanfare instead of the bell.
+  if (next.clock.day > prev.clock.day) {
+    out.push({ cue: eventOn(next.clock.day) ? 'fanfare' : 'bell' })
+  }
   if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
 
   if (next.customers !== prev.customers) {

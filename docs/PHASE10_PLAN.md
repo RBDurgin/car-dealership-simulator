@@ -1,6 +1,6 @@
 # Phase 10 Plan: Calendar & events
 
-**Status:** planned 2026-10-06. 10a done 2026-10-06. 10b done 2026-10-06. 10c done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** planned 2026-10-06. 10a done 2026-10-06. 10b done 2026-10-06. 10c done 2026-10-06. 10d done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -100,6 +100,7 @@ Almost everything is derived from the day number, the same way `isOwnerDay` and 
 - Sound: a short jingle cue when an event day opens. It needs a `SfxCue`, a file, a level and a credit.
 - Summary: an event line ("Memorial Day sale: 11 visitors").
 - Help: events and closeouts.
+- As built: `EVENTS` run Friday to Sunday of a set week (Presidents' Day Feb wk 3, Memorial Day May wk 4, Fourth of July Jul wk 1, Labor Day Sep wk 1, Black Friday Nov wk 4, Year-End Dec wk 4, which falls on month end), with `traffic` 1.5–2. The hoped-for discount is `extraDiscount` (3–5%), added to `expect` before the showroom's `expectCut` scales it; the archetype lean is `skew`, applied through `skewWeights` in `sim/archetypes.ts` (on top of an ad's `sourceWeights`, and for walk-ins too). The store's `arrivalOpts` gives every new customer the day's improvements and sale. `closeoutOn(day)` picks one model a month (seeded by month) for its last 3 days, `CLOSEOUT_REBATE` 6%, stacking with the daily incentive in `orderCost`. `eventNotice` gives the morning notice a week ahead and on opening day. `generateGoal(…, onSale)` makes a sales goal likelier and `EVENT_SALES_EXTRA` (2) cars bigger. The cue is `fanfare`, a synthesized arpeggio in `audio/samples.ts` that replaces the morning bell on sale days. The top bar shows a 🏷️ sale tag, the Calendar tab colours sale days and lists the next sale and the closeout, the stock panel badges the closeout model, and the summary names the sale in its kicker and visitor line. Nothing is saved.
 
 ## Tuning targets
 

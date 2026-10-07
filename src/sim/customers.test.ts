@@ -173,6 +173,25 @@ describe('generateCustomer', () => {
     }
   })
 
+  it('hopes for more off on a sale weekend, before the showroom cut', () => {
+    for (let i = 0; i < 20; i++) {
+      const plain = generateCustomer('x', inventory, createRng(i), { expectCut: 0.25 })
+      const sale = generateCustomer('x', inventory, createRng(i), {
+        expectCut: 0.25,
+        extraDiscount: 0.04,
+      })
+      expect(sale.expect).toBeCloseTo(plain.expect + 0.04 * 0.75, 2)
+    }
+  })
+
+  it('leans toward the archetypes a sale skews to', () => {
+    const count = (skew?: { bargain: number }) =>
+      Array.from({ length: 300 }, (_, i) =>
+        generateCustomer(`c${i}`, inventory, createRng(i), { skew }),
+      ).filter((c) => c.archetype === 'bargain').length
+    expect(count({ bargain: 3 })).toBeGreaterThan(count() * 1.8)
+  })
+
   it('makes bargain hunters spend less and decisive buyers wait less', () => {
     const many = (archetype: 'regular' | 'bargain' | 'decisive') =>
       Array.from({ length: 100 }, (_, i) =>

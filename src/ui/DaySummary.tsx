@@ -1,4 +1,5 @@
 import { calendarOf, longDate } from '../sim/calendar'
+import { eventOn } from '../sim/events'
 import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { dayOver, formatTime } from '../sim/clock'
 import {
@@ -37,6 +38,7 @@ export function DaySummary() {
   const monthSold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
   if (!open) return null
+  const event = eventOn(day)
   const missed = missedSummary(stats.missed)
   const nazma = nazmaSummary(stats.nazma, formatMoney)
   const sources = salesBySource(stats)
@@ -48,12 +50,14 @@ export function DaySummary() {
       <div className="panel day-summary" role="dialog" aria-label={`${longDate(day)} summary`}>
         <div className="info-kicker">
           End of day {day} · {WEATHER_ICONS[weather]} {WEATHER_LABELS[weather]}
+          {event && ` · ${event.label} sale`}
         </div>
         <h2>{longDate(day)}</h2>
         <dl className="summary-stats">
           <dt>Visitors</dt>
           <dd>
             {stats.visitors}
+            {event && <span className="muted"> on the {event.label} sale</span>}
             {stats.walkIns > 0 && (
               <span className="muted"> ({stats.walkIns} walked in off the street)</span>
             )}

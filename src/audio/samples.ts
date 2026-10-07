@@ -4,8 +4,11 @@ import { audioContext, busNode } from './engine'
 /** Short sounds, decoded (or made) once and replayed from memory. */
 export type SfxId = SfxCue
 
+/** Sounds made here rather than read from a file. */
+type Synth = 'spray' | 'fanfare'
+
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
-const FILES: Record<Exclude<SfxId, 'spray'>, string> = {
+const FILES: Record<Exclude<SfxId, Synth>, string> = {
   click: 'sfx/click.ogg',
   sale: 'sfx/sale.ogg',
   coin: 'sfx/coin.ogg',
@@ -21,7 +24,7 @@ const FILES: Record<Exclude<SfxId, 'spray'>, string> = {
   shoo: 'sfx/shoo.ogg',
 }
 
-const ALL_IDS = [...Object.keys(FILES), 'spray'] as SfxId[]
+const ALL_IDS = [...Object.keys(FILES), 'spray', 'fanfare'] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
 
@@ -49,16 +52,52 @@ function sprayBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+/** A sale weekend's fanfare: a quick rising arpeggio and a held chord, in C major. */
+const FANFARE_NOTES = [
+  { at: 0, hz: [523.25], len: 0.12 },
+  { at: 0.12, hz: [659.25], len: 0.12 },
+  { at: 0.24, hz: [783.99], len: 0.12 },
+  { at: 0.36, hz: [523.25, 659.25, 783.99, 1046.5], len: 0.7 },
+]
+const FANFARE_SECONDS = 1.1
+
+/**
+ * Brassy-ish notes from a few odd harmonics, each with a quick attack and a
+ * decay. Made here because the packs' jingles are already the bell and the sale.
+ */
+function fanfareBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(FANFARE_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const note of FANFARE_NOTES) {
+    const start = Math.floor(note.at * rate)
+    const end = Math.min(data.length, start + Math.floor((note.len + 0.15) * rate))
+    for (let i = start; i < end; i++) {
+      const t = (i - start) / rate
+      const envelope = Math.min(1, t / 0.015) * Math.exp(-t / (note.len * 0.6))
+      let sample = 0
+      for (const hz of note.hz) {
+        const phase = 2 * Math.PI * hz * t
+        sample += Math.sin(phase) + 0.4 * Math.sin(3 * phase) + 0.2 * Math.sin(5 * phase)
+      }
+      data[i] += (sample / note.hz.length) * envelope * 0.5
+    }
+  }
+  return buffer
+}
+
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)
   if (!buffer) {
     buffer =
       id === 'spray'
         ? Promise.resolve(sprayBuffer(ctx))
-        : fetch(BASE + FILES[id])
-            .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
-            .then((data) => ctx.decodeAudioData(data))
-            .catch(() => null)
+        : id === 'fanfare'
+          ? Promise.resolve(fanfareBuffer(ctx))
+          : fetch(BASE + FILES[id])
+              .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
+              .then((data) => ctx.decodeAudioData(data))
+              .catch(() => null)
     cache.set(id, buffer)
   }
   return buffer

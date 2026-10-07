@@ -4,6 +4,7 @@ import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT, floorBalance } from '../sim/fl
 import { carName } from '../sim/interactables'
 import { availableCars, BASE_MSRP, type InventoryCar } from '../sim/inventory'
 import type { CarModel } from '../sim/layout'
+import { CLOSEOUT_REBATE, closeoutOn } from '../sim/events'
 import {
   dailyIncentive,
   freeSlots,
@@ -53,6 +54,7 @@ function CatalogRow({
   const cost = orderCost(model, day)
   const msrp = BASE_MSRP[model]
   const onIncentive = dailyIncentive(day) === model
+  const onCloseout = closeoutOn(day) === model
   const order = (financing: Financing) => useGame.getState().orderCar(model, financing)
   const why = [...new Set([blockers.cash, blockers.floor])].filter((r): r is string => !!r)
   return (
@@ -63,6 +65,14 @@ function CatalogRow({
           {onIncentive && (
             <span className="stock-badge stock-incentive">
               −{Math.round(INCENTIVE_DISCOUNT * 100)}% today
+            </span>
+          )}
+          {onCloseout && (
+            <span
+              className="stock-badge stock-closeout"
+              title="The manufacturer's month-end closeout: off invoice until the month ends."
+            >
+              −{Math.round(CLOSEOUT_REBATE * 100)}% closeout
             </span>
           )}
         </div>
