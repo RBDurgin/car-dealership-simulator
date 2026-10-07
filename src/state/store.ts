@@ -7,7 +7,7 @@ import {
   type AudioBus,
   type AudioSettings,
 } from '../sim/audioSettings'
-import { weekdayTraffic } from '../sim/calendar'
+import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
@@ -88,10 +88,12 @@ import {
   cancelOrder,
   claimedByOrder,
   deliver,
+  ALL_SLOTS,
   placeOrder,
   type Financing,
   type Order,
 } from '../sim/ordering'
+import { addSale, emptyMonthSales, holdback, monthlyQuota, type MonthSales } from '../sim/quota'
 import {
   applyChange,
   campaignScale,
@@ -188,6 +190,10 @@ interface GameState {
   reputation: number
   /** Today's weather (`weatherOn(day)`), set each morning. Not saved. */
   weather: Weather
+  /** The month's sales so far, toward the quota. Goes up with each sale, reset on the 1st. */
+  monthSales: MonthSales
+  /** The manufacturer's sales target for the month, set on the 1st. */
+  quota: number
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -440,7 +446,8 @@ export const useGame = create<GameState>((set, get) => {
    * Pays the day's staff once the doors are shut and the last customer has gone,
    * before the summary shows, so it reports cash after payroll. On an owner's
    * day the day is judged against their goal, and any bonus is paid too. The
-   * day's customers move reputation.
+   * day's customers move reputation. On the month's last day the manufacturer
+   * pays the holdback on the month's sales.
    */
   const settleDay = () => {
     const s = get()
@@ -450,8 +457,16 @@ export const useGame = create<GameState>((set, get) => {
     // A goal the player never heard (the owner didn't make it in) isn't judged.
     const owner = s.owner?.announced ? judgeDay(s.owner.goal, s.dayStats, s.clock.day) : null
     const reputation = applyChange(s.reputation, reputationChange(s.dayStats))
+    const quota =
+      calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
+        ? {
+            quota: s.quota,
+            sold: s.monthSales.count,
+            payout: holdback(s.monthSales.count, s.quota, s.monthSales.msrp),
+          }
+        : null
     set({
-      cash: s.cash - wages - commissions - interest + (owner?.bonus ?? 0),
+      cash: s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0),
       reputation,
       dayStats: {
         ...s.dayStats,
@@ -460,6 +475,7 @@ export const useGame = create<GameState>((set, get) => {
         interest,
         owner,
         reputation: reputation - s.reputation,
+        quota,
         settled: true,
       },
     })
@@ -632,7 +648,10 @@ export const useGame = create<GameState>((set, get) => {
       commission: (seller ? salesCommission(price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
       source: c.source,
     }
-    set({ dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] } })
+    set({
+      dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] },
+      monthSales: addSale(get().monthSales, car.msrp),
+    })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))
     return sale
   }
@@ -672,9 +691,11 @@ export const useGame = create<GameState>((set, get) => {
    * gathered a night's dust (more out on the lot after rain), yesterday's orders are parked in their slots, finished ad
    * campaigns end, there are new arrivals (more while ads run, and more or
    * fewer with reputation, the weekday and the weather) and applicants, and the staff head in.
+   * On the 1st the manufacturer sets the month's quota, from reputation.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
+    const date = calendarOf(day)
     const effects = WEATHER_EFFECTS[weather]
     customerRng = createRng(CUSTOMER_SEED + day)
     dealRng = createRng(DEAL_SEED + day)
@@ -695,6 +716,7 @@ export const useGame = create<GameState>((set, get) => {
     const nazma = isNazmaDay(day, guarded)
       ? planVisit(createRng(visitSeed(day)), inventory, s.roster)
       : null
+    const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff),
@@ -705,6 +727,8 @@ export const useGame = create<GameState>((set, get) => {
     set({
       clock: startOfDay(day),
       weather,
+      monthSales: newMonth ? emptyMonthSales() : s.monthSales,
+      quota: newMonth ? monthlyQuota(date.month, ALL_SLOTS.length, s.reputation) : s.quota,
       inventory,
       orders: [],
       campaigns,
@@ -757,6 +781,8 @@ export const useGame = create<GameState>((set, get) => {
     improvements: [],
     reputation: START_REPUTATION,
     weather: weatherOn(1),
+    monthSales: emptyMonthSales(),
+    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION),
     customers: [],
     arrivals: planArrivals(
       customerRng,
@@ -1238,6 +1264,8 @@ export const useGame = create<GameState>((set, get) => {
         campaigns: save.campaigns,
         improvements: save.improvements,
         reputation: save.reputation,
+        monthSales: save.monthSales,
+        quota: save.quota,
       })
       beginDay(save.day + 1)
     },

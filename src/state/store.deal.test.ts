@@ -176,6 +176,7 @@ describe('selling to a customer', () => {
       expect.objectContaining({ carId: 'lot-car-1', price, customerName: 'Alex B.' }),
     ])
     expect(game().dayStats.refused + game().dayStats.impatient).toBe(0)
+    expect(game().monthSales).toEqual({ count: 1, msrp: price })
   })
 
   it("won't close a deal without a buyer", () => {

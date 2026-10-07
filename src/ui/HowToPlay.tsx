@@ -12,6 +12,13 @@ import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_NAZMA_DAY, FIRST_THEFT_DAY } from '../sim/nazma'
 import { OWNER_BONUS } from '../sim/owner'
+import {
+  HOLDBACK_FLOOR,
+  HOLDBACK_RATE,
+  HOLDBACK_STRETCH,
+  HOLDBACK_STRETCH_AT,
+  QUOTA_RANGE,
+} from '../sim/quota'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import {
   FINANCE_FEE,
@@ -181,6 +188,22 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>
           Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
           the summary and the stock panel. Order what people ask for.
+        </p>
+      </section>
+      <section>
+        <h3>Manufacturer&apos;s quota</h3>
+        <p>
+          On the 1st of each month the manufacturer sets a sales target of {QUOTA_RANGE.min} to{' '}
+          {QUOTA_RANGE.max} cars, more in busy months and with a good reputation. The flag in the
+          top bar shows the cars sold so far against it and the days left; the <b>Calendar</b> tab
+          shows how it&apos;s going.
+        </p>
+        <p>
+          At the end of the month the manufacturer pays a <b>holdback</b>: a share of the sticker
+          price of every car sold that month. Nothing below {Math.round(HOLDBACK_FLOOR * 100)}% of
+          the target, a little from there, {(HOLDBACK_RATE * 100).toFixed(2)}% for hitting it and{' '}
+          {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
+          sale counts, whoever makes it.
         </p>
       </section>
       <section>

@@ -1,5 +1,6 @@
-import { formatDate, longDate } from '../sim/calendar'
+import { calendarOf, formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
+import { daysLeft, QUOTA_STATUS_LABELS, quotaLine, quotaStatus } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { useGame } from '../state/store'
@@ -23,6 +24,29 @@ function ReputationMeter() {
         <span className="rep-fill" style={{ width: `${reputation}%` }} />
       </span>
       <span className="rep-score">{reputation}</span>
+    </span>
+  )
+}
+
+/** The month's sales against the manufacturer's quota, with the days left; compact screens keep the count. */
+function QuotaMeter({ day }: { day: number }) {
+  const sold = useGame((s) => s.monthSales.count)
+  const quota = useGame((s) => s.quota)
+  const left = daysLeft(calendarOf(day).dayOfMonth)
+  const status = quotaStatus(sold, quota, left)
+  const text = `Manufacturer's quota: ${quotaLine(sold, quota, left)} (${QUOTA_STATUS_LABELS[status].toLowerCase()}). Hit it for a holdback at month end.`
+  return (
+    <span className={`quota-meter quota-${status}`} title={text} aria-label={text}>
+      <span className="quota-icon" aria-hidden>
+        ⚑
+      </span>
+      <span aria-hidden>
+        {sold}/{quota}
+      </span>
+      <span className="quota-left" aria-hidden>
+        {' '}
+        · {left}d
+      </span>
     </span>
   )
 }
@@ -67,7 +91,7 @@ function SoundButton() {
 }
 
 /**
- * Date, weather, time, cash, reputation, the owner's goal (on their days) and the office (stock,
+ * Date, weather, time, cash, reputation, the month's quota, the owner's goal (on their days) and the office (stock,
  * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
@@ -88,6 +112,7 @@ export function TopBar() {
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
       <ReputationMeter />
+      <QuotaMeter day={clock.day} />
       <GoalBanner />
       <button
         className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}

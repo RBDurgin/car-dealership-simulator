@@ -1,4 +1,4 @@
-import { longDate } from '../sim/calendar'
+import { calendarOf, longDate } from '../sim/calendar'
 import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { dayOver, formatTime } from '../sim/clock'
 import {
@@ -17,6 +17,7 @@ import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
 import { goalLabel } from '../sim/owner'
+import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -33,6 +34,8 @@ export function DaySummary() {
   const arriving = useGame((s) => s.orders.length)
   const reputation = useGame((s) => s.reputation)
   const weather = useGame((s) => s.weather)
+  const monthSold = useGame((s) => s.monthSales.count)
+  const quota = useGame((s) => s.quota)
   if (!open) return null
   const missed = missedSummary(stats.missed)
   const nazma = nazmaSummary(stats.nazma, formatMoney)
@@ -91,6 +94,12 @@ export function DaySummary() {
               <dd className="price">{formatMoney(-theftLoss(stats))}</dd>
             </>
           )}
+          {!!stats.quota?.payout && (
+            <>
+              <dt>Holdback</dt>
+              <dd className="price">{formatMoney(stats.quota.payout)}</dd>
+            </>
+          )}
           {!!stats.owner?.bonus && (
             <>
               <dt>Owner&apos;s bonus</dt>
@@ -131,6 +140,19 @@ export function DaySummary() {
               </dd>
             </>
           )}
+          <dt>Quota</dt>
+          <dd>
+            {stats.quota ? (
+              <>
+                {stats.quota.sold} of {stats.quota.quota} this month{' '}
+                <span className="muted">
+                  ({stats.quota.payout > 0 ? 'holdback paid' : 'no holdback'})
+                </span>
+              </>
+            ) : (
+              quotaLine(monthSold, quota, daysLeft(calendarOf(day).dayOfMonth))
+            )}
+          </dd>
           <dt>Reputation</dt>
           <dd>
             {reputation} <span className="muted">({reputationLabel(reputation)})</span>{' '}

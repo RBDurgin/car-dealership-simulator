@@ -1,6 +1,6 @@
 # Phase 10 Plan: Calendar & events
 
-**Status:** planned 2026-10-06. 10a done 2026-10-06. 10b done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** planned 2026-10-06. 10a done 2026-10-06. 10b done 2026-10-06. 10c done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -85,6 +85,7 @@ Almost everything is derived from the day number, the same way `isOwnerDay` and 
 - Summary: a quota line every day ("9 of 16 this month, 6 days left") and the payout on month end.
 - Save: `monthSales` goes in `SaveData`. Bump `SAVE_VERSION` to 9 with an `UPGRADES[8]` step that starts it at zero.
 - Help: the quota and holdback.
+- As built: the store keeps `monthSales` (`{ count, msrp }`, added to in `sign`) and the month's target as `quota`, both saved (v9). The target is set in `beginDay` on the 1st from that morning's reputation (`monthlyQuota(month, ALL_SLOTS.length, reputation)`: half a car per slot, a `MONTH_QUOTA` season factor, ±4 cars for reputation, held to 12–20), so it doesn't drift mid-month; `monthSales` resets at the same time, so a save from the 28th still carries the old month. The holdback was tuned to the $5–8k target: 0.6% of sold MSRP from 80%, `HOLDBACK_RATE` 1.25% at 100% and `HOLDBACK_STRETCH` 2% from 120% (a 16-car month at about $35k a car pays about $7k). The top bar's ⚑ meter shows sold/target and days left, coloured by `quotaStatus`; the Calendar tab shows the month and what the holdback would pay now. The v8 upgrade starts the month at zero with a target from the save's reputation.
 
 ### 10d: Sales events and closeouts
 

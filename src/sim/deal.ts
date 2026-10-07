@@ -19,6 +19,7 @@ import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
 import type { OwnerVerdict } from './owner'
+import type { QuotaResult } from './quota'
 import { financeOnDuty, type Employee } from './staff'
 
 /**
@@ -244,6 +245,8 @@ export interface DayStats {
   owner: OwnerVerdict | null
   /** What Nazma got up to today. */
   nazma: NazmaStats
+  /** On the month's last day, the quota and the holdback it paid (set when settled). */
+  quota: QuotaResult | null
 }
 
 export function emptyStats(): DayStats {
@@ -265,6 +268,7 @@ export function emptyStats(): DayStats {
     settled: false,
     owner: null,
     nazma: emptyNazmaStats(),
+    quota: null,
   }
 }
 
@@ -289,7 +293,7 @@ export function theftLoss(stats: DayStats): number {
 
 /**
  * Gross profit less the day's staff costs, floor plan interest, ad spend, improvements
- * and stolen stock, plus any bonus from the owner.
+ * and stolen stock, plus any bonus from the owner and the month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
   return (
@@ -300,7 +304,8 @@ export function netIncome(stats: DayStats): number {
     stats.marketing -
     stats.improvements -
     theftLoss(stats) +
-    (stats.owner?.bonus ?? 0)
+    (stats.owner?.bonus ?? 0) +
+    (stats.quota?.payout ?? 0)
   )
 }
 

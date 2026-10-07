@@ -338,6 +338,28 @@ kbd {
   color: #fca5a5;
 }
 
+/* The month's quota, in the top bar */
+.quota-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.quota-left {
+  opacity: 0.7;
+}
+.quota-hit .quota-icon {
+  color: #86efac;
+}
+.quota-onTrack .quota-icon {
+  color: #93c5fd;
+}
+.quota-behind .quota-icon {
+  color: #fca5a5;
+}
+
 /* The date in the top bar; only the weekday on compact screens */
 .topbar-date {
   white-space: nowrap;
@@ -386,6 +408,21 @@ kbd {
   display: block;
   height: 100%;
   background: #60a5fa;
+}
+.cal-quota {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  padding: 3px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-quota.quota-hit .cal-fill {
+  background: #86efac;
+}
+.cal-quota.quota-behind .cal-fill {
+  background: #fca5a5;
 }
 .cal-label {
   text-align: right;
@@ -1106,7 +1143,8 @@ kbd {
   .topbar-time {
     min-width: 0;
   }
-  .rep-bar {
+  .rep-bar,
+  .quota-left {
     display: none;
   }
   .goal-icon {

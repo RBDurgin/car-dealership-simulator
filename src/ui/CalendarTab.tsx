@@ -9,8 +9,21 @@ import {
   weekdayTraffic,
   weekStart,
 } from '../sim/calendar'
+import {
+  daysLeft,
+  holdback,
+  HOLDBACK_FLOOR,
+  HOLDBACK_PARTIAL,
+  HOLDBACK_RATE,
+  HOLDBACK_STRETCH,
+  HOLDBACK_STRETCH_AT,
+  QUOTA_STATUS_LABELS,
+  quotaLine,
+  quotaStatus,
+} from '../sim/quota'
 import { forecastFor, WEATHER_EFFECTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { useGame } from '../state/store'
+import { formatMoney } from './format'
 
 const PEAK =
   Math.max(...WEEKDAY_TRAFFIC) * Math.max(...Object.values(WEATHER_EFFECTS).map((e) => e.traffic))
@@ -62,6 +75,40 @@ function Week({ title, start, today }: { title: string; start: number; today: nu
   )
 }
 
+const percent = (rate: number) => `${+(rate * 100).toFixed(2)}%`
+
+/** The month so far against the manufacturer's quota, and what the holdback would pay. */
+function MonthQuota({ day }: { day: number }) {
+  const sales = useGame((s) => s.monthSales)
+  const quota = useGame((s) => s.quota)
+  const left = daysLeft(calendarOf(day).dayOfMonth)
+  const status = quotaStatus(sales.count, quota, left)
+  const payout = holdback(sales.count, quota, sales.msrp)
+  return (
+    <>
+      <h3>
+        Manufacturer&apos;s quota <span className="muted">· {QUOTA_STATUS_LABELS[status]}</span>
+      </h3>
+      <div className={`cal-quota quota-${status}`}>
+        <span className="cal-bar" aria-hidden>
+          <span
+            className="cal-fill"
+            style={{ width: `${Math.min(100, (sales.count / quota) * 100)}%` }}
+          />
+        </span>
+        <span>{quotaLine(sales.count, quota, left)}</span>
+      </div>
+      <p className="muted cal-intro">
+        At month end the manufacturer pays a holdback on the sticker price of every car sold that
+        month: {percent(HOLDBACK_PARTIAL)} from {Math.ceil(quota * HOLDBACK_FLOOR)} cars,{' '}
+        {percent(HOLDBACK_RATE)} at {quota}, {percent(HOLDBACK_STRETCH)} from{' '}
+        {Math.ceil(quota * HOLDBACK_STRETCH_AT)}. As things stand:{' '}
+        <b className="price">{formatMoney(payout)}</b>.
+      </p>
+    </>
+  )
+}
+
 /** This week and next, with each day's weather (forecast a few days ahead) and expected traffic. */
 export function CalendarTab() {
   const day = useGame((s) => s.clock.day)
@@ -75,6 +122,7 @@ export function CalendarTab() {
       </p>
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
+      <MonthQuota day={day} />
     </>
   )
 }

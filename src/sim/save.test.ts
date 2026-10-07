@@ -5,6 +5,8 @@ import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { START_REPUTATION } from './reputation'
+import { ALL_SLOTS } from './ordering'
+import { monthlyQuota } from './quota'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import type { Employee } from './staff'
@@ -31,6 +33,9 @@ const source = () => ({
   campaigns: [campaign, expired],
   improvements: [improvement],
   reputation: 62,
+  // As a v8 save upgrades, so the older upgrades compare equal.
+  monthSales: { count: 0, msrp: 0 },
+  quota: monthlyQuota(0, ALL_SLOTS.length, 62),
 })
 
 const order: Order = {
@@ -168,6 +173,25 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(v7)))).toEqual(save)
   })
 
+  it('upgrades a version 8 save: the month starts afresh, with a target from reputation', () => {
+    const save = createSave(source(), 123)
+    const v8 = { ...save, version: 8, monthSales: undefined, quota: undefined }
+    expect(save.quota).toBeGreaterThan(0)
+    expect(parseSave(JSON.parse(JSON.stringify(v8)))).toEqual({
+      ...save,
+      monthSales: { count: 0, msrp: 0 },
+      quota: monthlyQuota(0, ALL_SLOTS.length, 62),
+    })
+  })
+
+  it('keeps the month’s sales and quota', () => {
+    const monthSales = { count: 5, msrp: 180_000 }
+    expect(createSave({ ...source(), monthSales, quota: 16 }, 123)).toMatchObject({
+      monthSales: { count: 5, msrp: 180_000 },
+      quota: 16,
+    })
+  })
+
   it('dresses staff in a dropped model in one still in use, and guards in uniform', () => {
     const save = createSave(source(), 123)
     const roster = [
@@ -225,5 +249,8 @@ describe('save data', () => {
     expect(parseSave({ ...save, reputation: undefined })).toBeNull()
     expect(parseSave({ ...save, reputation: 101 })).toBeNull()
     expect(parseSave({ ...save, reputation: -1 })).toBeNull()
+    expect(parseSave({ ...save, monthSales: undefined })).toBeNull()
+    expect(parseSave({ ...save, monthSales: { count: 1 } })).toBeNull()
+    expect(parseSave({ ...save, quota: 0 })).toBeNull()
   })
 })

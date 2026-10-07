@@ -1,9 +1,11 @@
+import { calendarOf } from './calendar'
 import type { GameTime } from './clock'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
-import type { Order } from './ordering'
+import { ALL_SLOTS, type Order } from './ordering'
+import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { dressFor, ROLES, type Employee } from './staff'
 
@@ -17,7 +19,7 @@ import { dressFor, ROLES, type Employee } from './staff'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 8
+export const SAVE_VERSION = 9
 
 export interface SaveData {
   version: number
@@ -36,6 +38,10 @@ export interface SaveData {
   improvements: OwnedImprovement[]
   /** Reputation after the day was settled (see `sim/reputation.ts`). */
   reputation: number
+  /** The month's sales so far, toward the manufacturer's quota (see `sim/quota.ts`). */
+  monthSales: MonthSales
+  /** The month's sales target. */
+  quota: number
 }
 
 export interface SaveSource {
@@ -47,6 +53,8 @@ export interface SaveSource {
   campaigns: Campaign[]
   improvements: OwnedImprovement[]
   reputation: number
+  monthSales: MonthSales
+  quota: number
 }
 
 /**
@@ -65,6 +73,8 @@ export function createSave(s: SaveSource, now: number): SaveData {
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
     improvements: s.improvements,
     reputation: s.reputation,
+    monthSales: s.monthSales,
+    quota: s.quota,
   }
 }
 
@@ -112,6 +122,18 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
       ? raw.roster.map((e: unknown) => (isObject(e) ? { ...e, quitting: false } : e))
       : raw.roster,
   }),
+  // v9: the manufacturer's quota, starting the month afresh at the save's reputation.
+  8: (raw) => ({
+    ...raw,
+    monthSales: emptyMonthSales(),
+    quota: isNumber(raw.day)
+      ? monthlyQuota(
+          calendarOf(raw.day).month,
+          ALL_SLOTS.length,
+          isNumber(raw.reputation) ? raw.reputation : START_REPUTATION,
+        )
+      : undefined,
+  }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -134,6 +156,7 @@ export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
+  const { monthSales, quota } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -141,6 +164,9 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
   if (!Array.isArray(improvements) || !improvements.every(isImprovement)) return null
   if (!isNumber(reputation) || reputation < 0 || reputation > MAX_REPUTATION) return null
+  if (!isObject(monthSales) || !isNumber(monthSales.count) || !isNumber(monthSales.msrp))
+    return null
+  if (!isNumber(quota) || quota < 1) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   return raw as unknown as SaveData
