@@ -30,6 +30,7 @@ This is a web-based rpg-style game that simulates day to day tasks of a fictitio
 
 - `npm run dev` starts the dev server
 - `npm test` runs Vitest once (`npm run test:watch` to watch)
+- `npm run e2e` runs the Playwright browser smoke tests in `e2e/` (2–3 minutes; starts its own dev server on 5199)
 - `npm run lint` runs oxlint
 - `npm run format` runs Prettier
 - `npm run build` type-checks and builds
