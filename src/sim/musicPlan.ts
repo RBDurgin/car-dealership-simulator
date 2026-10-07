@@ -50,3 +50,8 @@ export function trackFor(s: MusicState): TrackId {
 export function isMuffled(s: Pick<MusicState, 'helpOpen' | 'rotatePrompt'>): boolean {
   return s.helpOpen || s.rotatePrompt
 }
+
+/** The rain loop plays under the music on a rainy day, once the game is under way. */
+export function rainPlays(s: { screen: MusicState['screen']; weather: string }): boolean {
+  return s.screen === 'playing' && s.weather === 'rain'
+}

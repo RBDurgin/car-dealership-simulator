@@ -428,6 +428,19 @@ describe('reduceCustomer', () => {
     expect(reduceCustomer(c, { type: 'tick', minutes: 10, except: 'c2' })?.patienceLeft).toBe(50)
   })
 
+  it('wears down those waiting outside faster', () => {
+    const c = at('waiting')
+    const outside = new Set(['c1'])
+    const ev = (ids: Set<string>): CustomerEvent => ({
+      type: 'tick',
+      minutes: 10,
+      outside: ids,
+      outsideFactor: 1.5,
+    })
+    expect(reduceCustomer(c, ev(outside))?.patienceLeft).toBe(45)
+    expect(reduceCustomer(c, ev(new Set()))?.patienceLeft).toBe(50)
+  })
+
   it('sends everyone home at closing except a customer mid-signature', () => {
     for (const phase of ['arriving', 'browsing', 'waiting', 'talking', 'following'] as const) {
       const c = run(at(phase), { type: 'close' })!

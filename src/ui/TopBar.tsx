@@ -1,6 +1,7 @@
 import { formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
 import { reputationLabel } from '../sim/reputation'
+import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
@@ -37,6 +38,17 @@ function TopBarDate({ day }: { day: number }) {
   )
 }
 
+/** Today's weather as an icon, with what it means on hover. */
+function WeatherIcon() {
+  const weather = useGame((s) => s.weather)
+  const text = `${WEATHER_LABELS[weather]}: ${WEATHER_HINTS[weather]}`
+  return (
+    <span className="topbar-weather" title={text} aria-label={text} role="img">
+      {WEATHER_ICONS[weather]}
+    </span>
+  )
+}
+
 /** The speaker: shows whether sound is muted and opens the sound settings. */
 function SoundButton() {
   const muted = useGame((s) => s.audio.muted)
@@ -55,7 +67,7 @@ function SoundButton() {
 }
 
 /**
- * Date, time, cash, reputation, the owner's goal (on their days) and the office (stock,
+ * Date, weather, time, cash, reputation, the owner's goal (on their days) and the office (stock,
  * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
@@ -68,6 +80,7 @@ export function TopBar() {
   return (
     <div className="panel topbar">
       <TopBarDate day={clock.day} />
+      <WeatherIcon />
       <span className="topbar-sep">·</span>
       <span className="topbar-time">{formatTime(clock.minute)}</span>
       {isClosed(clock) && <span className="topbar-closed">Closed</span>}

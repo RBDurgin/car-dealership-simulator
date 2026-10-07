@@ -34,18 +34,20 @@ export const PEDESTRIAN_SPEED = { min: 1.3, max: 1.9 }
 /**
  * Plans a day's passers-by, spread evenly over business hours, sorted by when
  * they set off. `traffic` scales the usual count (the weekday's, see
- * `weekdayTraffic`); improvements up that day draw more of them, and more turn in.
+ * `weekdayTraffic`, and the weather's); improvements up that day draw more of
+ * them, and more turn in. `walkInScale` scales the chance of turning in (rain).
  */
 export function planPedestrians(
   rng: Rng,
   day: number,
   effects: Effects = NO_EFFECTS,
   traffic = 1,
+  walkInScale = 1,
 ): Pedestrian[] {
   const count =
     Math.round(rng.int(PEDESTRIANS_PER_DAY.min, PEDESTRIANS_PER_DAY.max) * traffic) +
     effects.passersBy
-  const walkInChance = WALK_IN_CHANCE + effects.walkInChance
+  const walkInChance = (WALK_IN_CHANCE + effects.walkInChance) * walkInScale
   const minutes = Array.from({ length: count }, () =>
     Math.round(OPEN_MINUTE + rng.next() * (CLOSE_MINUTE - OPEN_MINUTE)),
   ).sort((a, b) => a - b)

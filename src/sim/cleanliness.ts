@@ -56,10 +56,12 @@ function mapCars(inventory: InventoryCar[], fn: (c: InventoryCar) => number): In
   return changed ? next : inventory
 }
 
-/** A night's dust on every car still in stock. */
-export function dirtyOvernight(inventory: InventoryCar[]): InventoryCar[] {
+/** A night's dust on every car still in stock; `lotDirt` multiplies it out on the lot (rain). */
+export function dirtyOvernight(inventory: InventoryCar[], lotDirt = 1): InventoryCar[] {
   return mapCars(inventory, (c) =>
-    c.status === 'available' ? c.cleanliness - NIGHTLY_DIRT[c.location] : c.cleanliness,
+    c.status === 'available'
+      ? c.cleanliness - NIGHTLY_DIRT[c.location] * (c.location === 'lot' ? lotDirt : 1)
+      : c.cleanliness,
   )
 }
 

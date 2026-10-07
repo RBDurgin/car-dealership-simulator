@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { startAudio } from './audio/engine'
 import { startMusic, syncMusic } from './audio/music'
+import { startRain, syncRain } from './audio/rain'
 import { preloadSfx } from './audio/samples'
 import { startSfx } from './audio/sfxBridge'
 import { startUiClicks } from './audio/uiClicks'
@@ -19,8 +20,10 @@ startAudioPref()
 startAudio(() => {
   preloadSfx()
   syncMusic()
+  syncRain()
 })
 startMusic()
+startRain()
 startUiClicks()
 startSfx()
 

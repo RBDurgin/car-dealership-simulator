@@ -379,8 +379,15 @@ export type CustomerEvent =
   /**
    * Game time passed. Applies to everyone except `except`, the customer the
    * player is on their way to help, who doesn't give up while being greeted.
+   * Those in `outside` lose patience `outsideFactor` times as fast (rain, heat).
    */
-  | { type: 'tick'; minutes: number; except?: string }
+  | {
+      type: 'tick'
+      minutes: number
+      except?: string
+      outside?: ReadonlySet<string>
+      outsideFactor?: number
+    }
   /** Closing time. Applies to everyone. */
   | { type: 'close' }
 
@@ -477,7 +484,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       // Nobody gives up while someone is on their way to help them.
       if (c.phase !== 'waiting' || ev.minutes <= 0 || ev.except === c.id) return c
       if (c.handlerId !== null) return c
-      const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes)
+      const factor = ev.outside?.has(c.id) ? (ev.outsideFactor ?? 1) : 1
+      const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes * factor)
       return patienceLeft === 0
         ? leave({ ...c, patienceLeft }, 'impatient')
         : { ...c, patienceLeft }

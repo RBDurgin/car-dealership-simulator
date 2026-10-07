@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, OPEN_MINUTE, startOfDay } from './clock'
-import { isMuffled, NOON_MINUTE, RUSH_MINUTE, trackFor, type MusicState } from './musicPlan'
+import {
+  isMuffled,
+  rainPlays,
+  NOON_MINUTE,
+  RUSH_MINUTE,
+  trackFor,
+  type MusicState,
+} from './musicPlan'
 
 const base: MusicState = {
   screen: 'playing',
@@ -44,5 +51,13 @@ describe('isMuffled', () => {
     expect(isMuffled(base)).toBe(false)
     expect(isMuffled({ ...base, helpOpen: true })).toBe(true)
     expect(isMuffled({ ...base, rotatePrompt: true })).toBe(true)
+  })
+})
+
+describe('rainPlays', () => {
+  it('plays on a rainy day once playing', () => {
+    expect(rainPlays({ screen: 'playing', weather: 'rain' })).toBe(true)
+    expect(rainPlays({ screen: 'title', weather: 'rain' })).toBe(false)
+    expect(rainPlays({ screen: 'playing', weather: 'sunny' })).toBe(false)
   })
 })

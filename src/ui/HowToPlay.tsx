@@ -82,6 +82,16 @@ function BasicsTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Weather</h3>
+        <p>
+          The icon next to the date is today&apos;s weather. Rain keeps about 40% of visitors and
+          passers-by away, leaves the lot cars much dirtier overnight, and customers left waiting
+          out on the lot lose patience faster; heat wears them down too. Cars in the showroom stay
+          dry, and a lot porter pays off in a wet spell. The Calendar tab forecasts the next three
+          days, and it&apos;s usually right.
+        </p>
+      </section>
+      <section>
         <h3>Making a sale</h3>
         <p>
           {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they

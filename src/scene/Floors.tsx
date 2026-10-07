@@ -4,6 +4,7 @@ import { slotTier } from '../sim/improvements'
 import { PARKING_SPACES, ZONES, type ZoneKind } from '../sim/layout'
 import { rectBounds } from './runtime'
 import { useUpNow } from './useUpNow'
+import { useWeather, wetLook } from './useWeather'
 
 const ZONE_COLORS: Record<ZoneKind, string> = {
   grass: '#6f8f5a',
@@ -19,6 +20,8 @@ const ZONE_COLORS: Record<ZoneKind, string> = {
 // The street runs past the whole property, so these zones extend to the horizon.
 const EXTEND_X: ReadonlySet<ZoneKind> = new Set(['road', 'sidewalk'])
 const HORIZON = 160
+/** Floors that are out in the weather, so get wet in the rain. */
+const OUTDOOR: ReadonlySet<ZoneKind> = new Set(['grass', 'asphalt', 'concrete', 'sidewalk', 'road'])
 const STRIPE = 0.08
 
 function Plane({
@@ -28,6 +31,7 @@ function Plane({
   h,
   y,
   color,
+  wet = false,
 }: {
   x: number
   z: number
@@ -35,11 +39,13 @@ function Plane({
   h: number
   y: number
   color: string
+  wet?: boolean
 }) {
+  const look = wetLook(color, wet)
   return (
     <mesh position={[x, y, z]} rotation-x={-Math.PI / 2} receiveShadow>
       <planeGeometry args={[w, h]} />
-      <meshStandardMaterial color={color} />
+      <meshStandardMaterial color={look.color} roughness={look.roughness} />
     </mesh>
   )
 }
@@ -115,6 +121,7 @@ function useStripes() {
 
 export function Floors() {
   const stripes = useStripes()
+  const raining = useWeather() === 'rain'
   const road = ZONES.find((z) => z.kind === 'road')
   const roadBounds = road ? rectBounds(road.rect) : null
 
@@ -137,12 +144,13 @@ export function Floors() {
             h={b.h}
             y={y}
             color={ZONE_COLORS[zone.kind]}
+            wet={raining && OUTDOOR.has(zone.kind)}
           />
         )
       })}
 
       {stripes.map(([key, s]) => (
-        <Plane key={key} {...s} y={0.025} color="#f4f4f0" />
+        <Plane key={key} {...s} y={0.025} color="#f4f4f0" wet={raining} />
       ))}
 
       {roadBounds && (
@@ -156,6 +164,7 @@ export function Floors() {
               h={0.12}
               y={0.025}
               color="#e8c547"
+              wet={raining}
             />
           ))}
           {/* curb between the sidewalk and the road */}

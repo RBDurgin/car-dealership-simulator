@@ -61,6 +61,15 @@ describe('planPedestrians', () => {
     expect(share).toBeLessThan(WALK_IN_CHANCE + 0.15 + 0.05)
   })
 
+  it('turns fewer in when the walk-in chance is scaled down', () => {
+    const wet = Array.from({ length: 100 }, (_, i) =>
+      planPedestrians(createRng(i), i + 1, NO_EFFECTS, 1, 0.5),
+    ).flat()
+    const share = wet.filter((p) => p.walkIn).length / wet.length
+    expect(share).toBeGreaterThan(WALK_IN_CHANCE * 0.5 - 0.03)
+    expect(share).toBeLessThan(WALK_IN_CHANCE * 0.5 + 0.03)
+  })
+
   it('scales the usual count by the day’s traffic', () => {
     const busy = Array.from({ length: 100 }, (_, i) =>
       planPedestrians(createRng(i), i + 1, NO_EFFECTS, 1.4),

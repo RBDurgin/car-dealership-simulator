@@ -26,7 +26,8 @@ From [Music Jingles](https://kenney.nl/assets/music-jingles):
 - `sfx/bell.ogg`: `jingles_STEEL10.ogg`
 
 The water spray of a car wash has no file: it's filtered noise made in
-`src/audio/samples.ts`.
+`src/audio/samples.ts`. The rain on rainy days is the same: filtered noise made in
+`src/audio/rain.ts`.
 
 Only the sounds the game uses are copied here, renamed for what they do. To add more,
 download the pack, copy the file across and register it in `src/audio/samples.ts`.

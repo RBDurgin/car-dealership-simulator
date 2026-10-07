@@ -1,6 +1,6 @@
 # Phase 10 Plan: Calendar & events
 
-**Status:** planned 2026-10-06. 10a done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** planned 2026-10-06. 10a done 2026-10-06. 10b done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
@@ -69,6 +69,7 @@ Almost everything is derived from the day number, the same way `isOwnerDay` and 
 - Audio: a rain loop in `audio/` on the music bus, started and stopped from a store subscription. Credit it in `public/audio/LICENSE.md`.
 - HUD: a weather icon next to the date. The Calendar tab shows the forecast.
 - Help: what weather does.
+- As built: `forecastFor(day, today)` is right 90/80/70% one, two and three days out. Weather is the store's `weather` (set in `beginDay`, not saved). Lot customers are `waitingOutside` (by a lot car or out front), passed to the customer `tick` as `outside`/`outsideFactor`. The rain loop is synthesized noise (`audio/rain.ts`, `rainPlays` in `sim/musicPlan.ts`), so there's no file to credit. Odds were tuned to about 24% rain overall (about 30% in spring and autumn, 6–15% in summer), with spells of about 2.3 days; the summary's kicker names the day's weather.
 
 ### 10c: Manufacturer quota
 

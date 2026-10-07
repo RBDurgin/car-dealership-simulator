@@ -2,6 +2,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { isTap, isTouch } from '../input/touch'
 import { useGame } from '../state/store'
 import { grid } from './runtime'
+import { useWeather, wetLook } from './useWeather'
 
 // Larger than the grid so the world's edge stays off screen; clicks outside the grid are ignored.
 const SIZE = 160
@@ -12,6 +13,7 @@ function moveTo(e: ThreeEvent<PointerEvent>) {
 }
 
 export function Ground() {
+  const look = wetLook('#6f8f5a', useWeather() === 'rain')
   // A mouse moves on press; a finger on a tap, so a pinch never sends the player off.
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button === 0 && !isTouch(e.nativeEvent)) moveTo(e)
@@ -28,7 +30,7 @@ export function Ground() {
       onPointerUp={onPointerUp}
     >
       <planeGeometry args={[SIZE, SIZE]} />
-      <meshStandardMaterial color="#6f8f5a" />
+      <meshStandardMaterial color={look.color} roughness={look.roughness} />
     </mesh>
   )
 }

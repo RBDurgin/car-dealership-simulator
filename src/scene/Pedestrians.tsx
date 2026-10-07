@@ -11,6 +11,7 @@ import {
   type Pedestrian,
 } from '../sim/pedestrians'
 import { createRng } from '../sim/rng'
+import { WEATHER_EFFECTS } from '../sim/weather'
 import { isPaused, useGame } from '../state/store'
 import { Character } from './Character'
 import { ambientPos, gameTime, grid, walkInSpawns } from './runtime'
@@ -120,12 +121,14 @@ export function Pedestrians() {
       const day = game.clock.day
       Object.assign(today, {
         day,
-        // Improvements bought today go up tonight, so today's crowd is set now. Busier on weekends.
+        // Improvements bought today go up tonight, so today's crowd is set now. Busier on
+        // weekends; rain keeps people indoors, and fewer of those out turn in.
         plan: planPedestrians(
           createRng(PEDESTRIAN_SEED + day),
           day,
           effectsOf(installed(game.improvements, day)),
-          weekdayTraffic(day),
+          weekdayTraffic(day) * WEATHER_EFFECTS[game.weather].traffic,
+          WEATHER_EFFECTS[game.weather].walkIn,
         ),
         next: 0,
       })

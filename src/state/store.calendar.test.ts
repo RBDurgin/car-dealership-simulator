@@ -30,8 +30,10 @@ describe('weekly rhythm', () => {
 
   it('plans more visitors on Saturday and fewer on Sunday', () => {
     const byWeekday: number[][] = Array.from({ length: 7 }, () => [])
-    for (let i = 0; i < 28; i++) {
+    for (let i = 0; i < 56; i++) {
       nextDay()
+      // Rain thins any day out (see store.weather.test), so only dry days are compared.
+      if (game().weather === 'rain') continue
       byWeekday[calendarOf(game().clock.day).weekday].push(regulars())
     }
     const [sat, sun] = [byWeekday[5], byWeekday[6]]

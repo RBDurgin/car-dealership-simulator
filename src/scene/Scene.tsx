@@ -17,6 +17,7 @@ import { Props } from './Props'
 import { TubeMan } from './TubeMan'
 import { Staff } from './Staff'
 import { Walls } from './Walls'
+import { WeatherEffects, WeatherLights } from './Weather'
 
 /**
  * Phones and small screens get a 2048 shadow map instead of 4096: a quarter of the
@@ -33,18 +34,7 @@ export function Scene() {
     <>
       <CameraRig />
       <GameClock />
-      <hemisphereLight args={['#dfe9ff', '#5a4a3a', 0.6]} />
-      <directionalLight
-        position={[12, 20, 8]}
-        intensity={1.8}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
-        shadow-normalBias={0.03}
-      />
+      <WeatherLights shadowMapSize={SHADOW_MAP_SIZE} />
       <Ground />
       <Floors />
       <Walls />
@@ -61,6 +51,7 @@ export function Scene() {
       <Owner />
       <Nazma />
       <Chatter />
+      <WeatherEffects />
       {SHOW_FPS && <Stats className="fps-stats" />}
     </>
   )

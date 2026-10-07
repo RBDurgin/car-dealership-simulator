@@ -1,4 +1,5 @@
 import { longDate } from '../sim/calendar'
+import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { dayOver, formatTime } from '../sim/clock'
 import {
   averageDiscount,
@@ -31,6 +32,7 @@ export function DaySummary() {
   const cash = useGame((s) => s.cash)
   const arriving = useGame((s) => s.orders.length)
   const reputation = useGame((s) => s.reputation)
+  const weather = useGame((s) => s.weather)
   if (!open) return null
   const missed = missedSummary(stats.missed)
   const nazma = nazmaSummary(stats.nazma, formatMoney)
@@ -41,7 +43,9 @@ export function DaySummary() {
   return (
     <div className="modal-backdrop">
       <div className="panel day-summary" role="dialog" aria-label={`${longDate(day)} summary`}>
-        <div className="info-kicker">End of day {day}</div>
+        <div className="info-kicker">
+          End of day {day} · {WEATHER_ICONS[weather]} {WEATHER_LABELS[weather]}
+        </div>
         <h2>{longDate(day)}</h2>
         <dl className="summary-stats">
           <dt>Visitors</dt>

@@ -120,6 +120,7 @@ import {
 } from '../sim/staff'
 import { leadChoice } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
+import { WEATHER_EFFECTS, waitingOutside, weatherOn, type Weather } from '../sim/weather'
 import { formatMoney } from '../ui/format'
 
 export interface MoveOrder {
@@ -185,6 +186,8 @@ interface GameState {
   improvements: OwnedImprovement[]
   /** The dealership's good name, 0–100. Changes once a day, when the day is settled. */
   reputation: number
+  /** Today's weather (`weatherOn(day)`), set each morning. Not saved. */
+  weather: Weather
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -666,11 +669,13 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Opens the doors on `day`: sold cars are gone, Nazma may have stolen one
    * off the lot (the bank calls in its loan if it was floored), the rest have
-   * gathered a night's dust, yesterday's orders are parked in their slots, finished ad
+   * gathered a night's dust (more out on the lot after rain), yesterday's orders are parked in their slots, finished ad
    * campaigns end, there are new arrivals (more while ads run, and more or
-   * fewer with reputation and the weekday) and applicants, and the staff head in.
+   * fewer with reputation, the weekday and the weather) and applicants, and the staff head in.
    */
   const beginDay = (day: number) => {
+    const weather = weatherOn(day)
+    const effects = WEATHER_EFFECTS[weather]
     customerRng = createRng(CUSTOMER_SEED + day)
     dealRng = createRng(DEAL_SEED + day)
     staffRng = createRng(STAFF_SEED + day)
@@ -683,7 +688,7 @@ export const useGame = create<GameState>((set, get) => {
     const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded)
     const stolen = theft?.outcome === 'stolen' ? theft.car : null
     const inventory = [
-      ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept),
+      ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
       ...delivered,
     ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
@@ -699,6 +704,7 @@ export const useGame = create<GameState>((set, get) => {
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
+      weather,
       inventory,
       orders: [],
       campaigns,
@@ -706,7 +712,7 @@ export const useGame = create<GameState>((set, get) => {
         customerRng,
         trafficBoost(campaigns, day, campaignScale(s.reputation)),
         {
-          scale: visitorScale(s.reputation) * weekdayTraffic(day),
+          scale: visitorScale(s.reputation) * weekdayTraffic(day) * effects.traffic,
           referrals: referralVisitors(s.reputation),
         },
       ),
@@ -750,8 +756,13 @@ export const useGame = create<GameState>((set, get) => {
     campaigns: [],
     improvements: [],
     reputation: START_REPUTATION,
+    weather: weatherOn(1),
     customers: [],
-    arrivals: planArrivals(customerRng, {}, { scale: weekdayTraffic(1), referrals: 0 }),
+    arrivals: planArrivals(
+      customerRng,
+      {},
+      { scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic, referrals: 0 },
+    ),
     dayStats: emptyStats(),
     roster: [],
     candidates: generateCandidates(staffRng, 1),
@@ -845,11 +856,21 @@ export const useGame = create<GameState>((set, get) => {
       // heads out (`commit` applies the close).
       const minutes = step.day === s.clock.day ? step.minute - s.clock.minute : 0
       // A receptionist keeps waiting customers company, and a comfy waiting
-      // area keeps them happy, so they last longer.
+      // area keeps them happy, so they last longer. Rain and heat wear down
+      // those left waiting out on the lot.
       const except = s.activeAction?.targetId
       const { patienceSaved, expectCut } = upEffects()
       const drain = minutes * patienceFactor(s.roster) * (1 - patienceSaved)
-      let customers = reduceCustomers(s.customers, { type: 'tick', minutes: drain, except })
+      const outsideFactor = WEATHER_EFFECTS[s.weather].lotPatience
+      let customers = reduceCustomers(s.customers, {
+        type: 'tick',
+        minutes: drain,
+        except,
+        ...(outsideFactor !== 1 && {
+          outside: waitingOutside(s.customers, s.inventory),
+          outsideFactor,
+        }),
+      })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
       const arrived = due.map((source) =>

@@ -77,6 +77,12 @@ describe('cleanliness', () => {
     expect(conditionOf(car(dirtyOvernight(night), 'lot-car-1').cleanliness)).toBe('Dusty')
   })
 
+  it('dirties lot cars more after rain, and leaves the showroom dry', () => {
+    const night = dirtyOvernight(inventory, 2.5)
+    expect(car(night, 'lot-car-1').cleanliness).toBeCloseTo(1 - NIGHTLY_DIRT.lot * 2.5)
+    expect(car(night, 'display-1').cleanliness).toBeCloseTo(1 - NIGHTLY_DIRT.showroom)
+  })
+
   it('never gets dirtier than 0, and leaves sold cars alone', () => {
     let inv = sellCar(withDirt({ 'lot-car-1': 0.05 }), 'lot-car-2')
     inv = dirtyOvernight(inv)
