@@ -89,13 +89,19 @@ const overlaps = (a: Rect, b: Rect) =>
 const sameSlot = (a: Slot, b: Slot) => a.location === b.location && a.index === b.index
 
 /**
- * Slots with no car in stock on them and no order claiming them, showroom
- * platforms first, then lot spaces.
+ * Slots with no car in stock on them, no order claiming them and not
+ * `reserved` (for a used car bought today), showroom platforms first, then lot
+ * spaces.
  */
-export function freeSlots(inventory: readonly InventoryCar[], orders: readonly Order[]): Slot[] {
+export function freeSlots(
+  inventory: readonly InventoryCar[],
+  orders: readonly Order[],
+  reserved: readonly Slot[] = [],
+): Slot[] {
   const stocked = inventory.filter((c) => c.status === 'available').map((c) => c.rect)
   return ALL_SLOTS.filter((slot) => {
     if (orders.some((o) => sameSlot(o.slot, slot))) return false
+    if (reserved.some((r) => sameSlot(r, slot))) return false
     const { rect } = slotPlacement(slot)
     return !stocked.some((r) => overlaps(r, rect))
   })
@@ -111,6 +117,8 @@ export interface OrderBook {
   cash: number
   inventory: readonly InventoryCar[]
   orders: readonly Order[]
+  /** Lot spaces held for used cars bought today, which go there at closing. */
+  reserved?: readonly Slot[]
 }
 
 export type OrderResult =
@@ -137,7 +145,7 @@ export function placeOrder(
   day: number,
   invoice = 1,
 ): OrderResult {
-  const slot = freeSlots(book.inventory, book.orders)[0]
+  const slot = freeSlots(book.inventory, book.orders, book.reserved)[0]
   if (!slot) return { ok: false, reason: 'No room: every space is taken or on order.' }
   const cost = orderCost(model, day, invoice)
   if (financing === 'cash' && book.cash < cost) {

@@ -52,6 +52,7 @@ const base: Customer = {
   chairId: null,
   sellerId: null,
   vehicle: null,
+  selling: null,
 }
 
 const run = (c: Customer, ...events: CustomerEvent[]) =>
@@ -656,6 +657,7 @@ describe('salespeople', () => {
       chairId: null,
       sellerId: null,
       vehicle: null,
+      selling: null,
     })
   })
 

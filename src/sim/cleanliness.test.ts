@@ -47,6 +47,7 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   chairId: null,
   sellerId: null,
   vehicle: null,
+  selling: null,
 })
 
 describe('cleanliness', () => {

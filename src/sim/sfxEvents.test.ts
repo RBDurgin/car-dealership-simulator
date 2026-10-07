@@ -65,6 +65,18 @@ describe('sfxFor', () => {
     ])
   })
 
+  it('rings up a car we bought, and the seller walks off without driving', () => {
+    const talking = { ...parked, phase: 'considering' as const }
+    const sold = {
+      ...parked,
+      phase: 'leaving' as const,
+      leaveReason: 'sold' as const,
+      vehicle: null,
+    }
+    expect(cues({ customers: [sold] }, { customers: [talking] })).toEqual(['coin'])
+    expect(cues({ customers: [] }, { customers: [sold] })).toEqual([])
+  })
+
   it('has no door to shut for a driver who never got out', () => {
     const leaving = { ...driving, phase: 'leaving' as const, leaveReason: 'closing' as const }
     expect(cues({ customers: [] }, { customers: [leaving] })).toEqual(['engine'])

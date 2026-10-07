@@ -31,6 +31,16 @@ const base: TipState = {
   owner: null,
   nazma: null,
 }
+const sellerCar = (parked: boolean): Partial<Customer> => ({
+  phase: parked ? 'waiting' : 'arriving',
+  handlerId: null,
+  vehicle: {
+    car: { model: 'sedan', year: 2020, miles: 70_000, condition: 0.6, acquiredDay: 1 },
+    spot: 0,
+    parked,
+  },
+  selling: { hope: 9_000, estimate: { estimate: 8_500, margin: 2_000 }, appraised: false },
+})
 const withCar = (patch: Partial<InventoryCar>) =>
   inventory.map((c, i) => (i === 0 ? { ...c, ...patch } : c))
 
@@ -52,6 +62,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  seller: [
+    { customers: [customer('c2', sellerCar(true))] },
+    { customers: [customer('c2', sellerCar(false))] },
+  ],
 }
 
 describe('tipFor', () => {

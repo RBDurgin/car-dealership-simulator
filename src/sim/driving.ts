@@ -1,7 +1,7 @@
 import type { Customer } from './customers'
 import type { Tile, Vec2 } from './grid'
 import { CUSTOMER_PARKING, parkedCarRect, type CarModel } from './layout'
-import type { Rng } from './rng'
+import { createRng, hashSeed, type Rng } from './rng'
 import { rollUsedCar, type UsedInfo } from './usedCars'
 
 /**
@@ -31,27 +31,34 @@ export function spotsInUse(customers: readonly Customer[]): Set<number> {
   return new Set(customers.flatMap((c) => (c.vehicle ? [c.vehicle.spot] : [])))
 }
 
-/** The first free customer-parking space, or null when all are taken. */
-export function freeSpot(customers: readonly Customer[]): number | null {
-  const used = spotsInUse(customers)
+/**
+ * The first free customer-parking space, or null when all are taken. `taken`
+ * are spaces held by something else: a car we bought, waiting there until closing.
+ */
+export function freeSpot(
+  customers: readonly Customer[],
+  taken: readonly number[] = [],
+): number | null {
+  const used = new Set([...spotsInUse(customers), ...taken])
   const i = CUSTOMER_PARKING.findIndex((_, n) => !used.has(n))
   return i < 0 ? null : i
 }
 
 /**
  * Gives some of the `arrived` customers a car, while `present` (everyone
- * already on the lot) and the earlier arrivals leave a space free. Each
- * driver's car is a used one of today's (`rollUsedCar`).
+ * already on the lot), the earlier arrivals and `taken` (see `freeSpot`) leave
+ * a space free. Each driver's car is a used one of today's (`rollUsedCar`).
  */
 export function assignVehicles(
   arrived: readonly Customer[],
   present: readonly Customer[],
   rng: Rng,
   day: number,
+  taken: readonly number[] = [],
 ): Customer[] {
   const out: Customer[] = []
   for (const c of arrived) {
-    const spot = freeSpot([...present, ...out])
+    const spot = freeSpot([...present, ...out], taken)
     if (spot === null || rng.next() >= DRIVE_IN_CHANCE) {
       out.push(c)
       continue
@@ -59,6 +66,15 @@ export function assignVehicles(
     out.push({ ...c, vehicle: { car: rollUsedCar(rng, day), spot, parked: false } })
   }
   return out
+}
+
+/**
+ * How clean a visitor's car (customer `id`'s) is: worn cars tend to be the
+ * dirty ones too. Seeded by the id, so the world and the store agree.
+ */
+export function drivenCleanliness(id: string, condition: number): number {
+  const rng = createRng(hashSeed(`${id}:dirt`))
+  return Math.min(1, 0.35 + 0.5 * condition + rng.next() * 0.15)
 }
 
 /** Where a driver gets out and back in: the tile behind their car. */

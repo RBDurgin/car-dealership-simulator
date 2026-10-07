@@ -21,6 +21,7 @@ import { nazmaSummary } from '../sim/nazma'
 import { goalLabel } from '../sim/owner'
 import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
+import { boughtSpend } from '../sim/sellers'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -114,6 +115,24 @@ export function DaySummary() {
           )}
           <dt>Net</dt>
           <dd className="price">{formatMoney(netIncome(stats))}</dd>
+          {stats.bought.length > 0 && (
+            <>
+              <dt>Bought</dt>
+              <dd>
+                {stats.bought.length} used car{stats.bought.length === 1 ? '' : 's'} (
+                <span className="price">{formatMoney(boughtSpend(stats.bought))}</span>)
+                <span className="muted"> stock, not an expense</span>
+                <ul className="summary-bought">
+                  {stats.bought.map((b, i) => (
+                    <li key={i}>
+                      {b.year} {carName(b.model)} from {b.sellerName} for {formatMoney(b.price)}{' '}
+                      <span className="muted">(worth {formatMoney(b.value)})</span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </>
+          )}
           <dt>Walk-outs</dt>
           <dd>
             {walkOuts(stats)}

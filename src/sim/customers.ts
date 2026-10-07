@@ -7,6 +7,8 @@ import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
+import type { Selling } from './sellers'
+import type { Appraisal } from './usedCars'
 
 /**
  * A customer's visit. The world (2d) moves them and reports progress as events;
@@ -48,7 +50,8 @@ export type CustomerPhase =
 /** The player's id as a customer's handler (and in the crowd). */
 export const PLAYER_ID = 'player'
 
-export type LeaveReason = 'bought' | 'refused' | 'impatient' | 'closing'
+/** `sold`: a seller who sold us their car, leaving on foot. */
+export type LeaveReason = 'bought' | 'sold' | 'refused' | 'impatient' | 'closing'
 
 export type { CustomerVariant }
 
@@ -109,6 +112,11 @@ export interface Customer {
    * came on foot. They leave the way they came.
    */
   vehicle: Vehicle | null
+  /**
+   * A seller (they drove in to sell us their car, not to shop): what they
+   * hope to get, and what the player makes of the car. Null for shoppers.
+   */
+  selling: Selling | null
 }
 
 const FIRST_NAMES = [
@@ -250,6 +258,7 @@ export function generateCustomer(
     chairId: null,
     sellerId: null,
     vehicle: null,
+    selling: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -335,7 +344,7 @@ export function moodOf(c: Customer): Mood {
     case 'queued':
       return 'happy'
     case 'leaving':
-      if (c.leaveReason === 'bought') return 'happy'
+      if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'happy'
       if (c.leaveReason === 'closing') return 'neutral'
       return 'unhappy'
     case 'waiting':
@@ -360,7 +369,7 @@ export function bubbleOf(c: Customer): Bubble | null {
     case 'considering':
       return 'considering'
     case 'leaving':
-      if (c.leaveReason === 'bought') return 'bought'
+      if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'bought'
       return moodOf(c) === 'unhappy' ? 'upset' : null
     default:
       return null
@@ -384,7 +393,11 @@ export type CustomerEvent =
   /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
   | { type: 'greet'; id: string; carId: string | null; by: string }
   | { type: 'offer'; id: string; carId: string; price: number }
-  /** Their answer to the offer (see `respondToAsk`), with their price if they counter. */
+  /**
+   * Their answer to the offer (see `respondToAsk`, or `respondToBuyOffer` for
+   * a seller), with their price if they counter. A seller who accepts has sold
+   * us their car: it stays, and they leave on foot.
+   */
   | { type: 'respond'; id: string; answer: 'accept' | 'counter' | 'walk'; counter?: number }
   /** Sat down to sign: in the guest chair they were sent to, else the office's (the player's buyer). */
   | { type: 'seat'; id: string }
@@ -396,6 +409,8 @@ export type CustomerEvent =
   | { type: 'call'; id: string }
   /** Paperwork signed: the sale goes through. */
   | { type: 'signed'; id: string }
+  /** The player looked a seller's car over properly: a closer estimate of its value. */
+  | { type: 'appraised'; id: string; estimate: Appraisal }
   /** Their handler walked away mid-conversation or mid-deal. */
   | { type: 'cancel'; id: string }
   /** Walked off the map. Removes them. */
@@ -462,14 +477,17 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.phase !== 'browsing' && c.phase !== 'waiting') return c
       // Someone else has claimed them.
       if (c.handlerId !== null && c.handlerId !== ev.by) return c
-      // Nothing left they could want.
-      if (ev.carId === null) return leave(c, 'refused')
+      // Nothing left they could want. A seller isn't shopping.
+      if (ev.carId === null && !c.selling) return leave(c, 'refused')
       return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by, sellerId: ev.by }
     case 'offer':
       if (c.phase !== 'talking') return c
       return { ...c, phase: 'considering', offer: { carId: ev.carId, price: ev.price } }
     case 'respond':
       if (c.phase !== 'considering' || !c.offer) return c
+      if (ev.answer === 'accept' && c.selling) {
+        return leave({ ...c, offer: null, vehicle: null }, 'sold')
+      }
       if (ev.answer === 'accept') return { ...c, phase: 'following' }
       if (ev.answer === 'walk' || ev.counter === undefined) {
         return leave({ ...c, offer: null }, 'refused')
@@ -497,6 +515,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'signed':
       if (c.phase !== 'signing') return c
       return leave(c, 'bought')
+    case 'appraised':
+      if (!c.selling || c.phase === 'leaving') return c
+      return { ...c, selling: { ...c.selling, estimate: ev.estimate, appraised: true } }
     case 'cancel':
       // A salesperson who claimed them gives up: they carry on as they were.
       if ((c.phase === 'browsing' || c.phase === 'waiting') && c.handlerId !== null) {

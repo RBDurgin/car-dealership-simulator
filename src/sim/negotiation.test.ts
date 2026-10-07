@@ -4,13 +4,23 @@ import { acceptChance, reduceCustomer, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import {
   askRange,
+  buyRange,
+  buyWarmth,
   clampAsk,
+  clampBuy,
   counterPrice,
   dealWarmth,
   FIRST_COUNTER_DROP,
   hopePrice,
   LAST_ROUND_FACTOR,
+  LOWBALL_FRACTION,
   respondToAsk,
+  respondToBuyOffer,
+  SELLER_FIRST_RISE,
+  SELLER_RESERVE,
+  sellChance,
+  sellerCounter,
+  suggestedBuy,
   STAFF_FLOOR_MARGIN,
   staffAsk,
   staffConcession,
@@ -52,6 +62,7 @@ const base: Customer = {
   chairId: null,
   sellerId: 'player',
   vehicle: null,
+  selling: null,
 }
 
 /** In the middle of a haggle: they countered `counter` to `lastAsk`. */
@@ -266,5 +277,69 @@ describe('staffAsk', () => {
     }
     const cheap = { ...sedan, cost: 29_900 }
     expect(staffAsk(1, cheap, null)).toBe(30_000)
+  })
+})
+
+describe('buying from a seller', () => {
+  const seller: Customer = {
+    ...base,
+    browseCarIds: [],
+    targetCarId: null,
+    vehicle: {
+      car: { model: 'sedan', year: 2020, miles: 70_000, condition: 0.6, acquiredDay: 1 },
+      spot: 0,
+      parked: true,
+    },
+    selling: { hope: 10_000, estimate: { estimate: 9_600, margin: 1_200 }, appraised: true },
+  }
+  const sellerHaggling = (round: number, lastOffer: number, counter: number) =>
+    ({ ...seller, haggle: { round, lastAsk: lastOffer, counter } }) satisfies Customer
+  const buy = (c: Customer, offer: number) => (seed: number) =>
+    respondToBuyOffer(c, offer, createRng(seed))
+
+  it('mostly sells at or over what they hope for, or at their counter', () => {
+    expect(rates(buy(seller, 10_000)).accept).toBeCloseTo(sellChance(seller), 1)
+    expect(rates(buy(sellerHaggling(2, 8_000, 10_500), 10_500)).accept).toBeGreaterThan(0.85)
+  })
+
+  it('counters an offer under their hope, first a little over it, then coming down', () => {
+    const first = respondToBuyOffer(seller, 8_500, createRng(1))
+    expect(first).toEqual({ answer: 'counter', counter: 10_000 * (1 + SELLER_FIRST_RISE) })
+    const next = sellerCounter(sellerHaggling(2, 8_500, 10_300), 9_000)
+    expect(next).toBeLessThan(10_300)
+    expect(next).toBeGreaterThan(9_000)
+    // Never under the offer.
+    expect(sellerCounter(sellerHaggling(2, 8_500, 9_000), 9_000)).toBe(9_000)
+  })
+
+  it('may walk off insulted by a lowball, or when we hold', () => {
+    const lowball = rates(buy(seller, LOWBALL_FRACTION * 10_000 - 100))
+    expect(lowball.walk).toBeGreaterThan(0.3)
+    expect(lowball.counter).toBeGreaterThan(0.3)
+    expect(rates(buy(sellerHaggling(2, 8_500, 10_300), 8_500)).walk).toBeCloseTo(STUBBORN_WALK, 1)
+  })
+
+  it('on the last round walks under their reserve, and only reluctantly sells over it', () => {
+    const rounds = ARCHETYPES.regular.haggle.rounds
+    const last = sellerHaggling(rounds, 8_500, 10_300)
+    expect(rates(buy(last, SELLER_RESERVE * 10_000 - 100)).walk).toBe(1)
+    const over = rates(buy(last, 9_900))
+    expect(over.accept).toBeCloseTo(sellChance(seller) * LAST_ROUND_FACTOR, 1)
+  })
+
+  it('warmth follows the same rules', () => {
+    expect(buyWarmth(seller, 10_000)).toBe('hot')
+    expect(buyWarmth(seller, 9_000)).toBe('warm')
+    expect(buyWarmth(seller, 5_000)).toBe('cold')
+    expect(buyWarmth(sellerHaggling(2, 8_500, 10_300), 8_500)).toBe('cold')
+  })
+
+  it('opens under the estimate and then splits the difference, within range', () => {
+    expect(suggestedBuy(seller)).toBe(8_200)
+    expect(buyRange(seller)).toEqual({ min: 100, max: 14_400 })
+    const h = sellerHaggling(2, 8_500, 10_300)
+    expect(buyRange(h)).toEqual({ min: 8_500, max: 10_300 })
+    expect(suggestedBuy(h)).toBe(9_400)
+    expect(clampBuy(h, 20_000)).toBe(10_300)
   })
 })

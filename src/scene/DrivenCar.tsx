@@ -1,10 +1,12 @@
 import { useFrame } from '@react-three/fiber'
 import { Suspense, useState } from 'react'
 import type { Group } from 'three'
+import { useShallow } from 'zustand/react/shallow'
 import { dampAngle } from '../sim/agent'
 import type { Customer } from '../sim/customers'
 import {
   blockedAhead,
+  drivenCleanliness,
   inboundRoute,
   outboundRoute,
   parkedPose,
@@ -15,8 +17,10 @@ import {
 import type { Vec2 } from '../sim/grid'
 import type { CarModel } from '../sim/layout'
 import { createRng, hashSeed } from '../sim/rng'
+import { vehicleTargetId } from '../sim/sellers'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
+import { Interactable } from './Interactable'
 import { crowdAgents, grid, vehiclePos } from './runtime'
 import { frameSeconds, MAX_STEP_S } from './walker'
 
@@ -60,6 +64,8 @@ interface DrivenCar {
   /** Game seconds held up by someone in the way, and left to push on regardless. */
   waited: number
   pushOn: number
+  /** We bought it: it stays in its space until it goes into stock at closing. */
+  bought: boolean
 }
 
 const cars = new Map<string, DrivenCar>()
@@ -87,8 +93,7 @@ function createCar(c: Customer): DrivenCar {
     id: c.id,
     model: vehicle.car.model,
     condition: vehicle.car.condition,
-    // Worn cars tend to be the dirty ones too.
-    cleanliness: Math.min(1, 0.35 + 0.5 * vehicle.car.condition + rng.next() * 0.15),
+    cleanliness: drivenCleanliness(c.id, vehicle.car.condition),
     spot: vehicle.spot,
     end,
     stage: vehicle.parked ? 'parked' : 'in',
@@ -103,6 +108,7 @@ function createCar(c: Customer): DrivenCar {
     speed: 0,
     waited: 0,
     pushOn: 0,
+    bought: false,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
@@ -189,9 +195,20 @@ function drive(car: DrivenCar, seconds: number): boolean {
   return car.leg >= car.legs.length
 }
 
-/** One car's frame. Returns false once it has driven off the map. */
-function update(car: DrivenCar, c: Customer | undefined, seconds: number): boolean {
+/**
+ * One car's frame. Returns false once it has driven off the map, or (one we
+ * bought) gone into stock.
+ */
+function update(
+  car: DrivenCar,
+  c: Customer | undefined,
+  bought: boolean,
+  seconds: number,
+): boolean {
   const game = useGame.getState()
+  if (bought) car.bought = true
+  // Ours now: it waits in its space, then becomes a lot car at closing.
+  if (car.bought) return bought
   // Their customer got back in (or is gone): pull out.
   if (car.stage === 'parked' && !c) driveOff(car)
   if (car.stage === 'parked') return true
@@ -213,11 +230,20 @@ function update(car: DrivenCar, c: Customer | undefined, seconds: number): boole
  * its customer-parking space on a fixed route (`sim/driving.ts`), and the
  * store hears `parked` once the driver gets out. Once they've got back in
  * (`droveOff`, from scene/Customers) it backs out and drives off the way it
- * came. A moving car waits for anyone in front of it; walkers step around it
- * through `vehiclePos`. Re-renders only when a car appears or leaves.
+ * came. A car we bought stays in its space until it goes into stock at
+ * closing, and a seller's car can be clicked to appraise. A moving car waits
+ * for anyone in front of it; walkers step around it through `vehiclePos`. Re-renders only when a car appears or leaves.
  */
 export function DrivenCars() {
   const [ids, setIds] = useState<string[]>([])
+  // A seller's car can be clicked to appraise while they're waiting by it.
+  const appraisable = useGame(
+    useShallow((s) =>
+      s.customers
+        .filter((c) => c.selling && c.vehicle?.parked && c.phase !== 'leaving')
+        .map((c) => c.id),
+    ),
+  )
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
@@ -228,6 +254,7 @@ export function DrivenCars() {
       changed = true
     }
     const byId = new Map(game.customers.map((c) => [c.id, c]))
+    const bought = new Set(game.purchases.map((p) => p.customerId))
     for (const c of game.customers) {
       if (c.vehicle && !cars.has(c.id)) {
         createCar(c)
@@ -236,7 +263,7 @@ export function DrivenCars() {
     }
     const { seconds } = frameSeconds(rawDelta, game.timeScale)
     for (const car of [...cars.values()]) {
-      if (update(car, byId.get(car.id), seconds)) continue
+      if (update(car, byId.get(car.id), bought.has(car.id), seconds)) continue
       removeCar(car.id)
       changed = true
     }
@@ -264,9 +291,15 @@ export function DrivenCars() {
               else groups.delete(id)
             }}
           >
-            <Suspense fallback={null}>
-              <CarBody model={car.model} cleanliness={car.cleanliness} condition={car.condition} />
-            </Suspense>
+            <Interactable id={vehicleTargetId(id)} disabled={!appraisable.includes(id)}>
+              <Suspense fallback={null}>
+                <CarBody
+                  model={car.model}
+                  cleanliness={car.cleanliness}
+                  condition={car.condition}
+                />
+              </Suspense>
+            </Interactable>
           </group>
         )
       })}

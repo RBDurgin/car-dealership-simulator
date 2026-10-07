@@ -107,6 +107,14 @@ Every car on the lot today is new, ordered from the manufacturer. Phase 12 adds 
   - On Easy, the deal hint shows how warm a seller is to your offer (a `dealWarmth` for buy offers).
   - A first-time `TipId` `seller`: "A seller drove in wanting cash for their car. Appraise it before you make an offer."
 
+- **As built (2026-10-07):**
+  - 30% of drivers are sellers (`SELLER_CHANCE`). A seller hopes for the car's market value plus their archetype's haggle `expect` (± jitter), so bargain hunters want most. They wait at their car's door tile.
+  - Before appraising, the player sees a glance estimate (±25%, `GLANCE_NOISE`); **Appraise** (4 s) narrows it to the player's skill (±12%), both × `Tuning.appraisalNoise`.
+  - `respondToBuyOffer`: at or over their hope (or their counter) they sell 90% of the time (plus half their archetype's `accept`); under 70% of hope they may leave insulted; the first counter is 3% over hope and later ones come down; on the last round they walk under 92% of hope.
+  - We open 15% under our estimate (`suggestedBuy`). Appraising the car of the seller you're talking to doesn't end the conversation.
+  - The bought car stays parked (held in the store's `purchases`, not saved) and holds both its parking space and a lot slot; the seller walks off down the sidewalk. Its cleanliness comes from `drivenCleanliness`, so the stock car matches what was parked.
+  - The summary lists each car with what it was really worth, so the player can judge their appraisals.
+
 ### 12d: Trade-ins in a sale
 
 - About 35% of driven-in buyers have a trade (`Customer.trade`). Each one has a `hope` for its allowance, usually 5–15% over its real value.

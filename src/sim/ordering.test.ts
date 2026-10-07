@@ -105,6 +105,13 @@ describe('free slots', () => {
     )
   })
 
+  it('skips reserved spaces, and orders never take one', () => {
+    const [first, second] = freeSlots(opening, [])
+    expect(freeSlots(opening, [], [first])[0]).toEqual(second)
+    const r = placeOrder({ ...book(), reserved: [first] }, 'sedan', 'cash', 1)
+    expect(r.ok && r.order.slot).toEqual(second)
+  })
+
   it('lists a sold showroom car’s platform first', () => {
     const free = freeSlots(sellCar(opening, 'display-2'), [])
     expect(free[0]).toEqual({ location: 'showroom', index: 1 })

@@ -1,5 +1,5 @@
 import { ARCHETYPES } from './archetypes'
-import { acceptChance, type Customer } from './customers'
+import { acceptChance, MAX_ACCEPT_CHANCE, type Customer } from './customers'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
 
@@ -39,7 +39,7 @@ export interface Haggle {
   counter: number
 }
 
-export type WalkReason = 'pass' | 'stubborn' | 'budget' | 'gone'
+export type WalkReason = 'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball'
 
 export type AskResponse =
   | { answer: 'accept' }
@@ -172,6 +172,103 @@ export function staffAsk(skill: number, car: InventoryCar, haggle: Haggle | null
   return Math.min(lastAsk, Math.max(counter, floor, ask))
 }
 
+// Buying a seller's car: the same haggle the other way round. We offer, they
+// accept, counter (down from a first counter over what they hope for) or walk.
+// `Haggle.lastAsk` is our last offer and `counter` their latest price.
+
+/** A seller's first counter comes in this fraction of their hope above it. */
+export const SELLER_FIRST_RISE = 0.03
+/** Under this share of their hope, an offer may insult a seller into leaving. */
+export const LOWBALL_FRACTION = 0.7
+export const LOWBALL_WALK = 0.5
+/** A seller's odds of taking an offer they're happy with, before their archetype. */
+export const SELL_CHANCE = 0.9
+/** On their last round, the least a seller will consider, as a share of their hope. */
+export const SELLER_RESERVE = 0.92
+/** We open this fraction under our estimate of the car's value. */
+export const BUY_OPEN_DISCOUNT = 0.15
+/** To open, the most the stepper offers, as a multiple of our estimate. */
+export const BUY_MAX_FACTOR = 1.5
+
+const hopeOf = (c: Customer) => c.selling?.hope ?? 0
+
+/** Odds a seller takes an offer they're happy with: 90%, plus half their archetype's `accept`. */
+export function sellChance(c: Customer): number {
+  return Math.max(
+    0.5,
+    Math.min(MAX_ACCEPT_CHANCE, SELL_CHANCE + ARCHETYPES[c.archetype].accept / 2),
+  )
+}
+
+/** A seller's counter to `offer`: the first over what they hope for, later ones coming down. */
+export function sellerCounter(c: Customer, offer: number): number {
+  const counter = c.haggle
+    ? roundPrice(c.haggle.counter - COUNTER_STEP * (c.haggle.counter - offer))
+    : roundPrice(hopeOf(c) * (1 + SELLER_FIRST_RISE))
+  // Never up from their last counter, or under the offer.
+  return Math.max(offer, Math.min(c.haggle?.counter ?? Infinity, counter))
+}
+
+/** The offer is one they're happy with: at their hope, or at their own counter. */
+const pleases = (c: Customer, offer: number) =>
+  offer >= hopeOf(c) || (!!c.haggle && offer >= c.haggle.counter)
+
+/**
+ * Seller `c`'s answer to our `offer` for their car, mirroring `respondToAsk`:
+ * at or over what they hope for (or their counter) they mostly take it; far
+ * under it they may leave insulted; not coming up from our last offer they may
+ * walk; otherwise they counter while they have rounds left, and on the last
+ * round take a half-hearted roll at anything near their hope.
+ */
+export function respondToBuyOffer(c: Customer, offer: number, rng: Rng): AskResponse {
+  const roll = (factor: number): AskResponse =>
+    rng.next() < sellChance(c) * factor ? { answer: 'accept' } : { answer: 'walk', reason: 'keep' }
+  if (pleases(c, offer)) return roll(1)
+  if (offer < LOWBALL_FRACTION * hopeOf(c) && rng.next() < LOWBALL_WALK) {
+    return { answer: 'walk', reason: 'insulted' }
+  }
+  if (c.haggle && offer <= c.haggle.lastAsk && rng.next() < STUBBORN_WALK) {
+    return { answer: 'walk', reason: 'stubborn' }
+  }
+  if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) {
+    return { answer: 'counter', counter: sellerCounter(c, offer) }
+  }
+  if (offer < SELLER_RESERVE * hopeOf(c)) return { answer: 'walk', reason: 'lowball' }
+  return roll(LAST_ROUND_FACTOR)
+}
+
+/** How seller `c` would take `offer`, from the same numbers `respondToBuyOffer` uses. */
+export function buyWarmth(c: Customer, offer: number): Warmth {
+  const odds = (factor: number): Warmth => {
+    const chance = sellChance(c) * factor
+    return chance >= HOT_CHANCE ? 'hot' : chance >= WARM_CHANCE ? 'warm' : 'cold'
+  }
+  if (pleases(c, offer)) return odds(1)
+  if (offer < LOWBALL_FRACTION * hopeOf(c)) return 'cold'
+  if (c.haggle && offer <= c.haggle.lastAsk) return 'cold'
+  if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) return 'warm'
+  if (offer < SELLER_RESERVE * hopeOf(c)) return 'cold'
+  return odds(LAST_ROUND_FACTOR)
+}
+
+/** What we can offer a seller now: up to half again our estimate at first, then between our last offer and their counter. */
+export function buyRange(c: Customer): { min: number; max: number } {
+  if (c.haggle) return { min: c.haggle.lastAsk, max: c.haggle.counter }
+  const estimate = c.selling?.estimate.estimate ?? 0
+  return { min: PRICE_STEP, max: Math.max(PRICE_STEP, roundPrice(estimate * BUY_MAX_FACTOR)) }
+}
+
+export function clampBuy(c: Customer, price: number): number {
+  const { min, max } = buyRange(c)
+  return Math.min(max, Math.max(min, Math.round(price)))
+}
+
+/** A sensible next offer: under our estimate to open, then splitting the difference. */
+export function suggestedBuy(c: Customer): number {
+  if (c.haggle) return clampBuy(c, roundPrice((c.haggle.lastAsk + c.haggle.counter) / 2))
+  return clampBuy(c, roundPrice((c.selling?.estimate.estimate ?? 0) * (1 - BUY_OPEN_DISCOUNT)))
+}
+
 /** What they say when they walk. */
 export function walkLine(reason: WalkReason): string {
   switch (reason) {
@@ -183,5 +280,11 @@ export function walkLine(reason: WalkReason): string {
       return "That's more than I can spend."
     case 'gone':
       return 'Oh, it sold? Never mind.'
+    case 'keep':
+      return "On second thought, I'll keep it."
+    case 'insulted':
+      return "Is that a joke? I'm out."
+    case 'lowball':
+      return 'I can get more than that elsewhere.'
   }
 }

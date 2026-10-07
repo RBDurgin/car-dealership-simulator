@@ -242,8 +242,9 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
       break
     }
     case 'leaving':
-      // Back to their car, if they came in one.
-      goals = [w.exit]
+      // Back to their car, if they came in one. A seller who sold us theirs
+      // walks off down the sidewalk.
+      goals = c.vehicle || !c.selling ? [w.exit] : [w.rng.pick(SIDEWALK_ENDS)]
       w.faceTo = null
       break
     case 'following': {

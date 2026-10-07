@@ -122,6 +122,8 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
       }
       if (c.phase !== 'leaving' || was.phase === 'leaving') continue
       if (c.leaveReason === 'bought') out.push({ cue: 'sale', subject })
+      // We bought their car.
+      else if (c.leaveReason === 'sold') out.push({ cue: 'coin' })
       else if (c.leaveReason === 'refused' || c.leaveReason === 'impatient') {
         out.push({ cue: 'thud', subject })
       }

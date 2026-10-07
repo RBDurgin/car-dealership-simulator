@@ -191,7 +191,7 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
         out.push([{ speaker: c.id, tone: 'murmur', syllables: 1 }])
       } else if (from === 'considering' && to === 'talking' && c.haggle) {
         out.push([{ speaker: c.id, tone: 'question', syllables: rng.int(3, 5) }])
-      } else if (from === 'considering' && to === 'following') {
+      } else if (from === 'considering' && (to === 'following' || c.leaveReason === 'sold')) {
         const lines: Line[] = [{ speaker: c.id, tone: 'happy', syllables: rng.int(2, 4) }]
         if (c.handlerId) lines.push({ speaker: c.handlerId, tone: 'happy', syllables: 2 })
         out.push(lines)

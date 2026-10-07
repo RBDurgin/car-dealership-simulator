@@ -20,6 +20,7 @@ import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
 import type { OwnerVerdict } from './owner'
 import type { QuotaResult } from './quota'
+import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { financeOnDuty, type Employee } from './staff'
 
 /**
@@ -110,12 +111,12 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
   return financeOnDuty(roster)?.id === e.id ? ['handOff', 'inspect'] : ['inspect']
 }
 
-/** What the player can do with a customer right now. */
+/** What the player can do with a customer right now. A seller waits for an offer. */
 export function customerActions(c: Customer): ActionId[] {
   switch (c.phase) {
     case 'browsing':
     case 'waiting':
-      return ['greet']
+      return c.selling ? ['makeOffer'] : ['greet']
     case 'talking':
       return ['offer']
     default:
@@ -150,7 +151,7 @@ export function customerInteractable(grid: Grid, c: Customer, tile: Tile): Inter
   return personInteractable(grid, c, 'customer', tile, customerActions(c))
 }
 
-const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'offer'])
+const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'makeOffer', 'offer'])
 
 export function isCustomerAction(action: ActionId): boolean {
   return CUSTOMER_ACTIONS.has(action)
@@ -167,6 +168,8 @@ export function actionBlocker(
   inventory: readonly InventoryCar[],
 ): string | null {
   if (action === 'wash') return washBlocker(inventory.find((c) => c.id === targetId))
+  if (action === 'appraise')
+    return appraiseBlocker(customers.find((c) => c.id === vehicleOwnerId(targetId)))
   if (isCustomerAction(action)) {
     const c = customers.find((x) => x.id === targetId)
     if (!c || c.phase === 'leaving') return `${c?.name ?? 'The customer'} left.`
@@ -186,6 +189,14 @@ export function actionBlocker(
     if (!financeOnDuty(roster)) return 'No finance manager on shift.'
     if (deal?.phase !== 'following') return NOBODY_TO_SIGN
   }
+  return null
+}
+
+/** Why the player can't appraise seller `c`'s car, or null if they can. */
+export function appraiseBlocker(c: Customer | undefined): string | null {
+  if (!c?.vehicle || c.phase === 'leaving') return 'They drove off.'
+  if (!c.selling) return "It isn't for sale."
+  if (c.selling.appraised) return "You've already appraised it."
   return null
 }
 
@@ -252,6 +263,8 @@ export interface DayStats {
    * one-time safety net), set when settled. A rescue, not income.
    */
   bailout: number
+  /** Used cars bought from sellers today: stock, not an expense, so off `netIncome`. */
+  bought: BoughtCar[]
 }
 
 export function emptyStats(): DayStats {
@@ -275,6 +288,7 @@ export function emptyStats(): DayStats {
     nazma: emptyNazmaStats(),
     quota: null,
     bailout: 0,
+    bought: [],
   }
 }
 
@@ -364,6 +378,8 @@ export function recordMissed(
   const inStock = new Set(available.map((c) => c.model))
   let missed = stats.missed
   for (const c of arrived) {
+    // A seller isn't shopping.
+    if (c.selling) continue
     if (c.preferredModels.some((m) => inStock.has(m))) continue
     const model = c.preferredModels[0]
     missed = { ...missed, [model]: (missed[model] ?? 0) + 1 }

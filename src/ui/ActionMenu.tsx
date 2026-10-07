@@ -2,7 +2,7 @@ import { COARSE, COMPACT, useMediaQuery } from '../input/useMediaQuery'
 import { useEffect, useRef } from 'react'
 import { actionBlocker } from '../sim/deal'
 import { ACTIONS, type ActionId, type Interactable } from '../sim/interactables'
-import { suggestedAsk } from '../sim/negotiation'
+import { suggestedAsk, suggestedBuy } from '../sim/negotiation'
 import { findInteractable } from '../scene/runtime'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -14,11 +14,12 @@ const MARGIN = 90
 /** A landscape phone is only ~375px tall: keep the ring nearer the edges. */
 const COMPACT_MARGIN = 70
 
-/** Button text: an offer names the suggested ask. */
+/** Button text: an offer names the suggested ask (or, to a seller, the suggested offer). */
 function labelFor(action: ActionId, it: Interactable): string {
   if (action !== 'offer') return ACTIONS[action].label
   const s = useGame.getState()
   const c = s.customers.find((x) => x.id === it.id)
+  if (c?.selling) return `Offer ${formatMoney(suggestedBuy(c))}`
   const car = s.inventory.find((x) => x.id === c?.targetCarId)
   return c && car ? `Ask ${formatMoney(suggestedAsk(c, car))}` : ACTIONS.offer.label
 }

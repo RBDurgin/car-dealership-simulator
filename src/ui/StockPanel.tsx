@@ -14,6 +14,7 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
+import { reservedSlots } from '../sim/sellers'
 import { levelTuning, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
 import { formatMoney } from './format'
@@ -243,12 +244,15 @@ function StockTab() {
   const day = useGame((s) => s.clock.day)
   const inventory = useGame((s) => s.inventory)
   const orders = useGame((s) => s.orders)
+  const purchases = useGame((s) => s.purchases)
   const missedToday = useGame((s) => s.dayStats.missed)
   const missedYesterday = useGame((s) => s.missedYesterday)
   const invoice = useGame(levelTuning).invoice
 
-  const book = { cash, inventory, orders }
-  const free = freeSlots(inventory, orders)
+  // Lot spaces held for used cars bought today are taken too.
+  const reserved = reservedSlots(purchases)
+  const book = { cash, inventory, orders, reserved }
+  const free = freeSlots(inventory, orders, reserved)
   const freeIn = (where: 'lot' | 'showroom') => free.filter((s) => s.location === where).length
   const blocker = (model: CarModel, financing: Financing) => {
     const r = placeOrder(book, model, financing, day, invoice)

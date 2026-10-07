@@ -47,6 +47,19 @@ describe('customer parking spaces', () => {
     expect(spotsInUse(full).size).toBe(CUSTOMER_PARKING.length)
   })
 
+  it('skips spaces held by a car we bought', () => {
+    expect(freeSpot([], [0])).toBe(1)
+    expect(freeSpot([customer('a', parkedIn(1))], [0, 2])).toBeNull()
+    const out = assignVehicles(
+      Array.from({ length: 40 }, (_, i) => customer(`c${i}`)),
+      [],
+      createRng(3),
+      1,
+      [0, 1],
+    )
+    expect(out.flatMap((c) => (c.vehicle ? [c.vehicle.spot] : []))).toEqual([2])
+  })
+
   it('puts the driver behind their car, on a tile the car leaves free', () => {
     CUSTOMER_PARKING.forEach((space, n) => {
       const door = doorTile(n)

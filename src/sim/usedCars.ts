@@ -133,9 +133,31 @@ export interface Appraisal {
   margin: number
 }
 
+/** How far off a quick look at a car may be, before anyone appraises it properly. */
+export const GLANCE_NOISE = 0.25
+
+/**
+ * A guess at a used `model`'s value on `day`, off by up to `noise` (a
+ * fraction) either way, with that much either way as its margin.
+ */
+export function estimateValue(
+  model: CarModel,
+  info: UsedInfo,
+  day: number,
+  noise: number,
+  rng: Rng,
+): Appraisal {
+  const value = marketValue(model, info, day)
+  return {
+    estimate: roundTo100(value * (1 + (rng.next() * 2 - 1) * noise)),
+    margin: roundTo100(value * noise),
+  }
+}
+
 /**
  * An appraiser of `skill` sizing up a used `model` on `day`: an estimate within
- * `appraisalNoise(skill)` of its true value, and that much either way as margin.
+ * `appraisalNoise(skill)` (× `noiseFactor`, the level's) of its true value, and
+ * that much either way as margin.
  */
 export function appraise(
   model: CarModel,
@@ -143,13 +165,9 @@ export function appraise(
   day: number,
   skill: number,
   rng: Rng,
+  noiseFactor = 1,
 ): Appraisal {
-  const value = marketValue(model, info, day)
-  const noise = appraisalNoise(skill)
-  return {
-    estimate: roundTo100(value * (1 + (rng.next() * 2 - 1) * noise)),
-    margin: roundTo100(value * noise),
-  }
+  return estimateValue(model, info, day, appraisalNoise(skill) * noiseFactor, rng)
 }
 
 /** The sticker for a used car worth `value`: `USED_MARKUP` over, rounded to $100. */
@@ -193,11 +211,11 @@ export function usedStockCar(
   }
 }
 
-/** The first `used-<day>-<n>` id not already in `inventory`. */
-export function nextUsedId(inventory: readonly InventoryCar[], day: number): string {
+/** The first `used-<day>-<n>` id not already in `taken` (stock, or cars bought today). */
+export function nextUsedId(taken: readonly { id: string }[], day: number): string {
   for (let n = 1; ; n++) {
     const id = `used-${day}-${n}`
-    if (!inventory.some((c) => c.id === id)) return id
+    if (!taken.some((c) => c.id === id)) return id
   }
 }
 

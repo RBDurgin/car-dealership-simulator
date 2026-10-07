@@ -40,7 +40,16 @@ import {
 } from '../sim/deal'
 import { eventNotice, eventOn } from '../sim/events'
 import { carName, type ActionId } from '../sim/interactables'
-import { clampAsk, respondToAsk, staffAsk, suggestedAsk, walkLine } from '../sim/negotiation'
+import {
+  clampAsk,
+  clampBuy,
+  respondToAsk,
+  respondToBuyOffer,
+  staffAsk,
+  suggestedAsk,
+  suggestedBuy,
+  walkLine,
+} from '../sim/negotiation'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty, type Tuning } from '../sim/difficulty'
 import { assignVehicles } from '../sim/driving'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
@@ -130,6 +139,19 @@ import { leadChoice } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { WEATHER_EFFECTS, waitingOutside, weatherOn, type Weather } from '../sim/weather'
 import type { TipId } from '../sim/tips'
+import {
+  appraiseFor,
+  assignSellers,
+  boughtRecord,
+  buyBlocker,
+  estimateRange,
+  purchaseOf,
+  reservedSlots,
+  stockPurchases,
+  vehicleOwnerId,
+  vehicleTargetId,
+  type Purchase,
+} from '../sim/sellers'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
 
@@ -194,6 +216,11 @@ interface GameState {
   inventory: InventoryCar[]
   /** Cars ordered from the manufacturer, delivered the next morning. */
   orders: Order[]
+  /**
+   * Used cars bought from sellers today. Each stands in customer parking,
+   * holding a lot space, until the day is settled and it goes into stock.
+   */
+  purchases: Purchase[]
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
@@ -455,6 +482,7 @@ function dayOne(difficulty: Difficulty) {
     cash: tuning.startingCash,
     bailoutUsed: false,
     tipsSeen: [] as TipId[],
+    purchases: [] as Purchase[],
     quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
@@ -518,6 +546,12 @@ export const useGame = create<GameState>((set, get) => {
       if (c.phase !== 'waiting') continue
       const was = prev.find((x) => x.id === c.id)?.phase
       if (was !== 'arriving' && was !== 'browsing') continue
+      if (c.selling && c.vehicle) {
+        notify(
+          `${c.name} wants to sell their ${carName(c.vehicle.car.model)}. They're waiting by it.`,
+        )
+        continue
+      }
       const carId = c.browseCarIds[c.browseCarIds.length - 1]
       const car = s.inventory.find((x) => x.id === carId)
       notify(`${c.name} is waiting ${car ? `by the ${carName(car.model)}` : 'out front'}.`)
@@ -533,7 +567,8 @@ export const useGame = create<GameState>((set, get) => {
    * before the summary shows, so it reports cash after payroll. On an owner's
    * day the day is judged against their goal, and any bonus is paid too. The
    * day's customers move reputation. On the month's last day the manufacturer
-   * pays the holdback on the month's sales.
+   * pays the holdback on the month's sales. Used cars bought today go into
+   * stock, in the lot spaces held for them, so the save keeps them.
    */
   const settleDay = () => {
     const s = get()
@@ -562,6 +597,10 @@ export const useGame = create<GameState>((set, get) => {
       cash: cash + bailout,
       bailoutUsed: s.bailoutUsed || bailout > 0,
       reputation,
+      ...(s.purchases.length > 0 && {
+        inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
+        purchases: [],
+      }),
       dayStats: {
         ...s.dayStats,
         wages,
@@ -627,7 +666,10 @@ export const useGame = create<GameState>((set, get) => {
       case 'getCoffee':
         return notify('Ahh, fresh coffee.')
       case 'greet':
+      case 'makeOffer':
         return greet(finished.targetId)
+      case 'appraise':
+        return appraiseCar(finished.targetId)
       case 'offer':
         return offer(finished.targetId)
       case 'closeDeal':
@@ -680,8 +722,10 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     const c = s.customers.find((x) => x.id === id)
     if (!c) return
-    const carId = chooseTarget(c, availableCars(s.inventory))
+    // A seller wants to talk about their own car.
+    const carId = c.selling ? null : chooseTarget(c, availableCars(s.inventory))
     commit(reduceCustomers(s.customers, { type: 'greet', id, carId, by: PLAYER_ID }))
+    if (c.selling) return
     if (carId === null) notify(`${c.name}: "Nothing here for me, sorry."`)
   }
 
@@ -689,10 +733,74 @@ export const useGame = create<GameState>((set, get) => {
   const offer = (id: string, price?: number) => {
     const s = get()
     const c = s.customers.find((x) => x.id === id)
+    if (c?.selling) return buyOffer(c, price)
     const car = s.inventory.find((x) => x.id === c?.targetCarId)
     if (!c || !car || car.status !== 'available') return notify("That car isn't for sale any more.")
     const ask = price === undefined ? suggestedAsk(c, car) : clampAsk(c, car, price)
     commit(reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: ask }))
+  }
+
+  /**
+   * Offers seller `c` `price` for their car, or the suggested offer (see
+   * `suggestedBuy`). Not while there's no lot space for it or not enough cash.
+   */
+  const buyOffer = (c: Customer, price?: number) => {
+    const s = get()
+    const bid = price === undefined ? suggestedBuy(c) : clampBuy(c, price)
+    const blocker = buyBlocker(s, bid)
+    if (blocker) return notify(blocker)
+    const ev = { type: 'offer', id: c.id, carId: vehicleTargetId(c.id), price: bid } as const
+    commit(reduceCustomers(s.customers, ev))
+  }
+
+  /**
+   * Seller `c` answers our offer. A yes buys the car: cash goes now, and the
+   * car stays in customer parking, holding a lot space, until closing.
+   */
+  const answerSeller = (c: Customer) => {
+    const s = get()
+    const price = c.offer!.price
+    const res = respondToBuyOffer(c, price, dealRng)
+    if (res.answer === 'accept') {
+      const id = nextUsedId([...s.inventory, ...s.purchases], s.clock.day)
+      const blocker = buyBlocker(s, price)
+      const purchase = blocker ? null : purchaseOf(c, price, s, id)
+      if (!purchase) {
+        // The last space went, or the cash, while they thought it over.
+        commit(reduceCustomers(s.customers, { type: 'cancel', id: c.id }))
+        return notify(blocker ?? 'The deal fell through.')
+      }
+      set({
+        cash: s.cash - price,
+        purchases: [...s.purchases, purchase],
+        dayStats: {
+          ...s.dayStats,
+          bought: [...s.dayStats.bought, boughtRecord(purchase, s.clock.day)],
+        },
+      })
+      commit(reduceCustomers(get().customers, { type: 'respond', id: c.id, answer: 'accept' }))
+      return notify(
+        `Bought ${c.name}'s ${carName(purchase.car.model)} for ${formatMoney(price)}. It goes on the lot tonight.`,
+      )
+    }
+    const counter = res.answer === 'counter' ? res.counter : undefined
+    commit(reduceCustomers(s.customers, { type: 'respond', id: c.id, answer: res.answer, counter }))
+    if (res.answer === 'counter') notify(`${c.name}: "I'd want ${formatMoney(res.counter)}."`)
+    else notify(`${c.name}: "${walkLine(res.reason)}"`)
+  }
+
+  /** The player finished looking over the car with target id `targetId`. */
+  const appraiseCar = (targetId: string) => {
+    const s = get()
+    const c = s.customers.find((x) => x.id === vehicleOwnerId(targetId))
+    const estimate =
+      c && appraiseFor(c, s.clock.day, PLAYER_SKILL, dealRng, tuning().appraisalNoise)
+    if (!c?.vehicle || !estimate) return
+    commit(reduceCustomers(s.customers, { type: 'appraised', id: c.id, estimate }))
+    const { low, high } = estimateRange(estimate)
+    notify(
+      `You'd put ${c.name}'s ${carName(c.vehicle.car.model)} at ${formatMoney(low)}–${formatMoney(high)}.`,
+    )
   }
 
   /** The customer salesperson `employeeId` is dealing with in `phases`, if any. */
@@ -862,6 +970,7 @@ export const useGame = create<GameState>((set, get) => {
         },
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
+      purchases: [],
       dayStats: {
         ...emptyStats(),
         nazma: {
@@ -951,7 +1060,8 @@ export const useGame = create<GameState>((set, get) => {
       // Turning to someone else ends the conversation; greeting someone else also
       // drops a customer who was following.
       const deal = dealCustomer(get().customers, PLAYER_ID)
-      if (deal && deal.id !== targetId) {
+      // Looking over the car of the seller they're talking to doesn't end the talk.
+      if (deal && deal.id !== targetId && deal.id !== vehicleOwnerId(targetId)) {
         endDeal(isCustomerAction(action) ? DEAL_PHASES : CONVERSATION_PHASES)
       }
       set({ moveOrder: null, menu: null, inspectedId: null })
@@ -1019,17 +1129,24 @@ export const useGame = create<GameState>((set, get) => {
       })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
-      // Some drive in, while there's room in customer parking.
-      const arrived = assignVehicles(
-        due.map((source) =>
-          generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-            source,
-            ...arrivalOpts(),
-          }),
+      // Some drive in, while there's room in customer parking, and some of those are sellers.
+      const level = tuning()
+      const arrived = assignSellers(
+        assignVehicles(
+          due.map((source) =>
+            generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+              source,
+              ...arrivalOpts(),
+            }),
+          ),
+          customers,
+          driveRng,
+          step.day,
+          s.purchases.map((p) => p.spot),
         ),
-        customers,
         driveRng,
         step.day,
+        { hope: level.sellerHope, noise: level.appraisalNoise },
       )
       customers = [...customers, ...arrived]
       set({
@@ -1060,7 +1177,8 @@ export const useGame = create<GameState>((set, get) => {
     },
     orderCar: (model, financing) => {
       const s = get()
-      const result = placeOrder(s, model, financing, s.clock.day, tuning().invoice)
+      const book = { ...s, reserved: reservedSlots(s.purchases) }
+      const result = placeOrder(book, model, financing, s.clock.day, tuning().invoice)
       if (!result.ok) {
         notify(result.reason)
         return false
@@ -1137,8 +1255,8 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const day = s.clock.day
       const spec = rollUsedCar(createRng(Date.now()), day)
-      const id = nextUsedId(s.inventory, day)
-      const cars = freeSlots(s.inventory, s.orders)
+      const id = nextUsedId([...s.inventory, ...s.purchases], day)
+      const cars = freeSlots(s.inventory, s.orders, reservedSlots(s.purchases))
         .filter((slot) => slot.location === 'lot')
         .map((slot) => usedStockCar(id, spec, slot, 0, day, 0.5))
       const car = cars.find((c) => canPlace?.(c) ?? true)
@@ -1239,6 +1357,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const c = s.customers.find((x) => x.id === id)
       if (c?.phase !== 'considering' || !c.offer) return
+      if (c.selling) return answerSeller(c)
       const car = s.inventory.find((x) => x.id === c.offer?.carId)
       const res =
         car?.status === 'available'
@@ -1264,6 +1383,8 @@ export const useGame = create<GameState>((set, get) => {
       // One customer at a time, and never the one the player is heading to.
       if (s.customers.some((c) => c.handlerId === employeeId && c.phase !== 'leaving')) return false
       if (s.activeAction?.targetId === customerId) return false
+      // Sellers are the player's to buy from.
+      if (s.customers.find((c) => c.id === customerId)?.selling) return false
       commit(reduceCustomers(s.customers, { type: 'claim', id: customerId, by: employeeId }))
       return get().customers.find((c) => c.id === customerId)?.handlerId === employeeId
     },

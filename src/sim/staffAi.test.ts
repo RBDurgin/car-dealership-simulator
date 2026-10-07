@@ -39,6 +39,7 @@ const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   chairId: null,
   sellerId: null,
   vehicle: null,
+  selling: null,
   ...extra,
 })
 
@@ -84,6 +85,11 @@ describe('pickSalesCustomer', () => {
       shopper('d', { phase: 'leaving', leaveReason: 'impatient' }),
     ]
     expect(pickSalesCustomer(list)).toBeNull()
+  })
+
+  it('leaves sellers to the player', () => {
+    const selling = { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false }
+    expect(pickSalesCustomer([shopper('a', { patienceLeft: 5, selling })])).toBeNull()
   })
 })
 

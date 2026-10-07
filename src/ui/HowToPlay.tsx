@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
+import { APPRAISE_SECONDS } from '../sim/interactables'
 import {
   AREA_LABELS,
   IMPROVEMENT_IDS,
@@ -91,14 +92,15 @@ function BasicsTab({ touch, click }: TabProps) {
           customers come in, they wait longer and are readier to buy. Nazma turns up less often and
           not before day {TUNING.easy.firstNazmaDay}, the quota is {percentOff(TUNING.easy.quota)}{' '}
           lower, the owner pays {formatMoney(ownerBonus(TUNING.easy.ownerBonus))} for a goal met and
-          unhappy customers cost less reputation.
+          unhappy customers cost less reputation. Sellers hope for a little less, and your estimates
+          of a used car&apos;s value are closer.
         </p>
         <p>
-          Easy also helps you learn. While you haggle, a chip shows how warm the customer is to the
-          price on the stepper: <b>hot</b> (likely to take it), <b>warm</b> (they&apos;ll talk) or{' '}
-          <b>cold</b> (likely to walk). The first time a day ends in the red, the bank tops your
-          cash back up to $0; it only does this once. And tips pop up the first time things happen,
-          such as a counter-offer, a dirty car or a visit from Nazma.
+          Easy also helps you learn. While you haggle, a chip shows how warm the customer (or a
+          seller) is to the price on the stepper: <b>hot</b> (likely to take it), <b>warm</b>{' '}
+          (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day ends in the red,
+          the bank tops your cash back up to $0; it only does this once. And tips pop up the first
+          time things happen, such as a counter-offer, a dirty car or a visit from Nazma.
         </p>
         <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
@@ -108,7 +110,7 @@ function BasicsTab({ touch, click }: TabProps) {
           from day {TUNING.hard.firstNazmaDay} and steals and poaches more, the quota is{' '}
           {percentOn(TUNING.hard.quota)} higher, the owner pays only{' '}
           {formatMoney(ownerBonus(TUNING.hard.ownerBonus))} and reputation is harder to win and
-          easier to lose.
+          easier to lose. Sellers want more for their cars, and your estimates are rougher.
         </p>
       </section>
       <section>
@@ -116,8 +118,9 @@ function BasicsTab({ touch, click }: TabProps) {
         <p>
           Doors open at 9:00 and close at 18:00. Customers browse, then wait for help and lose
           patience if nobody comes. Some are passers-by off the sidewalk, and some drive in and park
-          in the three customer spaces by the showroom; they walk back to their car to leave. Each
-          day ends with a summary, and your progress is saved then.
+          in the three customer spaces by the showroom; they walk back to their car to leave. Some
+          drivers come to sell you their car instead (see <b>Selling</b>). Each day ends with a
+          summary, and your progress is saved then.
         </p>
       </section>
       <section>
@@ -169,7 +172,7 @@ function BasicsTab({ touch, click }: TabProps) {
   )
 }
 
-function SellingTab() {
+function SellingTab({ click }: TabProps) {
   return (
     <>
       <section>
@@ -183,6 +186,27 @@ function SellingTab() {
         <p>
           Bargain hunters want the most off and haggle longest. Decisive buyers want only a little
           off and won&apos;t haggle for long, and neither will someone just looking.
+        </p>
+      </section>
+      <section>
+        <h3>Buying used cars</h3>
+        <p>
+          Some drivers come to <i>sell</i> their car for cash, and wait by it in customer parking.{' '}
+          {click} the car to <b>Appraise</b> it: you look it over for {APPRAISE_SECONDS} seconds and
+          get a much closer idea of what it&apos;s worth than a glance gives. Then{' '}
+          {click.toLowerCase()} the seller to <b>Make offer</b>.
+        </p>
+        <p>
+          The haggle runs the other way round: open under your estimate, and if they want more they
+          name their price; <b>Hold</b>, <b>Split the difference</b> or <b>Accept</b>. A lowball may
+          insult them into leaving. The panel shows your margin against your estimate. Your
+          salespeople leave sellers to you.
+        </p>
+        <p>
+          Buying needs a free lot space and the cash, paid on the spot. The car stays in customer
+          parking until closing, then goes on the lot as a used car costing what you paid. The
+          summary lists what you bought and what each car was really worth; the spend is stock, not
+          an expense, so it isn&apos;t taken off the day&apos;s net.
         </p>
       </section>
       <section>

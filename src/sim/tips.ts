@@ -10,7 +10,8 @@ import type { OwnerVisit } from './owner'
  * Pure: `tipFor` diffs two store states like `sfxFor`, and `state/tips.ts`
  * shows the tip and marks it seen.
  */
-export type TipId = 'wash' | 'haggle' | 'restock' | 'missed' | 'nazma' | 'owner' | 'lowCash'
+export type TipId =
+  'wash' | 'haggle' | 'restock' | 'missed' | 'nazma' | 'owner' | 'lowCash' | 'seller'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -28,6 +29,7 @@ export const TIPS: Record<TipId, string> = {
   missed:
     'Someone left because none of the body types they wanted was in stock. Keep a mix of models to catch more buyers.',
   wash: 'Dirty cars sell less often. Go up to one and choose Wash car, or hire a lot porter to keep them clean.',
+  seller: 'A seller drove in wanting cash for their car. Appraise it before you make an offer.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -83,6 +85,15 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     }
     case 'missed':
       return missedCount(next) > missedCount(prev)
+    case 'seller': {
+      if (next.customers === prev.customers) return false
+      return next.customers.some(
+        (c) =>
+          c.selling &&
+          c.vehicle?.parked &&
+          !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
+      )
+    }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

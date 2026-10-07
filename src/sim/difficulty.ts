@@ -41,7 +41,11 @@ export interface Tuning {
   repGain: number
   /** × reputation lost in a day. */
   repLoss: number
-  /** Show how warm a customer is to the ask while haggling. */
+  /** × what a seller hopes to get for their car. */
+  sellerHope: number
+  /** × how far off the player's estimate of a used car's value may be. */
+  appraisalNoise: number
+  /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
   dealHint: boolean
   /** The bank covers a negative end-of-day balance, once. */
   safetyNet: boolean
@@ -66,6 +70,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     ownerBonus: 1.33,
     repGain: 1,
     repLoss: 0.6,
+    sellerHope: 0.95,
+    appraisalNoise: 0.7,
     dealHint: true,
     safetyNet: true,
     tips: true,
@@ -86,6 +92,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     ownerBonus: 1,
     repGain: 1,
     repLoss: 1,
+    sellerHope: 1,
+    appraisalNoise: 1,
     dealHint: false,
     safetyNet: false,
     tips: false,
@@ -106,6 +114,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     ownerBonus: 0.67,
     repGain: 0.85,
     repLoss: 1.3,
+    sellerHope: 1.05,
+    appraisalNoise: 1.2,
     dealHint: false,
     safetyNet: false,
     tips: false,

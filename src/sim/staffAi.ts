@@ -48,8 +48,8 @@ const IDLE: SalesTask = { kind: 'idle' }
 /**
  * The customer a salesperson should go to: the one nobody is helping who has
  * the least patience left (waiting customers before browsing ones, who don't
- * lose patience), earliest on the lot on a tie. Skips anyone in `exclude`, and
- * browsing customers that `canGreetBrowsing` rules out.
+ * lose patience), earliest on the lot on a tie. Skips sellers, anyone in `exclude`,
+ * and browsing customers that `canGreetBrowsing` rules out.
  */
 export function pickSalesCustomer(
   customers: readonly Customer[],
@@ -60,6 +60,8 @@ export function pickSalesCustomer(
   for (const c of customers) {
     if (c.phase !== 'browsing' && c.phase !== 'waiting') continue
     if (c.handlerId !== null || exclude.has(c.id)) continue
+    // Sellers are the player's to buy from.
+    if (c.selling) continue
     if (c.phase === 'browsing' && !canGreetBrowsing(c)) continue
     if (!best || c.patienceLeft < best.patienceLeft) best = c
   }

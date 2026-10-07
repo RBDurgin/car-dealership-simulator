@@ -932,6 +932,12 @@ kbd {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+.summary-bought {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
 .summary-sales {
   margin: 0 0 16px;
   padding: 10px 0 0;

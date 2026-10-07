@@ -15,7 +15,9 @@ export type ActionId =
   | 'sit'
   | 'getCoffee'
   | 'greet'
+  | 'makeOffer'
   | 'offer'
+  | 'appraise'
   | 'closeDeal'
   | 'handOff'
   | 'orderStock'
@@ -23,6 +25,9 @@ export type ActionId =
   | 'improve'
   | 'calendar'
   | 'confront'
+
+/** Real seconds the player spends looking a seller's car over. */
+export const APPRAISE_SECONDS = 4
 
 /**
  * How an action plays out once the player reaches the object:
@@ -54,6 +59,22 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   greet: { id: 'greet', label: 'Greet', verb: 'Greeting', mode: 'timed', durationMs: 1500 },
   offer: { id: 'offer', label: 'Make an offer', verb: 'Making an offer', mode: 'instant' },
+  // A seller's: go over and start talking about their car.
+  makeOffer: {
+    id: 'makeOffer',
+    label: 'Make offer',
+    verb: 'Greeting',
+    mode: 'timed',
+    durationMs: 1500,
+  },
+  // A seller's parked car: look it over for a closer idea of its value.
+  appraise: {
+    id: 'appraise',
+    label: 'Appraise',
+    verb: 'Appraising the car',
+    mode: 'timed',
+    durationMs: APPRAISE_SECONDS * 1000,
+  },
   // Starts performing only once the customer is seated (see scene/Player).
   closeDeal: {
     id: 'closeDeal',

@@ -4,7 +4,12 @@ import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { improvementFootprints, installed, type ImprovementId } from '../sim/improvements'
-import { approachTilesFor, buildInteractables, type Interactable } from '../sim/interactables'
+import {
+  approachTilesFor,
+  buildInteractables,
+  carName,
+  type Interactable,
+} from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { nearestStandable, PLAYER_RADIUS } from '../sim/movement'
 import { NAZMA_ID } from '../sim/nazma'
@@ -19,6 +24,7 @@ import {
   SPAWN_TILE,
   type Rect,
 } from '../sim/layout'
+import { vehicleOwnerId } from '../sim/sellers'
 import { POSTS } from '../sim/staff'
 import { useGame } from '../state/store'
 
@@ -72,12 +78,18 @@ useGame.subscribe((s, prev) => {
   }
 })
 
-/** Customer-parking spaces with a car parked in them, which block its footprint. */
+/**
+ * Customer-parking spaces with a car parked in them (a visitor's, or one we
+ * bought today), which block its footprint.
+ */
 let parkedSpots = new Set<number>()
 
 useGame.subscribe((s, prev) => {
-  if (s.customers === prev.customers) return
-  const parked = spotsInUse(s.customers.filter((c) => c.vehicle?.parked))
+  if (s.customers === prev.customers && s.purchases === prev.purchases) return
+  const parked = new Set([
+    ...spotsInUse(s.customers.filter((c) => c.vehicle?.parked)),
+    ...s.purchases.map((p) => p.spot),
+  ])
   if (parked.size === parkedSpots.size && [...parked].every((n) => parkedSpots.has(n))) return
   CUSTOMER_PARKING.forEach((space, n) => {
     if (parked.has(n) === parkedSpots.has(n)) return
@@ -185,7 +197,7 @@ for (const id of SEATS) {
 }
 
 /**
- * An action target by id: a prop or car, or a customer, employee or Nazma approached
+ * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Nazma approached
  * from where they're standing right now. Undefined if it's gone.
  */
 export function findInteractable(id: string): Interactable | undefined {
@@ -202,6 +214,20 @@ export function findInteractable(id: string): Interactable | undefined {
   if (e && ePos) {
     const tile = grid.worldToTile(ePos.x, ePos.z)
     return personInteractable(grid, e, 'employee', tile, employeeActions(e, game.roster))
+  }
+  // A seller's parked car, to appraise.
+  const owner = game.customers.find((x) => x.id === vehicleOwnerId(id))
+  if (owner?.vehicle?.parked) {
+    const rect = parkedCarRect(CUSTOMER_PARKING[owner.vehicle.spot])
+    return {
+      id,
+      kind: 'car',
+      name: `${owner.name}'s ${carName(owner.vehicle.car.model)}`,
+      rect,
+      facing: CUSTOMER_PARKING[owner.vehicle.spot].facing,
+      approachTiles: approachTilesFor(grid, rect),
+      actions: owner.selling ? ['appraise'] : [],
+    }
   }
   const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined
   if (nPos && game.nazma?.status === 'onLot') {
