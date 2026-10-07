@@ -1,6 +1,6 @@
 # Phase 9 Plan: Adversaries (Nazma)
 
-**Status:** planned 2026-10-06. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
+**Status:** 9a done 2026-10-06. 9b done 2026-10-06. 9c done 2026-10-06. 9d done 2026-10-06, awaiting review. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases.
 
 ## Context
 
