@@ -1,6 +1,6 @@
 # Phase 12.5 Plan: What's new
 
-**Status:** planned 2026-10-08. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save is v12 today, so 12.5a makes it v13.
+**Status:** planned 2026-10-08. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save is v13 today (13a's `career`), so 12.5a makes it v14.
 
 ## Context
 
@@ -20,7 +20,7 @@ The game changes quickly, and a returning player has no way to see what changed 
 
 | Lever                                 | Where                        | Phase 12.5 use                                                                                                |
 | ------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `SAVE_VERSION`, `UPGRADES`, `upgrade` | `sim/save.ts`                | Bump to 13 and add `news`. The upgrade step needs the version the save started from (see 12.5a)               |
+| `SAVE_VERSION`, `UPGRADES`, `upgrade` | `sim/save.ts`                | Bump to 14 and add `news`. The upgrade step needs the version the save started from (see 12.5a)               |
 | `createSave`                          | `sim/save.ts`                | Always writes `news: LATEST_NEWS`                                                                             |
 | `readSave`, `writeSave`               | `state/persistence.ts`       | New `markNewsSeen()` rewrites the save with the latest `news` when the dialog closes                          |
 | `TitleScreen`                         | `ui/TitleScreen.tsx`         | Opens the dialog for an out-of-date save, and gets a **What's new** button                                    |
@@ -50,10 +50,11 @@ A save of version N was written by some build between the bump to N and the bump
 | 10           | 11a       | 10                                 | 7                     |
 | 11           | 11c       | 11 (11c was the last of 11)        | 8                     |
 | 12           | 12a       | 11 (12b–12e not yet)               | 8                     |
+| 13           | 13a       | 12 (13b–13f not yet)               | 9                     |
 
 ## Sub-phases
 
-### 12.5a: Update log and save v13 (pure + save)
+### 12.5a: Update log and save v14 (pure + save)
 
 - New `sim/whatsNew.ts` (pure, tested):
   - `Update { id: number, phase: string, title: string, items: string[] }`.
@@ -65,17 +66,17 @@ A save of version N was written by some build between the bump to N and the bump
   - `updatesSince(news)` returns the updates with `id > news`, newest first. It's empty when you're up to date.
   - `groupByPhase(updates)` returns `{ phase, updates }[]` in the same order, so a phase's sub-phase updates show together.
   - `legacyNews(version)` is the table above. Unknown versions give 0, so they're shown everything.
-- Save v13:
+- Save v14:
   - `SaveData.news: number`.
   - `createSave` writes `news: LATEST_NEWS`. Any build that writes a save has already shown its updates on the title screen, or it's a new game with nothing to catch up on, so no store state is needed.
-  - `UPGRADES[12]` sets `news: legacyNews(from)`, where `from` is the version the save was read at. A chained upgrade (v3 → … → v13) has lost the original version by the time it reaches step 12, so `upgrade` passes the starting version to each step (`step(save, from)`). The other steps ignore it.
+  - `UPGRADES[13]` sets `news: legacyNews(from)`, where `from` is the version the save was read at. A chained upgrade (v3 → … → v14) has lost the original version by the time it reaches step 13, so `upgrade` passes the starting version to each step (`step(save, from)`). The other steps ignore it.
   - `parseSave` checks that `news` is a whole number from 0 up to `LATEST_NEWS`. A larger number, from a newer build, is clamped to `LATEST_NEWS`, not rejected.
 - Tests:
   - Ids count up by 1 from 1, every update has a title and items, and no item is longer than about 120 characters.
-  - `legacyNews` covers every version from 2 to 12, and never goes down as the version goes up.
+  - `legacyNews` covers every version from 2 to 13, and never goes down as the version goes up.
   - `updatesSince(LATEST_NEWS)` is empty. `updatesSince(0)` is every update, newest first.
-  - A v2, v8 and v12 save each parse with the `news` from the table.
-  - A v13 save round-trips its `news`.
+  - A v2, v8, v12 and v13 save each parse with the `news` from the table.
+  - A v14 save round-trips its `news`.
   - `createSave` writes `LATEST_NEWS`.
 - Add a line to the CLAUDE.md conventions: a player-facing change adds an `UPDATES` entry in the same change, the same as keeping the how-to-play guide in sync.
 
@@ -102,7 +103,7 @@ A save of version N was written by some build between the bump to N and the bump
   - Close it, reload, and check that it doesn't open. Then **Continue** starts the day.
   - A fresh profile never sees the dialog.
 
-## Backfill: the first nine updates
+## Backfill: the first ten updates
 
 This is the draft text for review. Each line is one item. Update `id` = list number.
 
@@ -144,6 +145,9 @@ This is the draft text for review. Each line is one item. Update `id` = list num
    - Take a trade-in as part of a sale.
    - Used-car shoppers come by. Used stock loses value the longer it sits.
    - Classifieds ads bring more sellers and drive-ins.
+10. **Phase 13 · Dealer ranks**
+    - Earn dealer ranks from your lifetime gross profit and reputation. A rank, once earned, is kept.
+    - The top bar shows your rank and how far you are from the next one. The day summary tells you when you rank up.
 
 Phase 12.5 doesn't announce itself. The dialog showing up is the announcement.
 

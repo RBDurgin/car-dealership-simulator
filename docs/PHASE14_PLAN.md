@@ -31,7 +31,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
 | `SIDEWALK_ENDS`, `scene/Nazma.tsx`                                                                           | `sim/layout.ts`, `scene/`               | Once his lot is open, he crosses the road from it instead of walking in along the sidewalk                     |
 | `Tuning` / `TUNING`                                                                                          | `sim/difficulty.ts`                     | New levers `rivalStrength`, `rivalUndercut` and `rivalComeback`, neutral on Medium                             |
 | `computerTab`, `ui/CalendarTab.tsx`                                                                          | `state/store.ts`, `ui/`                 | A new **Rival** tab (key K)                                                                                    |
-| Save `UPGRADES`                                                                                              | `sim/save.ts`                           | v14 adds `rival` and `Career.rivalsBeaten`                                                                     |
+| Save `UPGRADES`                                                                                              | `sim/save.ts`                           | v15 adds `rival` and `Career.rivalsBeaten`                                                                     |
 
 ## Sub-phases
 
@@ -52,7 +52,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
     - His strength drifts up with the share he took and down with each of his quote-holders you sold to.
     - It records the day's share and updates `ourDiscount` from the day's new-car `Sale`s.
 - Store: `rival`. `beginDay` multiplies `Word.scale` by `1 − share` while he's open. `DayStats.rival` is `{ share, lost, matched }`.
-- Save v14: `rival`. An older save starts it `unopened`, so a save already at Main Street gets the notice the next morning.
+- Save v15: `rival`. An older save starts it `unopened`, so a save already at Main Street gets the notice the next morning.
 - Difficulty: `Tuning.rivalStrength` (× his opening strength and growth: Easy 0.75, Medium 1, Hard 1.25).
 - Nothing on screen yet except the notices and the traffic change.
 
@@ -155,7 +155,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
     - A poached hire raises his strength.
     - The bust reward and the reopening.
     - Reloading never repeats a theft.
-  - A save upgrade test: a v13 save loads into v14.
+  - A save upgrade test: a v14 save loads into v15.
   - `difficulty.test.ts`: every level has the new levers, and Medium's are neutral.
 - `npm run lint`, `npm run build`, `npm run e2e`.
 - `npm run dev` / `/run`:

@@ -19,6 +19,7 @@ import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
 import type { OwnerVerdict } from './owner'
+import type { RankId } from './progression'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { financeOnDuty, type Employee } from './staff'
@@ -273,6 +274,8 @@ export interface DayStats {
   bailout: number
   /** Used cars bought from sellers today: stock, not an expense, so off `netIncome`. */
   bought: BoughtCar[]
+  /** The rank reached when the day was settled, or null if it didn't change. */
+  rankUp: RankId | null
 }
 
 export function emptyStats(): DayStats {
@@ -298,6 +301,7 @@ export function emptyStats(): DayStats {
     quota: null,
     bailout: 0,
     bought: [],
+    rankUp: null,
   }
 }
 

@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. Phase 12d and 12e come first. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. The save is v12 today, so 13a makes it v13.
+**Status:** planned 2026-10-07. 13a built 2026-10-07; 13b is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. The save is v12 today, so 13a makes it v13.
 
 ## Context
 
@@ -40,6 +40,14 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - Top bar: a rank chip beside the `QuotaMeter`. The summary gets a rank progress line.
 - Save v13: `career`. An older save starts it at zeros.
 - Difficulty: `Tuning.rankScale` (× rank thresholds: Easy 0.75, Medium 1, Hard 1.3).
+
+**13a implementation notes:**
+
+- Thresholds (Medium, before `rankScale`): Main Street $40k gross and reputation 45, Trusted Dealer $150k and 55, Regional Name $400k and 65, Dealer of the Year $800k and 80. First guesses, for the 13f tuning pass.
+- A rank is kept once reached (`Career.rank`), so an expansion bought at a rank can't be stranded by a bad week. Ranks are earned in order: a reputation short of one rank holds back those above it.
+- `rankScale` scales only the gross. Reputation is already scaled by `repGain`/`repLoss`.
+- `bestMonth` is a month's gross profit, counted on the month's last day from `Career.monthGross`.
+- No `rankUp` tip: the summary banner and morning notice already say it, and tips are Easy only.
 
 ### 13b: Franchise tier
 

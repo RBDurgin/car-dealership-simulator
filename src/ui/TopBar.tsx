@@ -1,12 +1,14 @@
 import { calendarOf, formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
 import { eventOn } from '../sim/events'
+import { RANK_IDS, rankProgress } from '../sim/progression'
 import { daysLeft, QUOTA_STATUS_LABELS, quotaLine, quotaStatus } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
-import { useGame } from '../state/store'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
+import { rankLine } from './rankText'
 
 /** Reputation as a small bar and its score; it only changes when a day is settled. */
 function ReputationMeter() {
@@ -25,6 +27,32 @@ function ReputationMeter() {
         <span className="rep-fill" style={{ width: `${reputation}%` }} />
       </span>
       <span className="rep-score">{reputation}</span>
+    </span>
+  )
+}
+
+/** The dealer rank, with the way to the next one on hover; compact screens keep its number. */
+function RankChip() {
+  const career = useGame((s) => s.career)
+  const reputation = useGame((s) => s.reputation)
+  const scale = useGame((s) => levelTuning(s).rankScale)
+  const progress = rankProgress(career, reputation, scale)
+  const level = RANK_IDS.indexOf(progress.rank.id) + 1
+  const text = `Dealer rank ${level} of ${RANK_IDS.length}: ${progress.rank.name}. ${rankLine(progress, career.gross)}.`
+  return (
+    <span className="rank-chip" title={text} aria-label={text}>
+      <span className="rank-icon" aria-hidden>
+        ★
+      </span>
+      <span className="rank-level" aria-hidden>
+        {level}
+      </span>
+      <span className="rank-name" aria-hidden>
+        {progress.rank.name}
+      </span>
+      <span className="rank-bar" aria-hidden>
+        <span className="rank-fill" style={{ width: `${progress.share * 100}%` }} />
+      </span>
     </span>
   )
 }
@@ -107,7 +135,7 @@ function SoundButton() {
 }
 
 /**
- * Date, weather, any sale, time, cash, reputation, the month's quota, the owner's goal (on their days) and the office (stock,
+ * Date, weather, any sale, time, cash, reputation, the dealer rank, the month's quota, the owner's goal (on their days) and the office (stock,
  * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
@@ -129,6 +157,7 @@ export function TopBar() {
       <span className="topbar-sep">·</span>
       <span className="topbar-cash">{formatMoney(cash)}</span>
       <ReputationMeter />
+      <RankChip />
       <QuotaMeter day={clock.day} />
       <GoalBanner />
       <button

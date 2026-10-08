@@ -112,6 +112,14 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
+import {
+  addDay,
+  emptyCareer,
+  rankUp,
+  rankUpNotice,
+  rankById,
+  type Career,
+} from '../sim/progression'
 import { addSale, emptyMonthSales, holdback, monthlyQuota, type MonthSales } from '../sim/quota'
 import {
   applyChange,
@@ -243,6 +251,8 @@ interface GameState {
   quota: number
   /** The bank's one-time safety net (Easy) has covered a shortfall. Saved. */
   bailoutUsed: boolean
+  /** Lifetime totals and the dealer rank reached. Added to when a day is settled. Saved. */
+  career: Career
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
@@ -491,6 +501,7 @@ function dayOne(difficulty: Difficulty) {
     difficulty,
     cash: tuning.startingCash,
     bailoutUsed: false,
+    career: emptyCareer(),
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
     quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, tuning.quota),
@@ -577,8 +588,9 @@ export const useGame = create<GameState>((set, get) => {
    * before the summary shows, so it reports cash after payroll. On an owner's
    * day the day is judged against their goal, and any bonus is paid too. The
    * day's customers move reputation. On the month's last day the manufacturer
-   * pays the holdback on the month's sales. Used cars bought today go into
-   * stock, in the lot spaces held for them, so the save keeps them.
+   * pays the holdback on the month's sales. The day's gross goes on the
+   * career, which may earn a new rank. Used cars bought today go into stock,
+   * in the lot spaces held for them, so the save keeps them.
    */
   const settleDay = () => {
     const s = get()
@@ -591,14 +603,15 @@ export const useGame = create<GameState>((set, get) => {
       ? judgeDay(s.owner.goal, s.dayStats, s.clock.day, level.ownerBonus, repScale(level))
       : null
     const reputation = applyChange(s.reputation, reputationChange(s.dayStats, repScale(level)))
-    const quota =
-      calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
-        ? {
-            quota: s.quota,
-            sold: s.monthSales.count,
-            payout: holdback(s.monthSales.count, s.quota, s.monthSales.msrp),
-          }
-        : null
+    const monthEnd = calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
+    const career = addDay(s.career, s.dayStats, reputation, monthEnd, level.rankScale)
+    const quota = monthEnd
+      ? {
+          quota: s.quota,
+          sold: s.monthSales.count,
+          payout: holdback(s.monthSales.count, s.quota, s.monthSales.msrp),
+        }
+      : null
     const cash =
       s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
     // On Easy the bank covers the first time the day ends in the red.
@@ -607,6 +620,7 @@ export const useGame = create<GameState>((set, get) => {
       cash: cash + bailout,
       bailoutUsed: s.bailoutUsed || bailout > 0,
       reputation,
+      career,
       ...(s.purchases.length > 0 && {
         inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
         purchases: [],
@@ -620,6 +634,7 @@ export const useGame = create<GameState>((set, get) => {
         reputation: reputation - s.reputation,
         quota,
         bailout,
+        rankUp: rankUp(s.career, career)?.id ?? null,
         settled: true,
       },
     })
@@ -1038,6 +1053,7 @@ export const useGame = create<GameState>((set, get) => {
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
     const notices = [
+      s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
       eventNotice(day),
       theft && theftNotice(theft),
@@ -1612,6 +1628,7 @@ export const useGame = create<GameState>((set, get) => {
         monthSales: save.monthSales,
         quota: save.quota,
         bailoutUsed: save.bailoutUsed,
+        career: save.career,
         tipsSeen: save.tipsSeen,
       })
       beginDay(save.day + 1)

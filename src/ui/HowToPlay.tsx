@@ -23,6 +23,7 @@ import {
   HOLDBACK_STRETCH_AT,
   QUOTA_RANGE,
 } from '../sim/quota'
+import { rankGross, RANKS } from '../sim/progression'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import {
   FINANCE_FEE,
@@ -114,6 +115,10 @@ function BasicsTab({ touch, click }: TabProps) {
           {formatMoney(ownerBonus(TUNING.hard.ownerBonus))} and reputation is harder to win and
           easier to lose. Sellers want more for their cars, buyers want more for their trade-ins,
           and your estimates are rougher.
+        </p>
+        <p>
+          Dealer ranks need {percentOff(TUNING.easy.rankScale)} less lifetime gross on Easy and{' '}
+          {percentOn(TUNING.hard.rankScale)} more on Hard.
         </p>
       </section>
       <section>
@@ -275,7 +280,7 @@ function SellingTab({ click }: TabProps) {
 }
 
 function BusinessTab({ touch, click }: TabProps) {
-  const { interest } = useGame(levelTuning)
+  const { interest, rankScale } = useGame(levelTuning)
   return (
     <>
       <p className="how-lead">
@@ -303,6 +308,24 @@ function BusinessTab({ touch, click }: TabProps) {
           Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
           the summary and the stock panel. Order what people ask for.
         </p>
+      </section>
+      <section>
+        <h3>Progress</h3>
+        <p>
+          Your dealership climbs through five ranks: {RANKS.map((r) => r.name).join(', ')}. Each one
+          needs a lifetime gross profit (what your cars sold for, less what they cost you) and a
+          reputation. The star in the top bar shows your rank and how far you are toward the next;
+          the end-of-day summary tells you what&apos;s still needed.
+        </p>
+        <ul>
+          {RANKS.slice(1).map((r) => (
+            <li key={r.id}>
+              <b>{r.name}</b>: {formatMoney(rankGross(r, rankScale))} gross and a reputation of{' '}
+              {r.reputation}
+            </li>
+          ))}
+        </ul>
+        <p>Once you reach a rank you keep it, even if your reputation slips later.</p>
       </section>
       <section>
         <h3>Manufacturer&apos;s quota</h3>

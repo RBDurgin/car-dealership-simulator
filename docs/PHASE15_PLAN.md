@@ -1,6 +1,6 @@
 # Phase 15 Plan: Service Department
 
-**Status:** planned 2026-10-08. Phase 13 comes first: the garage is one of its expansions, unlocked by its ranks, and service demand reads its `Career`. Phase 15 doesn't need Phase 14, but it comes after it in the plan. If the save is v14 by then, 15a makes it v15. If Phase 15 is built before Phase 14, 15a takes v14. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
+**Status:** planned 2026-10-08. Phase 13 comes first: the garage is one of its expansions, unlocked by its ranks, and service demand reads its `Career`. Phase 15 doesn't need Phase 14, but it comes after it in the plan. If the save is v15 by then, 15a makes it v16. If Phase 15 is built before Phase 14, 15a takes v15. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
 
 ## Context
 
@@ -40,7 +40,7 @@ The game's goal is a rich client base and a growing revenue. Every dollar still 
 | `sfxFor`, `conversationsOf`                                                            | `sim/sfxEvents.ts`, `sim/chatter.ts`                   | `wrench` and `lift` cues. A check-in conversation                                                             |
 | `generateGoal`                                                                         | `sim/owner.ts`                                         | A `serviced` goal, once the bay is up                                                                         |
 | `Tuning` / `TUNING`                                                                    | `sim/difficulty.ts`                                    | New levers `serviceDemand` and `comebackScale`, neutral on Medium                                             |
-| Save `UPGRADES`                                                                        | `sim/save.ts`                                          | v15 adds `service` and `Career.soldByModel`                                                                   |
+| Save `UPGRADES`                                                                        | `sim/save.ts`                                          | v16 adds `service` and `Career.soldByModel`                                                                   |
 
 ## Sub-phases
 
@@ -77,7 +77,7 @@ The game's goal is a rich client base and a growing revenue. Every dollar still 
   - `netIncome` adds it.
   - `grossProfit` stays sales-only, so the summary's new/used split and `averageDiscount` don't change.
   - A new `totalGross(stats)` (sales + service) feeds `Career.gross` and the owner's `profit` goal. Service counts toward ranks.
-- Save v15:
+- Save v16:
   - Adds `service`.
   - Adds `Career.soldByModel`, counted in `sign` from now on, so 15e has data.
   - The upgrade splits an older save's `Career.sales` across the models, so recalls aren't empty for months.
@@ -267,7 +267,7 @@ The game's goal is a rich client base and a growing revenue. Every dollar still 
     - A car in the shop isn't browsable, keeps its space and survives the night.
     - A day without a garage plays exactly as before.
   - `layout.test.ts`: the garage doesn't overlap 13d's spaces, and the lane and counter are reachable.
-  - A save upgrade test: a v14 save loads into v15.
+  - A save upgrade test: a v15 save loads into v16.
   - `difficulty.test.ts`: every level has the new levers, and Medium's are neutral.
 - `npm run lint`, `npm run build`, `npm run e2e`.
 - `npm run dev` / `/run`:

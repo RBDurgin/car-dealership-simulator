@@ -4,6 +4,7 @@ import type { OwnedImprovement } from './improvements'
 import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
+import { emptyCareer, type Career } from './progression'
 import { START_REPUTATION } from './reputation'
 import { ALL_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
@@ -42,6 +43,8 @@ const source = () => ({
   // As a v10 save upgrades, so the older upgrades compare equal.
   bailoutUsed: false,
   tipsSeen: [] as TipId[],
+  // As a v12 save upgrades, so the older upgrades compare equal.
+  career: emptyCareer() as Career,
 })
 
 const order: Order = {
@@ -216,6 +219,34 @@ describe('save data', () => {
     const upgraded = parseSave(JSON.parse(JSON.stringify(v11)))
     expect(upgraded).toEqual(save)
     expect(upgraded?.inventory.every((c) => c.used === null)).toBe(true)
+  })
+
+  it('upgrades a version 12 save with an empty career at the first rank', () => {
+    const career: Career = {
+      ...emptyCareer(),
+      gross: 90_000,
+      sales: 30,
+      days: 12,
+      rank: 'main-street',
+    }
+    const save = createSave({ ...source(), career }, 123)
+    const v12 = { ...save, version: 12, career: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v12)))).toEqual({ ...save, career: emptyCareer() })
+  })
+
+  it('keeps the career, and rejects a rank it doesn’t know', () => {
+    const career: Career = {
+      gross: 120_000,
+      sales: 41,
+      days: 20,
+      monthGross: 30_000,
+      bestMonth: 95_000,
+      rank: 'main-street',
+    }
+    const save = createSave({ ...source(), career }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.career).toEqual(career)
+    expect(parseSave({ ...save, career: { ...career, rank: 'emperor' } })).toBeNull()
+    expect(parseSave({ ...save, career: { ...career, gross: 'lots' } })).toBeNull()
   })
 
   it('keeps a used car, and rejects one whose condition is out of range', () => {

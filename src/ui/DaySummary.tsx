@@ -20,11 +20,13 @@ import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
 import { goalLabel } from '../sim/owner'
+import { rankById, rankProgress } from '../sim/progression'
 import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
-import { useGame } from '../state/store'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
+import { rankLine } from './rankText'
 
 /**
  * End of the day: shown once the doors are closed and the last customer has
@@ -41,7 +43,10 @@ export function DaySummary() {
   const monthSold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
   const difficulty = useGame((s) => s.difficulty)
+  const career = useGame((s) => s.career)
+  const rankScale = useGame((s) => levelTuning(s).rankScale)
   if (!open) return null
+  const progress = rankProgress(career, reputation, rankScale)
   const event = eventOn(day)
   const missed = missedSummary(stats.missed)
   const nazma = nazmaSummary(stats.nazma, formatMoney)
@@ -222,9 +227,18 @@ export function DaySummary() {
                   : 'no change'}
             </span>
           </dd>
+          <dt>Rank</dt>
+          <dd>
+            {progress.rank.name} <span className="muted">({rankLine(progress, career.gross)})</span>
+          </dd>
           <dt>Cash</dt>
           <dd className="price topbar-cash">{formatMoney(cash)}</dd>
         </dl>
+        {stats.rankUp && (
+          <div className="summary-rank-up">
+            ★ Your dealership is now a <b>{rankById(stats.rankUp).name}</b>.
+          </div>
+        )}
         {stats.bailout > 0 && (
           <div className="summary-bailout">
             The bank covered your {formatMoney(stats.bailout)} shortfall. It won&apos;t next time.

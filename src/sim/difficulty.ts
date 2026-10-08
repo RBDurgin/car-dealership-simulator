@@ -47,6 +47,8 @@ export interface Tuning {
   appraisalNoise: number
   /** × the allowance a buyer hopes for on their trade-in. */
   tradeHope: number
+  /** × the lifetime gross each dealer rank needs. */
+  rankScale: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
   dealHint: boolean
   /** The bank covers a negative end-of-day balance, once. */
@@ -75,6 +77,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sellerHope: 0.95,
     appraisalNoise: 0.7,
     tradeHope: 0.95,
+    rankScale: 0.75,
     dealHint: true,
     safetyNet: true,
     tips: true,
@@ -98,6 +101,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sellerHope: 1,
     appraisalNoise: 1,
     tradeHope: 1,
+    rankScale: 1,
     dealHint: false,
     safetyNet: false,
     tips: false,
@@ -121,6 +125,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sellerHope: 1.05,
     appraisalNoise: 1.2,
     tradeHope: 1.05,
+    rankScale: 1.3,
     dealHint: false,
     safetyNet: false,
     tips: false,

@@ -6,6 +6,7 @@ import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import { ALL_SLOTS, type Order } from './ordering'
+import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { dressFor, ROLES, type Employee } from './staff'
@@ -21,7 +22,7 @@ import { isTipId, type TipId } from './tips'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 12
+export const SAVE_VERSION = 13
 
 export interface SaveData {
   version: number
@@ -50,6 +51,8 @@ export interface SaveData {
   bailoutUsed: boolean
   /** Guided tips already shown (Easy), so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
+  /** Lifetime totals and the rank reached (see `sim/progression.ts`). */
+  career: Career
 }
 
 export interface SaveSource {
@@ -66,6 +69,7 @@ export interface SaveSource {
   difficulty: Difficulty
   bailoutUsed: boolean
   tipsSeen: TipId[]
+  career: Career
 }
 
 /**
@@ -89,6 +93,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     difficulty: s.difficulty,
     bailoutUsed: s.bailoutUsed,
     tipsSeen: s.tipsSeen,
+    career: s.career,
   }
 }
 
@@ -159,6 +164,8 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
       ? raw.inventory.map((c: unknown) => (isObject(c) ? { ...c, used: null } : c))
       : raw.inventory,
   }),
+  // v13: the career, starting from nothing.
+  12: (raw) => ({ ...raw, career: emptyCareer() }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -181,7 +188,7 @@ export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
-  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen } = raw
+  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -195,6 +202,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isDifficulty(difficulty)) return null
   if (typeof bailoutUsed !== 'boolean') return null
   if (!Array.isArray(tipsSeen) || !tipsSeen.every(isTipId)) return null
+  if (!isCareer(career)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   return raw as unknown as SaveData
@@ -213,6 +221,18 @@ function isCar(v: unknown): boolean {
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold') &&
     (v.used === null || isUsedInfo(v.used))
+  )
+}
+
+function isCareer(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.gross) &&
+    isNumber(v.sales) &&
+    isNumber(v.days) &&
+    isNumber(v.monthGross) &&
+    isNumber(v.bestMonth) &&
+    isRankId(v.rank)
   )
 }
 
