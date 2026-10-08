@@ -41,6 +41,10 @@ const sellerCar = (parked: boolean): Partial<Customer> => ({
   },
   selling: { hope: 9_000, estimate: { estimate: 8_500, margin: 2_000 }, appraised: false },
 })
+const tradeCar = (parked: boolean): Partial<Customer> => {
+  const { selling, ...rest } = sellerCar(parked)
+  return { ...rest, phase: parked ? 'browsing' : 'arriving', trade: selling }
+}
 const withCar = (patch: Partial<InventoryCar>) =>
   inventory.map((c, i) => (i === 0 ? { ...c, ...patch } : c))
 
@@ -65,6 +69,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   seller: [
     { customers: [customer('c2', sellerCar(true))] },
     { customers: [customer('c2', sellerCar(false))] },
+  ],
+  tradeIn: [
+    { customers: [customer('c3', tradeCar(true))] },
+    { customers: [customer('c3', tradeCar(false))] },
   ],
 }
 

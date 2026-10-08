@@ -889,6 +889,13 @@ kbd {
 .haggle-ask {
   flex: 1;
 }
+/* The trade-in allowance between its − and + (not a button: the Ask button sends both). */
+.haggle-allowance {
+  flex: 1;
+  align-self: center;
+  text-align: center;
+  font-size: 13px;
+}
 
 /* End-of-day summary */
 .modal-backdrop {

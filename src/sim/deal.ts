@@ -22,6 +22,7 @@ import type { OwnerVerdict } from './owner'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { financeOnDuty, type Employee } from './staff'
+import { tradeOver, type TradeRecord } from './tradeIns'
 
 /**
  * Selling to a customer: who is dealing with whom, which actions a customer
@@ -192,11 +193,12 @@ export function actionBlocker(
   return null
 }
 
-/** Why the player can't appraise seller `c`'s car, or null if they can. */
+/** Why the player can't appraise customer `c`'s car (a seller's, or a trade-in), or null if they can. */
 export function appraiseBlocker(c: Customer | undefined): string | null {
   if (!c?.vehicle || c.phase === 'leaving') return 'They drove off.'
-  if (!c.selling) return "It isn't for sale."
-  if (c.selling.appraised) return "You've already appraised it."
+  const look = c.selling ?? c.trade
+  if (!look) return "It isn't for sale."
+  if (look.appraised) return "You've already appraised it."
   return null
 }
 
@@ -223,6 +225,8 @@ export interface Sale {
   commission: number
   /** What brought the buyer in. */
   source: Source
+  /** The car they traded in, if they did. */
+  trade?: TradeRecord
 }
 
 /** One day's results, for the end-of-day summary. */
@@ -408,6 +412,9 @@ export interface SellerTally {
   gross: number
   /** What staff earned on these sales (the salesperson's cut and any finance fee). */
   commission: number
+  /** Trade-ins taken on these sales, and how much over their value they were allowed (under if negative). */
+  trades: number
+  tradeOver: number
 }
 
 /** The day's sales by who made them, the player first, then in order of first sale. */
@@ -424,6 +431,8 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       msrp: 0,
       gross: 0,
       commission: 0,
+      trades: 0,
+      tradeOver: 0,
     }
     tallies.set(s.soldBy, {
       ...t,
@@ -432,6 +441,8 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       msrp: t.msrp + s.msrp,
       gross: t.gross + s.price - s.cost,
       commission: t.commission + s.commission,
+      trades: t.trades + (s.trade ? 1 : 0),
+      tradeOver: t.tradeOver + (s.trade ? tradeOver(s.trade) : 0),
     })
   }
   return [...tallies.values()]

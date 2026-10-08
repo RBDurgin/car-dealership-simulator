@@ -72,6 +72,7 @@ const base: Customer = {
   sellerId: null,
   vehicle: null,
   selling: null,
+  trade: null,
 }
 
 const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({
@@ -372,11 +373,53 @@ describe('day stats', () => {
       sales: [sale(28_000, 'Kim P.', 500, 30_000), sale(20_000, null), sale(10_000, 'Kim P.', 750)],
     }
     const tallies = salesBySeller(stats)
+    const none = { trades: 0, tradeOver: 0 }
     expect(tallies).toEqual([
-      { seller: null, cars: 1, revenue: 20_000, msrp: 20_000, gross: 3_000, commission: 0 },
-      { seller: 'Kim P.', cars: 2, revenue: 38_000, msrp: 40_000, gross: 4_000, commission: 1250 },
+      {
+        seller: null,
+        cars: 1,
+        revenue: 20_000,
+        msrp: 20_000,
+        gross: 3_000,
+        commission: 0,
+        ...none,
+      },
+      {
+        seller: 'Kim P.',
+        cars: 2,
+        revenue: 38_000,
+        msrp: 40_000,
+        gross: 4_000,
+        commission: 1250,
+        ...none,
+      },
     ])
     expect(tallies.map(averageDiscount)).toEqual([0, 0.05])
     expect(salesBySeller(emptyStats())).toEqual([])
+  })
+
+  it('adds up how far over (or under) their value trade-ins were allowed, per seller', () => {
+    const sale = (soldBy: string | null, allowance: number, value: number) => ({
+      customerName: 'Pat',
+      carId: 'x',
+      model: 'sedan' as const,
+      msrp: 30_000,
+      cost: 27_000,
+      minute: 600,
+      price: 29_000,
+      soldBy,
+      signedBy: null,
+      commission: 0,
+      source: 'regular' as const,
+      trade: { model: 'van' as const, allowance, value },
+    })
+    const { trade: _, ...plain } = sale(null, 0, 0)
+    const stats = {
+      ...emptyStats(),
+      sales: [sale('Kim P.', 11_000, 10_000), sale('Kim P.', 7_500, 8_000), plain],
+    }
+    const [you, kim] = salesBySeller(stats)
+    expect(you).toMatchObject({ trades: 0, tradeOver: 0 })
+    expect(kim).toMatchObject({ trades: 2, tradeOver: 500 })
   })
 })

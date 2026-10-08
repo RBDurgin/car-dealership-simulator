@@ -226,7 +226,7 @@ export function findInteractable(id: string): Interactable | undefined {
       rect,
       facing: CUSTOMER_PARKING[owner.vehicle.spot].facing,
       approachTiles: approachTilesFor(grid, rect),
-      actions: owner.selling ? ['appraise'] : [],
+      actions: owner.selling || owner.trade ? ['appraise'] : [],
     }
   }
   const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined

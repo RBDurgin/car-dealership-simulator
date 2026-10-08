@@ -8,6 +8,7 @@ import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
 import type { Selling } from './sellers'
+import type { TradeIn } from './tradeIns'
 import type { Appraisal } from './usedCars'
 
 /**
@@ -58,6 +59,8 @@ export type { CustomerVariant }
 export interface Offer {
   carId: string
   price: number
+  /** What we allow for their trade-in, when it's part of the deal. */
+  allowance?: number
 }
 
 export interface Customer {
@@ -117,6 +120,11 @@ export interface Customer {
    * hope to get, and what the player makes of the car. Null for shoppers.
    */
   selling: Selling | null
+  /**
+   * A buyer who drove in with a car to trade: what they hope we'll allow for
+   * it, and what the player makes of it. Null for anyone without one.
+   */
+  trade: TradeIn | null
 }
 
 const FIRST_NAMES = [
@@ -259,6 +267,7 @@ export function generateCustomer(
     sellerId: null,
     vehicle: null,
     selling: null,
+    trade: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -392,13 +401,20 @@ export type CustomerEvent =
   | { type: 'claim'; id: string; by: string }
   /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
   | { type: 'greet'; id: string; carId: string | null; by: string }
-  | { type: 'offer'; id: string; carId: string; price: number }
+  | { type: 'offer'; id: string; carId: string; price: number; allowance?: number }
   /**
    * Their answer to the offer (see `respondToAsk`, or `respondToBuyOffer` for
    * a seller), with their price if they counter. A seller who accepts has sold
    * us their car: it stays, and they leave on foot.
    */
-  | { type: 'respond'; id: string; answer: 'accept' | 'counter' | 'walk'; counter?: number }
+  | {
+      type: 'respond'
+      id: string
+      answer: 'accept' | 'counter' | 'walk'
+      counter?: number
+      /** Our trade allowance offended them: the counter costs them an extra round. */
+      insulted?: boolean
+    }
   /** Sat down to sign: in the guest chair they were sent to, else the office's (the player's buyer). */
   | { type: 'seat'; id: string }
   /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
@@ -407,9 +423,9 @@ export type CustomerEvent =
   | { type: 'lead'; id: string; chairId: string }
   /** Finance is free: up from the lounge and over to the desk. */
   | { type: 'call'; id: string }
-  /** Paperwork signed: the sale goes through. */
-  | { type: 'signed'; id: string }
-  /** The player looked a seller's car over properly: a closer estimate of its value. */
+  /** Paperwork signed: the sale goes through. `traded`: we took their car, so they leave on foot. */
+  | { type: 'signed'; id: string; traded?: boolean }
+  /** The player looked a seller's (or a trade-in's) car over properly: a closer estimate of its value. */
   | { type: 'appraised'; id: string; estimate: Appraisal }
   /** Their handler walked away mid-conversation or mid-deal. */
   | { type: 'cancel'; id: string }
@@ -482,7 +498,15 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by, sellerId: ev.by }
     case 'offer':
       if (c.phase !== 'talking') return c
-      return { ...c, phase: 'considering', offer: { carId: ev.carId, price: ev.price } }
+      return {
+        ...c,
+        phase: 'considering',
+        offer: {
+          carId: ev.carId,
+          price: ev.price,
+          ...(ev.allowance !== undefined && { allowance: ev.allowance }),
+        },
+      }
     case 'respond':
       if (c.phase !== 'considering' || !c.offer) return c
       if (ev.answer === 'accept' && c.selling) {
@@ -492,11 +516,18 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (ev.answer === 'walk' || ev.counter === undefined) {
         return leave({ ...c, offer: null }, 'refused')
       }
+      // With a trade in the deal, the haggle is over what they pay after it.
+      const { price, allowance } = c.offer
       return {
         ...c,
         phase: 'talking',
         offer: null,
-        haggle: { round: (c.haggle?.round ?? 1) + 1, lastAsk: c.offer.price, counter: ev.counter },
+        haggle: {
+          round: (c.haggle?.round ?? 1) + (ev.insulted ? 2 : 1),
+          lastAsk: price - (allowance ?? 0),
+          counter: ev.counter,
+          ...(allowance !== undefined && { allowance }),
+        },
       }
     case 'seat':
       if (c.phase !== 'following') return c
@@ -514,10 +545,14 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       return { ...c, phase: 'following', chairId: GUEST_CHAIR_ID }
     case 'signed':
       if (c.phase !== 'signing') return c
-      return leave(c, 'bought')
-    case 'appraised':
-      if (!c.selling || c.phase === 'leaving') return c
-      return { ...c, selling: { ...c.selling, estimate: ev.estimate, appraised: true } }
+      return leave(ev.traded ? { ...c, vehicle: null } : c, 'bought')
+    case 'appraised': {
+      if (c.phase === 'leaving') return c
+      const looked = { estimate: ev.estimate, appraised: true }
+      if (c.selling) return { ...c, selling: { ...c.selling, ...looked } }
+      if (c.trade) return { ...c, trade: { ...c.trade, ...looked } }
+      return c
+    }
     case 'cancel':
       // A salesperson who claimed them gives up: they carry on as they were.
       if ((c.phase === 'browsing' || c.phase === 'waiting') && c.handlerId !== null) {

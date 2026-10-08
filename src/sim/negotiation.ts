@@ -2,6 +2,7 @@ import { ARCHETYPES } from './archetypes'
 import { acceptChance, MAX_ACCEPT_CHANCE, type Customer } from './customers'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
+import { insultingAllowance, TRADE_MAX_FACTOR, TRADE_OPEN_FACTOR, tradeBonus } from './tradeIns'
 
 /**
  * Haggling over a car's price. The seller asks a price; the customer accepts,
@@ -14,6 +15,11 @@ import type { Rng } from './rng'
  * goes to the usual yes/no roll (`acceptChance`), so a tire-kicker still
  * mostly passes. Above it they counter while they have rounds left, and on
  * the last round take a half-hearted roll at anything within budget.
+ *
+ * With a trade-in in the deal there are two numbers, the price and what we
+ * allow for their car, and the customer judges the net: what they'd pay after
+ * the trade, against what they hoped to pay less what they hoped to be
+ * allowed. The haggle's numbers (`Haggle.lastAsk`, `counter`) are then nets.
  */
 
 /** Prices are named in round hundreds. */
@@ -37,13 +43,16 @@ export interface Haggle {
   lastAsk: number
   /** Their latest counter. */
   counter: number
+  /** What we allowed for their trade-in on the ask they countered, if it was in the deal. */
+  allowance?: number
 }
 
 export type WalkReason = 'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball'
 
 export type AskResponse =
   | { answer: 'accept' }
-  | { answer: 'counter'; counter: number }
+  /** `insulted`: our trade allowance offended them, which costs a round. */
+  | { answer: 'counter'; counter: number; insulted?: boolean }
   | { answer: 'walk'; reason: WalkReason }
 
 const roundPrice = (price: number) => Math.round(price / PRICE_STEP) * PRICE_STEP
@@ -58,18 +67,46 @@ export function hopePrice(c: Customer, car: InventoryCar): number {
   return Math.min(c.budget, roundPrice(car.msrp * (1 - c.expect)))
 }
 
-/** Their counter to `ask`: the first one under what they hope for, later ones creeping up. */
-export function counterPrice(c: Customer, car: InventoryCar, ask: number): number {
-  const counter = c.haggle
-    ? roundPrice(c.haggle.counter + COUNTER_STEP * (ask - c.haggle.counter))
-    : roundPrice(hopePrice(c, car) - FIRST_COUNTER_DROP * car.msrp)
-  // Never down from their last counter, over budget, or over the ask.
-  return Math.min(c.budget, ask, Math.max(c.haggle?.counter ?? 0, counter))
+/**
+ * What an ask is weighed in. With their trade in the deal (`allowance` given)
+ * it's the net, and their hope and budget are net of the allowance they hoped
+ * for: `offset` turns a net back into the price it's worth to them.
+ */
+function termsOf(c: Customer, car: InventoryCar, allowance?: number) {
+  const offset = c.trade && allowance !== undefined ? c.trade.hope : 0
+  return { offset, hope: hopePrice(c, car) - offset, budget: c.budget - offset }
+}
+
+/** What they'd pay for `ask` after `allowance` for their trade (just `ask` without one). */
+export function netOf(c: Customer, ask: number, allowance?: number): number {
+  return c.trade && allowance !== undefined ? ask - allowance : ask
 }
 
 /**
- * Their answer to `ask` for `car`. `bonus` is the seller's skill bonus (see
- * `skillBonus`). Deterministic for a given rng state.
+ * Their counter to `ask` (with `allowance` for their trade, a net): the first
+ * one under what they hope for, later ones creeping up.
+ */
+export function counterPrice(
+  c: Customer,
+  car: InventoryCar,
+  ask: number,
+  allowance?: number,
+): number {
+  const { hope, budget } = termsOf(c, car, allowance)
+  const net = netOf(c, ask, allowance)
+  const counter = c.haggle
+    ? roundPrice(c.haggle.counter + COUNTER_STEP * (net - c.haggle.counter))
+    : roundPrice(hope - FIRST_COUNTER_DROP * car.msrp)
+  // Never down from their last counter, over budget, or over the ask.
+  return Math.min(budget, net, Math.max(c.haggle?.counter ?? 0, counter))
+}
+
+/**
+ * Their answer to `ask` for `car`, with `allowance` for their trade-in if it's
+ * part of the deal. `bonus` is the seller's skill bonus (see `skillBonus`).
+ * An allowance far under what they hoped for (`TRADE_INSULT`) gets a counter
+ * that costs them a round, or on their last round sends them off. Otherwise
+ * the net is weighed like a price. Deterministic for a given rng state.
  */
 export function respondToAsk(
   c: Customer,
@@ -77,20 +114,31 @@ export function respondToAsk(
   ask: number,
   rng: Rng,
   bonus = 0,
+  allowance?: number,
 ): AskResponse {
+  const { offset, hope, budget } = termsOf(c, car, allowance)
+  const net = netOf(c, ask, allowance)
+  const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance))
   const roll = (factor: number): AskResponse =>
-    rng.next() < acceptChance(c, car, ask, bonus) * factor
+    rng.next() < chance * factor
       ? { answer: 'accept' }
-      : { answer: 'walk', reason: ask > c.budget ? 'budget' : 'pass' }
+      : { answer: 'walk', reason: net > budget ? 'budget' : 'pass' }
+  const rounds = ARCHETYPES[c.archetype].haggle.rounds
 
-  if (ask <= hopePrice(c, car) || (c.haggle && ask <= c.haggle.counter)) return roll(1)
-  if (c.haggle && ask >= c.haggle.lastAsk && rng.next() < STUBBORN_WALK) {
+  if (insultingAllowance(c, allowance)) {
+    if (roundOf(c) + 1 < rounds) {
+      return { answer: 'counter', counter: counterPrice(c, car, ask, allowance), insulted: true }
+    }
+    return { answer: 'walk', reason: 'insulted' }
+  }
+  if (net <= hope || (c.haggle && net <= c.haggle.counter)) return roll(1)
+  if (c.haggle && net >= c.haggle.lastAsk && rng.next() < STUBBORN_WALK) {
     return { answer: 'walk', reason: 'stubborn' }
   }
-  if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) {
-    return { answer: 'counter', counter: counterPrice(c, car, ask) }
+  if (roundOf(c) < rounds) {
+    return { answer: 'counter', counter: counterPrice(c, car, ask, allowance) }
   }
-  if (ask > c.budget) return { answer: 'walk', reason: 'budget' }
+  if (net > budget) return { answer: 'walk', reason: 'budget' }
   return roll(LAST_ROUND_FACTOR)
 }
 
@@ -102,38 +150,79 @@ export const HOT_CHANCE = 0.6
 export const WARM_CHANCE = 0.3
 
 /**
- * How `c` would take `ask` for `car`, from the same numbers `respondToAsk`
- * uses, without rolling: hot when they'd likely say yes, warm when they'd
- * maybe say yes or will counter, cold when they'd likely walk. Over budget,
- * or holding at the last ask (they may walk off in a huff), is cold.
+ * How `c` would take `ask` for `car` (with `allowance` for their trade), from
+ * the same numbers `respondToAsk` uses, without rolling: hot when they'd
+ * likely say yes, warm when they'd maybe say yes or will counter, cold when
+ * they'd likely walk. Over budget, holding at the last ask (they may walk off
+ * in a huff) or an allowance that offends them is cold.
  */
-export function dealWarmth(c: Customer, car: InventoryCar, ask: number, bonus = 0): Warmth {
+export function dealWarmth(
+  c: Customer,
+  car: InventoryCar,
+  ask: number,
+  bonus = 0,
+  allowance?: number,
+): Warmth {
+  const { offset, hope, budget } = termsOf(c, car, allowance)
+  const net = netOf(c, ask, allowance)
   const odds = (factor: number): Warmth => {
-    const chance = acceptChance(c, car, ask, bonus) * factor
+    const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance)) * factor
     return chance >= HOT_CHANCE ? 'hot' : chance >= WARM_CHANCE ? 'warm' : 'cold'
   }
-  if (ask <= hopePrice(c, car) || (c.haggle && ask <= c.haggle.counter)) return odds(1)
-  if (ask > c.budget) return 'cold'
-  if (c.haggle && ask >= c.haggle.lastAsk) return 'cold'
+  if (insultingAllowance(c, allowance)) return 'cold'
+  if (net <= hope || (c.haggle && net <= c.haggle.counter)) return odds(1)
+  if (net > budget) return 'cold'
+  if (c.haggle && net >= c.haggle.lastAsk) return 'cold'
   if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) return 'warm'
   return odds(LAST_ROUND_FACTOR)
 }
 
-/** The prices a seller can ask now: up to MSRP at first, then between their counter and the last ask. */
-export function askRange(c: Customer, car: InventoryCar): { min: number; max: number } {
+/**
+ * The prices a seller can ask now, with `allowance` for the customer's trade:
+ * up to MSRP at first, then between their counter and the last ask (nets,
+ * with a trade, so the allowance is added back).
+ */
+export function askRange(
+  c: Customer,
+  car: InventoryCar,
+  allowance?: number,
+): { min: number; max: number } {
   if (!c.haggle) return { min: PRICE_STEP, max: car.msrp }
-  return { min: c.haggle.counter, max: c.haggle.lastAsk }
+  const add = c.trade && allowance !== undefined ? allowance : 0
+  const max = Math.min(car.msrp, c.haggle.lastAsk + add)
+  return { min: Math.min(max, c.haggle.counter + add), max }
 }
 
-export function clampAsk(c: Customer, car: InventoryCar, price: number): number {
-  const { min, max } = askRange(c, car)
+export function clampAsk(c: Customer, car: InventoryCar, price: number, allowance?: number) {
+  const { min, max } = askRange(c, car, allowance)
   return Math.min(max, Math.max(min, Math.round(price)))
 }
 
-/** A sensible next ask: MSRP to open, then splitting the difference with their counter. */
-export function suggestedAsk(c: Customer, car: InventoryCar): number {
+/**
+ * A sensible next ask, with `allowance` for their trade: MSRP to open, then
+ * splitting the difference with their counter.
+ */
+export function suggestedAsk(c: Customer, car: InventoryCar, allowance?: number): number {
   if (!c.haggle) return car.msrp
-  return clampAsk(c, car, roundPrice((c.haggle.lastAsk + c.haggle.counter) / 2))
+  const add = c.trade && allowance !== undefined ? allowance : 0
+  return clampAsk(c, car, roundPrice((c.haggle.lastAsk + c.haggle.counter) / 2) + add, allowance)
+}
+
+/** What we can allow for a buyer's trade: up to half again our estimate of it. */
+export function allowanceRange(c: Customer): { min: number; max: number } {
+  const estimate = c.trade?.estimate.estimate ?? 0
+  return { min: 0, max: Math.max(PRICE_STEP, roundPrice(estimate * TRADE_MAX_FACTOR)) }
+}
+
+export function clampAllowance(c: Customer, allowance: number): number {
+  const { min, max } = allowanceRange(c)
+  return Math.min(max, Math.max(min, Math.round(allowance)))
+}
+
+/** A sensible allowance: what we allowed last round, else a little under our estimate. */
+export function suggestedAllowance(c: Customer): number {
+  if (c.haggle?.allowance !== undefined) return clampAllowance(c, c.haggle.allowance)
+  return clampAllowance(c, roundPrice((c.trade?.estimate.estimate ?? 0) * TRADE_OPEN_FACTOR))
 }
 
 /** Below MSRP − this share, a salesperson under average skill opens. */
@@ -154,15 +243,23 @@ export function staffConcession(skill: number): number {
  * ones a little under. After a counter they come down a share of the gap
  * (less the better they are), or take the counter: seasoned ones (4+) when it
  * keeps a healthy gross, green ones (2 or less) whatever it is. Never under
- * cost + `STAFF_FLOOR_MARGIN`.
+ * cost + `STAFF_FLOOR_MARGIN`. With a trade in the deal, `allowance` is what
+ * they allow for it this round (see `staffAllowance`).
  */
-export function staffAsk(skill: number, car: InventoryCar, haggle: Haggle | null): number {
+export function staffAsk(
+  skill: number,
+  car: InventoryCar,
+  haggle: Haggle | null,
+  allowance = 0,
+): number {
   const floor = car.cost + STAFF_FLOOR_MARGIN
   if (!haggle) {
     const open = skill >= 3 ? car.msrp : roundPrice(car.msrp * (1 - STAFF_OPEN_DISCOUNT))
     return Math.min(car.msrp, Math.max(floor, open))
   }
-  const { lastAsk, counter } = haggle
+  // With a trade, the haggle's nets are prices once this round's allowance is added back.
+  const lastAsk = Math.min(car.msrp, haggle.lastAsk + allowance)
+  const counter = Math.min(lastAsk, haggle.counter + allowance)
   const takes =
     counter >= floor &&
     (skill <= 2 || (skill >= 4 && counter - car.cost >= STAFF_ACCEPT_GROSS * car.msrp))
@@ -170,6 +267,54 @@ export function staffAsk(skill: number, car: InventoryCar, haggle: Haggle | null
   const ask = roundPrice(lastAsk - staffConcession(skill) * (lastAsk - counter))
   // Within what can be asked now: their counter up to the last ask.
   return Math.min(lastAsk, Math.max(counter, floor, ask))
+}
+
+/** A seasoned salesperson opens this share under their appraisal of a trade, per skill over 2. */
+export const STAFF_TRADE_ANCHOR = 0.03
+/** Each round they come this share of the way from their opening allowance up to the appraisal. */
+export const STAFF_TRADE_STEP = 0.5
+
+/**
+ * What a salesperson of `skill` allows for a buyer's trade, in the haggle's
+ * round `round` (1 to open), given their `appraisal` of it and the buyer's
+ * `hope`. A green one (2 or less) just gives them what they hope for, which
+ * is usually more than it's worth; a seasoned one anchors under the
+ * appraisal (more the better they are) and comes up toward it, never past it.
+ */
+export function staffAllowance(skill: number, appraisal: number, hope: number, round = 1): number {
+  if (skill <= 2) return roundPrice(hope)
+  const open = appraisal * (1 - STAFF_TRADE_ANCHOR * (skill - 2))
+  const step = Math.min(1, (round - 1) * STAFF_TRADE_STEP)
+  return roundPrice(Math.min(appraisal, open + step * (appraisal - open)))
+}
+
+/** A salesperson's first offer to a seller is this share under their appraisal, less with skill. */
+export const STAFF_BUY_OPEN = { worst: 0.05, best: 0.15 }
+/** A seasoned salesperson takes a seller's price that leaves this share of the appraisal. */
+export const STAFF_BUY_MARGIN = 0.05
+
+/**
+ * What a salesperson of `skill` offers a seller for their car, with the haggle
+ * as it stands (null to open), given their `appraisal` of it. They open under
+ * it, further the better they are, then come up a share of the gap
+ * (`staffConcession`) or take the seller's price: a green one (2 or less)
+ * whenever it's within the appraisal, a seasoned one (4+) when it leaves
+ * `STAFF_BUY_MARGIN`. Never over the appraisal.
+ */
+export function staffBuyOffer(skill: number, appraisal: number, haggle: Haggle | null): number {
+  const cap = roundPrice(appraisal)
+  if (!haggle) {
+    const under =
+      STAFF_BUY_OPEN.worst + ((skill - 1) / 4) * (STAFF_BUY_OPEN.best - STAFF_BUY_OPEN.worst)
+    return Math.max(PRICE_STEP, roundPrice(appraisal * (1 - under)))
+  }
+  const { lastAsk, counter } = haggle
+  const takes =
+    counter <= cap && (skill <= 2 || (skill >= 4 && counter <= appraisal * (1 - STAFF_BUY_MARGIN)))
+  if (takes) return counter
+  const offer = roundPrice(lastAsk + staffConcession(skill) * (counter - lastAsk))
+  // Within what can be offered now: our last offer up to their price, and never over the cap.
+  return Math.max(lastAsk, Math.min(counter, cap, offer))
 }
 
 // Buying a seller's car: the same haggle the other way round. We offer, they

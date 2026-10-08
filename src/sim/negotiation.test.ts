@@ -3,9 +3,11 @@ import { ARCHETYPES } from './archetypes'
 import { acceptChance, reduceCustomer, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import {
+  allowanceRange,
   askRange,
   buyRange,
   buyWarmth,
+  clampAllowance,
   clampAsk,
   clampBuy,
   counterPrice,
@@ -14,6 +16,7 @@ import {
   hopePrice,
   LAST_ROUND_FACTOR,
   LOWBALL_FRACTION,
+  netOf,
   respondToAsk,
   respondToBuyOffer,
   SELLER_FIRST_RISE,
@@ -22,13 +25,24 @@ import {
   sellerCounter,
   suggestedBuy,
   STAFF_FLOOR_MARGIN,
+  STAFF_TRADE_ANCHOR,
+  staffAllowance,
   staffAsk,
+  staffBuyOffer,
   staffConcession,
   STUBBORN_WALK,
+  suggestedAllowance,
   suggestedAsk,
   type AskResponse,
 } from './negotiation'
 import { createRng } from './rng'
+import {
+  insultingAllowance,
+  NO_TRADE_PENALTY,
+  TRADE_INSULT,
+  TRADE_PRIDE,
+  tradeBonus,
+} from './tradeIns'
 
 // Half clean: no bonus or penalty for the car's condition.
 const sedan: InventoryCar = {
@@ -63,6 +77,7 @@ const base: Customer = {
   sellerId: 'player',
   vehicle: null,
   selling: null,
+  trade: null,
 }
 
 /** In the middle of a haggle: they countered `counter` to `lastAsk`. */
@@ -341,5 +356,123 @@ describe('buying from a seller', () => {
     expect(buyRange(h)).toEqual({ min: 8_500, max: 10_300 })
     expect(suggestedBuy(h)).toBe(9_400)
     expect(clampBuy(h, 20_000)).toBe(10_300)
+  })
+})
+
+describe('a trade-in in the deal', () => {
+  // Hopes to pay 28,800 and be allowed 10,000 for their car: 18,800 after the trade.
+  const trade = { hope: 10_000, estimate: { estimate: 9_500, margin: 1_000 }, appraised: true }
+  const trader = (extra: Partial<Customer> = {}): Customer => ({ ...base, trade, ...extra })
+
+  it('weighs what they pay after the trade', () => {
+    expect(netOf(trader(), 30_000, 11_200)).toBe(18_800)
+    expect(netOf(base, 30_000, 11_200)).toBe(30_000)
+    // At the net they hoped for, mostly a yes.
+    expect(
+      rates((s) => respondToAsk(trader(), sedan, 30_000, createRng(s), 0, 11_200)).accept,
+    ).toBeGreaterThan(0.6)
+    // Over it, a counter in net terms, under what they hoped to pay after the trade.
+    expect(respondToAsk(trader(), sedan, 30_000, createRng(1), 0, 9_000)).toEqual({
+      answer: 'counter',
+      counter: 18_800 - FIRST_COUNTER_DROP * 30_000,
+    })
+  })
+
+  it('takes offence at an allowance far under their hope, which costs a round', () => {
+    const allowance = TRADE_INSULT * 10_000 - 100
+    expect(insultingAllowance(trader(), allowance)).toBe(true)
+    // Even a low net doesn't make up for it.
+    const res = respondToAsk(trader(), sedan, 20_000, createRng(1), 0, allowance)
+    expect(res).toMatchObject({ answer: 'counter', insulted: true })
+    const offended = reduceCustomer(
+      { ...trader(), phase: 'considering', offer: { carId: sedan.id, price: 20_000, allowance } },
+      { type: 'respond', id: 'c1', answer: 'counter', counter: 12_000, insulted: true },
+    )!
+    expect(offended.haggle).toEqual({
+      round: 3,
+      lastAsk: 20_000 - allowance,
+      counter: 12_000,
+      allowance,
+    })
+    // With no round to spare, they leave.
+    expect(respondToAsk(offended, sedan, 20_000, createRng(1), 0, allowance)).toEqual({
+      answer: 'walk',
+      reason: 'insulted',
+    })
+    expect(dealWarmth(trader(), sedan, 20_000, 0, allowance)).toBe('cold')
+  })
+
+  it('pleases regulars more with a generous allowance at the same net', () => {
+    // Not their body type, so the odds aren't capped.
+    const c = trader({ preferredModels: [] })
+    const generous = rates((s) => respondToAsk(c, sedan, 30_000, createRng(s), 0, 11_200))
+    const firm = rates((s) => respondToAsk(c, sedan, 28_000, createRng(s), 0, 9_200))
+    expect(generous.accept).toBeGreaterThan(firm.accept + TRADE_PRIDE.regular / 2)
+    expect(tradeBonus(trader({ archetype: 'bargain' }), 11_000)).toBe(0)
+  })
+
+  it('makes them less keen when the trade is left out', () => {
+    expect(tradeBonus(trader())).toBe(-NO_TRADE_PENALTY)
+    const without = rates((s) => respondToAsk(trader(), sedan, 28_800, createRng(s)))
+    const plain = rates((s) => respondToAsk(base, sedan, 28_800, createRng(s)))
+    expect(without.accept).toBeLessThan(plain.accept - NO_TRADE_PENALTY / 2)
+  })
+
+  it('puts the allowance back on the haggle’s nets for the prices that can be asked', () => {
+    const h = trader({ haggle: { round: 2, lastAsk: 21_000, counter: 17_900, allowance: 9_000 } })
+    expect(askRange(h, sedan, 9_000)).toEqual({ min: 26_900, max: 30_000 })
+    // Never over MSRP, however much is allowed.
+    expect(askRange(h, sedan, 10_000)).toEqual({ min: 27_900, max: 30_000 })
+    expect(suggestedAsk(h, sedan, 9_000)).toBe(28_500)
+    expect(suggestedAllowance(h)).toBe(9_000)
+  })
+
+  it('suggests a little under our estimate, within reason', () => {
+    expect(suggestedAllowance(trader())).toBe(9_000)
+    expect(clampAllowance(trader(), 50_000)).toBe(allowanceRange(trader()).max)
+    expect(clampAllowance(trader(), -5)).toBe(0)
+  })
+})
+
+describe('staffAllowance', () => {
+  it('gives a green salesperson’s buyer what they hope for', () => {
+    expect(staffAllowance(1, 9_000, 10_400)).toBe(10_400)
+    expect(staffAllowance(2, 9_000, 10_400, 3)).toBe(10_400)
+  })
+
+  it('anchors a seasoned one under the appraisal, more with skill, and comes up to it', () => {
+    expect(staffAllowance(3, 10_000, 11_000)).toBe(10_000 * (1 - STAFF_TRADE_ANCHOR))
+    expect(staffAllowance(5, 10_000, 11_000)).toBe(10_000 * (1 - 3 * STAFF_TRADE_ANCHOR))
+    expect(staffAllowance(5, 10_000, 11_000, 2)).toBeGreaterThan(staffAllowance(5, 10_000, 11_000))
+    for (let round = 1; round <= 5; round++) {
+      expect(staffAllowance(5, 10_000, 11_000, round)).toBeLessThanOrEqual(10_000)
+    }
+  })
+
+  it('asks a price with the allowance added back to the haggle’s nets', () => {
+    // Net counter 17,900 + 10,000 allowed = 27,900, which keeps a healthy gross.
+    const h = { round: 2, lastAsk: 20_000, counter: 17_900, allowance: 10_000 }
+    expect(staffAsk(4, sedan, h, 10_000)).toBe(27_900)
+    expect(staffAsk(4, sedan, h, 10_000)).toBeLessThanOrEqual(sedan.msrp)
+  })
+})
+
+describe('staffBuyOffer', () => {
+  it('opens under the appraisal, further the more skilled', () => {
+    expect(staffBuyOffer(1, 10_000, null)).toBe(9_500)
+    expect(staffBuyOffer(5, 10_000, null)).toBe(8_500)
+  })
+
+  it('never offers over the appraisal', () => {
+    const h = { round: 2, lastAsk: 9_500, counter: 12_000 }
+    expect(staffBuyOffer(1, 10_000, h)).toBe(10_000)
+    expect(staffBuyOffer(5, 10_000, { ...h, lastAsk: 10_000 })).toBe(10_000)
+  })
+
+  it('takes a fair price: a green one within the appraisal, a seasoned one with a margin', () => {
+    const h = { round: 2, lastAsk: 8_500, counter: 9_800 }
+    expect(staffBuyOffer(1, 10_000, h)).toBe(9_800)
+    expect(staffBuyOffer(5, 10_000, h)).toBeLessThan(9_800)
+    expect(staffBuyOffer(5, 10_000, { ...h, counter: 9_400 })).toBe(9_400)
   })
 })

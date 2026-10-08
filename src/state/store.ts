@@ -41,11 +41,16 @@ import {
 import { eventNotice, eventOn } from '../sim/events'
 import { carName, type ActionId } from '../sim/interactables'
 import {
+  clampAllowance,
   clampAsk,
   clampBuy,
   respondToAsk,
   respondToBuyOffer,
+  roundOf,
+  staffAllowance,
   staffAsk,
+  staffBuyOffer,
+  suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
   walkLine,
@@ -145,13 +150,16 @@ import {
   boughtRecord,
   buyBlocker,
   estimateRange,
+  lotSlotFor,
   purchaseOf,
   reservedSlots,
+  staffAppraisal,
   stockPurchases,
   vehicleOwnerId,
   vehicleTargetId,
   type Purchase,
 } from '../sim/sellers'
+import { assignTrades, tradeRecord } from '../sim/tradeIns'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
 
@@ -341,9 +349,11 @@ interface GameState {
   answerOffer: (id: string) => void
   /**
    * The player asks their customer `price` for the car, kept between the
-   * customer's counter and the last ask (or up to MSRP to open).
+   * customer's counter and the last ask (or up to MSRP to open). With a
+   * trade-in, `allowance` is what we allow for it (the suggested one if not
+   * given); the trade is left out when there's no lot space for it.
    */
-  ask: (price: number) => void
+  ask: (price: number, allowance?: number) => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */
@@ -729,16 +739,31 @@ export const useGame = create<GameState>((set, get) => {
     if (carId === null) notify(`${c.name}: "Nothing here for me, sorry."`)
   }
 
-  /** Asks customer `id` for their car: `price`, or the suggested ask (see `suggestedAsk`). */
-  const offer = (id: string, price?: number) => {
+  /**
+   * Asks customer `id` for their car: `price`, or the suggested ask (see
+   * `suggestedAsk`), with `allowance` (or the suggested one) for any trade-in.
+   */
+  const offer = (id: string, price?: number, allowance?: number) => {
     const s = get()
     const c = s.customers.find((x) => x.id === id)
     if (c?.selling) return buyOffer(c, price)
     const car = s.inventory.find((x) => x.id === c?.targetCarId)
     if (!c || !car || car.status !== 'available') return notify("That car isn't for sale any more.")
-    const ask = price === undefined ? suggestedAsk(c, car) : clampAsk(c, car, price)
-    commit(reduceCustomers(s.customers, { type: 'offer', id, carId: car.id, price: ask }))
+    const allow = tradeAllowance(c, allowance ?? suggestedAllowance(c))
+    const ask = Math.max(
+      allow ?? 0,
+      price === undefined ? suggestedAsk(c, car, allow) : clampAsk(c, car, price, allow),
+    )
+    const ev = { type: 'offer', id, carId: car.id, price: ask, allowance: allow } as const
+    commit(reduceCustomers(s.customers, ev))
   }
+
+  /**
+   * What we can allow for `c`'s trade-in: `allowance` within reason, or
+   * undefined when they have none or there's no lot space to take it.
+   */
+  const tradeAllowance = (c: Customer, allowance: number): number | undefined =>
+    c.trade && lotSlotFor(get()) ? clampAllowance(c, allowance) : undefined
 
   /**
    * Offers seller `c` `price` for their car, or the suggested offer (see
@@ -779,12 +804,15 @@ export const useGame = create<GameState>((set, get) => {
         },
       })
       commit(reduceCustomers(get().customers, { type: 'respond', id: c.id, answer: 'accept' }))
+      const buyer = s.roster.find((e) => e.id === c.handlerId)
       return notify(
-        `Bought ${c.name}'s ${carName(purchase.car.model)} for ${formatMoney(price)}. It goes on the lot tonight.`,
+        `${buyer ? `${buyer.name} bought` : 'Bought'} ${c.name}'s ${carName(purchase.car.model)} for ${formatMoney(price)}. It goes on the lot tonight.`,
       )
     }
     const counter = res.answer === 'counter' ? res.counter : undefined
     commit(reduceCustomers(s.customers, { type: 'respond', id: c.id, answer: res.answer, counter }))
+    // Staff haggles go on quietly.
+    if (c.handlerId !== PLAYER_ID) return
     if (res.answer === 'counter') notify(`${c.name}: "I'd want ${formatMoney(res.counter)}."`)
     else notify(`${c.name}: "${walkLine(res.reason)}"`)
   }
@@ -843,8 +871,15 @@ export const useGame = create<GameState>((set, get) => {
   const sign = (c: Customer, signer: Employee | null): Sale | null => {
     const s = get()
     const car = s.inventory.find((x) => x.id === c.offer?.carId)
-    if (!c.offer || !car || !get().sellCar(car.id, c.offer.price)) return null
-    const price = c.offer.price
+    if (!c.offer || !car || car.status !== 'available') return null
+    const { price, allowance } = c.offer
+    // Their trade-in, if it's in the deal, takes a lot space; none left and the deal is off.
+    const traded =
+      allowance === undefined
+        ? null
+        : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
+    if (allowance !== undefined && !traded) return null
+    if (!get().sellCar(car.id, price)) return null
     // Who made the sale. A salesperson let go since is no longer on the roster.
     const seller =
       c.sellerId && c.sellerId !== PLAYER_ID
@@ -864,12 +899,21 @@ export const useGame = create<GameState>((set, get) => {
       commission: (seller ? salesCommission(price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
       source: c.source,
     }
+    const trade = traded && tradeRecord(c, traded.price, s.clock.day)
+    if (trade) sale.trade = trade
+    const stats = get().dayStats
     set({
-      dayStats: { ...get().dayStats, sales: [...get().dayStats.sales, sale] },
+      dayStats: {
+        ...stats,
+        sales: [...stats.sales, sale],
+        bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
+      },
       // Only new cars count toward the manufacturer's quota.
       monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
+      // We pay for their car out of the price; it goes on the lot tonight.
+      ...(traded && { cash: get().cash - traded.price, purchases: [...get().purchases, traded] }),
     })
-    commit(reduceCustomers(get().customers, { type: 'signed', id: c.id }))
+    commit(reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
     return sale
   }
 
@@ -881,9 +925,13 @@ export const useGame = create<GameState>((set, get) => {
       return notify('The deal fell through.')
     }
     notify(
-      `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!`,
+      `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!${tradeLine(sale)}`,
     )
   }
+
+  /** " Their Summit Sedan goes on the lot tonight." after a sale with a trade-in. */
+  const tradeLine = (sale: Sale) =>
+    sale.trade ? ` Their ${carName(sale.trade.model)} goes on the lot tonight.` : ''
 
   /** At the desk with a buyer: the finance manager takes them from here. */
   const handOff = () => {
@@ -1129,24 +1177,30 @@ export const useGame = create<GameState>((set, get) => {
       })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       const stock = availableCars(s.inventory)
-      // Some drive in, while there's room in customer parking, and some of those are sellers.
+      // Some drive in, while there's room in customer parking. Some of those
+      // are sellers, and some of the rest bring a car to trade.
       const level = tuning()
-      const arrived = assignSellers(
-        assignVehicles(
-          due.map((source) =>
-            generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-              source,
-              ...arrivalOpts(),
-            }),
+      const arrived = assignTrades(
+        assignSellers(
+          assignVehicles(
+            due.map((source) =>
+              generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+                source,
+                ...arrivalOpts(),
+              }),
+            ),
+            customers,
+            driveRng,
+            step.day,
+            s.purchases.map((p) => p.spot),
           ),
-          customers,
           driveRng,
           step.day,
-          s.purchases.map((p) => p.spot),
+          { hope: level.sellerHope, noise: level.appraisalNoise },
         ),
         driveRng,
         step.day,
-        { hope: level.sellerHope, noise: level.appraisalNoise },
+        { hope: level.tradeHope, noise: level.appraisalNoise },
       )
       customers = [...customers, ...arrived]
       set({
@@ -1359,22 +1413,27 @@ export const useGame = create<GameState>((set, get) => {
       if (c?.phase !== 'considering' || !c.offer) return
       if (c.selling) return answerSeller(c)
       const car = s.inventory.find((x) => x.id === c.offer?.carId)
+      const { price, allowance } = c.offer
       const res =
         car?.status === 'available'
-          ? respondToAsk(c, car, c.offer.price, dealRng, sellerBonus(c))
+          ? respondToAsk(c, car, price, dealRng, sellerBonus(c), allowance)
           : ({ answer: 'walk', reason: 'gone' } as const)
       const counter = res.answer === 'counter' ? res.counter : undefined
-      commit(reduceCustomers(s.customers, { type: 'respond', id, answer: res.answer, counter }))
+      const insulted = res.answer === 'counter' && res.insulted
+      const ev = { type: 'respond', id, answer: res.answer, counter, insulted } as const
+      commit(reduceCustomers(s.customers, ev))
       // Staff deals go on quietly; the sale itself is announced.
       if (c.handlerId !== PLAYER_ID) return
       if (res.answer === 'accept') notify(`${c.name}: "Deal! Lead the way."`)
-      else if (res.answer === 'counter')
-        notify(`${c.name}: "How about ${formatMoney(res.counter)}?"`)
-      else notify(`${c.name}: "${walkLine(res.reason)}"`)
+      else if (res.answer === 'counter') {
+        const after = allowance === undefined ? '' : ' after my trade'
+        const slight = insulted ? `That's all for my car? ` : ''
+        notify(`${c.name}: "${slight}How about ${formatMoney(res.counter)}${after}?"`)
+      } else notify(`${c.name}: "${walkLine(res.reason)}"`)
     },
-    ask: (price) => {
+    ask: (price, allowance) => {
       const c = dealCustomer(get().customers, PLAYER_ID)
-      if (c?.phase === 'talking') offer(c.id, price)
+      if (c?.phase === 'talking') offer(c.id, price, allowance)
     },
     staffClaim: (employeeId, customerId) => {
       const s = get()
@@ -1383,30 +1442,47 @@ export const useGame = create<GameState>((set, get) => {
       // One customer at a time, and never the one the player is heading to.
       if (s.customers.some((c) => c.handlerId === employeeId && c.phase !== 'leaving')) return false
       if (s.activeAction?.targetId === customerId) return false
-      // Sellers are the player's to buy from.
-      if (s.customers.find((c) => c.id === customerId)?.selling) return false
+      // A seller's car needs a lot space and some cash.
+      if (s.customers.find((c) => c.id === customerId)?.selling && buyBlocker(s)) return false
       commit(reduceCustomers(s.customers, { type: 'claim', id: customerId, by: employeeId }))
       return get().customers.find((c) => c.id === customerId)?.handlerId === employeeId
     },
     staffGreet: (employeeId) => {
       const c = staffCustomer(employeeId, ['browsing', 'waiting'])
       if (!c) return
-      const carId = chooseTarget(c, availableCars(get().inventory))
+      const carId = c.selling ? null : chooseTarget(c, availableCars(get().inventory))
       commit(reduceCustomers(get().customers, { type: 'greet', id: c.id, carId, by: employeeId }))
     },
     staffOffer: (employeeId) => {
+      const s = get()
       const c = staffCustomer(employeeId, ['talking'])
-      const car = get().inventory.find((x) => x.id === c?.targetCarId)
-      if (!c) return
-      // Sold to someone else while they talked: nothing left to offer.
-      if (!car || car.status !== 'available') {
-        commit(reduceCustomers(get().customers, { type: 'cancel', id: c.id }))
+      const e = s.roster.find((x) => x.id === employeeId)
+      if (!c || !e) return
+      // What they make of the customer's car, if they're selling it or trading it in.
+      const appraisal = staffAppraisal(c, e.id, s.clock.day, e.skill)?.estimate ?? 0
+      if (c.selling) {
+        const price = staffBuyOffer(e.skill, appraisal, c.haggle)
+        // No room or cash for it any more: they give up on this one.
+        if (buyBlocker(s, price)) {
+          commit(reduceCustomers(s.customers, { type: 'cancel', id: c.id }))
+          return
+        }
+        const ev = { type: 'offer', id: c.id, carId: vehicleTargetId(c.id), price } as const
+        commit(reduceCustomers(s.customers, ev))
         return
       }
-      const e = get().roster.find((x) => x.id === employeeId)
-      const price = e ? staffAsk(e.skill, car, c.haggle) : suggestedAsk(c, car)
-      const ev = { type: 'offer', id: c.id, carId: car.id, price } as const
-      commit(reduceCustomers(get().customers, ev))
+      const car = s.inventory.find((x) => x.id === c.targetCarId)
+      // Sold to someone else while they talked: nothing left to offer.
+      if (!car || car.status !== 'available') {
+        commit(reduceCustomers(s.customers, { type: 'cancel', id: c.id }))
+        return
+      }
+      const allow = c.trade
+        ? tradeAllowance(c, staffAllowance(e.skill, appraisal, c.trade.hope, roundOf(c)))
+        : undefined
+      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow))
+      const ev = { type: 'offer', id: c.id, carId: car.id, price, allowance: allow } as const
+      commit(reduceCustomers(s.customers, ev))
     },
     staffLead: (employeeId) => {
       const s = get()
@@ -1436,7 +1512,7 @@ export const useGame = create<GameState>((set, get) => {
         return notify(`${e.name}: "The ${c.name} deal fell through."`)
       }
       notify(
-        `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!`,
+        `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!${tradeLine(sale)}`,
       )
     },
     staffWash: (employeeId, carId) => {
