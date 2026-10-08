@@ -417,6 +417,18 @@ kbd {
 .cal-intro {
   margin: 0 0 8px;
 }
+/* Calendar tab: the franchise tiers, the current one bright */
+.cal-tiers {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.cal-tiers li {
+  opacity: 0.7;
+}
+.cal-tiers .cal-tier-now {
+  opacity: 1;
+}
 .cal-week {
   list-style: none;
   margin: 0 0 10px;
@@ -822,6 +834,14 @@ kbd {
 }
 .stock-stale {
   background: #b91c1c;
+}
+.stock-tier {
+  background: #6b7280;
+}
+.stock-locked .staff-name,
+.stock-locked .staff-meta,
+.stock-locked .staff-wage {
+  opacity: 0.55;
 }
 .stock-value {
   color: #fca5a5;

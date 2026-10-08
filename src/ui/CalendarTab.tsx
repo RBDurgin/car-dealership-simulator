@@ -10,7 +10,9 @@ import {
   weekStart,
 } from '../sim/calendar'
 import { CLOSEOUT_REBATE, closeoutOn, EVENTS, eventOn, nextEvent } from '../sim/events'
+import { MODEL_TIER, TIER_PERKS, TIERS, tierName, type FranchiseTier } from '../sim/franchise'
 import { carName } from '../sim/interactables'
+import type { CarModel } from '../sim/layout'
 import {
   daysLeft,
   holdback,
@@ -24,7 +26,7 @@ import {
   quotaStatus,
 } from '../sim/quota'
 import { forecastFor, WEATHER_EFFECTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
-import { useGame } from '../state/store'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 const PEAK =
@@ -94,7 +96,8 @@ function MonthQuota({ day }: { day: number }) {
   const quota = useGame((s) => s.quota)
   const left = daysLeft(calendarOf(day).dayOfMonth)
   const status = quotaStatus(sales.count, quota, left)
-  const payout = holdback(sales.count, quota, sales.msrp)
+  const tier = useGame((s) => s.franchise)
+  const payout = holdback(sales.count, quota, sales.msrp, TIER_PERKS[tier].holdback)
   return (
     <>
       <h3>
@@ -113,8 +116,66 @@ function MonthQuota({ day }: { day: number }) {
         At month end the manufacturer pays a holdback on the sticker price of every car sold that
         month: {percent(HOLDBACK_PARTIAL)} from {Math.ceil(quota * HOLDBACK_FLOOR)} cars,{' '}
         {percent(HOLDBACK_RATE)} at {quota}, {percent(HOLDBACK_STRETCH)} from{' '}
-        {Math.ceil(quota * HOLDBACK_STRETCH_AT)}. As things stand:{' '}
-        <b className="price">{formatMoney(payout)}</b>.
+        {Math.ceil(quota * HOLDBACK_STRETCH_AT)}
+        {TIER_PERKS[tier].holdback !== 1 && (
+          <>
+            , all × {TIER_PERKS[tier].holdback} at {tierName(tier)}
+          </>
+        )}
+        . As things stand: <b className="price">{formatMoney(payout)}</b>.
+      </p>
+    </>
+  )
+}
+
+/** What a tier offers: "4% off invoice, holdback × 1.5, may order the Summit Vela GT and …". */
+function perkLine(tier: FranchiseTier): string {
+  const { invoice, holdback } = TIER_PERKS[tier]
+  const models = (Object.keys(MODEL_TIER) as CarModel[])
+    .filter((m) => TIERS.indexOf(MODEL_TIER[m]!) <= TIERS.indexOf(tier))
+    .map(carName)
+  const parts = [
+    invoice < 1 ? `${Math.round((1 - invoice) * 100)}% off invoice` : 'list invoice',
+    `holdback × ${holdback}`,
+    models.length > 0 ? `may order the ${models.join(' and ')}` : 'no premium models',
+  ]
+  return parts.join(', ')
+}
+
+/** The franchise tier, what it gives, and what moves it at month end. */
+function Franchise() {
+  const tier = useGame((s) => s.franchise)
+  const quota = useGame((s) => s.quota)
+  const slack = useGame((s) => levelTuning(s).franchiseSlack)
+  const i = TIERS.indexOf(tier)
+  const up = TIERS[i + 1]
+  const down = i > 0 ? TIERS[i - 1] : null
+  const dropUnder = Math.ceil(quota * (HOLDBACK_FLOOR - slack))
+  return (
+    <>
+      <h3>
+        Franchise <span className="muted">· {tierName(tier)}</span>
+      </h3>
+      <ul className="cal-tiers">
+        {TIERS.map((t) => (
+          <li key={t} className={t === tier ? 'cal-tier-now' : undefined}>
+            <b>{tierName(t)}</b>: {perkLine(t)}
+          </li>
+        ))}
+      </ul>
+      <p className="muted cal-intro">
+        {up ? (
+          <>
+            Sell {quota} new cars this month to move up to <b>{tierName(up)}</b>.{' '}
+          </>
+        ) : (
+          <>Meet the quota to stay at Gold. </>
+        )}
+        {down ? (
+          <>
+            Under {dropUnder} and you drop to {tierName(down)}.
+          </>
+        ) : null}
       </p>
     </>
   )
@@ -169,6 +230,7 @@ export function CalendarTab() {
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
       <SalesAndCloseouts day={day} />
       <MonthQuota day={day} />
+      <Franchise />
     </>
   )
 }

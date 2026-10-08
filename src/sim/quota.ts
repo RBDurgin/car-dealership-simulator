@@ -1,4 +1,5 @@
 import { DAYS_PER_MONTH } from './calendar'
+import type { FranchiseTier } from './franchise'
 import { START_REPUTATION } from './reputation'
 
 /**
@@ -38,6 +39,8 @@ export interface QuotaResult {
   quota: number
   sold: number
   payout: number
+  /** The franchise tier the month was played at, and the one it earned. */
+  tier: { from: FranchiseTier; to: FranchiseTier }
 }
 
 export type QuotaStatus = 'hit' | 'onTrack' | 'behind'
@@ -72,9 +75,9 @@ export function holdbackRate(sold: number, quota: number): number {
   return 0
 }
 
-/** The holdback for the month, rounded to $10. */
-export function holdback(sold: number, quota: number, msrp: number): number {
-  return Math.round((msrp * holdbackRate(sold, quota)) / 10) * 10
+/** The holdback for the month, × the franchise tier's `factor`, rounded to $10. */
+export function holdback(sold: number, quota: number, msrp: number, factor = 1): number {
+  return Math.round((msrp * holdbackRate(sold, quota) * factor) / 10) * 10
 }
 
 /** `sales` with a car of `msrp` added. */

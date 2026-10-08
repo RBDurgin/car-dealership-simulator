@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07; 13b is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13. 13b, 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b on 2026-10-08; 13c is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -63,6 +63,16 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - The Stock panel greys out locked models ("Silver dealers only"). The Calendar tab shows the tier.
 - Saved (next save version). An older save starts with no franchise.
 - Difficulty: `Tuning.franchiseSlack` (Easy: a month near the target still holds the tier).
+
+**13b implementation notes:**
+
+- Save v15 keeps `franchise`. "No franchise" for an older save is Bronze, whose perks are neutral, so an older game plays as before apart from the two locked models.
+- `QuotaResult.tier` is `{ from, to }`. The holdback is paid at the month's tier (`from`), and `settleDay` sets the store's `franchise` to `to`. The next morning's notice says what the move brings (`tierNotice`).
+- Invoice: the store's `orderInvoice(s)` is the level's factor × the tier's, used by `orderCar` and the Stock panel.
+- `franchiseSlack` lowers the drop line below `HOLDBACK_FLOOR`: Easy 0.1 (drops under 70%), Medium and Hard 0. It doesn't make moving up easier.
+- `placeOrder` refuses a locked model first ("Gold dealers only."); `OrderBook.tier` defaults to Bronze.
+- Tip `franchise` (Easy) shows on the first tier change. The summary has a Franchise row; the Calendar tab lists the tiers and the line to move up or down.
+- What's new: update 11.
 
 ### 13c: Bigger map and performance groundwork (no gameplay change)
 

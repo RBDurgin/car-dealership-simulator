@@ -24,6 +24,9 @@ import {
   QUOTA_RANGE,
 } from '../sim/quota'
 import { rankGross, RANKS } from '../sim/progression'
+import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
+import { carName } from '../sim/interactables'
+import type { CarModel } from '../sim/layout'
 import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
 import {
   FINANCE_FEE,
@@ -118,7 +121,9 @@ function BasicsTab({ touch, click }: TabProps) {
         </p>
         <p>
           Dealer ranks need {percentOff(TUNING.easy.rankScale)} less lifetime gross on Easy and{' '}
-          {percentOn(TUNING.hard.rankScale)} more on Hard.
+          {percentOn(TUNING.hard.rankScale)} more on Hard. On Easy a month has to fall under{' '}
+          {Math.round((HOLDBACK_FLOOR - TUNING.easy.franchiseSlack) * 100)}% of the quota, not{' '}
+          {Math.round(HOLDBACK_FLOOR * 100)}%, to cost you a franchise tier.
         </p>
       </section>
       <section>
@@ -345,6 +350,36 @@ function BusinessTab({ touch, click }: TabProps) {
           the target, a little from there, {(HOLDBACK_RATE * 100).toFixed(2)}% for hitting it and{' '}
           {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
           new car sold counts, whoever makes it; used cars don&apos;t.
+        </p>
+      </section>
+      <section>
+        <h3>Franchise tier</h3>
+        <p>
+          The manufacturer ranks its dealers Bronze, Silver and Gold, and you start at Bronze. A
+          month that meets the quota moves you up a tier; one under{' '}
+          {Math.round(HOLDBACK_FLOOR * 100)}% of it drops you a tier. A higher tier pays less for
+          stock, gets a bigger holdback and may order the top models:
+        </p>
+        <ul>
+          {TIERS.map((t) => {
+            const models = (Object.keys(MODEL_TIER) as CarModel[]).filter(
+              (m) => MODEL_TIER[m] === t,
+            )
+            return (
+              <li key={t}>
+                <b>{tierName(t)}</b>: invoice{' '}
+                {TIER_PERKS[t].invoice < 1
+                  ? `${Math.round((1 - TIER_PERKS[t].invoice) * 100)}% off`
+                  : 'at list'}
+                , holdback × {TIER_PERKS[t].holdback}
+                {models.length > 0 && <>, unlocks the {models.map(carName).join(' and ')}</>}
+              </li>
+            )
+          })}
+        </ul>
+        <p>
+          Locked models are greyed out on the Stock tab. The Calendar tab shows your tier and what
+          it takes to move.
         </p>
       </section>
       <section>

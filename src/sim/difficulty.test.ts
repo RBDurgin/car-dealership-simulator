@@ -12,8 +12,16 @@ import { FIRST_NAZMA_DAY } from './nazma'
 describe('difficulty levels', () => {
   it('defaults to Medium, whose levers are all neutral', () => {
     expect(DEFAULT_DIFFICULTY).toBe('medium')
-    const { startingCash, firstNazmaDay, expect: shift, acceptBonus, ...rest } = TUNING.medium
+    const {
+      startingCash,
+      firstNazmaDay,
+      expect: shift,
+      acceptBonus,
+      franchiseSlack,
+      ...rest
+    } = TUNING.medium
     expect(startingCash).toBe(25_000)
+    expect(franchiseSlack).toBe(0)
     expect(firstNazmaDay).toBe(FIRST_NAZMA_DAY)
     expect(shift).toBe(0)
     expect(acceptBonus).toBe(0)
@@ -39,6 +47,11 @@ describe('difficulty levels', () => {
     expect(TUNING.hard.invoice).toBeGreaterThan(1)
     expect(TUNING.easy.interest).toBeLessThan(1)
     expect(TUNING.hard.interest).toBeGreaterThan(1)
+  })
+
+  it('lets Easy keep its franchise tier through a near miss', () => {
+    expect(TUNING.easy.franchiseSlack).toBeGreaterThan(0)
+    expect(TUNING.hard.franchiseSlack).toBe(0)
   })
 
   it('names and describes each level', () => {

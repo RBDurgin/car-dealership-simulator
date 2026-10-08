@@ -1,6 +1,7 @@
 import { CAR_MODELS } from './customers'
 import { CLOSEOUT_REBATE, closeoutOn } from './events'
 import { FLOOR_PLAN_LIMIT, floorBalance } from './floorPlan'
+import { lockedReason, START_TIER, type FranchiseTier } from './franchise'
 import { BASE_MSRP, rollMsrp, roundTo100, type CarLocation, type InventoryCar } from './inventory'
 import {
   DISPLAY_CARS,
@@ -119,6 +120,8 @@ export interface OrderBook {
   orders: readonly Order[]
   /** Lot spaces held for used cars bought today, which go there at closing. */
   reserved?: readonly Slot[]
+  /** The franchise tier, which decides the models on offer (Bronze if left out). */
+  tier?: FranchiseTier
 }
 
 export type OrderResult =
@@ -134,8 +137,9 @@ function nextOrderId(orders: readonly Order[], day: number): string {
 
 /**
  * Orders a `model` on `day`, into the first free slot. Paid in cash now, or on
- * the floor plan. Fails with the reason when there's no room, not enough cash,
- * or the floor plan would go over its limit. `invoice` is the level's invoice
+ * the floor plan. Fails with the reason when the franchise tier can't order
+ * the model, there's no room, not enough cash, or the floor plan would go over
+ * its limit. `invoice` is the level's invoice
  * factor (see `orderCost`).
  */
 export function placeOrder(
@@ -145,6 +149,8 @@ export function placeOrder(
   day: number,
   invoice = 1,
 ): OrderResult {
+  const locked = lockedReason(model, book.tier ?? START_TIER)
+  if (locked) return { ok: false, reason: locked }
   const slot = freeSlots(book.inventory, book.orders, book.reserved)[0]
   if (!slot) return { ok: false, reason: 'No room: every space is taken or on order.' }
   const cost = orderCost(model, day, invoice)

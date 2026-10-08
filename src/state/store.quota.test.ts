@@ -56,7 +56,12 @@ describe('manufacturer quota', () => {
     endDay()
     const payout = holdback(quota, quota, monthSales.msrp)
     expect(payout).toBeGreaterThan(0)
-    expect(game().dayStats.quota).toEqual({ quota, sold: quota, payout })
+    expect(game().dayStats.quota).toEqual({
+      quota,
+      sold: quota,
+      payout,
+      tier: { from: 'bronze', to: 'silver' },
+    })
     expect(game().cash).toBe(cash + payout)
     expect(netIncome(game().dayStats)).toBe(payout)
   })
@@ -65,7 +70,61 @@ describe('manufacturer quota', () => {
     goTo(DAYS_PER_MONTH)
     useGame.setState({ monthSales: { count: 2, msrp: 60_000 } })
     endDay()
-    expect(game().dayStats.quota).toEqual({ quota: game().quota, sold: 2, payout: 0 })
+    expect(game().dayStats.quota).toEqual({
+      quota: game().quota,
+      sold: 2,
+      payout: 0,
+      tier: { from: 'bronze', to: 'bronze' },
+    })
+  })
+
+  it('moves the franchise tier at month end and says so the next morning', () => {
+    goTo(DAYS_PER_MONTH)
+    const quota = game().quota
+    useGame.setState({ monthSales: { count: quota, msrp: quota * 35_000 } })
+    endDay()
+    expect(game().franchise).toBe('silver')
+    game().startNextDay()
+    expect(game().notice?.text).toContain('Silver dealer')
+    expect(game().notice?.text).toContain('Summit Vela GT')
+  })
+
+  it('pays a bigger holdback at a higher tier', () => {
+    goTo(DAYS_PER_MONTH)
+    const quota = game().quota
+    const monthSales = { count: quota, msrp: quota * 35_000 }
+    useGame.setState({ monthSales, franchise: 'gold' })
+    endDay()
+    expect(game().dayStats.quota?.payout).toBe(holdback(quota, quota, monthSales.msrp, 1.5))
+    expect(game().franchise).toBe('gold')
+  })
+
+  it('drops a tier for a month well short, unless Easy’s slack covers it', () => {
+    goTo(DAYS_PER_MONTH)
+    const sold = Math.ceil(game().quota * 0.75)
+    useGame.setState({ monthSales: { count: sold, msrp: sold * 30_000 }, franchise: 'gold' })
+    endDay()
+    expect(game().franchise).toBe('silver')
+
+    useGame.setState(initial, true)
+    game().newGame('easy')
+    goTo(DAYS_PER_MONTH)
+    const easySold = Math.ceil(game().quota * 0.75)
+    useGame.setState({
+      monthSales: { count: easySold, msrp: easySold * 30_000 },
+      franchise: 'gold',
+    })
+    endDay()
+    expect(game().franchise).toBe('gold')
+  })
+
+  it('keeps the franchise tier through a save', () => {
+    useGame.setState({ franchise: 'silver' })
+    endDay()
+    const save = parseSave(JSON.parse(JSON.stringify(createSave(game(), 1))))!
+    useGame.setState(initial, true)
+    game().loadGame(save)
+    expect(game().franchise).toBe('silver')
   })
 
   it('starts the next month afresh, with a target from reputation', () => {

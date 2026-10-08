@@ -121,6 +121,17 @@ export const UPDATES: readonly Update[] = [
       'The top bar shows your rank and how far you are from the next one. The day summary tells you when you rank up.',
     ],
   },
+  {
+    id: 11,
+    phase: '13',
+    title: 'Franchise tiers',
+    items: [
+      'The manufacturer ranks you Bronze, Silver or Gold. Meet the quota to move up a tier; fall well short to drop one.',
+      'Silver and Gold dealers pay less for stock and earn a bigger holdback.',
+      'The Summit Vela GT now needs Silver and the Summit Ridge Platinum Gold. Locked models are greyed out on the Stock tab.',
+      'The Calendar tab shows your tier and what it takes to move.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

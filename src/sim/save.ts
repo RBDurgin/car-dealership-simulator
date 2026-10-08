@@ -2,6 +2,7 @@ import { calendarOf } from './calendar'
 import type { GameTime } from './clock'
 import { isDifficulty, type Difficulty } from './difficulty'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
+import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
@@ -23,7 +24,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 14
+export const SAVE_VERSION = 15
 
 export interface SaveData {
   version: number
@@ -54,6 +55,8 @@ export interface SaveData {
   tipsSeen: TipId[]
   /** Lifetime totals and the rank reached (see `sim/progression.ts`). */
   career: Career
+  /** The manufacturer's franchise tier (see `sim/franchise.ts`). */
+  franchise: FranchiseTier
   /** The latest update (see `sim/whatsNew.ts`) this game's player has been shown. */
   news: number
 }
@@ -73,6 +76,7 @@ export interface SaveSource {
   bailoutUsed: boolean
   tipsSeen: TipId[]
   career: Career
+  franchise: FranchiseTier
 }
 
 /**
@@ -99,6 +103,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     bailoutUsed: s.bailoutUsed,
     tipsSeen: s.tipsSeen,
     career: s.career,
+    franchise: s.franchise,
     news: LATEST_NEWS,
   }
 }
@@ -177,6 +182,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   12: (raw) => ({ ...raw, career: emptyCareer() }),
   // v14: the updates already shown, judged by the version the save started at.
   13: (raw, from) => ({ ...raw, news: legacyNews(from) }),
+  // v15: the franchise tier. Every game before it starts at Bronze.
+  14: (raw) => ({ ...raw, franchise: START_TIER }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -200,7 +207,7 @@ export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
-  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, news } = raw
+  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -215,6 +222,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (typeof bailoutUsed !== 'boolean') return null
   if (!Array.isArray(tipsSeen) || !tipsSeen.every(isTipId)) return null
   if (!isCareer(career)) return null
+  if (!isFranchiseTier(franchise)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)

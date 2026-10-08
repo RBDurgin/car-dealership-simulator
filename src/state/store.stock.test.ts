@@ -33,9 +33,21 @@ describe('ordering stock', () => {
   })
 
   it('refuses a cash order it can’t pay for, with the reason', () => {
-    expect(game().orderCar('suv-luxury', 'cash')).toBe(false)
+    expect(game().orderCar('truck', 'cash')).toBe(false)
     expect(game().orders).toEqual([])
     expect(game().notice?.text).toBe('Not enough cash.')
+  })
+
+  it('orders the top models only at their franchise tier, at the tier’s invoice', () => {
+    expect(game().orderCar('suv-luxury', 'floor')).toBe(false)
+    expect(game().notice?.text).toBe('Gold dealers only.')
+    expect(game().orderCar('sedan-sports', 'floor')).toBe(false)
+    useGame.setState({ franchise: 'silver' })
+    expect(game().orderCar('sedan-sports', 'floor')).toBe(true)
+    expect(game().orders[0].cost).toBe(orderCost('sedan-sports', 1, 0.98))
+    expect(game().orderCar('suv-luxury', 'floor')).toBe(false)
+    useGame.setState({ franchise: 'gold' })
+    expect(game().orderCar('suv-luxury', 'floor')).toBe(true)
   })
 
   it('orders on the floor plan → resume → delivers into the right slots → sells and pays interest', () => {

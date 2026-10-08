@@ -32,6 +32,7 @@ const base: TipState = {
   dayStats: { missed: {} },
   owner: null,
   nazma: null,
+  franchise: 'bronze',
 }
 const sellerCar = (parked: boolean): Partial<Customer> => ({
   phase: parked ? 'waiting' : 'arriving',
@@ -74,6 +75,7 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  franchise: [{ franchise: 'silver' }, { franchise: 'bronze' }],
   seller: [
     { customers: [customer('c2', sellerCar(true))] },
     { customers: [customer('c2', sellerCar(false))] },

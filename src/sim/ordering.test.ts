@@ -226,7 +226,7 @@ describe('delivery', () => {
   })
 
   it('rolls each MSRP within the model’s range', () => {
-    const b = orderAll(book({ cash: 1_000_000 }), Array(8).fill('suv-luxury'))
+    const b = orderAll(book({ cash: 1_000_000, tier: 'gold' }), Array(8).fill('suv-luxury'))
     for (const car of deliver(b.orders, createRng(3), 2)) {
       expect(Math.abs(car.msrp / BASE_MSRP['suv-luxury'] - 1)).toBeLessThanOrEqual(MSRP_VARIATION)
       expect(car.msrp).toBeGreaterThan(car.cost)

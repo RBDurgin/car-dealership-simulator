@@ -14,8 +14,9 @@ import {
   type Financing,
   type Order,
 } from '../sim/ordering'
+import { lockedReason } from '../sim/franchise'
 import { reservedSlots } from '../sim/sellers'
-import { levelTuning, useGame, type ComputerTab } from '../state/store'
+import { levelTuning, orderInvoice, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
@@ -44,16 +45,19 @@ function CatalogRow({
   blockers,
   explain,
   missed,
+  locked,
 }: {
   model: CarModel
   day: number
+  /** Why the franchise tier can't order this model, or null if it can. */
+  locked: string | null
   /** Why each kind of order can't be placed, or null if it can. */
   blockers: Record<Financing, string | null>
   /** Say why under the buttons (touch has no tooltips). */
   explain: boolean
   missed: string | null
 }) {
-  const invoice = useGame(levelTuning).invoice
+  const invoice = useGame(orderInvoice)
   const cost = orderCost(model, day, invoice)
   const msrp = BASE_MSRP[model]
   const onIncentive = dailyIncentive(day) === model
@@ -61,10 +65,18 @@ function CatalogRow({
   const order = (financing: Financing) => useGame.getState().orderCar(model, financing)
   const why = [...new Set([blockers.cash, blockers.floor])].filter((r): r is string => !!r)
   return (
-    <li className="stock-row">
+    <li className={locked ? 'stock-row stock-locked' : 'stock-row'}>
       <div className="stock-who">
         <div className="staff-name">
           {carName(model)}
+          {locked && (
+            <span
+              className="stock-badge stock-tier"
+              title="Meet the manufacturer's quota to move up a franchise tier."
+            >
+              {locked.replace(/\.$/, '')}
+            </span>
+          )}
           {onIncentive && (
             <span className="stock-badge stock-incentive">
               −{Math.round(INCENTIVE_DISCOUNT * 100)}% today
@@ -103,7 +115,9 @@ function CatalogRow({
           Floor plan
         </button>
       </div>
-      {explain && why.length > 0 && <div className="stock-why muted">{why.join(' ')}</div>}
+      {explain && !locked && why.length > 0 && (
+        <div className="stock-why muted">{why.join(' ')}</div>
+      )}
     </li>
   )
 }
@@ -255,11 +269,12 @@ function StockTab() {
   const purchases = useGame((s) => s.purchases)
   const missedToday = useGame((s) => s.dayStats.missed)
   const missedYesterday = useGame((s) => s.missedYesterday)
-  const invoice = useGame(levelTuning).invoice
+  const invoice = useGame(orderInvoice)
+  const tier = useGame((s) => s.franchise)
 
   // Lot spaces held for used cars bought today are taken too.
   const reserved = reservedSlots(purchases)
-  const book = { cash, inventory, orders, reserved }
+  const book = { cash, inventory, orders, reserved, tier }
   const free = freeSlots(inventory, orders, reserved)
   const freeIn = (where: 'lot' | 'showroom') => free.filter((s) => s.location === where).length
   const blocker = (model: CarModel, financing: Financing) => {
@@ -300,6 +315,7 @@ function StockTab() {
             // With no room, every order is blocked for the same reason, said once above.
             explain={free.length > 0}
             missed={missedLabel(missedYesterday[model], missedToday[model])}
+            locked={lockedReason(model, tier)}
           />
         ))}
       </ul>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
+import type { FranchiseTier } from './franchise'
 import type { OwnedImprovement } from './improvements'
 import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
@@ -46,6 +47,8 @@ const source = () => ({
   tipsSeen: [] as TipId[],
   // As a v12 save upgrades, so the older upgrades compare equal.
   career: emptyCareer() as Career,
+  // As a v14 save upgrades, so the older upgrades compare equal.
+  franchise: 'bronze' as FranchiseTier,
 })
 
 const order: Order = {
@@ -279,6 +282,18 @@ describe('save data', () => {
     expect(parseSave({ ...save, news: -1 })).toBeNull()
     expect(parseSave({ ...save, news: 2.5 })).toBeNull()
     expect(parseSave({ ...save, news: undefined })).toBeNull()
+  })
+
+  it('upgrades a version 14 save at Bronze', () => {
+    const save = createSave({ ...source(), franchise: 'gold' }, 123)
+    const v14 = { ...save, version: 14, franchise: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v14)))).toEqual({ ...save, franchise: 'bronze' })
+  })
+
+  it('keeps the franchise tier, and rejects one it doesn’t know', () => {
+    const save = createSave({ ...source(), franchise: 'silver' }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.franchise).toBe('silver')
+    expect(parseSave({ ...save, franchise: 'platinum' })).toBeNull()
   })
 
   it('keeps the career, and rejects a rank it doesn’t know', () => {

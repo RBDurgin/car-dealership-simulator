@@ -16,6 +16,7 @@ import {
   salesBySource,
   walkOuts,
 } from '../sim/deal'
+import { TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
@@ -44,6 +45,7 @@ export function DaySummary() {
   const quota = useGame((s) => s.quota)
   const difficulty = useGame((s) => s.difficulty)
   const career = useGame((s) => s.career)
+  const franchise = useGame((s) => s.franchise)
   const rankScale = useGame((s) => levelTuning(s).rankScale)
   if (!open) return null
   const progress = rankProgress(career, reputation, rankScale)
@@ -206,6 +208,20 @@ export function DaySummary() {
               </>
             ) : (
               quotaLine(monthSold, quota, daysLeft(calendarOf(day).dayOfMonth))
+            )}
+          </dd>
+          <dt>Franchise</dt>
+          <dd>
+            {tierName(franchise)}
+            {stats.quota && stats.quota.tier.from !== stats.quota.tier.to && (
+              <span className="muted">
+                {' '}
+                (
+                {TIERS.indexOf(stats.quota.tier.to) > TIERS.indexOf(stats.quota.tier.from)
+                  ? 'up'
+                  : 'down'}{' '}
+                from {tierName(stats.quota.tier.from)})
+              </span>
             )}
           </dd>
           <dt>Reputation</dt>

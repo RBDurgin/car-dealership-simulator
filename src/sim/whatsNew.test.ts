@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { SAVE_VERSION } from './save'
 import {
   groupByPhase,
   LATEST_NEWS,
@@ -51,7 +50,8 @@ describe('the update log', () => {
 describe('news for saves from before it was kept', () => {
   it('covers every version from 2 up to the one that added it, never going down', () => {
     let last = 0
-    for (let v = 2; v < SAVE_VERSION; v++) {
+    // v14 added the news to the save.
+    for (let v = 2; v < 14; v++) {
       const news = legacyNews(v)
       expect(news).toBeGreaterThanOrEqual(last)
       expect(news).toBeLessThan(LATEST_NEWS)

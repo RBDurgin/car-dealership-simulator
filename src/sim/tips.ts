@@ -1,6 +1,7 @@
 import { WASH_BELOW } from './cleanliness'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
+import type { FranchiseTier } from './franchise'
 import type { InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import type { OwnerVisit } from './owner'
@@ -22,6 +23,7 @@ export type TipId =
   | 'seller'
   | 'tradeIn'
   | 'staleUsed'
+  | 'franchise'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -43,6 +45,8 @@ export const TIPS: Record<TipId, string> = {
   tradeIn:
     'This buyer brought a car to trade. Appraise it, then set an allowance as you haggle. They weigh what they pay after the trade, and a lowball allowance offends them.',
   staleUsed: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Buyers judge its price by what it's worth now, so take a lower offer to move it.`,
+  franchise:
+    'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -63,6 +67,7 @@ export interface TipState {
   dayStats: Pick<DayStats, 'missed'>
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
+  franchise: FranchiseTier
 }
 
 const missedCount = (s: TipState) =>
@@ -115,6 +120,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       const was = new Set(stale(prev).map((c) => c.id))
       return stale(next).some((c) => !was.has(c.id))
     }
+    case 'franchise':
+      return next.franchise !== prev.franchise
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }
