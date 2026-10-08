@@ -63,3 +63,7 @@ Trade-ins and used cars. Customers can trade in their car as part of a deal, and
 ## Phase 13
 
 Expansion and progression. Dealer ranks are earned from lifetime gross profit and reputation, and each rank unlocks bigger things. Buy the parcel next door for more lot space, then build a showroom wing with more display platforms, sales desks and staff. A manufacturer franchise tier (Bronze, Silver, Gold) rises with a met quota and falls with a missed one. It improves the invoice price and holdback, and unlocks the luxury models. Reaching Dealer of the Year shows a win screen, and you can keep playing after it.
+
+## Phase 14
+
+A rival dealership. Nazma opens his own lot across the road once you've made a name for yourself. He takes a share of the town's buyers, undercuts your prices, and runs price wars, ad blitzes and sale weekends. Shoppers come in quoting his prices, so you can match him or risk a walk. His smudging, thefts and poaching now come from his business: they get worse when he's losing, stolen cars turn up on his lot, and poached staff go to work for him. Keep his share low for a few weeks and he goes bust. He reopens later under a new name.
