@@ -59,7 +59,8 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 ### 13c: Bigger map and performance groundwork (no gameplay change)
 
 - `GRID_WIDTH` goes from 40 to about 54. The parcel is tx 40–53, behind its own fence, with a "For sale" sign. Until it's bought, it's grass and blocked.
-- The road and sidewalk extend east. `SIDEWALK_ENDS` and the pedestrians' spawn points move with them.
+- The road and sidewalk extend east. `SIDEWALK_ENDS` and the pedestrians' spawn points move with them. So does the hardcoded `ROAD_EAST` in `sim/driving.ts`.
+- Leave room for Phase 15's service garage: a corner of about 10×8 tiles, a service lane in front of it and a second gate in the south fence. If 13d's rows and 13e's wing don't leave that much, widen the map to about 60 instead.
 - `buildLayout(expansions)`. The grid is rebuilt each morning, the same way improvement footprints are now.
 - The camera's pan bounds cover the parcel.
 - The performance fixes below (pathfinding and shadows).

@@ -67,3 +67,7 @@ Expansion and progression. Dealer ranks are earned from lifetime gross profit an
 ## Phase 14
 
 A rival dealership. Nazma opens his own lot across the road once you've made a name for yourself. He takes a share of the town's buyers, undercuts your prices, and runs price wars, ad blitzes and sale weekends. Shoppers come in quoting his prices, so you can match him or risk a walk. His smudging, thefts and poaching now come from his business: they get worse when he's losing, stolen cars turn up on his lot, and poached staff go to work for him. Keep his share low for a few weeks and he goes bust. He reopens later under a new name.
+
+## Phase 15
+
+A service department. Once you're a Trusted Dealer with the east lot, you can build a two-bay garage on the parcel and hire mechanics to work in it. The more cars you've sold, the more service clients drive in for oil changes, brakes and repairs. You or a service advisor check them in and quote the job. Clients wait in the garage or drop the car off and come back for it, and extra work the mechanic finds can be offered to them. The shop rate trades money per hour against how many clients come. The garage also reconditions used stock, so a rough trade-in sells for more. Manufacturer recalls bring a model's buyers back in, and the factory pays for the work.
