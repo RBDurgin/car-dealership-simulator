@@ -8,7 +8,7 @@ import { REFERRAL_SKEW } from './reputation'
  * planned at opening.
  */
 
-export type Channel = 'newspaper' | 'radio' | 'tv' | 'online'
+export type Channel = 'newspaper' | 'radio' | 'tv' | 'online' | 'classifieds'
 
 /**
  * Where a customer heard of us: a campaign, wandering in off the sidewalk, a
@@ -28,6 +28,12 @@ export interface ChannelInfo {
   skew: Partial<Record<Archetype, number>>
   /** Who it reaches, for the marketing tab. */
   reaches: string
+  /**
+   * Odds its visitors drive in, and that a driver came to sell, in place of
+   * `DRIVE_IN_CHANCE` and `SELLER_CHANCE`.
+   */
+  driveIn?: number
+  sellers?: number
 }
 
 export const CHANNELS: Record<Channel, ChannelInfo> = {
@@ -62,6 +68,16 @@ export const CHANNELS: Record<Channel, ChannelInfo> = {
     visitors: 1,
     skew: { couple: 3, 'tire-kicker': 1.5 },
     reaches: 'Young couples browsing',
+  },
+  classifieds: {
+    label: 'Classifieds',
+    cost: 500,
+    days: 4,
+    visitors: 1,
+    skew: { 'used-shopper': 5, bargain: 1.3 },
+    reaches: 'Used-car shoppers, and people selling theirs',
+    driveIn: 0.6,
+    sellers: 0.6,
   },
 }
 
@@ -126,6 +142,19 @@ export function sourceWeights(source: Source): Record<Archetype, number> | undef
   }
   return weights
 }
+
+/** Odds a visitor from `source` drives in (`base` unless their channel says otherwise). */
+export function driveInChance(source: Source, base: number): number {
+  return channelOf(source)?.driveIn ?? base
+}
+
+/** Odds a driver from `source` came to sell their car (`base` unless their channel says otherwise). */
+export function sellerChance(source: Source, base: number): number {
+  return channelOf(source)?.sellers ?? base
+}
+
+const channelOf = (source: Source): ChannelInfo | null =>
+  source in CHANNELS ? CHANNELS[source as Channel] : null
 
 export type LaunchResult =
   | { ok: true; campaign: Campaign; cash: number; campaigns: Campaign[] }

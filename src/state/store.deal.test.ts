@@ -178,6 +178,7 @@ describe('selling to a customer', () => {
     expect(game().dayStats.sales).toEqual([
       expect.objectContaining({ carId: 'lot-car-1', price, customerName: 'Alex B.' }),
     ])
+    expect(game().dayStats.sales[0].used).toBeUndefined()
     expect(game().dayStats.refused + game().dayStats.impatient).toBe(0)
     expect(game().monthSales).toEqual({ count: 1, msrp: price })
   })
@@ -194,7 +195,7 @@ describe('selling to a customer', () => {
     game().arriveAction(id)
     game().completeAction(id)
     expect(car('lot-car-1').status).toBe('sold')
-    expect(game().dayStats.sales).toHaveLength(1)
+    expect(game().dayStats.sales).toEqual([expect.objectContaining({ used: true })])
     expect(game().monthSales).toEqual({ count: 0, msrp: 0 })
   })
 

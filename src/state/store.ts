@@ -901,6 +901,7 @@ export const useGame = create<GameState>((set, get) => {
     }
     const trade = traded && tradeRecord(c, traded.price, s.clock.day)
     if (trade) sale.trade = trade
+    if (car.used) sale.used = true
     const stats = get().dayStats
     set({
       dayStats: {
@@ -1416,7 +1417,7 @@ export const useGame = create<GameState>((set, get) => {
       const { price, allowance } = c.offer
       const res =
         car?.status === 'available'
-          ? respondToAsk(c, car, price, dealRng, sellerBonus(c), allowance)
+          ? respondToAsk(c, car, price, dealRng, sellerBonus(c), allowance, s.clock.day)
           : ({ answer: 'walk', reason: 'gone' } as const)
       const counter = res.answer === 'counter' ? res.counter : undefined
       const insulted = res.answer === 'counter' && res.insulted

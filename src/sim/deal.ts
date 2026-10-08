@@ -227,6 +227,8 @@ export interface Sale {
   source: Source
   /** The car they traded in, if they did. */
   trade?: TradeRecord
+  /** The car sold was a used one. */
+  used?: boolean
 }
 
 /** One day's results, for the end-of-day summary. */
@@ -308,6 +310,13 @@ export function costOfSales(stats: DayStats): number {
 /** Revenue less the cost of the cars sold. */
 export function grossProfit(stats: DayStats): number {
   return revenue(stats) - costOfSales(stats)
+}
+
+/** Gross profit on new cars and on used ones, apart. */
+export function grossSplit(stats: DayStats): { new: number; used: number } {
+  const split = { new: 0, used: 0 }
+  for (const s of stats.sales) split[s.used ? 'used' : 'new'] += s.price - s.cost
+  return split
 }
 
 /** The cost of the stock Nazma stole overnight, written off. */

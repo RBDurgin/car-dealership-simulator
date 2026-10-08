@@ -9,7 +9,7 @@ import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
 import type { Selling } from './sellers'
 import type { TradeIn } from './tradeIns'
-import type { Appraisal } from './usedCars'
+import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
 
 /**
  * A customer's visit. The world (2d) moves them and reports progress as events;
@@ -171,17 +171,26 @@ function favourite(c: Customer, cars: readonly InventoryCar[]): InventoryCar | n
   return best
 }
 
-/** Picks up to `count` distinct cars, preferred body types several times likelier. */
+/** How likely `c` is to put `car` in their browse: preferred body types 4×, used cars by archetype. */
+function browseWeight(c: Customer, car: InventoryCar): number {
+  const used = car.used ? ARCHETYPES[c.archetype].usedWeight : 1
+  return (c.preferredModels.includes(car.model) ? 4 : 1) * used
+}
+
+/**
+ * Picks up to `count` distinct cars, weighted by `browseWeight`. Cars they'd
+ * never look at (used ones, for most) are left out.
+ */
 function pickBrowseCars(
   c: Customer,
   available: readonly InventoryCar[],
   count: number,
   rng: Rng,
 ): InventoryCar[] {
-  const pool = [...available]
+  const pool = available.filter((car) => browseWeight(c, car) > 0)
   const picked: InventoryCar[] = []
   while (picked.length < count && pool.length > 0) {
-    const weights = pool.map((car) => (c.preferredModels.includes(car.model) ? 4 : 1))
+    const weights = pool.map((car) => browseWeight(c, car))
     let r = rng.next() * weights.reduce((a, b) => a + b, 0)
     let i = 0
     while (r >= weights[i] && i < pool.length - 1) r -= weights[i++]
@@ -231,7 +240,19 @@ export function generateCustomer(
 
   const first = rng.pick(CAR_MODELS)
   const second = rng.pick(CAR_MODELS)
-  const preferredModels = rng.next() < 0.5 && second !== first ? [first, second] : [first]
+  // A used-car shopper is open to more body types than someone buying new.
+  const preferredModels =
+    traits.models > 2
+      ? [
+          ...new Set([
+            first,
+            second,
+            ...Array.from({ length: traits.models - 2 }, () => rng.pick(CAR_MODELS)),
+          ]),
+        ]
+      : rng.next() < 0.5 && second !== first
+        ? [first, second]
+        : [first]
 
   const top = Math.max(...preferredModels.map((m) => BASE_MSRP[m]))
   const factor = traits.budget.min + rng.next() * (traits.budget.max - traits.budget.min)
@@ -320,21 +341,33 @@ export function skillBonus(skill: number): number {
 }
 
 /**
- * Chance they say yes to `car` at `price`. Zero over budget. Otherwise 35% for
- * a car of the wrong body type right at their limit, rising with preference
- * (+35%) and headroom (up to +30% at 25% under budget), plus how clean the
- * car is (±8%, see `cleanlinessBonus`), their archetype (a tire-kicker rarely
- * says yes, a decisive buyer usually does) and the seller's `bonus` (see
- * `skillBonus`), capped at 95%.
+ * Chance they say yes to `car` at `price` on `day`. Zero over budget. Otherwise
+ * 35% for a car of the wrong body type right at their limit, rising with
+ * preference (+35%) and headroom (up to +30% at 25% under budget), plus how
+ * clean the car is (±8%, see `cleanlinessBonus`), their archetype (a
+ * tire-kicker rarely says yes, a decisive buyer usually does) and the seller's
+ * `bonus` (see `skillBonus`), capped at 95%. A used car's headroom is also
+ * judged against what it's worth on `day` (`valueHeadroom`), and its
+ * condition adds ±10% (`conditionBonus`).
  */
-export function acceptChance(c: Customer, car: InventoryCar, price: number, bonus = 0): number {
+export function acceptChance(
+  c: Customer,
+  car: InventoryCar,
+  price: number,
+  bonus = 0,
+  day = car.arrivedDay,
+): number {
   if (price > c.budget) return 0
   const preferred = c.preferredModels.includes(car.model) ? 1 : 0
-  const headroom = Math.min(1, (c.budget - price) / c.budget / COMFORT_HEADROOM)
+  const room = Math.min(1, (c.budget - price) / c.budget / COMFORT_HEADROOM)
+  const headroom = car.used
+    ? Math.min(room, valueHeadroom(price, marketValue(car.model, car.used, day)))
+    : room
   const chance =
     0.35 +
     0.35 * preferred +
     0.3 * headroom +
+    (car.used ? conditionBonus(car.used.condition) : 0) +
     cleanlinessBonus(car.cleanliness) +
     ARCHETYPES[c.archetype].accept +
     bonus

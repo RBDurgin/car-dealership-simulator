@@ -7,6 +7,7 @@ import {
   averageDiscount,
   costOfSales,
   grossProfit,
+  grossSplit,
   missedSummary,
   netIncome,
   theftLoss,
@@ -48,6 +49,7 @@ export function DaySummary() {
   // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
   const traded = stats.sales.some((s) => s.trade)
+  const split = grossSplit(stats)
 
   return (
     <div className="modal-backdrop">
@@ -74,6 +76,14 @@ export function DaySummary() {
           <dd className="price">{formatMoney(-costOfSales(stats) || 0)}</dd>
           <dt>Gross profit</dt>
           <dd className="price">{formatMoney(grossProfit(stats))}</dd>
+          {stats.sales.some((s) => s.used) && (
+            <>
+              <dt className="summary-sub">· on new cars</dt>
+              <dd className="price summary-sub">{formatMoney(split.new)}</dd>
+              <dt className="summary-sub">· on used cars</dt>
+              <dd className="price summary-sub">{formatMoney(split.used)}</dd>
+            </>
+          )}
           <dt>Wages</dt>
           <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
           <dt>Commissions</dt>

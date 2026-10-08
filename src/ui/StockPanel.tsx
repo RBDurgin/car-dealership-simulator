@@ -20,7 +20,7 @@ import { CalendarTab } from './CalendarTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
 import { UpgradesTab } from './UpgradesTab'
-import { DAILY_DEPRECIATION, stockValue, usedTag } from '../sim/usedCars'
+import { DAILY_DEPRECIATION, isStale, STALE_DAYS, stockValue, usedTag } from '../sim/usedCars'
 
 const WHERE = { showroom: 'Showroom', lot: 'Lot' } as const
 
@@ -142,6 +142,14 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
             </span>
           )}
           {car.used && <span className="stock-badge stock-used">{usedTag(car.used)}</span>}
+          {isStale(car, day) && (
+            <span
+              className="stock-badge stock-stale"
+              title={`In stock ${STALE_DAYS}+ days and still losing value. Take a lower offer to move it.`}
+            >
+              Stale
+            </span>
+          )}
         </div>
         <div className="staff-meta">
           {WHERE[car.location]} · {daysOnLot(car, day)} · cost {formatMoney(car.cost)}

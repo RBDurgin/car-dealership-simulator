@@ -13,6 +13,7 @@ import {
   emptyStats,
   employeeActions,
   grossProfit,
+  grossSplit,
   guestChairBusy,
   hasBuyersInHand,
   inConversation,
@@ -273,6 +274,15 @@ describe('day stats', () => {
     expect(grossProfit(stats)).toBe(5_500)
     expect(revenue(emptyStats())).toBe(0)
     expect(grossProfit(emptyStats())).toBe(0)
+  })
+
+  it('splits gross profit between new and used cars', () => {
+    const stats = {
+      ...emptyStats(),
+      sales: [sale(30_000, 27_000), { ...sale(14_000, 11_500), used: true }],
+    }
+    expect(grossSplit(stats)).toEqual({ new: 3_000, used: 2_500 })
+    expect(grossSplit(emptyStats())).toEqual({ new: 0, used: 0 })
   })
 
   it('nets gross profit less staff costs, interest, ads and improvements, plus the owner bonus', () => {

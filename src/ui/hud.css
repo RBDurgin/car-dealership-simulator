@@ -792,6 +792,9 @@ kbd {
 .stock-used {
   background: #475569;
 }
+.stock-stale {
+  background: #b91c1c;
+}
 .stock-value {
   color: #fca5a5;
 }
@@ -938,6 +941,10 @@ kbd {
 .summary-stats dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+.summary-stats .summary-sub {
+  padding-left: 12px;
+  font-size: 13px;
 }
 .summary-bought {
   margin: 4px 0 0;

@@ -1,6 +1,6 @@
 # Phase 12 Plan: Trade-ins and Used Cars
 
-**Status:** planned 2026-10-07. 12c done 2026-10-07. 12d done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
+**Status:** planned 2026-10-07. 12c done 2026-10-07. 12d done 2026-10-07. 12e done 2026-10-07. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. It builds on everything built through Phase 11: Nazma, the calendar, weather, quota, events and difficulty. The save is v11 today, so 12a makes it v12.
 
 ## Context
 
@@ -163,6 +163,13 @@ Every car on the lot today is new, ordered from the manufacturer. Phase 12 adds 
   - The summary shows used gross apart from new gross (`grossProfit` split by `used`).
 - Marketing: a Classifieds channel that's cheap, gives a small boost, and has `sourceWeights` toward `used-shopper` and sellers.
 - Reputation: no change. A used sale counts the same as a new one, and so does the owner's `sales` goal. It doesn't count toward the quota (12a).
+
+- **As built (2026-10-07):**
+  - `used-shopper` has weight 25 (a fifth of the usual visitors), a budget of 0.45–0.6 of their priciest model, up to 3 body types (`ArchetypeTraits.models`), 4 haggle rounds and `expect` 0.06. Each archetype has a `usedWeight` on used cars' browse odds: used shoppers 4, bargain 1, regular 0.5, the rest 0 (they never browse one). With no used stock, used shoppers rarely find anything they can afford.
+  - `fairPrice(car, day)` is MSRP for a new car, and `usedListPrice` of today's `marketValue` for a used one; `hopePrice` starts from it. A used car's sticker stays as it came in, so a car that sits gets harder to sell. `acceptChance`'s headroom for a used car is the lesser of the budget headroom and `valueHeadroom` (full at 0.9× value, none at 1.2×), plus `conditionBonus` (±10%). `acceptChance`, `respondToAsk`, `counterPrice` and `dealWarmth` take a trailing `day` (default the car's `arrivedDay`); the store passes `clock.day`.
+  - `Sale.used`, `grossSplit` and the summary's "on new cars / on used cars" lines (shown once a used car sells). The stock panel flags a used car **Stale** at `STALE_DAYS` (10), and the customer panel shows a used car's worth today.
+  - Classifieds: $500 for 4 days, 1 visitor a day, skew `used-shopper` ×5. `ChannelInfo.driveIn` and `sellers` (0.6 each) replace `DRIVE_IN_CHANCE`/`SELLER_CHANCE` for its visitors (`driveInChance`, `sellerChance`).
+  - Easy tip `staleUsed` the first time a used car in stock goes stale (`TipState.clock`).
 
 ## Help (every sub-phase)
 

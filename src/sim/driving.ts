@@ -1,6 +1,7 @@
 import type { Customer } from './customers'
 import type { Tile, Vec2 } from './grid'
 import { CUSTOMER_PARKING, parkedCarRect, type CarModel } from './layout'
+import { driveInChance } from './marketing'
 import { createRng, hashSeed, type Rng } from './rng'
 import { rollUsedCar, type UsedInfo } from './usedCars'
 
@@ -59,7 +60,7 @@ export function assignVehicles(
   const out: Customer[] = []
   for (const c of arrived) {
     const spot = freeSpot([...present, ...out], taken)
-    if (spot === null || rng.next() >= DRIVE_IN_CHANCE) {
+    if (spot === null || rng.next() >= driveInChance(c.source, DRIVE_IN_CHANCE)) {
       out.push(c)
       continue
     }

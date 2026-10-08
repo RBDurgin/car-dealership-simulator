@@ -4,8 +4,10 @@ import {
   activeCampaigns,
   CHANNELS,
   daysLeft,
+  driveInChance,
   launchCampaign,
   REPEAT_FALLOFF,
+  sellerChance,
   sourceWeights,
   trafficBoost,
   unfinished,
@@ -90,7 +92,10 @@ describe('sourceWeights', () => {
   })
 
   it('skews who each channel (and each referral) brings', () => {
-    const share = (source: 'newspaper' | 'tv' | 'online' | 'referral', archetype: string) => {
+    const share = (
+      source: 'newspaper' | 'tv' | 'online' | 'referral' | 'classifieds',
+      archetype: string,
+    ) => {
       const rng = createRng(1)
       const weights = sourceWeights(source)
       const picks = Array.from({ length: 2000 }, () => pickArchetype(rng, weights))
@@ -103,5 +108,28 @@ describe('sourceWeights', () => {
     expect(share('online', 'couple')).toBeGreaterThan(usual('couple') * 2)
     expect(share('referral', 'decisive')).toBeGreaterThan(usual('decisive') * 1.5)
     expect(share('referral', 'tire-kicker')).toBeLessThan(usual('tire-kicker'))
+    expect(share('classifieds', 'used-shopper')).toBeGreaterThan(usual('used-shopper') * 2)
+  })
+
+  it('has used shoppers as about a fifth of the usual visitors', () => {
+    const total = Object.values(ARCHETYPES).reduce((sum, t) => sum + t.weight, 0)
+    expect(ARCHETYPES['used-shopper'].weight / total).toBeCloseTo(0.2, 1)
+  })
+})
+
+describe('classifieds', () => {
+  it('is the cheapest channel', () => {
+    for (const info of Object.values(CHANNELS)) {
+      expect(CHANNELS.classifieds.cost).toBeLessThanOrEqual(info.cost)
+    }
+  })
+
+  it('brings more drivers, and more of them selling, than other sources', () => {
+    expect(driveInChance('classifieds', 0.35)).toBeGreaterThan(0.35)
+    expect(sellerChance('classifieds', 0.3)).toBeGreaterThan(0.3)
+    for (const source of ['regular', 'walk-in', 'referral', 'tv'] as const) {
+      expect(driveInChance(source, 0.35)).toBe(0.35)
+      expect(sellerChance(source, 0.3)).toBe(0.3)
+    }
   })
 })

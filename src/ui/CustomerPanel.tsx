@@ -19,7 +19,7 @@ import {
 } from '../sim/negotiation'
 import { buyBlocker, estimateRange, lotSlotFor, SELLER_HINTS } from '../sim/sellers'
 import { financeOnDuty } from '../sim/staff'
-import { usedTag } from '../sim/usedCars'
+import { stockValue, usedTag } from '../sim/usedCars'
 import { levelTuning, sellerBonusFor, useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -53,7 +53,8 @@ function WarmthChip({
   allowance?: number
 }) {
   const bonus = useGame((s) => sellerBonusFor(s, c))
-  const warmth = dealWarmth(c, car, price, bonus, allowance)
+  const day = useGame((s) => s.clock.day)
+  const warmth = dealWarmth(c, car, price, bonus, allowance, day)
   return (
     <div className={`warmth-chip warmth-${warmth}`} role="status">
       {WARMTH_LABELS[warmth]}
@@ -367,11 +368,13 @@ export function CustomerPanel() {
   const finance = useGame((s) => !!financeOnDuty(s.roster))
   const car = useGame((s) => s.inventory.find((x) => x.id === (c?.offer?.carId ?? c?.targetCarId)))
   const touch = useMediaQuery(COARSE)
+  const day = useGame((s) => s.clock.day)
   if (c?.selling) return <SellerPanel c={c} />
   if (!c || !car) return null
 
   const game = useGame.getState()
   const haggling = c.phase === 'talking' || c.phase === 'considering'
+  const worth = stockValue(car, day)
   return (
     <div className={haggling ? 'panel customer-panel haggling' : 'panel customer-panel'}>
       <div className="info-kicker">Customer</div>
@@ -389,6 +392,12 @@ export function CustomerPanel() {
         </dd>
         <dt>{car.used ? 'Used price' : 'MSRP'}</dt>
         <dd className="price">{formatMoney(car.msrp)}</dd>
+        {worth !== null && (
+          <>
+            <dt>Worth today</dt>
+            <dd className="price">{formatMoney(worth)}</dd>
+          </>
+        )}
         <dt>Your cost</dt>
         <dd className="price">{formatMoney(car.cost)}</dd>
         {c.trade && c.vehicle && <TradeFigures c={c} />}

@@ -36,6 +36,7 @@ import {
   type AskResponse,
 } from './negotiation'
 import { createRng } from './rng'
+import { fairPrice, usedStockCar } from './usedCars'
 import {
   insultingAllowance,
   NO_TRADE_PENALTY,
@@ -474,5 +475,33 @@ describe('staffBuyOffer', () => {
     expect(staffBuyOffer(1, 10_000, h)).toBe(9_800)
     expect(staffBuyOffer(5, 10_000, h)).toBeLessThan(9_800)
     expect(staffBuyOffer(5, 10_000, { ...h, counter: 9_400 })).toBe(9_400)
+  })
+})
+
+describe('haggling over a used car', () => {
+  const used = usedStockCar(
+    'used-1-1',
+    { model: 'sedan', year: 2021, miles: 60_000, condition: 0.5, acquiredDay: 1 },
+    { location: 'lot', index: 0 },
+    9_000,
+    1,
+    0.5,
+  )
+  const buyer = { ...base, browseCarIds: [used.id], targetCarId: used.id }
+
+  it('hopes to pay from what the car is worth today, not its sticker', () => {
+    expect(hopePrice(buyer, used, 1)).toBe(Math.round((used.msrp * 0.96) / 100) * 100)
+    expect(hopePrice(buyer, used, 15)).toBe(Math.round((fairPrice(used, 15) * 0.96) / 100) * 100)
+    expect(hopePrice(buyer, used, 15)).toBeLessThan(hopePrice(buyer, used, 1))
+  })
+
+  it('counters a sticker price more often once the car has sat', () => {
+    const at = (day: number) =>
+      rates((seed) =>
+        respondToAsk(buyer, used, hopePrice(buyer, used, 1), createRng(seed), 0, undefined, day),
+      )
+    // Their hope on day 1 is fine on day 1; two weeks on it's over what they'd pay.
+    expect(at(1).counter).toBe(0)
+    expect(at(15).counter).toBeGreaterThan(0.9)
   })
 })

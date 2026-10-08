@@ -5,7 +5,14 @@ import type { Rng } from './rng'
  * cars they look at, how long they'll wait, how much they'll spend) and how
  * readily they say yes, so a day's visitors don't all play the same.
  */
-export type Archetype = 'regular' | 'tire-kicker' | 'decisive' | 'bargain' | 'couple'
+export type Archetype =
+  | 'regular'
+  | 'tire-kicker'
+  | 'decisive'
+  | 'bargain'
+  | 'couple'
+  /** After a used car: a smaller budget and a wider taste in models. */
+  | 'used-shopper'
 
 export interface ArchetypeTraits {
   /** Relative odds of a new customer being this kind. */
@@ -25,6 +32,13 @@ export interface ArchetypeTraits {
    * they'll hear (they counter all but the last; see `respondToAsk`).
    */
   haggle: { expect: number; rounds: number }
+  /**
+   * × a used car's odds of being in their browse, against a new one's 1. Zero
+   * and they never browse used cars.
+   */
+  usedWeight: number
+  /** How many body types they're shopping for, at most. */
+  models: number
   /** What the player learns about them on greeting. */
   hint: string
 }
@@ -41,6 +55,8 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     accept: 0,
     linger: 1,
     haggle: { expect: 0.04, rounds: 3 },
+    usedWeight: 0.5,
+    models: 2,
     hint: 'Shopping around',
   },
   'tire-kicker': {
@@ -51,6 +67,8 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     accept: -0.35,
     linger: 1.2,
     haggle: { expect: 0.06, rounds: 2 },
+    usedWeight: 0,
+    models: 2,
     hint: 'Just looking',
   },
   decisive: {
@@ -61,6 +79,8 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     accept: 0.15,
     linger: 0.6,
     haggle: { expect: 0.02, rounds: 2 },
+    usedWeight: 0,
+    models: 2,
     hint: 'Knows what they want',
   },
   bargain: {
@@ -71,6 +91,8 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     accept: 0,
     linger: 1,
     haggle: { expect: 0.08, rounds: 4 },
+    usedWeight: 1,
+    models: 2,
     hint: 'Watching every dollar',
   },
   couple: {
@@ -81,7 +103,21 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     accept: 0,
     linger: 1.3,
     haggle: { expect: 0.05, rounds: 3 },
+    usedWeight: 0,
+    models: 2,
     hint: 'Shopping together',
+  },
+  'used-shopper': {
+    weight: 25,
+    browse: { min: 2, max: 4 },
+    patience: 1,
+    budget: { min: 0.45, max: 0.6 },
+    accept: 0,
+    linger: 1,
+    haggle: { expect: 0.06, rounds: 4 },
+    usedWeight: 4,
+    models: 3,
+    hint: 'After a good used car',
   },
 }
 

@@ -4,6 +4,7 @@ import type { DayStats } from './deal'
 import type { InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import type { OwnerVisit } from './owner'
+import { isStale, STALE_DAYS } from './usedCars'
 
 /**
  * Guided tips on Easy: a short pointer the first time something happens.
@@ -11,7 +12,16 @@ import type { OwnerVisit } from './owner'
  * shows the tip and marks it seen.
  */
 export type TipId =
-  'wash' | 'haggle' | 'restock' | 'missed' | 'nazma' | 'owner' | 'lowCash' | 'seller' | 'tradeIn'
+  | 'wash'
+  | 'haggle'
+  | 'restock'
+  | 'missed'
+  | 'nazma'
+  | 'owner'
+  | 'lowCash'
+  | 'seller'
+  | 'tradeIn'
+  | 'staleUsed'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -32,6 +42,7 @@ export const TIPS: Record<TipId, string> = {
   seller: 'A seller drove in wanting cash for their car. Appraise it before you make an offer.',
   tradeIn:
     'This buyer brought a car to trade. Appraise it, then set an allowance as you haggle. They weigh what they pay after the trade, and a lowball allowance offends them.',
+  staleUsed: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Buyers judge its price by what it's worth now, so take a lower offer to move it.`,
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -45,6 +56,7 @@ export function isTipId(v: unknown): v is TipId {
 /** The slice of the store `tipFor` compares. */
 export interface TipState {
   screen: 'title' | 'playing'
+  clock: { day: number }
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
@@ -96,6 +108,12 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           c.vehicle?.parked &&
           !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
       )
+    }
+    case 'staleUsed': {
+      const stale = (s: TipState) =>
+        s.inventory.filter((c) => c.status === 'available' && isStale(c, s.clock.day))
+      const was = new Set(stale(prev).map((c) => c.id))
+      return stale(next).some((c) => !was.has(c.id))
     }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH

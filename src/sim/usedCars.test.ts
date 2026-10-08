@@ -8,7 +8,10 @@ import {
   ageOf,
   appraisalNoise,
   appraise,
+  conditionBonus,
   conditionFactor,
+  fairPrice,
+  isStale,
   FIRST_MODEL_YEAR,
   marketValue,
   mileFactor,
@@ -16,10 +19,12 @@ import {
   nextUsedId,
   PLAYER_SKILL,
   rollUsedCar,
+  STALE_DAYS,
   stockValue,
   usedListPrice,
   usedStockCar,
   usedTag,
+  valueHeadroom,
   type UsedInfo,
 } from './usedCars'
 
@@ -143,5 +148,43 @@ describe('used cars', () => {
 
   it('tags a used car with its year and miles', () => {
     expect(usedTag(info({ year: 2019, miles: 64_300 }))).toBe('Used · 2019 · 64k mi')
+  })
+
+  describe('aging and buyers', () => {
+    const stock = usedStockCar(
+      'used-1-1',
+      { model: 'sedan', ...info() },
+      { location: 'lot', index: 0 },
+      9_000,
+      1,
+      0.5,
+    )
+
+    it('flags a used car stale after STALE_DAYS, never a new one', () => {
+      expect(isStale(stock, 1 + STALE_DAYS - 1)).toBe(false)
+      expect(isStale(stock, 1 + STALE_DAYS)).toBe(true)
+      expect(isStale({ ...stock, used: null }, 99)).toBe(false)
+    })
+
+    it('adds up to ±10% for condition', () => {
+      expect(conditionBonus(1)).toBeCloseTo(0.1)
+      expect(conditionBonus(0.5)).toBeCloseTo(0)
+      expect(conditionBonus(0)).toBeCloseTo(-0.1)
+    })
+
+    it('judges a price against value: full headroom under it, none well over', () => {
+      expect(valueHeadroom(9_000, 10_000)).toBeCloseTo(1)
+      expect(valueHeadroom(12_000, 10_000)).toBe(0)
+      expect(valueHeadroom(11_200, 10_000)).toBeCloseTo(0.27, 2)
+      expect(valueHeadroom(10_000, 10_000)).toBeGreaterThan(valueHeadroom(11_000, 10_000))
+    })
+
+    it('prices a new car at MSRP and a used one at what it’s worth today, falling as it sits', () => {
+      expect(fairPrice({ ...stock, used: null }, 50)).toBe(stock.msrp)
+      expect(fairPrice(stock, 1)).toBe(stock.msrp)
+      expect(fairPrice(stock, 11)).toBeLessThan(fairPrice(stock, 1))
+      // About 6% lost over 10 days.
+      expect(fairPrice(stock, 11) / fairPrice(stock, 1)).toBeCloseTo(0.94, 1)
+    })
   })
 })

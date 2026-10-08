@@ -3,6 +3,7 @@ import { acceptChance, MAX_ACCEPT_CHANCE, type Customer } from './customers'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
 import { insultingAllowance, TRADE_MAX_FACTOR, TRADE_OPEN_FACTOR, tradeBonus } from './tradeIns'
+import { fairPrice } from './usedCars'
 
 /**
  * Haggling over a car's price. The seller asks a price; the customer accepts,
@@ -20,6 +21,11 @@ import { insultingAllowance, TRADE_MAX_FACTOR, TRADE_OPEN_FACTOR, tradeBonus } f
  * allow for their car, and the customer judges the net: what they'd pay after
  * the trade, against what they hoped to pay less what they hoped to be
  * allowed. The haggle's numbers (`Haggle.lastAsk`, `counter`) are then nets.
+ *
+ * A used car is judged on the `day` of the ask: what they hope to pay starts
+ * from what it's worth that day (`fairPrice`), not its sticker, so a used car
+ * that sits gets harder to sell at the same price. `day` defaults to the day
+ * the car came in.
  */
 
 /** Prices are named in round hundreds. */
@@ -62,9 +68,12 @@ export function roundOf(c: Customer): number {
   return c.haggle?.round ?? 1
 }
 
-/** What they hope to pay for `car`: MSRP less their `expect`, within budget. */
-export function hopePrice(c: Customer, car: InventoryCar): number {
-  return Math.min(c.budget, roundPrice(car.msrp * (1 - c.expect)))
+/**
+ * What they hope to pay for `car` on `day`: MSRP (for a used car, what it's
+ * worth that day, `fairPrice`) less their `expect`, within budget.
+ */
+export function hopePrice(c: Customer, car: InventoryCar, day = car.arrivedDay): number {
+  return Math.min(c.budget, roundPrice(fairPrice(car, day) * (1 - c.expect)))
 }
 
 /**
@@ -72,9 +81,9 @@ export function hopePrice(c: Customer, car: InventoryCar): number {
  * it's the net, and their hope and budget are net of the allowance they hoped
  * for: `offset` turns a net back into the price it's worth to them.
  */
-function termsOf(c: Customer, car: InventoryCar, allowance?: number) {
+function termsOf(c: Customer, car: InventoryCar, allowance: number | undefined, day: number) {
   const offset = c.trade && allowance !== undefined ? c.trade.hope : 0
-  return { offset, hope: hopePrice(c, car) - offset, budget: c.budget - offset }
+  return { offset, hope: hopePrice(c, car, day) - offset, budget: c.budget - offset }
 }
 
 /** What they'd pay for `ask` after `allowance` for their trade (just `ask` without one). */
@@ -91,8 +100,9 @@ export function counterPrice(
   car: InventoryCar,
   ask: number,
   allowance?: number,
+  day = car.arrivedDay,
 ): number {
-  const { hope, budget } = termsOf(c, car, allowance)
+  const { hope, budget } = termsOf(c, car, allowance, day)
   const net = netOf(c, ask, allowance)
   const counter = c.haggle
     ? roundPrice(c.haggle.counter + COUNTER_STEP * (net - c.haggle.counter))
@@ -115,10 +125,11 @@ export function respondToAsk(
   rng: Rng,
   bonus = 0,
   allowance?: number,
+  day = car.arrivedDay,
 ): AskResponse {
-  const { offset, hope, budget } = termsOf(c, car, allowance)
+  const { offset, hope, budget } = termsOf(c, car, allowance, day)
   const net = netOf(c, ask, allowance)
-  const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance))
+  const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance), day)
   const roll = (factor: number): AskResponse =>
     rng.next() < chance * factor
       ? { answer: 'accept' }
@@ -127,7 +138,11 @@ export function respondToAsk(
 
   if (insultingAllowance(c, allowance)) {
     if (roundOf(c) + 1 < rounds) {
-      return { answer: 'counter', counter: counterPrice(c, car, ask, allowance), insulted: true }
+      return {
+        answer: 'counter',
+        counter: counterPrice(c, car, ask, allowance, day),
+        insulted: true,
+      }
     }
     return { answer: 'walk', reason: 'insulted' }
   }
@@ -136,7 +151,7 @@ export function respondToAsk(
     return { answer: 'walk', reason: 'stubborn' }
   }
   if (roundOf(c) < rounds) {
-    return { answer: 'counter', counter: counterPrice(c, car, ask, allowance) }
+    return { answer: 'counter', counter: counterPrice(c, car, ask, allowance, day) }
   }
   if (net > budget) return { answer: 'walk', reason: 'budget' }
   return roll(LAST_ROUND_FACTOR)
@@ -162,11 +177,13 @@ export function dealWarmth(
   ask: number,
   bonus = 0,
   allowance?: number,
+  day = car.arrivedDay,
 ): Warmth {
-  const { offset, hope, budget } = termsOf(c, car, allowance)
+  const { offset, hope, budget } = termsOf(c, car, allowance, day)
   const net = netOf(c, ask, allowance)
   const odds = (factor: number): Warmth => {
-    const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance)) * factor
+    const chance =
+      acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance), day) * factor
     return chance >= HOT_CHANCE ? 'hot' : chance >= WARM_CHANCE ? 'warm' : 'cold'
   }
   if (insultingAllowance(c, allowance)) return 'cold'

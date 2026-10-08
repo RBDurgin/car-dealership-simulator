@@ -4,6 +4,7 @@ import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import { createRng } from './rng'
+import { STALE_DAYS } from './usedCars'
 import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
 
 const inventory = buildInventory(createRng(42)).map((c) => ({ ...c, cleanliness: 1 }))
@@ -24,6 +25,7 @@ const nazma = (status: NazmaVisit['status']): NazmaVisit => ({
 
 const base: TipState = {
   screen: 'playing',
+  clock: { day: 1 },
   cash: 20_000,
   inventory,
   customers: [customer('c1')],
@@ -45,6 +47,12 @@ const tradeCar = (parked: boolean): Partial<Customer> => {
   const { selling, ...rest } = sellerCar(parked)
   return { ...rest, phase: parked ? 'browsing' : 'arriving', trade: selling }
 }
+const usedOn = (acquiredDay: number) => ({
+  year: 2020,
+  miles: 70_000,
+  condition: 0.6,
+  acquiredDay,
+})
 const withCar = (patch: Partial<InventoryCar>) =>
   inventory.map((c, i) => (i === 0 ? { ...c, ...patch } : c))
 
@@ -73,6 +81,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   tradeIn: [
     { customers: [customer('c3', tradeCar(true))] },
     { customers: [customer('c3', tradeCar(false))] },
+  ],
+  staleUsed: [
+    { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
+    { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
   ],
 }
 

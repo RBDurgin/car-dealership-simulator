@@ -3,6 +3,7 @@ import type { Customer } from './customers'
 import { drivenCleanliness } from './driving'
 import { roundTo100, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
+import { sellerChance } from './marketing'
 import { freeSlots, type Order, type Slot } from './ordering'
 import { createRng, hashSeed, type Rng } from './rng'
 import {
@@ -46,6 +47,7 @@ export const SELLER_HINTS: Record<Archetype, string> = {
   decisive: 'Wants a quick sale',
   bargain: 'Wants top dollar',
   couple: 'Selling the family car',
+  'used-shopper': 'Selling to buy another',
 }
 
 /** The level's levers on sellers (`Tuning.sellerHope`, `Tuning.appraisalNoise`). */
@@ -88,7 +90,7 @@ export function toSeller(c: Customer, rng: Rng, day: number, opts: SellerOpts = 
   }
 }
 
-/** Makes `SELLER_CHANCE` of the drivers among `arrived` sellers. */
+/** Makes `SELLER_CHANCE` of the drivers among `arrived` sellers (more from the classifieds). */
 export function assignSellers(
   arrived: readonly Customer[],
   rng: Rng,
@@ -96,7 +98,9 @@ export function assignSellers(
   opts: SellerOpts = {},
 ): Customer[] {
   return arrived.map((c) =>
-    c.vehicle && rng.next() < SELLER_CHANCE ? toSeller(c, rng, day, opts) : c,
+    c.vehicle && rng.next() < sellerChance(c.source, SELLER_CHANCE)
+      ? toSeller(c, rng, day, opts)
+      : c,
   )
 }
 

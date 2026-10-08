@@ -11,6 +11,7 @@ import {
 } from '../sim/improvements'
 import { CLOSEOUT_REBATE, EVENTS } from '../sim/events'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
+import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
@@ -189,6 +190,11 @@ function SellingTab({ click }: TabProps) {
           Bargain hunters want the most off and haggle longest. Decisive buyers want only a little
           off and won&apos;t haggle for long, and neither will someone just looking.
         </p>
+        <p>
+          Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
+          more body types, mostly looks at used cars and haggles hard. With no used stock they
+          rarely find anything. Regulars and bargain hunters look at used cars now and then too.
+        </p>
       </section>
       <section>
         <h3>Buying used cars</h3>
@@ -209,6 +215,21 @@ function SellingTab({ click }: TabProps) {
           parking until closing, then goes on the lot as a used car costing what you paid. The
           summary lists what you bought and what each car was really worth; the spend is stock, not
           an expense, so it isn&apos;t taken off the day&apos;s net.
+        </p>
+      </section>
+      <section>
+        <h3>Selling used cars</h3>
+        <p>
+          A used car&apos;s sticker is set when it comes in, about {Math.round(USED_MARKUP * 100)}%
+          over what it&apos;s worth, but it loses about {(DAILY_DEPRECIATION * 100).toFixed(1)}% of
+          its value every day it sits. Buyers judge its price against what it&apos;s worth today,
+          not the sticker, so the longer it sits the less they&apos;ll pay. Its condition counts
+          too: a car in good shape is easier to sell, a worn one harder.
+        </p>
+        <p>
+          The stock panel shows each used car&apos;s days in stock and today&apos;s value, and flags
+          it <b>Stale</b> after {STALE_DAYS} days. The summary splits gross profit between new and
+          used cars, so you can see what your used stock really makes.
         </p>
       </section>
       <section>

@@ -42,6 +42,7 @@ export const TRADE_PRIDE: Record<Archetype, number> = {
   decisive: 0.03,
   'tire-kicker': 0,
   bargain: 0,
+  'used-shopper': 0.03,
 }
 /** The allowance we open with, as a share of our estimate of their car. */
 export const TRADE_OPEN_FACTOR = 0.95

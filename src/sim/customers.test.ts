@@ -24,6 +24,7 @@ import {
 import { GUEST_CHAIR_ID } from './layout'
 import { availableCars, BASE_MSRP, buildInventory, sellCar, type InventoryCar } from './inventory'
 import { createRng } from './rng'
+import { usedStockCar } from './usedCars'
 
 const inventory = buildInventory(createRng(42))
 const car = (id: string) => inventory.find((c) => c.id === id)!
@@ -240,6 +241,71 @@ describe('generateCustomer', () => {
     expect(mean(many('decisive').map((c) => c.patience))).toBeLessThan(
       mean(many('regular').map((c) => c.patience)) * 0.7,
     )
+  })
+})
+
+describe('used cars and used-car shoppers', () => {
+  // Five used cars on the lot alongside the new stock.
+  const used = Array.from({ length: 5 }, (_, i) =>
+    usedStockCar(
+      `used-1-${i + 1}`,
+      { model: 'sedan', year: 2021, miles: 60_000, condition: 0.6, acquiredDay: 1 },
+      { location: 'lot', index: 20 + i },
+      9_000,
+      1,
+      0.5,
+    ),
+  )
+  const stock = [...inventory, ...used]
+  const many = (archetype: Customer['archetype']) =>
+    Array.from({ length: 200 }, (_, i) =>
+      generateCustomer(`c${i}`, stock, createRng(i), { archetype }),
+    )
+  const usedShare = (cs: Customer[]) => {
+    const ids = cs.flatMap((c) => c.browseCarIds)
+    return ids.filter((id) => id.startsWith('used-')).length / ids.length
+  }
+
+  it('gives used shoppers a small budget and a wider taste in models', () => {
+    const shoppers = many('used-shopper')
+    for (const c of shoppers) {
+      const top = Math.max(...c.preferredModels.map((m) => BASE_MSRP[m]))
+      expect(c.budget / top).toBeGreaterThan(0.43)
+      expect(c.budget / top).toBeLessThan(0.62)
+    }
+    const models = (cs: Customer[]) =>
+      cs.reduce((n, c) => n + c.preferredModels.length, 0) / cs.length
+    expect(models(shoppers)).toBeGreaterThan(models(many('regular')) + 0.5)
+  })
+
+  it('has used shoppers browse used cars most, regulars and bargain hunters some, others none', () => {
+    expect(usedShare(many('used-shopper'))).toBeGreaterThan(0.4)
+    expect(usedShare(many('regular'))).toBeGreaterThan(0)
+    expect(usedShare(many('bargain'))).toBeGreaterThan(usedShare(many('regular')))
+    expect(usedShare(many('used-shopper'))).toBeGreaterThan(usedShare(many('bargain')))
+    expect(usedShare(many('decisive'))).toBe(0)
+    expect(usedShare(many('tire-kicker'))).toBe(0)
+    expect(usedShare(many('couple'))).toBe(0)
+  })
+
+  it('judges a used car against what it is worth that day, and gets pickier as it sits', () => {
+    const buyer = { ...base, budget: 40_000 }
+    const car = used[0]
+    const fresh = acceptChance(buyer, car, car.msrp, 0, 1)
+    expect(acceptChance(buyer, car, car.msrp, 0, 15)).toBeLessThan(fresh)
+    // A big budget doesn't make a dear used car look cheap.
+    const newSedan = { ...car, used: null }
+    expect(acceptChance(buyer, newSedan, car.msrp)).toBeGreaterThan(fresh)
+  })
+
+  it('likes a used car in good condition better: up to ±10%', () => {
+    // Not their body type, so the odds stay under the cap.
+    const buyer = { ...base, budget: 40_000, preferredModels: ['truck' as const] }
+    const car = used[0]
+    const at = (condition: number) =>
+      acceptChance(buyer, { ...car, used: { ...car.used!, condition } }, car.msrp * 0.5, 0, 1)
+    expect(at(1) - at(0.5)).toBeCloseTo(0.1)
+    expect(at(0) - at(0.5)).toBeCloseTo(-0.1)
   })
 })
 

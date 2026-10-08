@@ -223,3 +223,43 @@ export function nextUsedId(taken: readonly { id: string }[], day: number): strin
 export function usedTag(info: UsedInfo): string {
   return `Used · ${info.year} · ${Math.round(info.miles / 1000)}k mi`
 }
+
+/** After this many days in stock a used car is flagged as stale in the stock panel. */
+export const STALE_DAYS = 10
+
+/** A used car that's been in stock `STALE_DAYS` or more. Never a new one. */
+export function isStale(car: InventoryCar, day: number): boolean {
+  return !!car.used && day - car.used.acquiredDay >= STALE_DAYS
+}
+
+/** The most condition adds to (or takes off) a buyer's odds of saying yes to a used car. */
+export const CONDITION_BONUS = 0.1
+
+/** −10% for a wreck, 0 at middling, +10% for one like new. */
+export function conditionBonus(condition: number): number {
+  return CONDITION_BONUS * (2 * clamp(condition, 0, 1) - 1)
+}
+
+/**
+ * The price a buyer thinks `car` is worth on `day`: its MSRP when new, or the
+ * sticker its market value would carry today when used (`usedListPrice`). A
+ * used car's sticker stays as it was when it came in, so this falls under it
+ * the longer it sits.
+ */
+export function fairPrice(car: InventoryCar, day: number): number {
+  return car.used ? usedListPrice(marketValue(car.model, car.used, day)) : car.msrp
+}
+
+/** At this multiple of a used car's market value, its price leaves a buyer no headroom. */
+export const USED_PRICE_CEILING = 1.2
+/** Headroom is full this far (as a multiple of value) under the ceiling: at 0.9× value. */
+export const USED_HEADROOM_SPAN = 0.3
+
+/**
+ * How good `price` looks for a used car worth `value` (0–1): full at 0.9× its
+ * value, none at 1.2×. At its sticker (`USED_MARKUP` over) about a quarter.
+ */
+export function valueHeadroom(price: number, value: number): number {
+  if (value <= 0) return 0
+  return clamp((USED_PRICE_CEILING - price / value) / USED_HEADROOM_SPAN, 0, 1)
+}
