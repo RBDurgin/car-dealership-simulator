@@ -71,3 +71,7 @@ A rival dealership. Nazma opens his own lot across the road once you've made a n
 ## Phase 15
 
 A service department. Once you're a Trusted Dealer with the east lot, you can build a two-bay garage on the parcel and hire mechanics to work in it. The more cars you've sold, the more service clients drive in for oil changes, brakes and repairs. You or a service advisor check them in and quote the job. Clients wait in the garage or drop the car off and come back for it, and extra work the mechanic finds can be offered to them. The shop rate trades money per hour against how many clients come. The garage also reconditions used stock, so a rough trade-in sells for more. Manufacturer recalls bring a model's buyers back in, and the factory pays for the work.
+
+## Phase 16
+
+A client book. Everyone who buys from you is kept by name, with a satisfaction score from how their visit went. Shoppers who talked to you and walked out are kept for a couple of weeks as prospects. Call them from the desk phone, or let the receptionist call between customers: thank buyers, bring prospects back and book appointments. A month or two after buying, clients come back to trade up the car you sold them, and happy ones send friends by name. Spend on a referral fee, a loyalty discount or a client appreciation cookout. The manufacturer's monthly satisfaction survey (CSI) scales the holdback and can hold back a franchise tier. Service visits come from your clients, and unhappy ones may take their business to Nazma.

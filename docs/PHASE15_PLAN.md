@@ -280,7 +280,7 @@ The game's goal is a rich client base and a growing revenue. Every dollar still 
 
 ## Left out
 
-Robert left these out on 2026-10-08. They could make a later phase:
+Robert left these out on 2026-10-08. Phase 16 (`docs/PHASE16_PLAN.md`) picks up the client book, clients who trade up, referrals by name, follow-up calls and pitching a service client, and its 16f draws service visits from the book. The rest could make a later phase:
 
 - A saved client book with satisfaction scores.
 - Named clients who come back to trade up.
