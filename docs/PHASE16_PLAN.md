@@ -6,7 +6,7 @@
 - unhappy clients defect to 14's rival lot;
 - 15's service clients come from the book.
 
-The save will be v16 by then, so 16a makes it v17. If one of those phases hasn't been built yet, 16a takes the next free version, and 16f leaves out its ties to that phase until the phase lands. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
+The save will be v19 by then, so 16a makes it v20. If one of those phases hasn't been built yet, 16a takes the next free version, and 16f leaves out its ties to that phase until the phase lands. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
 
 ## Context
 
@@ -55,7 +55,7 @@ Real dealers live on repeat and referral business: the buyer from two years ago 
 | `generateGoal`                                                                                      | `sim/owner.ts`                                         | A `returning` goal, once clients are due                                                                      |
 | `DayStats`, `netIncome`, `salesBySource`, `DaySummary`                                              | `sim/deal.ts`, `ui/DaySummary.tsx`                     | `DayStats.clients`. Referral fees and the cookout come off `netIncome`. A Clients block in the summary        |
 | `Tuning` / `TUNING`                                                                                 | `sim/difficulty.ts`                                    | New levers `clientReturn` and `satisfactionShift`, neutral on Medium                                          |
-| Save `UPGRADES`                                                                                     | `sim/save.ts`                                          | v17 adds `clients`, `clientPerks`, `appreciation` and `monthCsi`                                              |
+| Save `UPGRADES`                                                                                     | `sim/save.ts`                                          | v20 adds `clients`, `clientPerks`, `appreciation` and `monthCsi`                                              |
 
 ## Sub-phases
 
@@ -96,7 +96,7 @@ Real dealers live on repeat and referral business: the buyer from two years ago 
   - `appreciation` and `monthCsi`: saved, and empty until 16e and 16f.
   - `clients`, `clientPerks` and `appreciation` are added to `startAutosave`'s changed list, so a change made in the Clients or Calendar tab after closing is kept.
 - `DayStats.clients`: `{ added, prospects, returned, calls, booked, referrals, referralFees, appreciation, defected, scores }`.
-- Save v17:
+- Save v20:
   - Adds `clients`, `clientPerks`, `appreciation` and `monthCsi`.
   - An older save starts with an empty book, since no sale history is saved.
 - Difficulty:
@@ -306,7 +306,7 @@ Real dealers live on repeat and referral business: the buyer from two years ago 
     - The CSI scales the month-end holdback.
     - A game with an empty book plays exactly as before.
   - `service.test.ts` (15): demand from clients due for service. `rival.test.ts` (14): defectors add strength, and loyal clients carry no quote.
-  - A save upgrade test: a v16 save loads into v17 with an empty book.
+  - A save upgrade test: a v19 save loads into v20 with an empty book.
   - `difficulty.test.ts`: every level has the new levers, and Medium's are neutral.
 - `npm run lint`, `npm run build`, `npm run e2e`.
 - `npm run dev` / `/run`:

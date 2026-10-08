@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07; 13b is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. The save is v12 today, so 13a makes it v13.
+**Status:** planned 2026-10-07. 13a built 2026-10-07; 13b is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. The save was v12 then, so 13a made it v13. Phase 12.5a took v14, so 13b, 13d and 13f each take the next one (v15, v16, v17).
 
 ## Context
 
@@ -26,7 +26,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 | Owner goals                                                                                                     | `sim/owner.ts`                         | Already scale with `salesStaff`, so they grow with the wing                                              |
 | `Tuning` / `TUNING`                                                                                             | `sim/difficulty.ts`                    | New levers `rankScale` and `franchiseSlack`, neutral on Medium                                           |
 | Tips, how-to-play guide, controls                                                                               | `sim/tips.ts`, `ui/HowToPlay.tsx`      | Tips `rankUp`, `franchise` and `expansion`. A Progress section in the Business tab                       |
-| Save `UPGRADES`                                                                                                 | `sim/save.ts`                          | v13 adds `career`, `franchise`, `expansions` and `won`                                                   |
+| Save `UPGRADES`                                                                                                 | `sim/save.ts`                          | v13 adds `career` (13a), v15 `franchise` (13b), v16 `expansions` (13d), v17 `won` (13f)                  |
 
 ## Sub-phases
 
@@ -61,7 +61,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - `orderable(model, tier)`: `sedan-sports` needs Silver and `suv-luxury` needs Gold. The opening stock still has both, so day 1 looks as it does now.
 - `settleDay` applies the change on the month's last day, and it's recorded in `DayStats.quota`.
 - The Stock panel greys out locked models ("Silver dealers only"). The Calendar tab shows the tier.
-- Saved in v13.
+- Saved in v15. An older save starts with no franchise.
 - Difficulty: `Tuning.franchiseSlack` (Easy: a month near the target still holds the tier).
 
 ### 13c: Bigger map and performance groundwork (no gameplay change)
@@ -76,6 +76,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 
 ### 13d: Lot expansion
 
+- Save v16: `expansions` (`{ id, day }[]`). An older save starts with none.
 - New `sim/expansions.ts`, modelled on improvements:
   - `EXPANSIONS`:
     - `east-lot`: about $60k, needs Main Street.
@@ -99,7 +100,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 ### 13f: Dealer of the Year, sandbox and balance
 
 - Reaching the top rank opens the win screen (`ui/WinScreen.tsx`). It shows days played, lifetime gross, best month and franchise tier.
-- **Keep playing** sets `won: true` (saved), so the win screen shows once. The title screen shows a trophy on a save that has won.
+- **Keep playing** sets `won: true` (saved in v17, false for an older save), so the win screen shows once. The title screen shows a trophy on a save that has won.
 - Tuning pass to hit the targets below.
 
 ## Performance

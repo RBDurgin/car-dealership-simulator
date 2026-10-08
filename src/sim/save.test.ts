@@ -11,6 +11,7 @@ import { monthlyQuota } from './quota'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import type { TipId } from './tips'
+import { LATEST_NEWS, legacyNews } from './whatsNew'
 import type { Employee } from './staff'
 
 const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
@@ -129,6 +130,7 @@ describe('save data', () => {
     const upgraded = parseSave(JSON.parse(JSON.stringify(v3)))
     expect(upgraded).toEqual({
       ...save,
+      news: legacyNews(3),
       orders: [],
       campaigns: [],
       improvements: [],
@@ -147,6 +149,7 @@ describe('save data', () => {
     }
     expect(parseSave(JSON.parse(JSON.stringify(v4)))).toEqual({
       ...save,
+      news: legacyNews(4),
       campaigns: [],
       improvements: [],
       reputation: START_REPUTATION,
@@ -158,6 +161,7 @@ describe('save data', () => {
     const v5 = { ...save, version: 5, improvements: undefined, reputation: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v5)))).toEqual({
       ...save,
+      news: legacyNews(5),
       improvements: [],
       reputation: START_REPUTATION,
     })
@@ -168,6 +172,7 @@ describe('save data', () => {
     const v6 = { ...save, version: 6, reputation: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v6)))).toEqual({
       ...save,
+      news: legacyNews(6),
       reputation: START_REPUTATION,
     })
   })
@@ -179,7 +184,7 @@ describe('save data', () => {
       version: 7,
       roster: save.roster.map((e) => ({ ...e, quitting: undefined })),
     }
-    expect(parseSave(JSON.parse(JSON.stringify(v7)))).toEqual(save)
+    expect(parseSave(JSON.parse(JSON.stringify(v7)))).toEqual({ ...save, news: legacyNews(7) })
   })
 
   it('upgrades a version 8 save: the month starts afresh, with a target from reputation', () => {
@@ -188,6 +193,7 @@ describe('save data', () => {
     expect(save.quota).toBeGreaterThan(0)
     expect(parseSave(JSON.parse(JSON.stringify(v8)))).toEqual({
       ...save,
+      news: legacyNews(8),
       monthSales: { count: 0, msrp: 0 },
       quota: monthlyQuota(0, ALL_SLOTS.length, 62),
     })
@@ -196,7 +202,11 @@ describe('save data', () => {
   it('upgrades a version 9 save to Medium', () => {
     const save = createSave({ ...source(), difficulty: 'hard' }, 123)
     const v9 = { ...save, version: 9, difficulty: undefined }
-    expect(parseSave(JSON.parse(JSON.stringify(v9)))).toEqual({ ...save, difficulty: 'medium' })
+    expect(parseSave(JSON.parse(JSON.stringify(v9)))).toEqual({
+      ...save,
+      difficulty: 'medium',
+      news: legacyNews(9),
+    })
   })
 
   it('upgrades a version 10 save with the safety net unused and no tips seen', () => {
@@ -204,6 +214,7 @@ describe('save data', () => {
     const v10 = { ...save, version: 10, bailoutUsed: undefined, tipsSeen: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v10)))).toEqual({
       ...save,
+      news: legacyNews(10),
       bailoutUsed: false,
       tipsSeen: [],
     })
@@ -217,7 +228,7 @@ describe('save data', () => {
       inventory: save.inventory.map((car) => ({ ...car, used: undefined })),
     }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v11)))
-    expect(upgraded).toEqual(save)
+    expect(upgraded).toEqual({ ...save, news: legacyNews(11) })
     expect(upgraded?.inventory.every((c) => c.used === null)).toBe(true)
   })
 
@@ -231,7 +242,43 @@ describe('save data', () => {
     }
     const save = createSave({ ...source(), career }, 123)
     const v12 = { ...save, version: 12, career: undefined }
-    expect(parseSave(JSON.parse(JSON.stringify(v12)))).toEqual({ ...save, career: emptyCareer() })
+    expect(parseSave(JSON.parse(JSON.stringify(v12)))).toEqual({
+      ...save,
+      career: emptyCareer(),
+      news: legacyNews(12),
+    })
+  })
+
+  it('upgrades a version 13 save with the news its version had already shown', () => {
+    const save = createSave(source(), 123)
+    const v13 = { ...save, version: 13, news: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v13)))).toEqual({ ...save, news: 9 })
+  })
+
+  it('gives each old save the news from the version it started at, through every upgrade', () => {
+    const save = createSave(source(), 123)
+    const v2 = {
+      ...save,
+      version: 2,
+      news: undefined,
+      inventory: save.inventory.map((car) => ({ ...car, cost: undefined })),
+    }
+    const news = (raw: object) => parseSave(JSON.parse(JSON.stringify(raw)))?.news
+    expect(news(v2)).toBe(0)
+    expect(news({ ...save, version: 8, news: undefined })).toBe(6)
+    expect(news({ ...save, version: 12, news: undefined })).toBe(8)
+    expect(news({ ...save, version: 13, news: undefined })).toBe(9)
+  })
+
+  it('writes the latest news, round-trips it, clamps a newer build’s, and rejects a bad one', () => {
+    const save = createSave(source(), 123)
+    expect(save.news).toBe(LATEST_NEWS)
+    const seen = { ...save, news: 4 }
+    expect(parseSave(JSON.parse(JSON.stringify(seen)))?.news).toBe(4)
+    expect(parseSave({ ...save, news: LATEST_NEWS + 5 })?.news).toBe(LATEST_NEWS)
+    expect(parseSave({ ...save, news: -1 })).toBeNull()
+    expect(parseSave({ ...save, news: 2.5 })).toBeNull()
+    expect(parseSave({ ...save, news: undefined })).toBeNull()
   })
 
   it('keeps the career, and rejects a rank it doesn’t know', () => {

@@ -1,6 +1,6 @@
 # Phase 12.5 Plan: What's new
 
-**Status:** planned 2026-10-08. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save is v13 today (13a's `career`), so 12.5a makes it v14.
+**Status:** planned 2026-10-08. 12.5a built 2026-10-08; 12.5b is next. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save is v13 today (13a's `career`), so 12.5a makes it v14.
 
 ## Context
 
@@ -61,7 +61,7 @@ A save of version N was written by some build between the bump to N and the bump
     - `id` counts up from 1.
     - `phase` is shown as a group heading, for example `'12'` shows as "Phase 12". It's how several updates from one phase are grouped together.
     - `items` are short, player-facing lines that say what you can do, not how it's built.
-  - `UPDATES`: the backfill below, one update per finished phase (ids 1–9). From now on, add **one update per shipped sub-phase that changes play**. Sub-phases from the same phase share a `phase`, so the dialog shows them under one heading. Never edit the text of an update that has already shipped. A save that has seen it won't be shown it again.
+  - `UPDATES`: the backfill below, one update per finished phase (ids 1–10, so `LATEST_NEWS` is 10). From now on, add **one update per shipped sub-phase that changes play**. Sub-phases from the same phase share a `phase`, so the dialog shows them under one heading. Never edit the text of an update that has already shipped. A save that has seen it won't be shown it again.
   - `LATEST_NEWS` is the last update's `id`.
   - `updatesSince(news)` returns the updates with `id > news`, newest first. It's empty when you're up to date.
   - `groupByPhase(updates)` returns `{ phase, updates }[]` in the same order, so a phase's sub-phase updates show together.
@@ -133,7 +133,8 @@ This is the draft text for review. Each line is one item. Update `id` = list num
    - Watch out for cars stolen overnight, and for Nazma poaching your staff. A raise can keep them.
 7. **Phase 10 · Calendar, weather and events**
    - A calendar with busier weekends. Check it on the computer's Calendar tab (C).
-   - Weather: rain keeps people away and dirties the lot, and people waiting outside lose patience faster on hot or rainy days.
+   - Weather: rain keeps people away and dirties the lot.
+   - People waiting outside lose patience faster on hot or rainy days.
    - A monthly sales target from the manufacturer pays a bonus when you hit it.
    - Weekend sales events, and month-end closeouts on one model.
 8. **Phase 11 · Difficulty levels**

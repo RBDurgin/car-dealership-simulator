@@ -11,6 +11,7 @@ import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { dressFor, ROLES, type Employee } from './staff'
 import { isTipId, type TipId } from './tips'
+import { LATEST_NEWS, legacyNews } from './whatsNew'
 
 /**
  * The saved game. Saves are only made at the end of a day, so nothing mid-day
@@ -22,7 +23,7 @@ import { isTipId, type TipId } from './tips'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 13
+export const SAVE_VERSION = 14
 
 export interface SaveData {
   version: number
@@ -53,6 +54,8 @@ export interface SaveData {
   tipsSeen: TipId[]
   /** Lifetime totals and the rank reached (see `sim/progression.ts`). */
   career: Career
+  /** The latest update (see `sim/whatsNew.ts`) this game's player has been shown. */
+  news: number
 }
 
 export interface SaveSource {
@@ -75,6 +78,8 @@ export interface SaveSource {
 /**
  * A save of the day that just ended. The fired (and those who quit) are gone
  * and everyone else is off for the night, nobody still thinking of quitting.
+ * A build that writes a save has shown its updates on the title screen (or
+ * it's a new game, with nothing to catch up on), so `news` is the latest.
  */
 export function createSave(s: SaveSource, now: number): SaveData {
   return {
@@ -94,6 +99,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     bailoutUsed: s.bailoutUsed,
     tipsSeen: s.tipsSeen,
     career: s.career,
+    news: LATEST_NEWS,
   }
 }
 
@@ -105,8 +111,11 @@ type RawSave = Record<string, unknown>
 /** A v2 car's cost, before cars had one: the middle of the range a new game rolls. */
 const LEGACY_COST_FRACTION = (COST_FRACTION.min + COST_FRACTION.max) / 2
 
-/** Each step brings a save from its key version to the next. */
-const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
+/**
+ * Each step brings a save from its key version to the next. `from` is the
+ * version the save was read at, before any step ran.
+ */
+const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   // v3: cars have a dealer cost.
   2: (raw) => ({
     ...raw,
@@ -166,16 +175,19 @@ const UPGRADES: Record<number, (raw: RawSave) => RawSave> = {
   }),
   // v13: the career, starting from nothing.
   12: (raw) => ({ ...raw, career: emptyCareer() }),
+  // v14: the updates already shown, judged by the version the save started at.
+  13: (raw, from) => ({ ...raw, news: legacyNews(from) }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
 function upgrade(raw: RawSave): RawSave | null {
   let save = raw
+  const from = raw.version as number
   while (save.version !== SAVE_VERSION) {
     const version = save.version
     const step = isNumber(version) ? UPGRADES[version] : undefined
     if (!step) return null
-    save = { ...step(save), version: (version as number) + 1 }
+    save = { ...step(save, from), version: (version as number) + 1 }
   }
   return save
 }
@@ -188,7 +200,7 @@ export function parseSave(input: unknown): SaveData | null {
   const raw = isObject(input) ? upgrade(input) : null
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
-  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career } = raw
+  const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, news } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -203,9 +215,11 @@ export function parseSave(input: unknown): SaveData | null {
   if (typeof bailoutUsed !== 'boolean') return null
   if (!Array.isArray(tipsSeen) || !tipsSeen.every(isTipId)) return null
   if (!isCareer(career)) return null
+  if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
-  return raw as unknown as SaveData
+  // A newer build has more updates than this one knows of.
+  return { ...raw, news: Math.min(news as number, LATEST_NEWS) } as unknown as SaveData
 }
 
 function isCar(v: unknown): boolean {
