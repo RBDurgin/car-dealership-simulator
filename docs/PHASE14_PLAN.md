@@ -1,6 +1,6 @@
 # Phase 14 Plan: Nazma's Rival Dealership
 
-**Status:** planned 2026-10-08. Phase 13 comes first: the rival opens at one of 13a's ranks, and his lot sits beside 13c's wider map. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 13. The save will be v17 by then (12.5a's v14 and Phase 13's v15–v17), so 14a makes it v18.
+**Status:** planned 2026-10-08. Phase 13 comes first: the rival opens at one of 13a's ranks, and his lot sits beside 13c's wider map. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 13. 14a takes the next save version.
 
 ## Context
 
@@ -31,7 +31,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
 | `SIDEWALK_ENDS`, `scene/Nazma.tsx`                                                                           | `sim/layout.ts`, `scene/`               | Once his lot is open, he crosses the road from it instead of walking in along the sidewalk                     |
 | `Tuning` / `TUNING`                                                                                          | `sim/difficulty.ts`                     | New levers `rivalStrength`, `rivalUndercut` and `rivalComeback`, neutral on Medium                             |
 | `computerTab`, `ui/CalendarTab.tsx`                                                                          | `state/store.ts`, `ui/`                 | A new **Rival** tab (key K)                                                                                    |
-| Save `UPGRADES`                                                                                              | `sim/save.ts`                           | v18 adds `rival` and `Career.rivalsBeaten`                                                                     |
+| Save `UPGRADES`                                                                                              | `sim/save.ts`                           | Next save version adds `rival` and `Career.rivalsBeaten`                                                       |
 
 ## Sub-phases
 
@@ -52,7 +52,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
     - His strength drifts up with the share he took and down with each of his quote-holders you sold to.
     - It records the day's share and updates `ourDiscount` from the day's new-car `Sale`s.
 - Store: `rival`. `beginDay` multiplies `Word.scale` by `1 − share` while he's open. `DayStats.rival` is `{ share, lost, matched }`.
-- Save v18: `rival`. An older save starts it `unopened`, so a save already at Main Street gets the notice the next morning.
+- Save, next version: `rival`. An older save starts it `unopened`, so a save already at Main Street gets the notice the next morning.
 - Difficulty: `Tuning.rivalStrength` (× his opening strength and growth: Easy 0.75, Medium 1, Hard 1.25).
 - Nothing on screen yet except the notices and the traffic change.
 
@@ -99,7 +99,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
   - `planVisit`'s `poachChance`.
   - The theft chance.
   - The guard's deterrence still applies on top, as it does now.
-- **Theft without the replay.** Today `isTheftNight` replays every night with one chance to keep the `THEFT_GAP_DAYS` gap. Once the chance changes from night to night, that replay no longer matches what happened. Instead, save `lastTheftDay` in `rival` and check the gap against it. The v17 upgrade fills it by replaying `isTheftNight` up to the save's day. Test that reloading a save never repeats a theft.
+- **Theft without the replay.** Today `isTheftNight` replays every night with one chance to keep the `THEFT_GAP_DAYS` gap. Once the chance changes from night to night, that replay no longer matches what happened. Instead, save `lastTheftDay` in `rival` and check the gap against it. 14a's upgrade step fills it by replaying `isTheftNight` up to the save's day. Test that reloading a save never repeats a theft.
 - A stolen car's model is added to `rival.stolen` and appears on his lot. The summary line says it's for sale at Nazma's.
 - A poached employee who walks out at `close` is added to `rival.hires`. Their skill adds to his strength, and the summary says "Dana now sells for Nazma's".
 - Once his lot is open, `scene/Nazma.tsx` starts and ends his visits at the sidewalk tile facing it. He crosses the road on a short fixed route off the grid, like `DrivenCar`'s routes.
@@ -155,7 +155,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
     - A poached hire raises his strength.
     - The bust reward and the reopening.
     - Reloading never repeats a theft.
-  - A save upgrade test: a v17 save loads into v18.
+  - A save upgrade test: a save from the version before loads with `rival` unopened.
   - `difficulty.test.ts`: every level has the new levers, and Medium's are neutral.
 - `npm run lint`, `npm run build`, `npm run e2e`.
 - `npm run dev` / `/run`:

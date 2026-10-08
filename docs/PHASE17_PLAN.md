@@ -7,7 +7,7 @@
 - 15's service jobs;
 - 16's client book.
 
-An achievement that needs a phase that hasn't been built yet stays out of the catalogue until that phase lands. 17a takes the next free save version (v21 if Phases 12.5 and 13–16 are all built). After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
+An achievement that needs a phase that hasn't been built yet stays out of the catalogue until that phase lands. 17a takes the next save version. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
 
 ## Context
 
