@@ -1063,6 +1063,46 @@ kbd {
   opacity: 0.75;
 }
 
+/* What's new: the list scrolls so Got it stays in view. */
+.whats-new.day-summary {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - var(--edge-t) - var(--edge-b));
+  overflow: hidden;
+}
+.whats-new h2 {
+  margin-bottom: 4px;
+}
+.whats-new-since {
+  margin: 0 0 10px;
+}
+.whats-new-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 0 14px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+.whats-new-list details {
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.whats-new-list summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.whats-new-list ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+.whats-new-more {
+  margin: 8px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
 /* Sound settings */
 .topbar-sound {
   padding: 2px 8px;

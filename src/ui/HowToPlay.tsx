@@ -130,6 +130,10 @@ function BasicsTab({ touch, click }: TabProps) {
           drivers come to sell you their car instead, and some bring one to trade in (see{' '}
           <b>Selling</b>). Each day ends with a summary, and your progress is saved then.
         </p>
+        <p>
+          The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent
+          updates, and it opens by itself when you come back to a game saved before them.
+        </p>
       </section>
       <section>
         <h3>The week</h3>

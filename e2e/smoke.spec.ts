@@ -79,3 +79,39 @@ test('closing an empty lot shows the day summary and starts the next day', async
   await expect.poll(() => inStore(page, (_, g) => g().clock.day)).toBe(2)
   expect(errors).toEqual([])
 })
+
+test('an old save shows what’s new once, then continues', async ({ page }) => {
+  const errors = watchErrors(page)
+  // A v12 save, from before the used-car update: day 1 of a fresh game, saved.
+  await page.goto('/')
+  const save = await page.evaluate(async () => {
+    const { useGame } = await import('/src/state/store.ts')
+    const { createSave } = await import('/src/sim/save.ts')
+    useGame.getState().newGame('medium')
+    const { news: _, ...old } = createSave(useGame.getState(), Date.now())
+    return { ...old, version: 12 }
+  })
+  await page.evaluate((s) => {
+    localStorage.setItem('car-dealership-simulator.save', JSON.stringify(s))
+  }, save)
+  await page.reload()
+
+  const dialog = page.getByRole('dialog', { name: "What's new" })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('Used cars')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Got it' }).click()
+  await expect(dialog).toBeHidden()
+
+  await page.reload()
+  await expect(page.getByRole('button', { name: /Continue/ })).toBeVisible()
+  await expect(dialog).toBeHidden()
+  await page.getByRole('button', { name: /Continue/ }).click()
+  await expect.poll(() => inStore(page, (_, g) => g().screen)).toBe('playing')
+  expect(errors).toEqual([])
+})
+
+test('a new player never sees what’s new', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'New game' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: "What's new" })).toBeHidden()
+})

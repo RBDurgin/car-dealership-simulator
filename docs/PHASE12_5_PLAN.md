@@ -1,6 +1,6 @@
 # Phase 12.5 Plan: What's new
 
-**Status:** planned 2026-10-08. 12.5a done 2026-10-08; 12.5b is next. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save was v13 (13a's `career`), so 12.5a made it v14.
+**Status:** planned 2026-10-08. 12.5a and 12.5b done 2026-10-08. We do one sub-phase per session and stop for Robert's review after each, the same as earlier phases. Both sub-phases are small, so they can go in one session if review allows. It builds on everything through Phase 12. The save was v13 (13a's `career`), so 12.5a made it v14.
 
 ## Context
 

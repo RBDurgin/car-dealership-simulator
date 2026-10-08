@@ -1,6 +1,7 @@
 import { parseAudioSettings } from '../sim/audioSettings'
 import { isClosed } from '../sim/clock'
 import { createSave, parseSave, type SaveData } from '../sim/save'
+import { LATEST_NEWS } from '../sim/whatsNew'
 import { useGame } from './store'
 
 const SAVE_KEY = 'car-dealership-simulator.save'
@@ -23,6 +24,15 @@ export function writeSave(save: SaveData): void {
   } catch {
     // Not saved; the game carries on.
   }
+}
+
+/**
+ * Marks the save as having seen every update, keeping everything else, once
+ * What's new is closed. Does nothing without a save.
+ */
+export function markNewsSeen(): void {
+  const save = readSave()
+  if (save && save.news !== LATEST_NEWS) writeSave({ ...save, news: LATEST_NEWS })
 }
 
 export function clearSave(): void {
