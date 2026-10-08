@@ -75,3 +75,7 @@ A service department. Once you're a Trusted Dealer with the east lot, you can bu
 ## Phase 16
 
 A client book. Everyone who buys from you is kept by name, with a satisfaction score from how their visit went. Shoppers who talked to you and walked out are kept for a couple of weeks as prospects. Call them from the desk phone, or let the receptionist call between customers: thank buyers, bring prospects back and book appointments. A month or two after buying, clients come back to trade up the car you sold them, and happy ones send friends by name. Spend on a referral fee, a loyalty discount or a client appreciation cookout. The manufacturer's monthly satisfaction survey (CSI) scales the holdback and can hold back a franchise tier. Service visits come from your clients, and unhappy ones may take their business to Nazma.
+
+## Phase 17
+
+Stats and achievements. Every day goes into a short log, and the office computer's Stats tab shows lifetime totals, personal records (best day, week and month, biggest deal, longest sales streak) and charts of sales, gross, net, visitors, reputation and cash. Achievements pop up as you earn them, such as a first sale at full sticker or running Nazma off yourself. They're a record only, with no rewards. Each save keeps its own, and a trophy case on the title screen keeps everything ever earned on the device.
