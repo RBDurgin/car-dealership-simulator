@@ -133,6 +133,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
   - People tab: poached staff go to work for him.
 - `ui/controls.ts`: K for Rival.
 - Tips `rivalOpens`, `rivalQuote` and `rivalBust` in `sim/tips.ts`.
+- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '14'` (14a through 14e; 14a's is the opening notice and the quieter days).
 
 ## Tuning targets (Medium)
 

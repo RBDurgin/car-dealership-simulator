@@ -126,6 +126,7 @@ The baseline, from Phase 4c, is 53–61 fps on a mid-range Android phone in Chro
   - Ranks, the franchise and expansions go in the Business tab.
   - Staff limits go in the People tab.
 - Update `ui/controls.ts` if a key is added. Add the new tips to `sim/tips.ts`.
+- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '13'` (13b, 13d, 13e and 13f; 13a's shipped as update 10, and 13c changes nothing on screen).
 
 ## Tuning targets (Medium)
 

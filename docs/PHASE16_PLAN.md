@@ -267,6 +267,7 @@ Real dealers live on repeat and referral business: the buyer from two years ago 
   - People tab: the receptionist's calls.
 - `ui/controls.ts`: L for Clients. The touch list's Office line mentions Clients.
 - Tips `clientBook`, `followUp`, `appointment`, `tradeUpDue`, `referral`, `appreciation` and `csi` in `sim/tips.ts`.
+- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '16'` (16b through 16f; 16a puts nothing on screen).
 
 ## Tuning targets (Medium)
 

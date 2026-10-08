@@ -234,6 +234,7 @@ The game's goal is a rich client base and a growing revenue. Every dollar still 
   - Selling tab: reconditioning, in the used-car section.
 - `ui/controls.ts`: B for Service. The touch list's Office line mentions Service.
 - Tips `serviceBay`, `recon`, `serviceClient`, `finding` and `recall` in `sim/tips.ts`.
+- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '15'` (15b through 15e; 15a puts nothing on screen).
 
 ## Tuning targets (Medium)
 
