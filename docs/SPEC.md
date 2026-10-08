@@ -59,3 +59,7 @@ Add difficulty levels (Easy, Medium, Hard)
 ## Phase 12
 
 Trade-ins and used cars. Customers can trade in their car as part of a deal, and sellers can drive in to sell their car for cash. Cars are appraised, and the trade-in allowance is haggled along with the price. Used cars sell to budget-minded used-car buyers and lose value every day they sit on the lot.
+
+## Phase 13
+
+Expansion and progression. Dealer ranks are earned from lifetime gross profit and reputation, and each rank unlocks bigger things. Buy the parcel next door for more lot space, then build a showroom wing with more display platforms, sales desks and staff. A manufacturer franchise tier (Bronze, Silver, Gold) rises with a met quota and falls with a missed one. It improves the invoice price and holdback, and unlocks the luxury models. Reaching Dealer of the Year shows a win screen, and you can keep playing after it.
