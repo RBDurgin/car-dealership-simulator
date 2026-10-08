@@ -124,6 +124,30 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
 const ALL = Object.keys(ARCHETYPES) as Archetype[]
 
 /**
+ * With no used car for sale, used-car shoppers come this many times as often
+ * (`usedStockSkew`): a few still look in, but most stay away until there's
+ * used stock.
+ */
+export const NO_USED_STOCK_SKEW = 0.2
+
+/** The archetype skew from what's for sale: fewer used-car shoppers with no used stock. */
+export function usedStockSkew(
+  available: readonly { used: unknown }[],
+): Partial<Record<Archetype, number>> {
+  return available.some((c) => c.used) ? {} : { 'used-shopper': NO_USED_STOCK_SKEW }
+}
+
+/** Two skews in one: each archetype's multipliers multiplied together. */
+export function combineSkews(
+  a: Partial<Record<Archetype, number>>,
+  b: Partial<Record<Archetype, number>>,
+): Partial<Record<Archetype, number>> {
+  const out = { ...a }
+  for (const k of Object.keys(b) as Archetype[]) out[k] = (out[k] ?? 1) * b[k]!
+  return out
+}
+
+/**
  * A random archetype, weighted by `weights` (an ad's skew, see
  * `sourceWeights`) or by default `ARCHETYPES[a].weight`.
  */

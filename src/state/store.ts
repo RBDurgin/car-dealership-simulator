@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
-import { pickArchetype, skewWeights } from '../sim/archetypes'
+import { combineSkews, pickArchetype, skewWeights, usedStockSkew } from '../sim/archetypes'
 import {
   DEFAULT_AUDIO_SETTINGS,
   withVolume,
@@ -848,15 +848,18 @@ export const useGame = create<GameState>((set, get) => {
    * What a new customer brings in with them today: the level's patience and
    * hoped-for discount, the showroom's cut to that discount, and on a sale
    * weekend a bigger hoped-for discount and a lean toward bargain hunters.
+   * With no used car for sale, few used-car shoppers come (`usedStockSkew`).
    */
   const arrivalOpts = () => {
     const event = eventOn(get().clock.day)
     const level = tuning()
+    const skew = combineSkews(event?.skew ?? {}, usedStockSkew(availableCars(get().inventory)))
     return {
       patienceFactor: level.patience,
       expectShift: level.expect,
       expectCut: upEffects().expectCut,
-      ...(event && { extraDiscount: event.extraDiscount, skew: event.skew }),
+      ...(event && { extraDiscount: event.extraDiscount }),
+      ...(Object.keys(skew).length > 0 && { skew }),
     }
   }
 

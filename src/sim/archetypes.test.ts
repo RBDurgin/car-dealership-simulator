@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { ARCHETYPES, pickArchetype, type Archetype } from './archetypes'
+import {
+  ARCHETYPES,
+  combineSkews,
+  NO_USED_STOCK_SKEW,
+  pickArchetype,
+  usedStockSkew,
+  type Archetype,
+} from './archetypes'
 import { createRng } from './rng'
 
 describe('pickArchetype', () => {
@@ -29,5 +36,24 @@ describe('pickArchetype', () => {
     expect(ARCHETYPES['tire-kicker'].accept).toBeLessThan(0)
     expect(ARCHETYPES.decisive.accept).toBeGreaterThan(0)
     expect(ARCHETYPES.bargain.budget.max).toBeLessThan(ARCHETYPES.regular.budget.max)
+  })
+})
+
+describe('used stock skew', () => {
+  it('thins out used-car shoppers only while no used car is for sale', () => {
+    expect(usedStockSkew([{ used: null }])).toEqual({ 'used-shopper': NO_USED_STOCK_SKEW })
+    expect(usedStockSkew([])).toEqual({ 'used-shopper': NO_USED_STOCK_SKEW })
+    expect(usedStockSkew([{ used: null }, { used: {} }])).toEqual({})
+  })
+
+  it('multiplies two skews together', () => {
+    expect(combineSkews({ bargain: 2, regular: 1.5 }, { bargain: 3, 'used-shopper': 0.2 })).toEqual(
+      {
+        bargain: 6,
+        regular: 1.5,
+        'used-shopper': 0.2,
+      },
+    )
+    expect(combineSkews({}, {})).toEqual({})
   })
 })

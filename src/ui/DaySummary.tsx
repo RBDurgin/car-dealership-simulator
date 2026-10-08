@@ -163,11 +163,22 @@ export function DaySummary() {
               <dd>{nazma}</dd>
             </>
           )}
-          {missed && (
+          {(missed || stats.missedUsed > 0) && (
             <>
               <dt>Missed</dt>
               <dd>
-                {missed} <span className="muted">(wanted, not in stock)</span>
+                {missed && (
+                  <>
+                    {missed} <span className="muted">(wanted, not in stock)</span>
+                  </>
+                )}
+                {missed && stats.missedUsed > 0 && ' · '}
+                {stats.missedUsed > 0 && (
+                  <>
+                    {stats.missedUsed} wanted a used car{' '}
+                    <span className="muted">(none in stock)</span>
+                  </>
+                )}
               </dd>
             </>
           )}

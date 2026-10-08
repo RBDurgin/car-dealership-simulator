@@ -254,6 +254,8 @@ export interface DayStats {
   improvements: number
   /** Customers who found none of the body types they wanted, by their first choice. */
   missed: Partial<Record<CarModel, number>>
+  /** Used-car shoppers who came in with no used car for sale. */
+  missedUsed: number
   /** What the day did to reputation (set when settled; see `reputationChange`). */
   reputation: number
   /** Payroll has been paid for the day. */
@@ -288,6 +290,7 @@ export function emptyStats(): DayStats {
     marketing: 0,
     improvements: 0,
     missed: {},
+    missedUsed: 0,
     reputation: 0,
     settled: false,
     owner: null,
@@ -380,8 +383,9 @@ export function salesBySource(stats: DayStats): SourceTally[] {
 
 /**
  * Tallies the new `arrived` customers who can't find any body type they want
- * among the `available` cars, under their first choice. Returns the same stats
- * when everyone can.
+ * among the `available` cars, under their first choice, and the used-car
+ * shoppers who find no used car (`missedUsed`). Returns the same stats when
+ * everyone can.
  */
 export function recordMissed(
   stats: DayStats,
@@ -390,14 +394,23 @@ export function recordMissed(
 ): DayStats {
   const inStock = new Set(available.map((c) => c.model))
   let missed = stats.missed
+  let missedUsed = stats.missedUsed
+  const usedInStock = available.some((c) => c.used)
   for (const c of arrived) {
     // A seller isn't shopping.
     if (c.selling) continue
+    // A used-car shopper is missed for want of a used car, whatever its body type.
+    if (c.archetype === 'used-shopper') {
+      if (!usedInStock) missedUsed++
+      continue
+    }
     if (c.preferredModels.some((m) => inStock.has(m))) continue
     const model = c.preferredModels[0]
     missed = { ...missed, [model]: (missed[model] ?? 0) + 1 }
   }
-  return missed === stats.missed ? stats : { ...stats, missed }
+  return missed === stats.missed && missedUsed === stats.missedUsed
+    ? stats
+    : { ...stats, missed, missedUsed }
 }
 
 /** "Summit Ridge ×2, Summit Hauler ×1": the missed demand, most asked-for first. Empty if none. */

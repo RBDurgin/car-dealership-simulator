@@ -192,8 +192,9 @@ function SellingTab({ click }: TabProps) {
         </p>
         <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
-          more body types, mostly looks at used cars and haggles hard. With no used stock they
-          rarely find anything. Regulars and bargain hunters look at used cars now and then too.
+          more body types, mostly looks at used cars and haggles hard. While you have no used car
+          for sale only a few come in, and the summary counts them as missed. Regulars and bargain
+          hunters look at used cars now and then too.
         </p>
       </section>
       <section>

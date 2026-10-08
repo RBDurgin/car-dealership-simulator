@@ -359,6 +359,21 @@ describe('day stats', () => {
     expect(recordMissed(none, [wants('sedan')], stock)).toBe(none)
   })
 
+  it('counts used-car shoppers who find no used car apart from body types', () => {
+    const stock = buildInventory(createRng(1))
+    const shopper = {
+      ...base,
+      archetype: 'used-shopper' as const,
+      preferredModels: ['truck' as const],
+    }
+    const stats = recordMissed(emptyStats(), [shopper, shopper], stock)
+    expect(stats.missedUsed).toBe(2)
+    expect(stats.missed).toEqual({})
+    const withUsed = [{ ...stock[0], used: { year: 2020, miles: 1, condition: 1, acquiredDay: 1 } }]
+    const none = emptyStats()
+    expect(recordMissed(none, [shopper], withUsed)).toBe(none)
+  })
+
   it('sums up missed demand, most asked-for first', () => {
     expect(missedSummary({ van: 1, suv: 2 })).toBe('Summit Ridge ×2, Summit Hauler ×1')
     expect(missedSummary({})).toBe('')
