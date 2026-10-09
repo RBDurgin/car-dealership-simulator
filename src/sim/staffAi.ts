@@ -206,6 +206,8 @@ export interface GuardContext {
   leg: number
   /** Already after him: they keep going until he's caught or gone. */
   chasing?: boolean
+  /** The stops to walk (`patrolTiles` of the expansions up); the base patrol if left out. */
+  patrol?: readonly Tile[]
 }
 
 /**
@@ -219,5 +221,6 @@ export function nextGuardTask(e: Employee, ctx: GuardContext): GuardTask {
     const seen = Math.hypot(nazma.tx - at.tx, nazma.tz - at.tz) <= guardSight(e.skill)
     if (seen || ctx.chasing) return { kind: 'chase' }
   }
-  return { kind: 'patrol', tile: GUARD_PATROL_TILES[ctx.leg % GUARD_PATROL_TILES.length] }
+  const stops = ctx.patrol ?? GUARD_PATROL_TILES
+  return { kind: 'patrol', tile: stops[ctx.leg % stops.length] }
 }

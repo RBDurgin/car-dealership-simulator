@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b and 13c on 2026-10-08; 13d is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c and 13d on 2026-10-08; 13e is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -110,6 +110,18 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
   - The porter's standby tiles stay where they are.
   - Nazma's theft and smudging reach the new spaces with no new code. Test that they do.
 - The Upgrades tab gets an Expansion section, locked by rank with the reason shown.
+
+**13d implementation notes:**
+
+- Save v16 keeps `expansions` (`OwnedExpansion[]`); an older save starts with none. `sim/expansions.ts` has `EXPANSIONS` (only `east-lot` so far, $60k from Main Street; the wing joins it in 13e), `installedExpansions(owned, day)`, `expansionBlocker`/`buyExpansion` (already bought, then the rank, then `requires`, then cash), and `unlockedBy(prev, next)` for the tip.
+- **Two rows of six, not three rows.** Spaces are 2×4 like the front rows, so three rows plus aisles don't fit in tz 13–23. The front row is tx 41–52, tz 20–23 (noses to the street), and the second faces it from tz 14–17 (noses north), with the aisle between. The spaces stay south of tz 13 (the wing) and west of tx 53 (the service lane). They are in `PARKING_SPACES` (indices 27–38) with `requires: 'east-lot'`; `spaceOpen(index, expansions)` and `slotUnlocked`/`openSlots` gate them, and `freeSlots` takes the expansions up as a 4th argument, so they fill after the old lot's.
+- Books (`OrderBook`, `BuyBook`) extend `Grounds` (`expansions` and `clock`, both on the store), read through `expansionsUp`, so the store passes `s` as before. Ground bought today isn't open until tomorrow, for orders as well.
+- **The quota doesn't grow** with the lot: `monthlyQuota` takes `BASE_SLOTS` (the 30 a new game has), not every slot. Otherwise the clamp would push it to the 20 maximum as soon as the lot was bought. Revisit in 13f.
+- The spend is `DayStats.expansions`, off `netIncome` and its own summary row, like improvements.
+- The guard's patrol is `patrolTiles(expansions)`: one more stop in the east lot's aisle (tx 47, tz 18), passed to `nextGuardTask` as `patrol`. The porter's standby stays put.
+- `scene/runtime` rebuilds `layout` in place when the expansions up change (`regrounded`, then `resetGrid`). `useGround()` (in `scene/useUpNow.ts`) re-renders `Floors` (stripes only on open spaces), `Props` (the sign comes down) and `Walls` (remounted by key, so the fence's instance counts are rebuilt).
+- Nazma's smudging and theft need no change: both pick from lot cars, which include the east lot's (tested in `expansions.test.ts`).
+- Tip `expansion` (Easy) when a rank-up makes one buyable. What's new: update 12. Help: an Expansion part under Progress in the Business tab.
 
 ### 13e: Showroom wing
 

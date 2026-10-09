@@ -5,14 +5,17 @@ import { BASE_MSRP, buildInventory, MSRP_VARIATION, sellCar, type InventoryCar }
 import { DISPLAY_CARS, PARKING_SPACES, parkedCarRect, type CarModel } from './layout'
 import {
   ALL_SLOTS,
+  BASE_SLOTS,
   cancelOrder,
   dailyIncentive,
   deliver,
   INCENTIVE_DISCOUNT,
   freeSlots,
   invoicePrice,
+  openSlots,
   orderCost,
   placeOrder,
+  slotUnlocked,
   type Order,
   type OrderBook,
 } from './ordering'
@@ -90,9 +93,12 @@ describe('catalog', () => {
 })
 
 describe('free slots', () => {
-  it('has 30 slots, 3 on the showroom floor', () => {
-    expect(ALL_SLOTS).toHaveLength(30)
+  it('has 30 slots open, 3 on the showroom floor, and 12 more on the east lot', () => {
+    expect(BASE_SLOTS).toBe(30)
+    expect(openSlots([])).toHaveLength(30)
     expect(ALL_SLOTS.filter((s) => s.location === 'showroom')).toHaveLength(3)
+    expect(openSlots(['east-lot'])).toHaveLength(42)
+    expect(ALL_SLOTS).toHaveLength(42)
   })
 
   it('lists the empty lot spaces when the showroom is full', () => {
@@ -100,9 +106,33 @@ describe('free slots', () => {
     const taken = new Set(opening.map((c) => c.spaceIndex))
     expect(free).toEqual(
       PARKING_SPACES.map((_, index) => index)
-        .filter((i) => !taken.has(i))
+        .filter((i) => !taken.has(i) && !PARKING_SPACES[i].requires)
         .map((index) => ({ location: 'lot', index })),
     )
+  })
+
+  it('opens the east lot’s spaces once it’s up, after the old lot’s', () => {
+    const closed = freeSlots(opening, [])
+    const open = freeSlots(opening, [], [], ['east-lot'])
+    expect(open.slice(0, closed.length)).toEqual(closed)
+    const added = open.slice(closed.length)
+    expect(added).toHaveLength(12)
+    for (const slot of added) {
+      expect(slotUnlocked(slot, [])).toBe(false)
+      expect(slotUnlocked(slot, ['east-lot'])).toBe(true)
+    }
+  })
+
+  it('orders into the east lot once the old one is full, only when it’s up', () => {
+    const full = orderAll(book({ cash: 1_000_000 }), Array(11).fill('sedan'))
+    expect(placeOrder(full, 'sedan', 'cash', 5).ok).toBe(false)
+    // Bought on day 4, so up on day 5 but not on day 4.
+    const grounds = { expansions: [{ id: 'east-lot' as const, day: 4 }] }
+    expect(placeOrder({ ...full, ...grounds, clock: { day: 4 } }, 'sedan', 'cash', 4).ok).toBe(
+      false,
+    )
+    const r = placeOrder({ ...full, ...grounds, clock: { day: 5 } }, 'sedan', 'cash', 5)
+    expect(r.ok && PARKING_SPACES[r.order.slot.index].requires).toBe('east-lot')
   })
 
   it('skips reserved spaces, and orders never take one', () => {

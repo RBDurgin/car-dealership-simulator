@@ -3,6 +3,7 @@ import { PLAYER_ID } from '../sim/customers'
 import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
+import { expansionsUp } from '../sim/expansions'
 import { improvementFootprints, installed, type ImprovementId } from '../sim/improvements'
 import {
   approachTilesFor,
@@ -22,13 +23,22 @@ import {
   parkedCarRect,
   SALES_DESKS,
   SPAWN_TILE,
+  type ExpansionId,
   type Rect,
 } from '../sim/layout'
 import { vehicleOwnerId } from '../sim/sellers'
 import { POSTS } from '../sim/staff'
 import { useGame } from '../state/store'
 
-export const layout = buildLayout()
+/** Expansions the layout was last built with. */
+let groundNow: ExpansionId[] = expansionsUp(useGame.getState())
+
+/**
+ * The dealership as it stands today. Rebuilt in place (`regrounded`) the
+ * morning an expansion goes up; components that draw from it redraw through
+ * `useGround`.
+ */
+export const layout = buildLayout(groundNow)
 
 // Mutable per-frame state shared between scene components. Deliberately not in the
 // zustand store: these change every frame and must never trigger React renders.
@@ -75,6 +85,16 @@ export const playerPos = { x: spawn.x, z: spawn.z }
 
 const upOn = (s: ReturnType<typeof useGame.getState>) => installed(s.improvements, s.clock.day)
 
+/** Builds the layout again if the expansions up have changed. True if it did. */
+function regrounded(ground: ExpansionId[]): boolean {
+  if (ground.length === groundNow.length && ground.every((id) => groundNow.includes(id))) {
+    return false
+  }
+  groundNow = ground
+  Object.assign(layout, buildLayout(ground))
+  return true
+}
+
 syncWorld(useGame.getState().inventory, upOn(useGame.getState()))
 // Runs synchronously inside the store update, before React re-renders anything.
 useGame.subscribe((s, prev) => {
@@ -82,7 +102,8 @@ useGame.subscribe((s, prev) => {
   const raised = up.filter((id) => !upNow.includes(id))
   const morning = s.clock.day !== prev.clock.day
   if (!morning && s.inventory === prev.inventory && raised.length === 0) return
-  if (morning) resetGrid()
+  // New ground only ever opens up, so nobody needs stepping out of it.
+  if (regrounded(expansionsUp(s)) || morning) resetGrid()
   syncWorld(s.inventory, up)
   // A car delivered or an improvement put up overnight where the player ended
   // the day steps them out. Only new ones: the player sits on a blocked chair tile.

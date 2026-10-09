@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
+import type { OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
+import { PARKING_SPACES } from './layout'
 import type { OwnedImprovement } from './improvements'
 import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { emptyCareer, type Career } from './progression'
 import { START_REPUTATION } from './reputation'
-import { ALL_SLOTS } from './ordering'
+import { BASE_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
@@ -39,7 +41,7 @@ const source = () => ({
   reputation: 62,
   // As a v8 save upgrades, so the older upgrades compare equal.
   monthSales: { count: 0, msrp: 0 },
-  quota: monthlyQuota(0, ALL_SLOTS.length, 62),
+  quota: monthlyQuota(0, BASE_SLOTS, 62),
   // As a v9 save upgrades, so the older upgrades compare equal.
   difficulty: 'medium' as const,
   // As a v10 save upgrades, so the older upgrades compare equal.
@@ -49,6 +51,8 @@ const source = () => ({
   career: emptyCareer() as Career,
   // As a v14 save upgrades, so the older upgrades compare equal.
   franchise: 'bronze' as FranchiseTier,
+  // As a v15 save upgrades, so the older upgrades compare equal.
+  expansions: [] as OwnedExpansion[],
 })
 
 const order: Order = {
@@ -198,7 +202,7 @@ describe('save data', () => {
       ...save,
       news: legacyNews(8),
       monthSales: { count: 0, msrp: 0 },
-      quota: monthlyQuota(0, ALL_SLOTS.length, 62),
+      quota: monthlyQuota(0, BASE_SLOTS, 62),
     })
   })
 
@@ -288,6 +292,20 @@ describe('save data', () => {
     const save = createSave({ ...source(), franchise: 'gold' }, 123)
     const v14 = { ...save, version: 14, franchise: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v14)))).toEqual({ ...save, franchise: 'bronze' })
+  })
+
+  it('upgrades a version 15 save with no expansions', () => {
+    const save = createSave(source(), 123)
+    const v15 = { ...save, version: 15, expansions: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v15)))).toEqual(save)
+  })
+
+  it('keeps the expansions, and rejects one it doesn’t know', () => {
+    const expansions: OwnedExpansion[] = [{ id: 'east-lot', day: 20 }]
+    const save = createSave({ ...source(), expansions }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.expansions).toEqual(expansions)
+    expect(parseSave({ ...save, expansions: [{ id: 'west-lot', day: 20 }] })).toBeNull()
+    expect(parseSave({ ...save, expansions: [{ id: 'east-lot' }] })).toBeNull()
   })
 
   it('keeps the franchise tier, and rejects one it doesn’t know', () => {
@@ -392,7 +410,10 @@ describe('save data', () => {
     expect(parseSave({ ...save, orders: undefined })).toBeNull()
     expect(parseSave({ ...save, orders: [{ ...order, financing: 'lease' }] })).toBeNull()
     expect(
-      parseSave({ ...save, orders: [{ ...order, slot: { location: 'lot', index: 27 } }] }),
+      parseSave({
+        ...save,
+        orders: [{ ...order, slot: { location: 'lot', index: PARKING_SPACES.length } }],
+      }),
     ).toBeNull()
     const { floored: ___, ...unfloored } = save.inventory[0]
     expect(parseSave({ ...save, inventory: [unfloored] })).toBeNull()

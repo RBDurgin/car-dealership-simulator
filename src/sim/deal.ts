@@ -257,6 +257,8 @@ export interface DayStats {
   marketing: number
   /** Spent on improvements today (paid when bought). */
   improvements: number
+  /** Spent on expansions today (paid when bought). */
+  expansions: number
   /** Customers who found none of the body types they wanted, by their first choice. */
   missed: Partial<Record<CarModel, number>>
   /** Used-car shoppers who came in with no used car for sale. */
@@ -296,6 +298,7 @@ export function emptyStats(): DayStats {
     interest: 0,
     marketing: 0,
     improvements: 0,
+    expansions: 0,
     missed: {},
     missedUsed: 0,
     reputation: 0,
@@ -336,8 +339,8 @@ export function theftLoss(stats: DayStats): number {
 }
 
 /**
- * Gross profit less the day's staff costs, floor plan interest, ad spend, improvements
- * and stolen stock, plus any bonus from the owner and the month-end holdback.
+ * Gross profit less the day's staff costs, floor plan interest, ad spend,
+ * improvements, expansions and stolen stock, plus any bonus from the owner and the month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
   return (
@@ -347,6 +350,7 @@ export function netIncome(stats: DayStats): number {
     stats.interest -
     stats.marketing -
     stats.improvements -
+    stats.expansions -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

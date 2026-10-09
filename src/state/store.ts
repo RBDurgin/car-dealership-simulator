@@ -39,6 +39,7 @@ import {
   type Sale,
 } from '../sim/deal'
 import { eventNotice, eventOn } from '../sim/events'
+import { buyExpansion, EXPANSIONS, expansionsUp, type OwnedExpansion } from '../sim/expansions'
 import { carName, type ActionId } from '../sim/interactables'
 import {
   clampAllowance,
@@ -58,7 +59,7 @@ import {
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty, type Tuning } from '../sim/difficulty'
 import { assignVehicles } from '../sim/driving'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
-import { DESK_CHAIR_ID, type CarModel } from '../sim/layout'
+import { DESK_CHAIR_ID, type CarModel, type ExpansionId } from '../sim/layout'
 import {
   availableCars,
   buildInventory,
@@ -106,7 +107,7 @@ import {
   cancelOrder,
   claimedByOrder,
   deliver,
-  ALL_SLOTS,
+  BASE_SLOTS,
   freeSlots,
   placeOrder,
   type Financing,
@@ -242,6 +243,8 @@ interface GameState {
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
   improvements: OwnedImprovement[]
+  /** Expansions bought, each with its day. One goes up the night after it's bought. */
+  expansions: OwnedExpansion[]
   /** The dealership's good name, 0–100. Changes once a day, when the day is settled. */
   reputation: number
   /** Today's weather (`weatherOn(day)`), set each morning. Not saved. */
@@ -324,6 +327,8 @@ interface GameState {
   launchCampaign: (channel: Channel) => boolean
   /** Buys improvement `id`, paid in cash now, to go up overnight. False if it can't be. */
   buyImprovement: (id: ImprovementId) => boolean
+  /** Buys expansion `id`, paid in cash now, to go up overnight. False if it can't be. */
+  buyExpansion: (id: ExpansionId) => boolean
   /** Cancels an order: cash comes back, or the floor plan credit is freed. */
   cancelOrder: (id: string) => void
   /** Pays the bank a floored car's cost from cash, so it stops accruing interest. */
@@ -511,9 +516,10 @@ function dayOne(difficulty: Difficulty) {
     bailoutUsed: false,
     career: emptyCareer(),
     franchise: START_TIER,
+    expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
-    quota: monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, tuning.quota),
+    quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
       {},
@@ -1041,9 +1047,7 @@ export const useGame = create<GameState>((set, get) => {
       clock: startOfDay(day),
       weather,
       monthSales: newMonth ? emptyMonthSales() : s.monthSales,
-      quota: newMonth
-        ? monthlyQuota(date.month, ALL_SLOTS.length, s.reputation, level.quota)
-        : s.quota,
+      quota: newMonth ? monthlyQuota(date.month, BASE_SLOTS, s.reputation, level.quota) : s.quota,
       inventory,
       orders: [],
       campaigns,
@@ -1323,6 +1327,22 @@ export const useGame = create<GameState>((set, get) => {
       notify(`Bought the ${label.toLowerCase()} for ${formatMoney(cost)}. It goes up overnight.`)
       return true
     },
+    buyExpansion: (id) => {
+      const s = get()
+      const result = buyExpansion({ ...s, rank: s.career.rank }, id, s.clock.day)
+      if (!result.ok) {
+        notify(result.reason)
+        return false
+      }
+      const { label, cost } = EXPANSIONS[id]
+      set({
+        cash: result.cash,
+        expansions: result.expansions,
+        dayStats: { ...s.dayStats, expansions: s.dayStats.expansions + cost },
+      })
+      notify(`Bought the ${label.toLowerCase()} for ${formatMoney(cost)}. It's built overnight.`)
+      return true
+    },
     cancelOrder: (id) => {
       const s = get()
       const order = s.orders.find((o) => o.id === id)
@@ -1355,7 +1375,7 @@ export const useGame = create<GameState>((set, get) => {
       const day = s.clock.day
       const spec = rollUsedCar(createRng(Date.now()), day)
       const id = nextUsedId([...s.inventory, ...s.purchases], day)
-      const cars = freeSlots(s.inventory, s.orders, reservedSlots(s.purchases))
+      const cars = freeSlots(s.inventory, s.orders, reservedSlots(s.purchases), expansionsUp(s))
         .filter((slot) => slot.location === 'lot')
         .map((slot) => usedStockCar(id, spec, slot, 0, day, 0.5))
       const car = cars.find((c) => canPlace?.(c) ?? true)
@@ -1649,6 +1669,7 @@ export const useGame = create<GameState>((set, get) => {
         orders: save.orders,
         campaigns: save.campaigns,
         improvements: save.improvements,
+        expansions: save.expansions,
         reputation: save.reputation,
         monthSales: save.monthSales,
         quota: save.quota,

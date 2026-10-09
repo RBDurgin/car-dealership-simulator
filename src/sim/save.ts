@@ -1,12 +1,13 @@
 import { calendarOf } from './calendar'
 import type { GameTime } from './clock'
 import { isDifficulty, type Difficulty } from './difficulty'
+import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { DISPLAY_CARS, PARKING_SPACES } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
-import { ALL_SLOTS, type Order } from './ordering'
+import { BASE_SLOTS, type Order } from './ordering'
 import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
@@ -24,7 +25,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 15
+export const SAVE_VERSION = 16
 
 export interface SaveData {
   version: number
@@ -41,6 +42,8 @@ export interface SaveData {
   campaigns: Campaign[]
   /** Improvements bought, with the day each was bought. */
   improvements: OwnedImprovement[]
+  /** Expansions bought, with the day each was bought (see `sim/expansions.ts`). */
+  expansions: OwnedExpansion[]
   /** Reputation after the day was settled (see `sim/reputation.ts`). */
   reputation: number
   /** The month's sales so far, toward the manufacturer's quota (see `sim/quota.ts`). */
@@ -69,6 +72,7 @@ export interface SaveSource {
   orders: Order[]
   campaigns: Campaign[]
   improvements: OwnedImprovement[]
+  expansions: OwnedExpansion[]
   reputation: number
   monthSales: MonthSales
   quota: number
@@ -96,6 +100,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
     improvements: s.improvements,
+    expansions: s.expansions,
     reputation: s.reputation,
     monthSales: s.monthSales,
     quota: s.quota,
@@ -162,7 +167,7 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
     quota: isNumber(raw.day)
       ? monthlyQuota(
           calendarOf(raw.day).month,
-          ALL_SLOTS.length,
+          BASE_SLOTS,
           isNumber(raw.reputation) ? raw.reputation : START_REPUTATION,
         )
       : undefined,
@@ -184,6 +189,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   13: (raw, from) => ({ ...raw, news: legacyNews(from) }),
   // v15: the franchise tier. Every game before it starts at Bronze.
   14: (raw) => ({ ...raw, franchise: START_TIER }),
+  // v16: expansions. Nothing was bought before them.
+  15: (raw) => ({ ...raw, expansions: [] }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -208,12 +215,14 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
+  const { expansions } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
   if (!Array.isArray(orders) || !orders.every(isOrder)) return null
   if (!Array.isArray(campaigns) || !campaigns.every(isCampaign)) return null
   if (!Array.isArray(improvements) || !improvements.every(isImprovement)) return null
+  if (!Array.isArray(expansions) || !expansions.every(isExpansion)) return null
   if (!isNumber(reputation) || reputation < 0 || reputation > MAX_REPUTATION) return null
   if (!isObject(monthSales) || !isNumber(monthSales.count) || !isNumber(monthSales.msrp))
     return null
@@ -307,6 +316,10 @@ function isCampaign(v: unknown): boolean {
 
 function isImprovement(v: unknown): boolean {
   return isObject(v) && IMPROVEMENT_IDS.includes(v.id as OwnedImprovement['id']) && isNumber(v.day)
+}
+
+function isExpansion(v: unknown): boolean {
+  return isObject(v) && isExpansionId(v.id) && isNumber(v.day)
 }
 
 function isSlot(location: unknown, index: unknown): boolean {

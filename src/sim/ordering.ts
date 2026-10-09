@@ -3,11 +3,14 @@ import { CLOSEOUT_REBATE, closeoutOn } from './events'
 import { FLOOR_PLAN_LIMIT, floorBalance } from './floorPlan'
 import { lockedReason, START_TIER, type FranchiseTier } from './franchise'
 import { BASE_MSRP, rollMsrp, roundTo100, type CarLocation, type InventoryCar } from './inventory'
+import { expansionsUp, type Grounds } from './expansions'
 import {
   DISPLAY_CARS,
   PARKING_SPACES,
   parkedCarRect,
+  spaceOpen,
   type CarModel,
+  type ExpansionId,
   type Facing,
   type Rect,
 } from './layout'
@@ -68,11 +71,30 @@ export function orderCost(model: CarModel, day: number, invoice = 1): number {
   return factor === 1 ? price : roundTo100(price * factor)
 }
 
-/** Every slot on the premises: the showroom platforms first, then the lot spaces. */
+/**
+ * Every slot on the premises, open or not: the showroom platforms first, then
+ * the lot spaces.
+ */
 export const ALL_SLOTS: readonly Slot[] = [
   ...DISPLAY_CARS.map((_, index): Slot => ({ location: 'showroom', index })),
   ...PARKING_SPACES.map((_, index): Slot => ({ location: 'lot', index })),
 ]
+
+/** Whether `slot` can take a car with the `expansions` that are up. */
+export function slotUnlocked(slot: Slot, expansions: readonly ExpansionId[]): boolean {
+  return slot.location !== 'lot' || spaceOpen(slot.index, expansions)
+}
+
+/** The slots open with the `expansions` that are up. */
+export function openSlots(expansions: readonly ExpansionId[]): Slot[] {
+  return ALL_SLOTS.filter((slot) => slotUnlocked(slot, expansions))
+}
+
+/**
+ * The slots a new game opens with. The manufacturer's quota is set from these,
+ * so buying more ground doesn't raise it.
+ */
+export const BASE_SLOTS = openSlots([]).length
 
 /** Where a car in `slot` stands and which way it faces. */
 export function slotPlacement(slot: Slot): { rect: Rect; facing: Facing } {
@@ -90,17 +112,18 @@ const overlaps = (a: Rect, b: Rect) =>
 const sameSlot = (a: Slot, b: Slot) => a.location === b.location && a.index === b.index
 
 /**
- * Slots with no car in stock on them, no order claiming them and not
- * `reserved` (for a used car bought today), showroom platforms first, then lot
- * spaces.
+ * Slots open with the `expansions` up, with no car in stock on them, no order
+ * claiming them and not `reserved` (for a used car bought today), showroom
+ * platforms first, then lot spaces.
  */
 export function freeSlots(
   inventory: readonly InventoryCar[],
   orders: readonly Order[],
   reserved: readonly Slot[] = [],
+  expansions: readonly ExpansionId[] = [],
 ): Slot[] {
   const stocked = inventory.filter((c) => c.status === 'available').map((c) => c.rect)
-  return ALL_SLOTS.filter((slot) => {
+  return openSlots(expansions).filter((slot) => {
     if (orders.some((o) => sameSlot(o.slot, slot))) return false
     if (reserved.some((r) => sameSlot(r, slot))) return false
     const { rect } = slotPlacement(slot)
@@ -114,7 +137,7 @@ export function claimedByOrder(rect: Rect, orders: readonly Order[]): boolean {
 }
 
 /** What ordering needs to know about the dealership. */
-export interface OrderBook {
+export interface OrderBook extends Grounds {
   cash: number
   inventory: readonly InventoryCar[]
   orders: readonly Order[]
@@ -151,7 +174,7 @@ export function placeOrder(
 ): OrderResult {
   const locked = lockedReason(model, book.tier ?? START_TIER)
   if (locked) return { ok: false, reason: locked }
-  const slot = freeSlots(book.inventory, book.orders, book.reserved)[0]
+  const slot = freeSlots(book.inventory, book.orders, book.reserved, expansionsUp(book))[0]
   if (!slot) return { ok: false, reason: 'No room: every space is taken or on order.' }
   const cost = orderCost(model, day, invoice)
   if (financing === 'cash' && book.cash < cost) {

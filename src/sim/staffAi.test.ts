@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { WASH_BELOW } from './cleanliness'
 import { PLAYER_ID, type Customer } from './customers'
 import { buildInventory, sellCar, type InventoryCar } from './inventory'
-import { GUARD_PATROL_TILES, GUEST_CHAIR_ID, SALES_DESKS } from './layout'
+import { GUARD_PATROL_TILES, GUEST_CHAIR_ID, patrolTiles, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
 import {
@@ -261,6 +261,17 @@ describe('nextGuardTask', () => {
     expect(nextGuardTask(guard, { nazma: null, at, leg: 2 })).toEqual(patrol(2))
     const n = GUARD_PATROL_TILES.length
     expect(nextGuardTask(guard, { nazma: null, at, leg: n + 1 })).toEqual(patrol(1))
+  })
+
+  it('adds the east lot to the rounds once it’s up', () => {
+    const stops = patrolTiles(['east-lot'])
+    expect(stops).toHaveLength(GUARD_PATROL_TILES.length + 1)
+    const last = stops.length - 1
+    expect(nextGuardTask(guard, { nazma: null, at, leg: last, patrol: stops })).toEqual({
+      kind: 'patrol',
+      tile: stops[last],
+    })
+    expect(patrolTiles([])).toEqual(GUARD_PATROL_TILES)
   })
 
   it('chases Nazma once he comes within sight', () => {

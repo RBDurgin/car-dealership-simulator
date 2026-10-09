@@ -15,6 +15,7 @@ import {
   type Order,
 } from '../sim/ordering'
 import { lockedReason } from '../sim/franchise'
+import { expansionsUp } from '../sim/expansions'
 import { reservedSlots } from '../sim/sellers'
 import { levelTuning, orderInvoice, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
@@ -271,11 +272,12 @@ function StockTab() {
   const missedYesterday = useGame((s) => s.missedYesterday)
   const invoice = useGame(orderInvoice)
   const tier = useGame((s) => s.franchise)
+  const expansions = useGame((s) => s.expansions)
 
   // Lot spaces held for used cars bought today are taken too.
   const reserved = reservedSlots(purchases)
-  const book = { cash, inventory, orders, reserved, tier }
-  const free = freeSlots(inventory, orders, reserved)
+  const book = { cash, inventory, orders, reserved, tier, expansions, clock: { day } }
+  const free = freeSlots(inventory, orders, reserved, expansionsUp(book))
   const freeIn = (where: 'lot' | 'showroom') => free.filter((s) => s.location === where).length
   const blocker = (model: CarModel, financing: Financing) => {
     const r = placeOrder(book, model, financing, day, invoice)

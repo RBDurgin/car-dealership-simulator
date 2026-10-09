@@ -4,6 +4,7 @@ import { drivenCleanliness } from './driving'
 import { roundTo100, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { sellerChance } from './marketing'
+import { expansionsUp, type Grounds } from './expansions'
 import { freeSlots, type Order, type Slot } from './ordering'
 import { createRng, hashSeed, type Rng } from './rng'
 import {
@@ -163,7 +164,7 @@ export interface BoughtCar {
 }
 
 /** What buying needs to know about the dealership. */
-export interface BuyBook {
+export interface BuyBook extends Grounds {
   cash: number
   inventory: readonly InventoryCar[]
   orders: readonly Order[]
@@ -177,7 +178,12 @@ export function reservedSlots(purchases: readonly Purchase[]): Slot[] {
 
 /** The first lot space (never a showroom platform) free for a used car, or null. */
 export function lotSlotFor(book: Omit<BuyBook, 'cash'>): Slot | null {
-  const free = freeSlots(book.inventory, book.orders, reservedSlots(book.purchases))
+  const free = freeSlots(
+    book.inventory,
+    book.orders,
+    reservedSlots(book.purchases),
+    expansionsUp(book),
+  )
   return free.find((s) => s.location === 'lot') ?? null
 }
 

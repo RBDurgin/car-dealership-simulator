@@ -33,6 +33,7 @@ const base: TipState = {
   owner: null,
   nazma: null,
   franchise: 'bronze',
+  career: { rank: 'corner-lot' },
 }
 const sellerCar = (parked: boolean): Partial<Customer> => ({
   phase: parked ? 'waiting' : 'arriving',
@@ -76,6 +77,7 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
   franchise: [{ franchise: 'silver' }, { franchise: 'bronze' }],
+  expansion: [{ career: { rank: 'main-street' } }, { career: { rank: 'corner-lot' } }],
   seller: [
     { customers: [customer('c2', sellerCar(true))] },
     { customers: [customer('c2', sellerCar(false))] },

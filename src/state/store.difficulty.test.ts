@@ -4,7 +4,7 @@ import { emptyStats } from '../sim/deal'
 import { TUNING } from '../sim/difficulty'
 import { FLOOR_PLAN_DAILY_RATE } from '../sim/floorPlan'
 import { FIRST_NAZMA_DAY } from '../sim/nazma'
-import { ALL_SLOTS, orderCost } from '../sim/ordering'
+import { BASE_SLOTS, orderCost } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
 import { monthlyQuota } from '../sim/quota'
 import { REPUTATION_POINTS, START_REPUTATION } from '../sim/reputation'
@@ -83,7 +83,7 @@ describe('difficulty levels', () => {
     expect(day1('easy').arrivals.minutes.length).toBeGreaterThan(medium)
     expect(day1('hard').arrivals.minutes.length).toBeLessThan(medium)
     expect(day1('hard').quota).toBe(
-      monthlyQuota(0, ALL_SLOTS.length, START_REPUTATION, TUNING.hard.quota),
+      monthlyQuota(0, BASE_SLOTS, START_REPUTATION, TUNING.hard.quota),
     )
   })
 

@@ -113,6 +113,12 @@ export function DaySummary() {
               <dd className="price">{formatMoney(-stats.improvements)}</dd>
             </>
           )}
+          {stats.expansions > 0 && (
+            <>
+              <dt>Expansion</dt>
+              <dd className="price">{formatMoney(-stats.expansions)}</dd>
+            </>
+          )}
           {theftLoss(stats) > 0 && (
             <>
               <dt>Stolen stock</dt>

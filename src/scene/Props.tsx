@@ -30,7 +30,7 @@ import { PLAYER_RADIUS } from '../sim/movement'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
 import { customerPos, interactables, layout, playerPos, rectBounds } from './runtime'
-import { useUpNow } from './useUpNow'
+import { useGround, useUpNow } from './useUpNow'
 
 const BASE = `${import.meta.env.BASE_URL}models`
 const CAR_SCALE = 0.95
@@ -607,6 +607,8 @@ function Cars({ turntables }: { turntables: boolean }) {
 /** The fixed props (as the improvements up have them), what improvements add, and the cars. */
 export function Props() {
   const up = useUpNow()
+  // The For Sale sign comes down when the lot is built.
+  useGround()
   return (
     <>
       {layout.props.map((p) => {

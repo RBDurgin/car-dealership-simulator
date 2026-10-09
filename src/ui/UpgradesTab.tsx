@@ -1,4 +1,5 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
+import { expansionBlocker, EXPANSION_IDS, EXPANSIONS, installedExpansions } from '../sim/expansions'
 import {
   AREA_LABELS,
   improvementBlocker,
@@ -10,6 +11,8 @@ import {
   type ImprovementId,
   type OwnedImprovement,
 } from '../sim/improvements'
+import type { ExpansionId } from '../sim/layout'
+import { rankById } from '../sim/progression'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 import { effectLabel } from './improvementText'
@@ -74,6 +77,45 @@ function UpgradeRow({
   )
 }
 
+/** An expansion: its price, what it needs (a rank first), and whether it's built. */
+function ExpansionRow({ id }: { id: ExpansionId }) {
+  const info = EXPANSIONS[id]
+  const touch = useMediaQuery(COARSE)
+  const cash = useGame((s) => s.cash)
+  const day = useGame((s) => s.clock.day)
+  const owned = useGame((s) => s.expansions)
+  const rank = useGame((s) => s.career.rank)
+  const bought = owned.some((o) => o.id === id)
+  const up = installedExpansions(owned, day).includes(id)
+  const blocker = expansionBlocker({ cash, expansions: owned, rank }, id)
+  return (
+    <li className="stock-row">
+      <div className="stock-who">
+        <div className="staff-name">
+          {info.label}
+          {bought && <span className="stock-badge">{up ? 'Built' : 'Built tonight'}</span>}
+        </div>
+        <div className="staff-meta">Needs {rankById(info.rank).name}</div>
+        <div className="staff-blurb muted">{info.blurb}</div>
+      </div>
+      <div className="staff-wage price">{formatMoney(info.cost)}</div>
+      {!bought && (
+        <div className="stock-actions">
+          <button
+            className="btn btn-small btn-primary"
+            disabled={!!blocker}
+            title={blocker ?? 'Pay now; it’s built overnight'}
+            onClick={() => useGame.getState().buyExpansion(id)}
+          >
+            Buy
+          </button>
+        </div>
+      )}
+      {touch && !bought && blocker && <div className="stock-why muted">{blocker}</div>}
+    </li>
+  )
+}
+
 /**
  * Improvements: buy one (paid now, up overnight) and see what's up. They're
  * for good, and a higher tier replaces the one below it.
@@ -82,7 +124,7 @@ export function UpgradesTab() {
   const cash = useGame((s) => s.cash)
   const day = useGame((s) => s.clock.day)
   const owned = useGame((s) => s.improvements)
-  const spent = useGame((s) => s.dayStats.improvements)
+  const spent = useGame((s) => s.dayStats.improvements + s.dayStats.expansions)
   return (
     <>
       <h2>Improve the dealership</h2>
@@ -103,6 +145,15 @@ export function UpgradesTab() {
           <p className="muted staff-blurb">{AREA_NOTES[area]}</p>
         </section>
       ))}
+      <section>
+        <h3>Expansion</h3>
+        <ul className="staff-list">
+          {EXPANSION_IDS.map((id) => (
+            <ExpansionRow key={id} id={id} />
+          ))}
+        </ul>
+        <p className="muted staff-blurb">More ground as your dealer rank grows.</p>
+      </section>
       <p className="muted staff-blurb">Each works from the morning after it goes up.</p>
     </>
   )

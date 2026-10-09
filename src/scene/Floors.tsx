@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
 import { slotTier } from '../sim/improvements'
-import { PARKING_SPACES, type ZoneKind } from '../sim/layout'
+import { PARKING_SPACES, spaceOpen, type ExpansionId, type ZoneKind } from '../sim/layout'
 import { layout, rectBounds } from './runtime'
-import { useUpNow } from './useUpNow'
+import { useGround, useUpNow } from './useUpNow'
 import { useWeather, wetLook } from './useWeather'
 
 const ZONE_COLORS: Record<ZoneKind, string> = {
@@ -107,11 +107,12 @@ function ShowroomFloor({
   )
 }
 
-/** Side lines of every parking space, deduplicated where neighbours share an edge. */
-function useStripes() {
+/** Side lines of every open parking space, deduplicated where neighbours share an edge. */
+function useStripes(ground: readonly ExpansionId[]) {
   return useMemo(() => {
     const lines = new Map<string, { x: number; z: number; w: number; h: number }>()
-    for (const { rect, facing } of PARKING_SPACES) {
+    for (const [i, { rect, facing }] of PARKING_SPACES.entries()) {
+      if (!spaceOpen(i, ground)) continue
       const b = rectBounds(rect)
       if (facing === 0 || facing === 2) {
         for (const x of [b.x - b.w / 2, b.x + b.w / 2]) {
@@ -124,11 +125,12 @@ function useStripes() {
       }
     }
     return [...lines.entries()]
-  }, [])
+  }, [ground])
 }
 
+/** The floors as the layout has them today, redrawn when an expansion changes it. */
 export function Floors() {
-  const stripes = useStripes()
+  const stripes = useStripes(useGround())
   const raining = useWeather() === 'rain'
   const road = layout.areas.find((z) => z.kind === 'road')
   const roadBounds = road ? rectBounds(road.rect) : null

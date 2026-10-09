@@ -23,7 +23,8 @@ import {
   HOLDBACK_STRETCH_AT,
   QUOTA_RANGE,
 } from '../sim/quota'
-import { rankGross, RANKS } from '../sim/progression'
+import { rankById, rankGross, RANKS } from '../sim/progression'
+import { EXPANSION_IDS, EXPANSIONS } from '../sim/expansions'
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
@@ -335,6 +336,21 @@ function BusinessTab({ touch, click }: TabProps) {
           ))}
         </ul>
         <p>Once you reach a rank you keep it, even if your reputation slips later.</p>
+        <h4>Expansion</h4>
+        <p>
+          A rank lets you buy more ground on the <b>Upgrades</b> tab. You pay up front and it&apos;s
+          built overnight. The manufacturer&apos;s quota stays the same.
+        </p>
+        <ul>
+          {EXPANSION_IDS.map((id) => {
+            const x = EXPANSIONS[id]
+            return (
+              <li key={id}>
+                <b>{x.label}</b>: {formatMoney(x.cost)}, from {rankById(x.rank).name}. {x.blurb}
+              </li>
+            )
+          })}
+        </ul>
       </section>
       <section>
         <h3>Manufacturer&apos;s quota</h3>
@@ -458,7 +474,7 @@ function BusinessTab({ touch, click }: TabProps) {
             </ul>
           </Fragment>
         ))}
-        <p>Ads and upgrades come off the net on the day you pay for them.</p>
+        <p>Ads, upgrades and expansions come off the net on the day you pay for them.</p>
       </section>
     </>
   )

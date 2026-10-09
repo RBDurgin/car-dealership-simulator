@@ -15,11 +15,13 @@ import {
   PARCEL_GATE,
   PARKING_SPACES,
   parkedCarRect,
+  patrolTiles,
   PORTER_STANDBY_TILES,
   PROPS,
   RECEPTION_CHAIR_ID,
   SALES_DESKS,
   SIDEWALK_ENDS,
+  spaceOpen,
   SPAWN_TILE,
   wallAt,
   zoneAt,
@@ -268,6 +270,10 @@ describe('the parcel east of the lot', () => {
       expect(g.isWalkable(tx, tz), `${tx},${tz}`).toBe(true)
     }
     for (const [tx, tz] of tiles(PARCEL_GATE)) expect(wallAt(open, tx, tz)).toBeNull()
+    // Paved right across, under the fence too, with no strip of grass between the lots.
+    for (let tz = PARCEL.tz; tz < PARCEL.tz + PARCEL.h; tz++) {
+      expect(zoneAt(open, PARCEL.tx - 1, tz), `${PARCEL.tx - 1},${tz}`).toBe('asphalt')
+    }
     const far = { tx: GRID_WIDTH - 2, tz: 3 }
     const path = findPath(g, LOT_ENTRY_TILES[0], far)!
     expect(path).not.toBeNull()
@@ -277,5 +283,60 @@ describe('the parcel east of the lot', () => {
     // The rest of the dealership is as it was.
     expect(open.props.filter((p) => p.model !== 'forSaleSign')).toEqual(PROPS)
     expect(wallAt(open, PARCEL.tx - 1, 5)).toBe('fence')
+  })
+
+  describe('the east lot', () => {
+    const open = buildLayout(['east-lot'])
+    const east = PARKING_SPACES.filter((sp) => sp.requires === 'east-lot')
+    const inside = (r: Rect, outer: Rect) =>
+      r.tx >= outer.tx &&
+      r.tz >= outer.tz &&
+      r.tx + r.w <= outer.tx + outer.w &&
+      r.tz + r.h <= outer.tz + outer.h
+
+    it('adds 12 spaces on the parcel, overlapping nothing, clear of the wing and the lane', () => {
+      expect(east).toHaveLength(12)
+      const seen = new Set<string>()
+      for (const sp of PARKING_SPACES) {
+        for (const [tx, tz] of tiles(sp.rect)) {
+          expect(seen.has(`${tx},${tz}`), `${tx},${tz}`).toBe(false)
+          seen.add(`${tx},${tz}`)
+        }
+      }
+      for (const sp of east) {
+        expect(inside(sp.rect, PARCEL)).toBe(true)
+        // The parcel's north side is for the showroom wing, its east end for a service lane.
+        expect(sp.rect.tz).toBeGreaterThan(12)
+        expect(sp.rect.tx + sp.rect.w).toBeLessThanOrEqual(GRID_WIDTH - 6)
+      }
+      expect(spaceOpen(PARKING_SPACES.indexOf(east[0]), [])).toBe(false)
+      expect(spaceOpen(PARKING_SPACES.indexOf(east[0]), ['east-lot'])).toBe(true)
+      expect(spaceOpen(0, [])).toBe(true)
+    })
+
+    it('reaches every car from the lot, with every space full', () => {
+      const g = createGrid(open)
+      applyToGrid(g, inventory)
+      const parked = east.map((sp) => parkedCarRect(sp))
+      for (const rect of parked) g.setRectBlocked(rect, true)
+      for (const rect of parked) {
+        const approach = approachTilesFor(g, rect)
+        expect(approach.length).toBeGreaterThan(0)
+        expect(findPathToAny(g, LOT_ENTRY_TILES[0], approach)).not.toBeNull()
+      }
+    })
+
+    it('adds a patrol stop in its aisle, off the parking and the cars', () => {
+      const g = createGrid(open)
+      const stops = patrolTiles(['east-lot'])
+      expect(stops.slice(0, GUARD_PATROL_TILES.length)).toEqual(GUARD_PATROL_TILES)
+      const t = stops[stops.length - 1]
+      const at = `${t.tx},${t.tz}`
+      expect(zoneAt(open, t.tx, t.tz), at).toBe('asphalt')
+      expect(findPath(g, LOT_ENTRY_TILES[0], t), at).not.toBeNull()
+      expect(east.flatMap((sp) => tiles(sp.rect))).not.toContainEqual([t.tx, t.tz])
+      const cars = east.flatMap((sp) => approachTilesFor(g, parkedCarRect(sp)))
+      expect(cars, at).not.toContainEqual(t)
+    })
   })
 })

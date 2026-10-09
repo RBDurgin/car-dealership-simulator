@@ -4,6 +4,7 @@ import { Color, MathUtils, Matrix4, Quaternion, Vector3, type InstancedMesh } fr
 import { isCutaway, wallPieces, type WallMode, type WallPiece } from '../sim/walls'
 import { useGame } from '../state/store'
 import { grid, layout } from './runtime'
+import { useGround } from './useUpNow'
 
 const WALL_HEIGHT: Record<WallMode, number> = { up: 2.4, cutaway: 0.35, down: 0.1 }
 const THICKNESS = { solid: 0.16, glass: 0.08, fence: 0.05 }
@@ -273,6 +274,8 @@ function Fence() {
 }
 
 export function Walls() {
+  // Built once from the layout, so drawn afresh when an expansion changes it.
+  const ground = useGround().join()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'KeyV' && !e.repeat) useGame.getState().cycleWallMode()
@@ -283,8 +286,8 @@ export function Walls() {
 
   return (
     <>
-      <BuildingWalls />
-      <Fence />
+      <BuildingWalls key={`walls:${ground}`} />
+      <Fence key={`fence:${ground}`} />
     </>
   )
 }

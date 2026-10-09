@@ -200,7 +200,8 @@ describe('improvement footprints', () => {
       expect(findPath(grid, end, turnInTile({ from: end }))).not.toBeNull()
       for (const entry of LOT_ENTRY_TILES) expect(findPath(grid, end, entry)).not.toBeNull()
     }
-    for (const space of PARKING_SPACES) {
+    // Spaces on ground that isn't bought yet are checked in layout.test.ts.
+    for (const space of PARKING_SPACES.filter((s) => !s.requires)) {
       const car = carProp({ ...inventory[0], rect: parkedCarRect(space) })
       const approach = approachTilesFor(grid, car.rect)
       expect(approach.length).toBeGreaterThan(0)

@@ -132,6 +132,15 @@ export const UPDATES: readonly Update[] = [
       'The Calendar tab shows your tier and what it takes to move.',
     ],
   },
+  {
+    id: 12,
+    phase: '13',
+    title: 'The east lot',
+    items: [
+      'From Main Street, buy the parcel next door on the Upgrades tab. It’s built overnight with 12 more parking spaces.',
+      'Stock goes there once the old lot is full, and your security guard adds it to their rounds.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

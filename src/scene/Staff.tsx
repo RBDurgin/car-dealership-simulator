@@ -6,7 +6,14 @@ import type { Customer } from '../sim/customers'
 import { hasBuyersInHand } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { GUARD_PATROL_TILES, PORTER_STANDBY_TILES, PROPS, SIDEWALK_ENDS } from '../sim/layout'
+import { expansionsUp } from '../sim/expansions'
+import {
+  GUARD_PATROL_TILES,
+  patrolTiles,
+  PORTER_STANDBY_TILES,
+  PROPS,
+  SIDEWALK_ENDS,
+} from '../sim/layout'
 import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
@@ -337,6 +344,7 @@ function updateGuard(e: Employee, w: StaffWalker, seconds: number): void {
     at: grid.worldToTile(w.pos.x, w.pos.z),
     leg: w.leg,
     chasing: w.task === 'chase',
+    patrol: patrolTiles(expansionsUp(game)),
   })
   if (task.kind === 'idle') {
     if (w.task !== 'post') plan(e, w, 'post')

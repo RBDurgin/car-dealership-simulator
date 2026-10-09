@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DAYS_PER_MONTH } from '../sim/calendar'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { emptyStats, netIncome } from '../sim/deal'
-import { ALL_SLOTS } from '../sim/ordering'
+import { BASE_SLOTS } from '../sim/ordering'
 import { holdback, monthlyQuota } from '../sim/quota'
 import { createSave, parseSave } from '../sim/save'
 import { useGame } from './store'
@@ -35,7 +35,7 @@ describe('manufacturer quota', () => {
   })
 
   it('starts the first month with a target and nothing sold', () => {
-    expect(game().quota).toBe(monthlyQuota(0, ALL_SLOTS.length, game().reputation))
+    expect(game().quota).toBe(monthlyQuota(0, BASE_SLOTS, game().reputation))
     expect(game().monthSales).toEqual({ count: 0, msrp: 0 })
   })
 
@@ -133,8 +133,8 @@ describe('manufacturer quota', () => {
     endDay()
     game().startNextDay()
     expect(game().monthSales).toEqual({ count: 0, msrp: 0 })
-    expect(game().quota).toBe(monthlyQuota(1, ALL_SLOTS.length, game().reputation))
-    expect(game().quota).toBeGreaterThan(monthlyQuota(1, ALL_SLOTS.length, 50))
+    expect(game().quota).toBe(monthlyQuota(1, BASE_SLOTS, game().reputation))
+    expect(game().quota).toBeGreaterThan(monthlyQuota(1, BASE_SLOTS, 50))
   })
 
   it('keeps the month going through a save mid-month', () => {

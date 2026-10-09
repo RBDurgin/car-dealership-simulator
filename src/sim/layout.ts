@@ -47,6 +47,16 @@ export const GUARD_PATROL_TILES: Tile[] = [
   { tx: 32, tz: 18 },
 ]
 
+/** The extra patrol stop once the east lot is up: its aisle, between the two rows. */
+const EAST_LOT_PATROL: Tile = { tx: 47, tz: 18 }
+
+/** The guard's patrol with the `expansions` that are up. */
+export function patrolTiles(expansions: readonly ExpansionId[]): Tile[] {
+  return expansions.includes('east-lot')
+    ? [...GUARD_PATROL_TILES, EAST_LOT_PATROL]
+    : GUARD_PATROL_TILES
+}
+
 /** Where the owner stands on a visit: in the office, by the desk, clear of both chairs. */
 export const OWNER_OFFICE_TILES: Tile[] = [
   { tx: 34, tz: 6 },
@@ -186,6 +196,8 @@ export interface ParkingSpace {
   rect: Rect
   /** Direction the parked car's nose points. The car fills the nose end of the space. */
   facing: Facing
+  /** The expansion that has to be up before the space can be used (none: always open). */
+  requires?: ExpansionId
 }
 
 function spaceRow(
@@ -209,7 +221,21 @@ export const PARKING_SPACES: ParkingSpace[] = [
   ...spaceRow(7, { tx: 1, tz: 2 }, { tx: 0, tz: 2 }, { w: 4, h: 2 }, 3),
   // Middle row, noses toward the showroom
   ...spaceRow(6, { tx: 9, tz: 2 }, { tx: 0, tz: 2 }, { w: 4, h: 2 }, 1),
+  // The east lot, on the parcel once it's bought: a front row along the street
+  // fence and a row facing it across the aisle, both in from the gate. The
+  // parcel's north side is left for the showroom wing, and its east end for a
+  // service lane.
+  ...[
+    ...spaceRow(6, { tx: 41, tz: 20 }, { tx: 2, tz: 0 }, { w: 2, h: 4 }, 0),
+    ...spaceRow(6, { tx: 41, tz: 14 }, { tx: 2, tz: 0 }, { w: 2, h: 4 }, 2),
+  ].map((space): ParkingSpace => ({ ...space, requires: 'east-lot' })),
 ]
+
+/** Whether lot space `index` can be used with the `expansions` that are up. */
+export function spaceOpen(index: number, expansions: readonly ExpansionId[]): boolean {
+  const { requires } = PARKING_SPACES[index]
+  return !requires || expansions.includes(requires)
+}
 
 /**
  * Where visitors who drive in park: three spaces in the open asphalt between
@@ -390,7 +416,7 @@ const FIXED_PROPS: Prop[] = [
 /** Fixed furniture and fittings. Cars come from the inventory and can leave. */
 export const PROPS: Prop[] = FIXED_PROPS
 
-/** Ground bought as the dealership grows. Nothing sells it yet. */
+/** Ground bought as the dealership grows (see `sim/expansions.ts`). */
 export type ExpansionId = 'east-lot'
 
 /** Where the fence between the lot and the parcel opens once the parcel is bought. */
@@ -421,14 +447,21 @@ function forEachTile(r: Rect, fn: (tx: number, tz: number) => void): void {
 }
 
 /**
+ * The paved east lot: the parcel, and the strip under the fence between it
+ * and the old lot, so the two lots meet without a seam of grass.
+ */
+const EAST_LOT_PAVING: Rect = { ...PARCEL, tx: PARCEL.tx - 1, w: PARCEL.w + 1 }
+
+/**
  * The dealership with the `expansions` that are up. Until the east lot is
  * bought, the parcel is closed off behind its fence with a sign out front;
- * once it is, the parcel is asphalt and the fence between them opens.
+ * once it is, the parcel and the strip under the fence are asphalt and the
+ * fence between the lots opens.
  */
 export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
   const lot = expansions.includes('east-lot')
   const areas = ZONES.map((z) =>
-    lot && z.kind === 'parcel' ? { ...z, kind: 'asphalt' as const } : z,
+    lot && z.kind === 'parcel' ? { kind: 'asphalt' as const, rect: EAST_LOT_PAVING } : z,
   )
   const openings = lot ? [...OPENINGS, PARCEL_GATE] : OPENINGS
   const n = GRID_WIDTH * GRID_HEIGHT
