@@ -115,3 +115,22 @@ test('a new player never sees what’s new', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'New game' })).toBeVisible()
   await expect(page.getByRole('dialog', { name: "What's new" })).toBeHidden()
 })
+
+test('says so, instead of a blank page, when the browser refuses WebGL', async ({ page }) => {
+  // As a browser does once it has blocked WebGL for the site.
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      type: string,
+      ...rest: unknown[]
+    ) {
+      if (type.startsWith('webgl')) return null
+      return getContext.call(this, type as '2d', ...(rest as []))
+    } as typeof getContext
+  })
+  await page.goto('/')
+  await expect(page.getByRole('alertdialog', { name: 'Error' })).toBeVisible()
+  await expect(page.getByText('3D graphics are unavailable')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reload' })).toBeVisible()
+})
