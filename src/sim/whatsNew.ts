@@ -174,8 +174,8 @@ export const UPDATES: readonly Update[] = [
     phase: '14',
     title: 'Keeping an eye on Nazma',
     items: [
-      'His lot goes up across the road, where you can see it from the sidewalk: a building site first, then his showroom, stock and a banner with his price cut.',
-      'The new Rival tab on the office computer (K) shows his share of the town’s buyers day by day, his strength and his prices.',
+      'His lot goes up across the road, in view from the sidewalk: a building site, then his showroom, stock and price banner.',
+      'The new Rival tab on the office computer (K) shows his share of buyers day by day, his strength and his prices.',
       'The top bar shows his share of today’s buyers, and each Monday morning you hear how he did last week.',
     ],
   },

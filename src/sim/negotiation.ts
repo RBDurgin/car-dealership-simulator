@@ -60,7 +60,7 @@ export interface Haggle {
 }
 
 export type WalkReason =
-  'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball' | 'rival'
+  'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball' | 'rival' | 'think'
 
 /** An ask more than this share over the rival's quote risks a walk to him. */
 export const QUOTE_TOLERANCE = 0.03
@@ -163,10 +163,11 @@ export function respondToAsk(
   const matched = quote !== null && ask <= quote
   const extra = tradeBonus(c, allowance) + (matched ? MATCH_BONUS : 0)
   const chance = acceptChance(c, car, net + offset, bonus + extra, day)
+  // Turning down a match of the rival's price, they leave to think, not to go to him.
   const roll = (factor: number): AskResponse =>
     rng.next() < chance * factor
       ? { answer: 'accept' }
-      : { answer: 'walk', reason: net > budget ? 'budget' : 'pass' }
+      : { answer: 'walk', reason: net > budget ? 'budget' : matched ? 'think' : 'pass' }
   const rounds = ARCHETYPES[c.archetype].haggle.rounds
 
   if (insultingAllowance(c, allowance)) {
@@ -511,5 +512,7 @@ export function walkLine(reason: WalkReason): string {
       return 'I can get more than that elsewhere.'
     case 'rival':
       return "Nazma's across the road is cheaper. I'll go there."
+    case 'think':
+      return "That's a fair price. I'll think about it."
   }
 }

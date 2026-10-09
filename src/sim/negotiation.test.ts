@@ -573,6 +573,18 @@ describe("the rival's quote", () => {
     expect(r.accept).toBeLessThan(chance + 0.04)
   })
 
+  it('leaves to think it over, not for him, when turning down a match', () => {
+    const c = quoted(29_200)
+    const walks = Array.from({ length: 200 }, (_, seed) =>
+      respondToAsk(c, sedan, 29_200, createRng(seed)),
+    ).filter((res) => res.answer === 'walk')
+    expect(walks.length).toBeGreaterThan(0)
+    for (const res of walks) expect(res).toEqual({ answer: 'walk', reason: 'think' })
+    expect(walkLine('think')).toMatch(/think about it/)
+    // Without a quote, the same ask over their hope gets a counter, not a walk.
+    expect(respondToAsk(base, sedan, 29_200, createRng(1)).answer).toBe('counter')
+  })
+
   it('compares the price before a trade allowance', () => {
     const trader = quoted(28_000, {
       trade: { hope: 10_000, estimate: { estimate: 9_000, margin: 1_000 }, appraised: true },
