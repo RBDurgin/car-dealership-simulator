@@ -108,7 +108,8 @@ export function createSave(s: SaveSource, now: number): SaveData {
     savedAt: now,
     day: s.clock.day,
     cash: s.cash,
-    inventory: s.inventory,
+    // The shop hands every car back at closing; this is in case one wasn't.
+    inventory: s.inventory.map((c) => (c.status === 'recon' ? { ...c, status: 'available' } : c)),
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off', quitting: false })),
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
@@ -330,7 +331,7 @@ function isCar(v: unknown): boolean {
     isNumber(v.arrivedDay) &&
     typeof v.floored === 'boolean' &&
     isObject(v.rect) &&
-    (v.status === 'available' || v.status === 'sold') &&
+    (v.status === 'available' || v.status === 'sold' || v.status === 'recon') &&
     (v.used === null || isUsedInfo(v.used))
   )
 }

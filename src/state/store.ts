@@ -177,7 +177,7 @@ import {
   type Employee,
   type StaffEvent,
 } from '../sim/staff'
-import { leadChoice } from '../sim/staffAi'
+import { leadChoice, mechanicWorking } from '../sim/staffAi'
 import { WALL_MODES, type WallMode } from '../sim/walls'
 import { WEATHER_EFFECTS, waitingOutside, weatherOn, type Weather } from '../sim/weather'
 import type { TipId } from '../sim/tips'
@@ -200,8 +200,19 @@ import {
   bayCount,
   defaultService,
   emptySchedule,
+  finishedLate,
+  finishRecon,
+  jobMinutes,
+  overtimeFor,
   planServiceVisits,
+  RECON_MAX,
+  reconBlocker,
+  reconJob,
+  reconPartsCost,
+  returnFromShop,
   serviceDemand,
+  workJobs,
+  type ReconBook,
   type ServiceJob,
   type ServiceSchedule,
   type ServiceSettings,
@@ -231,7 +242,7 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival'
+export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service'
 
 /** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
 export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash
@@ -434,6 +445,15 @@ interface GameState {
   staffSign: (employeeId: string, customerId: string) => void
   /** Lot porter `employeeId` finished washing car `carId`. */
   staffWash: (employeeId: string, carId: string) => void
+  /**
+   * Mechanic `employeeId` reached bay `bay` and starts on job `jobId` (or takes
+   * over one left stalled there). Its time then runs on the clock.
+   */
+  staffStartJob: (employeeId: string, jobId: string, bay: number) => void
+  /** Sends used car `carId` to the shop for reconditioning, paying for the parts. False if it can't go. */
+  recondition: (carId: string) => boolean
+  /** Turns reconditioning used cars as they come in on or off. */
+  setAutoRecon: (on: boolean) => void
   /** From the end-of-day summary: opens the doors on the next day. */
   startNextDay: () => void
   /** Puts one of today's candidates on the payroll. */
@@ -503,6 +523,19 @@ export function winShowing(
   s: Pick<GameState, 'screen' | 'clock' | 'customers' | 'career' | 'won'>,
 ): boolean {
   return s.screen === 'playing' && dayOver(s) && atTopRank(s.career) && !s.won
+}
+
+/** What deciding whether a car can go to the shop needs, from the store. */
+export function reconBook(
+  s: Pick<GameState, 'inventory' | 'customers' | 'roster' | 'expansions' | 'clock'>,
+): ReconBook {
+  return {
+    inventory: s.inventory,
+    customers: s.customers,
+    bays: bayCount(expansionsUp(s)),
+    mechanics: s.roster.filter((e) => e.role === 'mechanic' && !e.fired).length,
+    closed: isClosed(s.clock),
+  }
 }
 
 /** The levers of the game's difficulty level; a stable object, so fine as a selector. */
@@ -753,8 +786,14 @@ export const useGame = create<GameState>((set, get) => {
     })
   }
 
-  /** Closing time: the staff head home, and anyone still thinking of quitting goes for good. */
+  /**
+   * Closing time: the staff head home, and anyone still thinking of quitting
+   * goes for good. The mechanics stay on to finish what's in the bays, paid
+   * overtime, and cars still waiting for the shop go back on sale with their
+   * parts money back.
+   */
   const closeUp = () => {
+    closeShop()
     const before = get().roster
     setRoster(reduceStaff(before, { type: 'close' }))
     const quitters = before.filter((e) => e.quitting && !e.fired)
@@ -774,6 +813,73 @@ export const useGame = create<GameState>((set, get) => {
         ? `${quit.join(' and ')} quit to work for ${rival.name}.`
         : `${quit.join(' and ')} quit and won't be back.`,
     )
+  }
+
+  /** At closing: jobs in the bays are finished in overtime, and waiting cars come back. */
+  const closeShop = () => {
+    const s = get()
+    const started = s.serviceJobs.filter((j) => j.status === 'inBay')
+    const unstarted = s.serviceJobs.filter((j) => j.status === 'waiting' && j.carId)
+    if (started.length === 0 && unstarted.length === 0) return
+    const overtime = started.reduce((sum, j) => sum + overtimeFor(j), 0)
+    const refund = unstarted.reduce((sum, j) => sum + j.partsCost, 0)
+    let inventory = s.inventory
+    for (const j of unstarted) inventory = returnFromShop(inventory, j.carId!)
+    set({
+      inventory,
+      cash: s.cash + refund - overtime,
+      serviceJobs: s.serviceJobs
+        .filter((j) => !unstarted.includes(j))
+        .map((j) => (started.includes(j) ? finishedLate(j) : j)),
+      dayStats: {
+        ...s.dayStats,
+        service: { ...s.dayStats.service, overtime: s.dayStats.service.overtime + overtime },
+      },
+    })
+    jobsDone(started.map(finishedLate), true)
+  }
+
+  /**
+   * Books jobs that just finished: a reconditioned car goes back on sale,
+   * better and dearer. `late`: finished after closing, so said quietly.
+   */
+  const jobsDone = (done: readonly ServiceJob[], late = false) => {
+    const recon = done.filter((j) => j.status === 'done' && j.carId)
+    if (recon.length === 0) return
+    const s = get()
+    let inventory = s.inventory
+    for (const j of recon) inventory = finishRecon(inventory, j.carId!, j.partsCost, s.clock.day)
+    const stats = get().dayStats
+    set({
+      inventory,
+      dayStats: {
+        ...stats,
+        service: { ...stats.service, recon: stats.service.recon + recon.length },
+      },
+    })
+    if (late) return
+    for (const j of recon) {
+      const car = inventory.find((c) => c.id === j.carId)
+      if (car)
+        notify(
+          `The ${carName(car.model)} is back from the shop, on sale at ${formatMoney(car.msrp)}.`,
+        )
+    }
+  }
+
+  /** Sends car `carId` to the shop, its parts paid for now. */
+  const queueRecon = (carId: string, partsCost: number) => {
+    const s = get()
+    const n = s.serviceJobs.filter((j) => j.kind === 'recon').length + 1
+    set({
+      cash: s.cash - partsCost,
+      inventory: s.inventory.map((c) => (c.id === carId ? { ...c, status: 'recon' } : c)),
+      serviceJobs: [...s.serviceJobs, reconJob(`recon-${s.clock.day}-${n}`, carId, partsCost)],
+      menu: s.menu?.targetId === carId ? null : s.menu,
+      hoveredId: s.hoveredId === carId ? null : s.hoveredId,
+      inspectedId: s.inspectedId === carId ? null : s.inspectedId,
+    })
+    if (s.activeAction?.targetId === carId) dispatch({ type: 'cancel' })
   }
 
   /** Stores a new roster, dropping hovers, menus and panels aimed at anyone who's gone. */
@@ -837,6 +943,10 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'calendar')
       case 'rival':
         return get().toggleStockPanel(true, 'rival')
+      case 'service':
+        return get().toggleStockPanel(true, 'service')
+      case 'recondition':
+        return void get().recondition(finished.targetId)
       case 'confront':
         return get().nazmaRunOff('player')
     }
@@ -1113,6 +1223,26 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
+   * With reconditioning on its own, the used cars taken in yesterday that need
+   * it go to the shop, while there's cash for the parts. Returns how many went.
+   */
+  const autoRecon = (day: number): number => {
+    if (!get().service.autoRecon) return 0
+    const due = get().inventory.filter(
+      (c) => c.used && c.used.acquiredDay === day - 1 && c.used.condition < RECON_MAX,
+    )
+    let sent = 0
+    for (const car of due) {
+      if (reconBlocker(reconBook(get()), car.id)) continue
+      const partsCost = reconPartsCost(serviceRng)
+      if (get().cash < partsCost) break
+      queueRecon(car.id, partsCost)
+      sent++
+    }
+    return sent
+  }
+
+  /**
    * Opens the doors on `day`: sold cars are gone, Nazma may have stolen one
    * off the lot (the bank calls in its loan if it was floored), the rest have
    * gathered a night's dust (more out on the lot after rain), yesterday's
@@ -1143,7 +1273,10 @@ export const useGame = create<GameState>((set, get) => {
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
-    const kept = dropSold(s.inventory)
+    // The shop hands every car back at closing; this is in case one wasn't.
+    const kept = dropSold(s.inventory).map((c) =>
+      c.status === 'recon' ? { ...c, status: 'available' as const } : c,
+    )
     const level = tuning()
     const guarded = isGuarded(s.roster)
     const opening = rivalMorning(s.rival, day, s.career.rank, {
@@ -1236,11 +1369,12 @@ export const useGame = create<GameState>((set, get) => {
         rival: rival.status === 'open' ? emptyRivalStats(share) : null,
       },
       missedYesterday: s.dayStats.missed,
-      candidates: generateCandidates(staffRng, day),
+      candidates: generateCandidates(staffRng, day, installedExpansions(s.expansions, day)),
       owner,
       nazma,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
+    const shop = autoRecon(day)
     const notices = [
       s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
       s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
@@ -1249,6 +1383,7 @@ export const useGame = create<GameState>((set, get) => {
       eventNotice(day),
       theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
+      shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
     ].filter((t): t is string => !!t)
     if (notices.length > 0) notify(notices.join(' '))
   }
@@ -1311,7 +1446,9 @@ export const useGame = create<GameState>((set, get) => {
       const blocker =
         action === 'confront'
           ? confrontBlocker(s.nazma)
-          : actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
+          : action === 'recondition'
+            ? reconBlocker(reconBook(s), targetId)
+            : actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
       if (blocker) {
         set({ menu: null })
         return notify(blocker)
@@ -1416,11 +1553,17 @@ export const useGame = create<GameState>((set, get) => {
         ),
       )
       customers = [...customers, ...arrived]
+      // The mechanics put in the time on what's in the bays.
+      const jobs = workJobs(s.serviceJobs, minutes, (id) => mechanicWorking(s.roster, id))
       set({
         clock: step,
         arrivals: schedule,
         dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived),
+        serviceJobs: jobs,
       })
+      if (jobs !== s.serviceJobs) {
+        jobsDone(jobs.filter((j, i) => j.status !== s.serviceJobs[i].status))
+      }
       if (isClosed(step)) closeUp()
       commit(customers)
       settleDay()
@@ -1754,6 +1897,49 @@ export const useGame = create<GameState>((set, get) => {
       if (e?.role !== 'porter' || e.status !== 'atPost') return
       const inventory = washCar(get().inventory, carId)
       if (inventory !== get().inventory) set({ inventory })
+    },
+    staffStartJob: (employeeId, jobId, bay) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      const job = s.serviceJobs.find((j) => j.id === jobId)
+      if (e?.role !== 'mechanic' || !mechanicWorking(s.roster, e.id) || !job) return
+      let next: ServiceJob
+      if (job.status === 'inBay') {
+        // Taking over a job someone else left: the time already in it counts.
+        if (job.mechanicId === e.id || mechanicWorking(s.roster, job.mechanicId)) return
+        next = { ...job, mechanicId: e.id }
+      } else {
+        const taken = s.serviceJobs.some((j) => j.status === 'inBay' && j.bay === bay)
+        if (job.status !== 'waiting' || taken || bay >= bayCount(expansionsUp(s))) return
+        next = {
+          ...job,
+          status: 'inBay',
+          bay,
+          mechanicId: e.id,
+          minutes: jobMinutes(job.kind, e.skill),
+        }
+      }
+      set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
+    },
+    recondition: (carId) => {
+      const s = get()
+      const blocker = reconBlocker(reconBook(s), carId)
+      const partsCost = blocker ? 0 : reconPartsCost(serviceRng)
+      const reason = blocker ?? (s.cash < partsCost ? 'Not enough cash for the parts.' : null)
+      if (reason) {
+        notify(reason)
+        return false
+      }
+      queueRecon(carId, partsCost)
+      const car = get().inventory.find((c) => c.id === carId)!
+      notify(
+        `The ${carName(car.model)} went to the shop for reconditioning. Parts: ${formatMoney(partsCost)}.`,
+      )
+      return true
+    },
+    setAutoRecon: (on) => {
+      const service = get().service
+      if (service.autoRecon !== on) set({ service: { ...service, autoRecon: on } })
     },
     startNextDay: () => {
       const s = get()

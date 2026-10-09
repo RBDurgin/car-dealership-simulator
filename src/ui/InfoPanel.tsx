@@ -2,10 +2,17 @@ import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
 import { conditionOf } from '../sim/cleanliness'
 import { ROLE_LABELS } from '../sim/staff'
-import { usedTag } from '../sim/usedCars'
+import type { CarStatus } from '../sim/inventory'
+import { shapeLabel, usedTag } from '../sim/usedCars'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 import { Skill } from './StaffPanel'
+
+const STATUS_LABELS: Record<CarStatus, string> = {
+  available: 'For sale',
+  sold: 'Sold',
+  recon: 'In the shop',
+}
 
 function Panel({ children }: { children: ReactNode }) {
   return (
@@ -63,9 +70,15 @@ export function InfoPanel() {
         <dt>Your cost</dt>
         <dd className="price">{formatMoney(stock.cost)}</dd>
         <dt>Status</dt>
-        <dd>{stock.status === 'available' ? 'For sale' : 'Sold'}</dd>
+        <dd>{STATUS_LABELS[stock.status]}</dd>
         <dt>Condition</dt>
         <dd>{conditionOf(stock.cleanliness)}</dd>
+        {stock.used && (
+          <>
+            <dt>Shape</dt>
+            <dd>{shapeLabel(stock.used.condition)}</dd>
+          </>
+        )}
       </dl>
     </Panel>
   )

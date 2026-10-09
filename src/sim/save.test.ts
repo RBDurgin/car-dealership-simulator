@@ -92,6 +92,16 @@ describe('save data', () => {
     expect(createSave(source(), 123).campaigns).toEqual([campaign])
   })
 
+  it('writes a car left in the shop back as for sale, and still reads one', () => {
+    const src = source()
+    const inShop = { ...src.inventory[0], status: 'recon' as const }
+    const save = createSave({ ...src, inventory: [inShop, ...src.inventory.slice(1)] }, 123)
+    expect(save.inventory[0].status).toBe('available')
+    const raw = JSON.parse(JSON.stringify(save))
+    raw.inventory[0].status = 'recon'
+    expect(parseSave(raw)?.inventory[0].status).toBe('recon')
+  })
+
   it('round-trips through JSON', () => {
     const save = createSave(source(), 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save)

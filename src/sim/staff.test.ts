@@ -23,8 +23,8 @@ import {
   RECEPTION_PATIENCE_FACTOR,
   reduceStaff,
   retentionRaise,
-  ROLE_LIMITS,
   roleLimits,
+  ROLE_LIMITS,
   ROLES,
   wageFor,
   type Employee,
@@ -48,7 +48,7 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
 describe('candidates', () => {
   it('offers every role each day, with valid skills, wages and staff models', () => {
     for (let day = 1; day <= 20; day++) {
-      const cands = generateCandidates(createRng(day), day)
+      const cands = generateCandidates(createRng(day), day, ['east-lot', 'service-bay'])
       expect(cands.length).toBeGreaterThanOrEqual(ROLES.length)
       expect(cands.length).toBeLessThanOrEqual(ROLES.length + 1)
       for (const role of ROLES) expect(cands.some((c) => c.role === role)).toBe(true)
@@ -62,6 +62,31 @@ describe('candidates', () => {
       }
       expect(new Set(cands.map((c) => c.id)).size).toBe(cands.length)
     }
+  })
+
+  it('offers no mechanics until there is a garage, and rolls the rest as before', () => {
+    for (let day = 1; day <= 20; day++) {
+      const cands = generateCandidates(createRng(day), day)
+      expect(cands.some((c) => c.role === 'mechanic')).toBe(false)
+      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length - 1)
+      expect(cands.length).toBeLessThanOrEqual(ROLES.length)
+    }
+    expect(generateCandidates(createRng(5), 3, ['east-lot'])).toEqual(
+      generateCandidates(createRng(5), 3),
+    )
+  })
+
+  it('allows one mechanic per bay, and none before the garage', () => {
+    expect(roleLimits([]).mechanic).toBe(0)
+    expect(roleLimits(['east-lot']).mechanic).toBe(0)
+    expect(roleLimits(['east-lot', 'service-bay']).mechanic).toBe(2)
+    expect(roleLimits(['east-lot', 'service-bay', 'showroom-wing'])).toMatchObject({
+      sales: 4,
+      porter: 2,
+      mechanic: 2,
+    })
+    expect(canHire([], 'mechanic')).toBe('Build a service garage first.')
+    expect(canHire([], 'mechanic', ['east-lot', 'service-bay'])).toBeNull()
   })
 
   it('is deterministic for a seed and gives each day distinct ids', () => {

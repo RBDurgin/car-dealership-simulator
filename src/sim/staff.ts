@@ -5,6 +5,7 @@ import {
   DESK_CHAIR_ID,
   RECEPTION_CHAIR_ID,
   salesDesks,
+  serviceBays,
   type ExpansionId,
   type SalesDesk,
 } from './layout'
@@ -23,9 +24,16 @@ import type { Rng } from './rng'
  * now; a fired employee is removed once they've left. Someone Nazma poached is
  * `quitting` until kept with a raise; at `close` they walk out for good.
  */
-export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security'
+export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic'
 
-export const ROLES: readonly Role[] = ['sales', 'receptionist', 'finance', 'porter', 'security']
+export const ROLES: readonly Role[] = [
+  'sales',
+  'receptionist',
+  'finance',
+  'porter',
+  'security',
+  'mechanic',
+]
 
 export const ROLE_LABELS: Record<Role, string> = {
   sales: 'Salesperson',
@@ -33,6 +41,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   finance: 'Finance manager',
   porter: 'Lot porter',
   security: 'Security guard',
+  mechanic: 'Mechanic',
 }
 const ROLE_PLURALS: Record<Role, string> = {
   sales: 'salespeople',
@@ -40,6 +49,7 @@ const ROLE_PLURALS: Record<Role, string> = {
   finance: 'finance managers',
   porter: 'lot porters',
   security: 'security guards',
+  mechanic: 'mechanics',
 }
 /** What each role does, for applicants in the staff panel. */
 export const ROLE_BLURBS: Record<Role, string> = {
@@ -48,6 +58,7 @@ export const ROLE_BLURBS: Record<Role, string> = {
   finance: 'Signs buyers at your office desk, so you can sell to the next one.',
   porter: 'Washes the dirtiest cars on the lot.',
   security: 'Patrols the lot, chases off Nazma and makes his visits rarer.',
+  mechanic: 'Works a bay in the service garage. Skill sets how fast.',
 }
 /** Short label for the badge over their head. */
 export const ROLE_BADGES: Record<Role, string> = {
@@ -56,23 +67,31 @@ export const ROLE_BADGES: Record<Role, string> = {
   finance: 'Finance',
   porter: 'Porter',
   security: 'Security',
+  mechanic: 'Mechanic',
 }
 
-/** Most of each role on the payroll at once, before the showroom wing. */
+/**
+ * Most of each role on the payroll at once, before the showroom wing and the
+ * garage. No mechanics until there's a garage to work in.
+ */
 export const ROLE_LIMITS: Record<Role, number> = {
   sales: 2,
   receptionist: 1,
   finance: 1,
   porter: 1,
   security: 1,
+  mechanic: 0,
 }
 
 /** With the showroom wing up: a desk for each of 4 salespeople, and 2 porters for the bigger lot. */
 const WING_LIMITS: Partial<Record<Role, number>> = { sales: 4, porter: 2 }
 
-/** Most of each role on the payroll at once with the `expansions` that are up. */
+/** Most of each role on the payroll at once with the `expansions` that are up: a mechanic per bay. */
 export function roleLimits(expansions: readonly ExpansionId[] = []): Record<Role, number> {
-  return expansions.includes('showroom-wing') ? { ...ROLE_LIMITS, ...WING_LIMITS } : ROLE_LIMITS
+  const wing = expansions.includes('showroom-wing')
+  const bays = serviceBays(expansions).length
+  if (!wing && !bays) return ROLE_LIMITS
+  return { ...ROLE_LIMITS, ...(wing && WING_LIMITS), mechanic: bays }
 }
 
 /**
@@ -85,6 +104,7 @@ export const POSTS: Record<Role, string | null> = {
   finance: DESK_CHAIR_ID,
   porter: null,
   security: null,
+  mechanic: null,
 }
 
 export type StaffStatus = 'off' | 'arriving' | 'atPost' | 'leaving'
@@ -118,6 +138,7 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   finance: { base: 110, perSkill: 35 },
   porter: { base: 60, perSkill: 15 },
   security: { base: 80, perSkill: 20 },
+  mechanic: { base: 100, perSkill: 30 },
 }
 
 /** Share of a sale's gross profit (price less cost) a salesperson earns for making it. */
@@ -220,15 +241,23 @@ export function dressFor(role: Role, variant: unknown): StaffVariant {
 
 /**
  * The day's applicants: one for each role in random order, sometimes plus one
- * more of any role, so every role can be filled on any day.
+ * more of any role, so every role can be filled on any day. Only roles that
+ * can be hired with the `expansions` up apply (no mechanics without a garage),
+ * so the rolls are the same as before there were any.
  */
-export function generateCandidates(rng: Rng, day: number): Employee[] {
-  const roles = [...ROLES]
+export function generateCandidates(
+  rng: Rng,
+  day: number,
+  expansions: readonly ExpansionId[] = [],
+): Employee[] {
+  const limits = roleLimits(expansions)
+  const open = ROLES.filter((r) => limits[r] > 0)
+  const roles = [...open]
   for (let i = roles.length - 1; i > 0; i--) {
     const j = rng.int(0, i)
     ;[roles[i], roles[j]] = [roles[j], roles[i]]
   }
-  if (rng.next() < 0.5) roles.push(rng.pick(ROLES))
+  if (rng.next() < 0.5) roles.push(rng.pick(open))
   return roles.map((role, i) => {
     const skill = rng.int(MIN_SKILL, MAX_SKILL)
     return {
@@ -259,6 +288,8 @@ export function canHire(
   const count = roster.filter((e) => e.role === role && !e.fired).length
   const limit = roleLimits(expansions)[role]
   if (count < limit) return null
+  // Only mechanics need somewhere to work before they can be hired.
+  if (limit === 0) return 'Build a service garage first.'
   return limit === 1
     ? `You already have a ${ROLE_LABELS[role].toLowerCase()}.`
     : `You already have ${limit} ${ROLE_PLURALS[role]}.`

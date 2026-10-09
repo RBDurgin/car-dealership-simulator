@@ -2,7 +2,7 @@ import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { CAR_MODELS } from '../sim/customers'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT, floorBalance } from '../sim/floorPlan'
 import { carName } from '../sim/interactables'
-import { availableCars, BASE_MSRP, type InventoryCar } from '../sim/inventory'
+import { BASE_MSRP, type InventoryCar } from '../sim/inventory'
 import type { CarModel } from '../sim/layout'
 import { CLOSEOUT_REBATE, closeoutOn } from '../sim/events'
 import {
@@ -20,6 +20,7 @@ import { reservedSlots } from '../sim/sellers'
 import { levelTuning, orderInvoice, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
 import { RivalTab } from './RivalTab'
+import { ServiceTab } from './ServiceTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
 import { UpgradesTab } from './UpgradesTab'
@@ -158,6 +159,7 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
             </span>
           )}
           {car.used && <span className="stock-badge stock-used">{usedTag(car.used)}</span>}
+          {car.status === 'recon' && <span className="stock-badge">In the shop</span>}
           {isStale(car, day) && (
             <span
               className="stock-badge stock-stale"
@@ -200,8 +202,9 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
  * The office computer: buying stock from the manufacturer (the catalog,
  * today's orders and the cars in stock), ad campaigns on the marketing tab,
  * improvements on the upgrades tab, the coming weeks on the calendar tab and
- * Nazma's lot across the road on the rival tab. Opened at the computer, from
- * the top bar's Office button, or with I, M, U, C and K.
+ * Nazma's lot across the road on the rival tab, and the garage on the service
+ * tab. Opened at the computer, from the top bar's Office button, or with I, M,
+ * U, C, K and B.
  * Orders are delivered the next morning.
  */
 export function StockPanel() {
@@ -241,8 +244,10 @@ export function StockPanel() {
         <UpgradesTab />
       ) : tab === 'calendar' ? (
         <CalendarTab />
-      ) : (
+      ) : tab === 'rival' ? (
         <RivalTab />
+      ) : (
+        <ServiceTab />
       )}
       <div className="status-hint">
         {TAB_HINTS[tab].hint}
@@ -258,6 +263,7 @@ const TABS: [ComputerTab, string][] = [
   ['upgrades', 'Upgrades'],
   ['calendar', 'Calendar'],
   ['rival', 'Rival'],
+  ['service', 'Service'],
 ]
 
 const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
@@ -266,6 +272,7 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   upgrades: { hint: 'Upgrades go up overnight.', key: 'U' },
   calendar: { hint: 'Plan stock and ads for the busy days.', key: 'C' },
   rival: { hint: 'Ads, reputation and fair prices win his buyers back.', key: 'K' },
+  service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
 }
 
 function StockTab() {
@@ -289,9 +296,10 @@ function StockTab() {
     const r = placeOrder(book, model, financing, day, invoice)
     return r.ok ? null : r.reason
   }
-  const stock = availableCars(inventory).sort(
-    (a, b) => Number(a.location === 'lot') - Number(b.location === 'lot'),
-  )
+  // Cars in the shop are still ours.
+  const stock = inventory
+    .filter((c) => c.status !== 'sold')
+    .sort((a, b) => Number(a.location === 'lot') - Number(b.location === 'lot'))
   return (
     <>
       <h2>Order from the manufacturer</h2>

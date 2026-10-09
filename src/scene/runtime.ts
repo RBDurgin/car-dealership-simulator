@@ -27,6 +27,7 @@ import {
   type Rect,
 } from '../sim/layout'
 import { vehicleOwnerId } from '../sim/sellers'
+import { bayCount, RECON_MAX } from '../sim/service'
 import { POSTS } from '../sim/staff'
 import { useGame } from '../state/store'
 
@@ -107,11 +108,14 @@ useGame.subscribe((s, prev) => {
   if (rebuilt || morning) resetGrid()
   syncWorld(s.inventory, up)
   if (rebuilt) holdSeats()
-  // A car delivered or an improvement put up overnight where the player ended
-  // the day steps them out. Only new ones: the player sits on a blocked chair tile.
-  const known = new Set(prev.inventory.map((c) => c.id))
+  // A car delivered, back from the shop or an improvement put up overnight
+  // where the player stands steps them out. Only new ones: the player sits on
+  // a blocked chair tile.
+  const before = new Map(prev.inventory.map((c) => [c.id, c.status]))
   const added = [
-    ...s.inventory.filter((c) => !known.has(c.id)).map((c) => c.rect),
+    ...s.inventory
+      .filter((c) => c.status === 'available' && before.get(c.id) !== 'available')
+      .map((c) => c.rect),
     ...improvementFootprints(raised),
   ]
   if (added.some((rect) => touches(rect, playerPos))) {
@@ -236,6 +240,12 @@ function holdSeats(): void {
 }
 holdSeats()
 
+/** Whether car `id` is a used one the garage could do up. */
+function canRecondition(game: ReturnType<typeof useGame.getState>, id: string): boolean {
+  const car = game.inventory.find((c) => c.id === id)
+  return !!car?.used && car.used.condition < RECON_MAX && bayCount(expansionsUp(game)) > 0
+}
+
 /**
  * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Nazma approached
  * from where they're standing right now. Undefined if it's gone.
@@ -245,6 +255,10 @@ export function findInteractable(id: string): Interactable | undefined {
   const it = interactables.get(id)
   // The finance manager works from the desk chair while they're on shift.
   if (it && id === DESK_CHAIR_ID) return { ...it, actions: deskActions(game.roster) }
+  // A worn used car can go to the service garage once there is one.
+  if (it?.kind === 'car' && canRecondition(game, id)) {
+    return { ...it, actions: [...it.actions, 'recondition'] }
+  }
   if (it) return it
   const c = game.customers.find((x) => x.id === id)
   const cPos = customerPos.get(id)

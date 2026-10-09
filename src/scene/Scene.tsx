@@ -9,6 +9,7 @@ import { DebugGrid } from './DebugGrid'
 import { DrawCalls } from './DrawCalls'
 import { DrivenCars } from './DrivenCar'
 import { Floors } from './Floors'
+import { Garage } from './Garage'
 import { GameClock } from './GameClock'
 import { Ground } from './Ground'
 import { Nazma } from './Nazma'
@@ -43,6 +44,7 @@ export function Scene() {
       <Walls />
       <Suspense fallback={null}>
         <Props />
+        <Garage />
         <RivalLot />
       </Suspense>
       <TubeMan />

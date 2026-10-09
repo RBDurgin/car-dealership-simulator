@@ -7,6 +7,7 @@ import {
   buildInventory,
   carProp,
   COST_FRACTION,
+  dropSold,
   MSRP_VARIATION,
   restock,
   sellCar,
@@ -97,5 +98,19 @@ describe('selling and restocking', () => {
     applyToGrid(grid, sellCar(inventory, 'lot-car-1'))
     expect(grid.isWalkable(2, 21)).toBe(true)
     expect(grid.isWalkable(3, 23)).toBe(true)
+  })
+})
+
+describe('dropSold', () => {
+  it('drops sold cars and keeps the rest, a car in the shop too', () => {
+    const inventory = buildInventory(createRng(1))
+    expect(dropSold(inventory)).toBe(inventory)
+    const changed = sellCar(inventory, 'lot-car-3').map((c) =>
+      c.id === 'lot-car-4' ? { ...c, status: 'recon' as const } : c,
+    )
+    const kept = dropSold(changed)
+    expect(kept.map((c) => c.id)).not.toContain('lot-car-3')
+    expect(kept.find((c) => c.id === 'lot-car-4')?.status).toBe('recon')
+    expect(kept).toHaveLength(inventory.length - 1)
   })
 })

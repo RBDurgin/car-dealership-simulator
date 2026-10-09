@@ -4,6 +4,7 @@ import { financeBusy } from './deal'
 import type { InventoryCar } from './inventory'
 import type { Tile } from './grid'
 import { GUARD_PATROL_TILES, SALES_DESKS, type ExpansionId } from './layout'
+import { jobPriority, type ServiceJob } from './service'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 
 /**
@@ -228,4 +229,61 @@ export function nextGuardTask(e: Employee, ctx: GuardContext): GuardTask {
   }
   const stops = ctx.patrol ?? GUARD_PATROL_TILES
   return { kind: 'patrol', tile: stops[ctx.leg % stops.length] }
+}
+
+/**
+ * A mechanic's next step:
+ * - job: walk to bay `bay` and work on job `jobId` there (start it, carry on
+ *   with it, or take over one left stalled)
+ * - idle: nothing to work on; wait in the garage
+ */
+export type MechanicTask = { kind: 'idle' } | { kind: 'job'; jobId: string; bay: number }
+
+/** What the mechanic needs to know beyond the jobs. */
+export interface MechanicContext {
+  roster: readonly Employee[]
+  /** Bays up today. */
+  bays: number
+  /** Jobs other mechanics are on their way to, and the bay each is going to. */
+  taken?: ReadonlyMap<string, number>
+}
+
+const IDLE_MECHANIC: MechanicTask = { kind: 'idle' }
+
+/** Whether `id` is at work on the job they're on: at their post, not let go and not quitting. */
+export function mechanicWorking(roster: readonly Employee[], id: string | null): boolean {
+  const e = id ? roster.find((x) => x.id === id) : undefined
+  return !!e && e.status === 'atPost' && !e.fired && !e.quitting
+}
+
+/**
+ * Mechanic `e`'s next task while at work: the job they're on, else one left
+ * in a bay with nobody working it, else the first waiting job (clients' cars,
+ * then recalls, then reconditioning) in a free bay. Someone thinking of
+ * quitting downs tools.
+ */
+export function nextMechanicTask(
+  e: Employee,
+  jobs: readonly ServiceJob[],
+  ctx: MechanicContext,
+): MechanicTask {
+  if (e.status !== 'atPost' || e.fired || e.quitting) return IDLE_MECHANIC
+  const inBay = jobs.filter((j) => j.status === 'inBay' && j.bay !== null)
+  const mine = inBay.find((j) => j.mechanicId === e.id)
+  if (mine) return { kind: 'job', jobId: mine.id, bay: mine.bay! }
+  const taken = ctx.taken ?? new Map<string, number>()
+  const stalled = inBay.find(
+    (j) => !taken.has(j.id) && j.mechanicId !== e.id && !mechanicWorking(ctx.roster, j.mechanicId),
+  )
+  if (stalled) return { kind: 'job', jobId: stalled.id, bay: stalled.bay! }
+  const busy = new Set([...inBay.map((j) => j.bay!), ...taken.values()])
+  let bay = 0
+  while (bay < ctx.bays && busy.has(bay)) bay++
+  if (bay >= ctx.bays) return IDLE_MECHANIC
+  let next: ServiceJob | null = null
+  for (const j of jobs) {
+    if (j.status !== 'waiting' || taken.has(j.id)) continue
+    if (!next || jobPriority(j) < jobPriority(next)) next = j
+  }
+  return next ? { kind: 'job', jobId: next.id, bay } : IDLE_MECHANIC
 }

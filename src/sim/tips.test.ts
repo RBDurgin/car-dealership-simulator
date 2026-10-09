@@ -35,6 +35,16 @@ const base: TipState = {
   franchise: 'bronze',
   career: { rank: 'corner-lot' },
   rival: { status: 'unopened' },
+  expansions: [],
+}
+const garage: TipState['expansions'] = [
+  { id: 'east-lot', day: 1 },
+  { id: 'service-bay', day: 1 },
+]
+const roughUsed = {
+  ...inventory[0],
+  id: 'used-2-1',
+  used: { year: 2018, miles: 110_000, condition: 0.3, acquiredDay: 2 },
 }
 const sellerCar = (parked: boolean): Partial<Customer> => ({
   phase: parked ? 'waiting' : 'arriving',
@@ -100,6 +110,14 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   ],
   rivalOpens: [{ rival: { status: 'open' } }, { rival: { status: 'announced' } }],
   rivalBust: [{ rival: { status: 'closed' } }, { rival: { status: 'open' } }],
+  serviceBay: [
+    { expansions: garage, clock: { day: 2 } },
+    { expansions: garage, clock: { day: 1 } },
+  ],
+  recon: [
+    { inventory: [...inventory, roughUsed], expansions: garage, clock: { day: 3 } },
+    { expansions: garage, clock: { day: 3 } },
+  ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
@@ -115,6 +133,13 @@ describe('tipFor', () => {
     const [next, prev] = triggers[id]
     expect(tip(next, prev)).toBe(id)
     expect(tip(next, prev, [id])).toBeNull()
+  })
+
+  it('points at reconditioning only once the garage is up, and only for a rough car', () => {
+    const [next, prev] = triggers.recon
+    expect(tip({ ...next, expansions: [] }, { ...prev, expansions: [] })).toBeNull()
+    const fair = { ...roughUsed, used: { ...roughUsed.used, condition: 0.7 } }
+    expect(tip({ ...next, inventory: [...inventory, fair] }, prev)).toBeNull()
   })
 
   it('gives nothing when nothing changed', () => {

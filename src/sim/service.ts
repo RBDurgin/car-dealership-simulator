@@ -1,8 +1,13 @@
 import { calendarOf } from './calendar'
+import { washCar } from './cleanliness'
 import { OPEN_MINUTE } from './clock'
+import type { Customer } from './customers'
+import type { InventoryCar } from './inventory'
+import { SERVICE_BAYS, serviceBays, type ExpansionId } from './layout'
 import type { Career } from './progression'
 import type { Rng } from './rng'
 import { MAX_SKILL, MIN_SKILL, skillSeconds } from './staff'
+import { marketValue, usedListPrice } from './usedCars'
 
 /**
  * The service department (Phase 15): the garage's jobs, what they cost and
@@ -50,6 +55,8 @@ export interface ServiceJob {
   carId: string | null
   /** The bay it's in, or null while it waits for one. */
   bay: number | null
+  /** The mechanic who last worked on it, or null before anyone has. */
+  mechanicId: string | null
   status: JobStatus
   /** Game minutes worked so far, and needed. */
   worked: number
@@ -142,13 +149,13 @@ export const SERVICE_WEEKDAY = [1.3, 1.1, 1.0, 1.0, 0.9, 0.7, 0]
 /** Jobs one bay can take in a day. */
 export const JOBS_PER_BAY = 6
 /** Bays in the garage. */
-export const GARAGE_BAYS = 2
-/** The expansion that builds the garage (added in 15b). */
-export const GARAGE_EXPANSION = 'service-bay'
+export const GARAGE_BAYS = SERVICE_BAYS.length
+/** The expansion that builds the garage. */
+export const GARAGE_EXPANSION: ExpansionId = 'service-bay'
 
 /** Bays standing with the `expansions` up: none until the garage is built. */
-export function bayCount(expansions: readonly string[]): number {
-  return expansions.includes(GARAGE_EXPANSION) ? GARAGE_BAYS : 0
+export function bayCount(expansions: readonly ExpansionId[]): number {
+  return serviceBays(expansions).length
 }
 
 export interface DemandOpts {
@@ -245,7 +252,10 @@ export function comebackChance(skill: number): number {
 
 /** The day's service department, for the summary. */
 export interface ServiceStats {
+  /** Clients' jobs finished. */
   jobs: number
+  /** Our own used cars reconditioned. */
+  recon: number
   /** Customer-pay labor and parts billed, and what those parts cost. */
   labor: number
   parts: number
@@ -264,6 +274,7 @@ export interface ServiceStats {
 export function emptyServiceStats(): ServiceStats {
   return {
     jobs: 0,
+    recon: 0,
     labor: 0,
     parts: 0,
     partsCost: 0,
@@ -274,4 +285,174 @@ export function emptyServiceStats(): ServiceStats {
     late: 0,
     comebacks: 0,
   }
+}
+
+/** Reconditioning adds this much to a used car's condition… */
+export const RECON_STEP = 0.3
+/** …up to this. A car this good or better isn't worth the work. */
+export const RECON_MAX = 0.9
+
+/** The condition a used car comes out of the shop at. */
+export function reconCondition(condition: number): number {
+  return Math.min(RECON_MAX, Math.round((condition + RECON_STEP) * 100) / 100)
+}
+
+/**
+ * What reconditioning a used `car` adds to its market value on `day` (0 for a
+ * new car or one already at `RECON_MAX`).
+ */
+export function reconGain(car: InventoryCar, day: number): number {
+  if (!car.used || car.used.condition >= RECON_MAX) return 0
+  const after = { ...car.used, condition: reconCondition(car.used.condition) }
+  return marketValue(car.model, after, day) - marketValue(car.model, car.used, day)
+}
+
+/**
+ * Car `id` back from the shop on `day`: its condition up by `RECON_STEP`,
+ * detailed (washed), re-listed at the price its new worth calls for (never
+ * lower than it was) and for sale again. The `partsCost` goes on its cost, so
+ * its gross when sold is honest. Returns the same array if it isn't in the shop.
+ */
+export function finishRecon(
+  inventory: InventoryCar[],
+  id: string,
+  partsCost: number,
+  day: number,
+): InventoryCar[] {
+  const car = inventory.find((c) => c.id === id)
+  if (!car?.used || car.status !== 'recon') return inventory
+  const used = { ...car.used, condition: reconCondition(car.used.condition) }
+  const done: InventoryCar = {
+    ...car,
+    used,
+    status: 'available',
+    msrp: Math.max(car.msrp, usedListPrice(marketValue(car.model, used, day))),
+    cost: car.cost + partsCost,
+  }
+  return washCar(
+    inventory.map((c) => (c === car ? done : c)),
+    id,
+  )
+}
+
+/** Puts car `id` back on sale, as it was, if it's in the shop. */
+export function returnFromShop(inventory: InventoryCar[], id: string): InventoryCar[] {
+  const car = inventory.find((c) => c.id === id)
+  if (car?.status !== 'recon') return inventory
+  return inventory.map((c) => (c === car ? { ...c, status: 'available' } : c))
+}
+
+/** What deciding on reconditioning needs to know. */
+export interface ReconBook {
+  inventory: readonly InventoryCar[]
+  customers: readonly Customer[]
+  /** Bays up today. */
+  bays: number
+  /** Mechanics on the payroll (not let go). */
+  mechanics: number
+  /** The doors are shut for the day. */
+  closed: boolean
+}
+
+/** Why used car `id` can't go to the shop now, or null if it can. */
+export function reconBlocker(book: ReconBook, id: string): string | null {
+  if (book.bays === 0) return 'You need a service garage first.'
+  const car = book.inventory.find((c) => c.id === id)
+  if (!car || car.status === 'sold') return 'That car has been sold.'
+  if (car.status === 'recon') return "It's in the shop already."
+  if (!car.used) return 'Only used cars need reconditioning.'
+  if (car.used.condition >= RECON_MAX) return "It's in good enough shape."
+  if (book.closed) return 'The shop is closed for the day.'
+  if (book.mechanics === 0) return 'Hire a mechanic first.'
+  const wanted = book.customers.some(
+    (c) => c.phase !== 'leaving' && (c.targetCarId === id || c.offer?.carId === id),
+  )
+  if (wanted) return 'A customer is looking at it.'
+  return null
+}
+
+/**
+ * A reconditioning job for car `carId`, its parts rolled at `partsCost` (paid
+ * when it's booked). Nobody pays for its labor: it's our own car.
+ */
+export function reconJob(id: string, carId: string, partsCost: number): ServiceJob {
+  return {
+    id,
+    kind: 'recon',
+    customerId: null,
+    carId,
+    bay: null,
+    mechanicId: null,
+    status: 'waiting',
+    worked: 0,
+    minutes: JOBS.recon.minutes,
+    labor: 0,
+    parts: 0,
+    partsCost,
+    finding: null,
+  }
+}
+
+/** The parts a reconditioning job needs, rolled like any quote's. */
+export function reconPartsCost(rng: Rng): number {
+  return quote('recon', 'standard', rng).partsCost
+}
+
+/**
+ * Which waiting job a mechanic takes first: clients' cars (15c), then recalls
+ * (15e), then our own reconditioning.
+ */
+export function jobPriority(job: ServiceJob): number {
+  if (job.kind === 'recon') return 2
+  if (job.kind === 'recall') return 1
+  return 0
+}
+
+/** Jobs in the bays, being worked on (or stalled for want of a mechanic). */
+export function jobsInBays(jobs: readonly ServiceJob[]): ServiceJob[] {
+  return jobs.filter((j) => j.status === 'inBay')
+}
+
+/** Mechanics work off the clock at this rate, $ an hour, to finish a job after closing. */
+export const OVERTIME_HOURLY = 45
+
+/** What finishing `job` after closing costs in overtime. */
+export function overtimeFor(job: ServiceJob): number {
+  return Math.round((Math.max(0, job.minutes - job.worked) / 60) * OVERTIME_HOURLY)
+}
+
+/** Game minutes left on `job`. */
+export function minutesLeft(job: ServiceJob): number {
+  return Math.max(0, job.minutes - job.worked)
+}
+
+/**
+ * `jobs` after `minutes` more on the clock: each one in a bay whose mechanic
+ * is `working` gets the time, and is ready (a client's) or done (ours) once
+ * it has had all it needs. Returns the same array when nothing moved.
+ */
+export function workJobs(
+  jobs: ServiceJob[],
+  minutes: number,
+  working: (mechanicId: string | null) => boolean,
+): ServiceJob[] {
+  if (minutes <= 0) return jobs
+  let changed = false
+  const next = jobs.map((j) => {
+    if (j.status !== 'inBay' || !working(j.mechanicId)) return j
+    changed = true
+    return withWork(j, j.worked + minutes)
+  })
+  return changed ? next : jobs
+}
+
+/** `job` with `worked` minutes on it, finished if that's all it needs. */
+function withWork(job: ServiceJob, worked: number): ServiceJob {
+  if (worked < job.minutes) return { ...job, worked }
+  return { ...job, worked: job.minutes, status: job.customerId ? 'ready' : 'done' }
+}
+
+/** `job` finished off after closing, in overtime. */
+export function finishedLate(job: ServiceJob): ServiceJob {
+  return withWork(job, job.minutes)
 }

@@ -1,7 +1,7 @@
 import { WASH_BELOW } from './cleanliness'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
-import { unlockedBy } from './expansions'
+import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
 import type { InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
@@ -9,7 +9,11 @@ import { quoteFor } from './negotiation'
 import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
 import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
+import { bayCount } from './service'
 import { isStale, STALE_DAYS } from './usedCars'
+
+/** A used car this worn or worse is worth reconditioning (see the `recon` tip). */
+export const ROUGH_CONDITION = 0.5
 
 /**
  * Guided tips on Easy: a short pointer the first time something happens.
@@ -32,6 +36,8 @@ export type TipId =
   | 'staleUsed'
   | 'franchise'
   | 'expansion'
+  | 'serviceBay'
+  | 'recon'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -59,6 +65,10 @@ export const TIPS: Record<TipId, string> = {
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
   expansion:
     'Your new rank lets you expand. See the office computer’s Upgrades tab: what you buy there is built overnight.',
+  serviceBay:
+    'Your service garage is open. Hire a mechanic for each bay from the staff panel; the Service tab on the office computer shows what they’re working on.',
+  recon:
+    'This used car is in rough shape. Pick Recondition on it, or use the Service tab: a mechanic raises its condition, and it goes back on sale for more.',
   rivalOpens:
     "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
@@ -85,7 +95,10 @@ export interface TipState {
   franchise: FranchiseTier
   career: { rank: RankId }
   rival: { status: RivalStatus }
+  expansions: readonly OwnedExpansion[]
 }
+
+const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
 const missedCount = (s: TipState) =>
   Object.values(s.dayStats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
@@ -160,6 +173,19 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     case 'rivalBust': {
       const status = id === 'rivalOpens' ? 'open' : 'closed'
       return next.rival.status === status && prev.rival.status !== status
+    }
+    case 'serviceBay':
+      return garageUp(next) && !garageUp(prev)
+    case 'recon': {
+      if (next.inventory === prev.inventory || !garageUp(next)) return false
+      const known = new Set(prev.inventory.map((c) => c.id))
+      return next.inventory.some(
+        (c) =>
+          !known.has(c.id) &&
+          c.status === 'available' &&
+          !!c.used &&
+          c.used.condition < ROUGH_CONDITION,
+      )
     }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH

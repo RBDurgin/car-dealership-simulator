@@ -13,7 +13,8 @@ import {
 import type { Rng } from './rng'
 import type { UsedInfo } from './usedCars'
 
-export type CarStatus = 'available' | 'sold'
+/** For sale, sold (gone overnight), or in the service garage being reconditioned. */
+export type CarStatus = 'available' | 'sold' | 'recon'
 export type CarLocation = 'showroom' | 'lot'
 
 export interface InventoryCar {
@@ -140,9 +141,14 @@ export function sellCar(inventory: InventoryCar[], id: string): InventoryCar[] {
   return inventory.map((c) => (c === car ? { ...c, status: 'sold' } : c))
 }
 
-/** Cars still in stock, dropping the sold ones. Returns the same array if none were sold. */
+/**
+ * Cars still in stock (a car in the shop too), dropping the sold ones. Returns
+ * the same array if none were sold.
+ */
 export function dropSold(inventory: InventoryCar[]): InventoryCar[] {
-  return inventory.some((c) => c.status === 'sold') ? availableCars(inventory) : inventory
+  return inventory.some((c) => c.status === 'sold')
+    ? inventory.filter((c) => c.status !== 'sold')
+    : inventory
 }
 
 /**

@@ -209,6 +209,17 @@ export const UPDATES: readonly Update[] = [
       'He comes back a few weeks later under a new name, a little stronger. The Rival tab counts the rivals you’ve beaten.',
     ],
   },
+  {
+    id: 20,
+    phase: '15',
+    title: 'The service garage',
+    items: [
+      'From Trusted Dealer, with the east lot bought, build a 2-bay service garage on the Upgrades tab.',
+      'Hire a mechanic per bay. They recondition worn used cars, which go back on sale in better shape and for more.',
+      'Pick Recondition on a used car, or use the new Service tab on the office computer (B).',
+      'The Service tab can also send the used cars you take in to the shop on its own.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

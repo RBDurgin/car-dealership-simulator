@@ -5,8 +5,9 @@ import { RANK_IDS, rankById, type RankId } from './progression'
  * Expansions: ground and buildings bought as the dealership grows. Like
  * improvements they're paid up front and go up overnight, but each needs a
  * rank first (see `sim/progression.ts`), and they change the layout itself
- * (`buildLayout`): the east lot opens the parcel and its parking spaces, and the
- * showroom wing stands on its north side with more platforms and desks.
+ * (`buildLayout`): the east lot opens the parcel and its parking spaces, the
+ * showroom wing stands on its north side with more platforms and desks, and
+ * the service garage in its north-east corner.
  */
 
 export interface ExpansionInfo {
@@ -27,6 +28,14 @@ export const EXPANSIONS: Record<ExpansionId, ExpansionInfo> = {
     rank: 'main-street',
     blurb:
       'The empty parcel next door, paved, with 12 more parking spaces and a gate from the lot.',
+  },
+  'service-bay': {
+    label: 'Service garage',
+    cost: 90_000,
+    rank: 'trusted-dealer',
+    requires: 'east-lot',
+    blurb:
+      'A 2-bay garage in the corner of the east lot, with a service counter. Hire a mechanic for each bay to recondition used cars.',
   },
   'showroom-wing': {
     label: 'Showroom wing',

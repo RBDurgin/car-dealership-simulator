@@ -101,6 +101,7 @@ describe('dealership interactables', () => {
       'improve',
       'calendar',
       'rival',
+      'service',
     ])
     expect(all.has('office-desk')).toBe(false)
     expect(all.has('sales-monitor-1')).toBe(false)

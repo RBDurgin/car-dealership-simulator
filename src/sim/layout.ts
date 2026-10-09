@@ -9,7 +9,7 @@ import { Grid, type Tile } from './grid'
 /**
  * The old lot is tx 0–39. The parcel east of it (`PARCEL`) is for sale until
  * the lot expansion is bought, and leaves room for the showroom wing on its
- * north side and, later, a service garage in its north-east corner.
+ * north side and the service garage (`GARAGE`) in its north-east corner.
  */
 export const GRID_WIDTH = 60
 export const GRID_HEIGHT = 30
@@ -88,8 +88,9 @@ export type ZoneKind =
   | 'office'
   | 'lounge'
   | 'parcel'
+  | 'garage'
 
-const INDOOR: ReadonlySet<ZoneKind> = new Set(['showroom', 'office', 'lounge'])
+const INDOOR: ReadonlySet<ZoneKind> = new Set(['showroom', 'office', 'lounge', 'garage'])
 const BLOCKING_ZONES: ReadonlySet<ZoneKind> = new Set(['road', 'parcel'])
 
 export interface Zone {
@@ -461,7 +462,7 @@ const FIXED_PROPS: Prop[] = [
 export const PROPS: Prop[] = FIXED_PROPS
 
 /** Ground bought as the dealership grows (see `sim/expansions.ts`). */
-export type ExpansionId = 'east-lot' | 'showroom-wing'
+export type ExpansionId = 'east-lot' | 'showroom-wing' | 'service-bay'
 
 /**
  * The showroom wing, walls included: on the parcel's north side, against the
@@ -501,6 +502,87 @@ const WING_PROPS: Prop[] = [
   { id: 'wing-plant-2', model: 'pottedPlant', rect: { tx: 47, tz: 12, w: 1, h: 1 }, facing: 0 },
 ]
 
+/**
+ * The service garage, walls included: in the parcel's north-east corner, east
+ * of the wing and north of the east lot, with its doors to the south. Two bays
+ * with lifts on the west, a service counter and waiting chairs on the east.
+ */
+export const GARAGE: Rect = { tx: 49, tz: 1, w: 10, h: 9 }
+
+/** A service bay: where the car stands on the lift, nose in, and the door it comes through. */
+export interface ServiceBay {
+  rect: Rect
+  facing: Facing
+  door: Rect
+}
+
+export const SERVICE_BAYS: ServiceBay[] = [50, 53].map((tx) => ({
+  rect: { tx, tz: 3, w: 2, h: 3 },
+  facing: 2,
+  door: { tx, tz: GARAGE.tz + GARAGE.h - 1, w: 2, h: 1 },
+}))
+
+/** The garage's pole sign, out front by the east fence, facing the street. */
+export const GARAGE_SIGN: Rect = { tx: 58, tz: 11, w: 1, h: 1 }
+
+/** The bays standing with the `expansions` up: none until the garage is built. */
+export function serviceBays(expansions: readonly ExpansionId[]): ServiceBay[] {
+  return expansions.includes('service-bay') ? SERVICE_BAYS : []
+}
+
+/** Where mechanics wait for work: the garage's corners, clear of the bays and the doors. */
+export const GARAGE_STANDBY_TILES: Tile[] = [
+  { tx: 52, tz: 2 },
+  { tx: 55, tz: 2 },
+  { tx: 52, tz: 7 },
+  { tx: 55, tz: 7 },
+]
+
+/** Where the service advisor sits, behind the counter. */
+export const SERVICE_CHAIR_ID = 'service-chair'
+/** The chairs service clients wait in, facing the bays. */
+export const SERVICE_WAIT_IDS = [1, 2, 3, 4].map((n) => `service-wait-${n}`)
+
+const GARAGE_WALLS: WallRun[] = [
+  { kind: 'solid', rect: { tx: GARAGE.tx, tz: GARAGE.tz, w: GARAGE.w, h: 1 } },
+  { kind: 'solid', rect: { tx: GARAGE.tx, tz: GARAGE.tz, w: 1, h: GARAGE.h } },
+  { kind: 'solid', rect: { tx: GARAGE.tx + GARAGE.w - 1, tz: GARAGE.tz, w: 1, h: GARAGE.h } },
+  { kind: 'solid', rect: { tx: GARAGE.tx, tz: GARAGE.tz + GARAGE.h - 1, w: GARAGE.w, h: 1 } },
+]
+
+/** The roll-up doors and the clients' door by the counter. */
+const GARAGE_OPENINGS: Rect[] = [
+  ...SERVICE_BAYS.map((b) => b.door),
+  { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 },
+]
+
+/** The garage floor, inside its walls. */
+const GARAGE_FLOOR: Rect = {
+  tx: GARAGE.tx + 1,
+  tz: GARAGE.tz + 1,
+  w: GARAGE.w - 2,
+  h: GARAGE.h - 2,
+}
+
+const GARAGE_PROPS: Prop[] = [
+  { id: 'service-counter', model: 'desk', rect: { tx: 56, tz: 3, w: 2, h: 1 }, facing: 0 },
+  {
+    id: 'service-monitor',
+    model: 'computerScreen',
+    rect: { tx: 57, tz: 3, w: 1, h: 1 },
+    facing: 2,
+    blocks: false,
+    elevation: DESK_TOP,
+  },
+  { id: SERVICE_CHAIR_ID, model: 'chairDesk', rect: { tx: 57, tz: 2, w: 1, h: 1 }, facing: 0 },
+  ...SERVICE_WAIT_IDS.map((id, i): Prop => ({
+    id,
+    model: 'chairCushion',
+    rect: { tx: 57, tz: 5 + i, w: 1, h: 1 },
+    facing: 3,
+  })),
+]
+
 /** Where the fence between the lot and the parcel opens once the parcel is bought. */
 export const PARCEL_GATE: Rect = { tx: 39, tz: 15, w: 1, h: 9 }
 
@@ -520,6 +602,8 @@ export interface Layout {
   zones: ZoneKind[]
   walls: (WallKind | null)[]
   props: Prop[]
+  /** Footprints that block without a prop of their own: the garage's lifts. */
+  blocked: Rect[]
 }
 
 function forEachTile(r: Rect, fn: (tx: number, tz: number) => void): void {
@@ -544,12 +628,19 @@ const EAST_LOT_PAVING: Rect = { ...PARCEL, tx: PARCEL.tx - 1, w: PARCEL.w + 1 }
 export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
   const lot = expansions.includes('east-lot')
   const wing = expansions.includes('showroom-wing')
+  const garage = lot && expansions.includes('service-bay')
   const areas = ZONES.map((z) =>
     lot && z.kind === 'parcel' ? { kind: 'asphalt' as const, rect: EAST_LOT_PAVING } : z,
   )
   if (wing) areas.push({ kind: 'showroom', rect: WING })
-  const wallRuns = wing ? [...WALL_RUNS, ...WING_WALLS] : WALL_RUNS
-  const openings = [...OPENINGS, ...(lot ? [PARCEL_GATE] : []), ...(wing ? WING_OPENINGS : [])]
+  if (garage) areas.push({ kind: 'garage', rect: GARAGE_FLOOR })
+  const wallRuns = [...WALL_RUNS, ...(wing ? WING_WALLS : []), ...(garage ? GARAGE_WALLS : [])]
+  const openings = [
+    ...OPENINGS,
+    ...(lot ? [PARCEL_GATE] : []),
+    ...(wing ? WING_OPENINGS : []),
+    ...(garage ? GARAGE_OPENINGS : []),
+  ]
   const n = GRID_WIDTH * GRID_HEIGHT
   const idx = (tx: number, tz: number) => tz * GRID_WIDTH + tx
   const zones: ZoneKind[] = new Array<ZoneKind>(n).fill('grass')
@@ -560,8 +651,14 @@ export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
   const fixed = wing
     ? PROPS.map((p) => (p.id === LOUNGE_PLANT_ID ? { ...p, rect: LOUNGE_PLANT_MOVED } : p))
     : PROPS
-  const props = [...fixed, ...(lot ? [] : [FOR_SALE_SIGN]), ...(wing ? WING_PROPS : [])]
-  return { width: GRID_WIDTH, height: GRID_HEIGHT, areas, zones, walls, props }
+  const props = [
+    ...fixed,
+    ...(lot ? [] : [FOR_SALE_SIGN]),
+    ...(wing ? WING_PROPS : []),
+    ...(garage ? GARAGE_PROPS : []),
+  ]
+  const blocked = garage ? [...SERVICE_BAYS.map((b) => b.rect), GARAGE_SIGN] : []
+  return { width: GRID_WIDTH, height: GRID_HEIGHT, areas, zones, walls, props, blocked }
 }
 
 export function zoneAt(layout: Layout, tx: number, tz: number): ZoneKind | null {
@@ -594,5 +691,6 @@ export function createGrid(layout: Layout): Grid {
   for (const p of layout.props) {
     if (p.blocks !== false) grid.blockRect(p.rect.tx, p.rect.tz, p.rect.w, p.rect.h)
   }
+  for (const r of layout.blocked) grid.blockRect(r.tx, r.tz, r.w, r.h)
   return grid
 }

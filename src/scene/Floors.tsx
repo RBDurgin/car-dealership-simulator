@@ -16,6 +16,7 @@ const ZONE_COLORS: Record<ZoneKind, string> = {
   office: '#7d8aa0',
   lounge: '#cdb48f',
   parcel: '#7d8f55',
+  garage: '#8f9296',
 }
 
 // The street runs past the whole property, so these zones extend to the horizon.

@@ -5,22 +5,40 @@ import {
   bayCount,
   comebackChance,
   emptySchedule,
+  finishedLate,
+  finishRecon,
   GARAGE_BAYS,
   GARAGE_EXPANSION,
   isRateLevel,
   JOB_KINDS,
   jobMinutes,
+  jobPriority,
   JOBS,
   JOBS_PER_BAY,
   LAST_SERVICE_MINUTE,
+  minutesLeft,
+  OVERTIME_HOURLY,
+  overtimeFor,
   PARTS_MARKUP,
   planServiceVisits,
   quote,
   RATE_LEVELS,
+  RECON_MAX,
+  RECON_STEP,
+  reconBlocker,
+  reconCondition,
+  reconGain,
+  reconJob,
+  returnFromShop,
   serviceDemand,
   takeDueVisits,
   TOWN_SERVICE,
+  workJobs,
+  type ReconBook,
+  type ServiceJob,
 } from './service'
+import { buildInventory, type InventoryCar } from './inventory'
+import { usedStockCar } from './usedCars'
 import { OPEN_MINUTE } from './clock'
 
 const sold = (sales: number) => ({ ...emptyCareer(), sales })
@@ -164,5 +182,143 @@ describe('comebacks', () => {
     expect(comebackChance(5)).toBeCloseTo(0.02)
     for (let s = 1; s < 5; s++) expect(comebackChance(s + 1)).toBeLessThan(comebackChance(s))
     expect(comebackChance(9)).toBeCloseTo(0.02)
+  })
+})
+
+describe('reconditioning', () => {
+  const DAY = 10
+  const worn = (condition: number, msrp?: number): InventoryCar => {
+    const car = usedStockCar(
+      'used-9-1',
+      { model: 'sedan', year: 2021, miles: 60_000, condition, acquiredDay: 9 },
+      { location: 'lot', index: 20 },
+      8_000,
+      9,
+      0.3,
+    )
+    return msrp === undefined ? car : { ...car, msrp }
+  }
+  const inShop = (car: InventoryCar): InventoryCar => ({ ...car, status: 'recon' })
+
+  it('raises condition by a step, up to the cap', () => {
+    expect(reconCondition(0.3)).toBeCloseTo(0.3 + RECON_STEP)
+    expect(reconCondition(0.8)).toBe(RECON_MAX)
+    expect(reconCondition(RECON_MAX)).toBe(RECON_MAX)
+  })
+
+  it('adds value to a worn car, nothing to a new one or one in good shape', () => {
+    expect(reconGain(worn(0.3), DAY)).toBeGreaterThan(0)
+    expect(reconGain(worn(0.3), DAY)).toBeGreaterThan(reconGain(worn(0.75), DAY))
+    expect(reconGain(worn(RECON_MAX), DAY)).toBe(0)
+    expect(reconGain(buildInventory(createRng(1))[0], DAY)).toBe(0)
+  })
+
+  it('pays back about twice its parts on a rough car, and about breaks even near 0.75', () => {
+    const avgParts = (JOBS.recon.parts.min + JOBS.recon.parts.max) / 2
+    const rough = reconGain(worn(0.4), DAY)
+    expect(rough / avgParts).toBeGreaterThan(1.3)
+    const good = reconGain(worn(0.75), DAY)
+    expect(good / avgParts).toBeGreaterThan(0.5)
+    expect(good / avgParts).toBeLessThan(1.3)
+  })
+
+  it('hands the car back better, washed, re-listed and with the parts on its cost', () => {
+    const car = inShop(worn(0.3))
+    const [done] = finishRecon([car], car.id, 500, DAY)
+    expect(done.status).toBe('available')
+    expect(done.used!.condition).toBeCloseTo(0.6)
+    expect(done.cleanliness).toBe(1)
+    expect(done.cost).toBe(car.cost + 500)
+    expect(done.msrp).toBeGreaterThan(car.msrp)
+  })
+
+  it('never lowers the price it was listed at', () => {
+    const car = inShop(worn(0.3, 90_000))
+    expect(finishRecon([car], car.id, 500, DAY)[0].msrp).toBe(90_000)
+  })
+
+  it('leaves a car that is not in the shop alone', () => {
+    const inv = [worn(0.3)]
+    expect(finishRecon(inv, inv[0].id, 500, DAY)).toBe(inv)
+    expect(returnFromShop(inv, inv[0].id)).toBe(inv)
+    const back = returnFromShop([inShop(inv[0])], inv[0].id)
+    expect(back[0]).toEqual(inv[0])
+  })
+
+  describe('reconBlocker', () => {
+    const car = worn(0.3)
+    const book: ReconBook = {
+      inventory: [car],
+      customers: [],
+      bays: GARAGE_BAYS,
+      mechanics: 1,
+      closed: false,
+    }
+    it('lets a worn used car go to the shop', () => {
+      expect(reconBlocker(book, car.id)).toBeNull()
+    })
+    it('says why it can’t', () => {
+      expect(reconBlocker({ ...book, bays: 0 }, car.id)).toMatch(/garage/)
+      expect(reconBlocker({ ...book, mechanics: 0 }, car.id)).toMatch(/mechanic/)
+      expect(reconBlocker({ ...book, closed: true }, car.id)).toMatch(/closed/)
+      expect(reconBlocker(book, 'nope')).toMatch(/sold/)
+      expect(reconBlocker({ ...book, inventory: [inShop(car)] }, car.id)).toMatch(/shop/)
+      expect(reconBlocker({ ...book, inventory: [worn(0.95)] }, car.id)).toMatch(/good enough/)
+      const fresh = buildInventory(createRng(1))[0]
+      expect(reconBlocker({ ...book, inventory: [fresh] }, fresh.id)).toMatch(/used/)
+    })
+    it('won’t take a car a customer is looking at or haggling over', () => {
+      const looking = { id: 'c', phase: 'talking', targetCarId: car.id, offer: null }
+      const haggling = {
+        id: 'c',
+        phase: 'considering',
+        targetCarId: null,
+        offer: { carId: car.id, price: 1 },
+      }
+      const left = { ...looking, phase: 'leaving' }
+      for (const c of [looking, haggling]) {
+        expect(reconBlocker({ ...book, customers: [c as never] }, car.id)).toMatch(/customer/)
+      }
+      expect(reconBlocker({ ...book, customers: [left as never] }, car.id)).toBeNull()
+    })
+  })
+})
+
+describe('the clock in the bays', () => {
+  const job = (over: Partial<ServiceJob> = {}): ServiceJob => ({
+    ...reconJob('r', 'car', 400),
+    status: 'inBay',
+    bay: 0,
+    mechanicId: 'm1',
+    minutes: 60,
+    ...over,
+  })
+  const working = (id: string | null) => id === 'm1'
+
+  it('adds time while the mechanic works, and finishes the job', () => {
+    const jobs = [job()]
+    const half = workJobs(jobs, 30, working)
+    expect(half[0]).toMatchObject({ worked: 30, status: 'inBay' })
+    expect(workJobs(half, 40, working)[0]).toMatchObject({ worked: 60, status: 'done' })
+    // A client's car is ready to collect instead.
+    expect(workJobs([job({ customerId: 'c', carId: null })], 60, working)[0].status).toBe('ready')
+  })
+
+  it('stalls without a mechanic, and leaves waiting jobs alone', () => {
+    const jobs = [job({ mechanicId: 'gone' }), job({ status: 'waiting', bay: null })]
+    expect(workJobs(jobs, 30, working)).toBe(jobs)
+    expect(workJobs([job()], 0, working)).toEqual([job()])
+  })
+
+  it('charges overtime for what was left at closing', () => {
+    expect(overtimeFor(job({ worked: 30 }))).toBe(Math.round(0.5 * OVERTIME_HOURLY))
+    expect(overtimeFor(job({ worked: 60 }))).toBe(0)
+    expect(finishedLate(job({ worked: 10 }))).toMatchObject({ worked: 60, status: 'done' })
+    expect(minutesLeft(job({ worked: 45 }))).toBe(15)
+  })
+
+  it('puts client jobs before recalls before reconditioning', () => {
+    expect(jobPriority(job({ kind: 'oil' }))).toBeLessThan(jobPriority(job({ kind: 'recall' })))
+    expect(jobPriority(job({ kind: 'recall' }))).toBeLessThan(jobPriority(job()))
   })
 })

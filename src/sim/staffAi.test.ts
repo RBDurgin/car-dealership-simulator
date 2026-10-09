@@ -12,9 +12,12 @@ import {
   nextGuardTask,
   nextPorterTask,
   nextSalesTask,
+  mechanicWorking,
+  nextMechanicTask,
   pickSalesCustomer,
   salesChairFor,
 } from './staffAi'
+import { reconJob, type ServiceJob } from './service'
 
 const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   id,
@@ -336,5 +339,90 @@ describe('nextGuardTask', () => {
       expect(nextGuardTask({ ...guard, status }, ctx)).toEqual({ kind: 'idle' })
     }
     expect(nextGuardTask({ ...guard, fired: true }, ctx)).toEqual({ kind: 'idle' })
+  })
+})
+
+describe('nextMechanicTask', () => {
+  const job = (id: string, kind: ServiceJob['kind'], over: Partial<ServiceJob> = {}) => ({
+    ...reconJob(id, `car-${id}`, 400),
+    kind,
+    customerId: kind === 'recon' ? null : `client-${id}`,
+    carId: kind === 'recon' ? `car-${id}` : null,
+    ...over,
+  })
+  const mech = staff('m1', 'mechanic')
+  const other = staff('m2', 'mechanic')
+  const ctx = { roster: [mech, other], bays: 2 }
+
+  it('takes client jobs first, then recalls, then reconditioning, into a free bay', () => {
+    const jobs = [job('r', 'recon'), job('c', 'recall'), job('o', 'oil')]
+    expect(nextMechanicTask(mech, jobs, ctx)).toEqual({ kind: 'job', jobId: 'o', bay: 0 })
+    expect(nextMechanicTask(mech, jobs.slice(0, 2), ctx)).toEqual({
+      kind: 'job',
+      jobId: 'c',
+      bay: 0,
+    })
+    expect(nextMechanicTask(mech, jobs.slice(0, 1), ctx)).toEqual({
+      kind: 'job',
+      jobId: 'r',
+      bay: 0,
+    })
+  })
+
+  it('keeps the job they are on', () => {
+    const jobs = [job('o', 'oil'), job('r', 'recon', { status: 'inBay', bay: 1, mechanicId: 'm1' })]
+    expect(nextMechanicTask(mech, jobs, ctx)).toEqual({ kind: 'job', jobId: 'r', bay: 1 })
+  })
+
+  it('leaves jobs and bays other mechanics have taken', () => {
+    const jobs = [job('a', 'recon'), job('b', 'recon')]
+    const taken = new Map([['a', 0]])
+    expect(nextMechanicTask(mech, jobs, { ...ctx, taken })).toEqual({
+      kind: 'job',
+      jobId: 'b',
+      bay: 1,
+    })
+    // One bay in use and the other spoken for: nothing to start.
+    const busy = [job('x', 'recon', { status: 'inBay', bay: 0, mechanicId: 'm2' }), ...jobs]
+    expect(nextMechanicTask(mech, busy, { ...ctx, taken: new Map([['a', 1]]) })).toEqual({
+      kind: 'idle',
+    })
+  })
+
+  it('takes over a job left stalled in a bay', () => {
+    const gone = staff('m3', 'mechanic', { fired: true, status: 'leaving' })
+    const jobs = [job('s', 'recon', { status: 'inBay', bay: 0, mechanicId: 'm3' })]
+    expect(nextMechanicTask(mech, jobs, { ...ctx, roster: [mech, gone] })).toEqual({
+      kind: 'job',
+      jobId: 's',
+      bay: 0,
+    })
+    // Not one someone is still working.
+    const working = [job('s', 'recon', { status: 'inBay', bay: 0, mechanicId: 'm2' })]
+    expect(nextMechanicTask(mech, working, { ...ctx, bays: 1 })).toEqual({ kind: 'idle' })
+  })
+
+  it('does nothing off the clock, let go, quitting, or with nothing to do', () => {
+    const jobs = [job('r', 'recon')]
+    for (const e of [
+      staff('m', 'mechanic', { status: 'arriving' }),
+      staff('m', 'mechanic', { fired: true }),
+      staff('m', 'mechanic', { quitting: true }),
+    ]) {
+      expect(nextMechanicTask(e, jobs, ctx)).toEqual({ kind: 'idle' })
+    }
+    expect(nextMechanicTask(mech, [], ctx)).toEqual({ kind: 'idle' })
+    expect(nextMechanicTask(mech, jobs, { ...ctx, bays: 0 })).toEqual({ kind: 'idle' })
+    expect(nextMechanicTask(mech, [job('d', 'recon', { status: 'done' })], ctx)).toEqual({
+      kind: 'idle',
+    })
+  })
+
+  it('counts only a mechanic at their post as working', () => {
+    expect(mechanicWorking([mech], 'm1')).toBe(true)
+    expect(mechanicWorking([mech], null)).toBe(false)
+    expect(mechanicWorking([], 'm1')).toBe(false)
+    expect(mechanicWorking([{ ...mech, quitting: true }], 'm1')).toBe(false)
+    expect(mechanicWorking([{ ...mech, status: 'leaving' }], 'm1')).toBe(false)
   })
 })

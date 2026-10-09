@@ -4,6 +4,9 @@ import {
   createGrid,
   CUSTOMER_PARKING,
   DESK_CHAIR_ID,
+  GARAGE,
+  GARAGE_SIGN,
+  GARAGE_STANDBY_TILES,
   GUARD_PATROL_TILES,
   GRID_WIDTH,
   GUEST_CHAIR_ID,
@@ -21,6 +24,10 @@ import {
   RECEPTION_CHAIR_ID,
   SALES_DESKS,
   salesDesks,
+  SERVICE_BAYS,
+  SERVICE_CHAIR_ID,
+  SERVICE_WAIT_IDS,
+  serviceBays,
   SIDEWALK_ENDS,
   SOFA_IDS,
   spaceOpen,
@@ -471,6 +478,116 @@ describe('the showroom wing', () => {
     for (const sp of PARKING_SPACES) {
       const approach = approachTilesFor(g, parkedCarRect(sp))
       expect(findPathToAny(g, LOT_ENTRY_TILES[0], approach)).not.toBeNull()
+    }
+  })
+})
+
+describe('the service garage', () => {
+  const ground = ['east-lot', 'showroom-wing', 'service-bay'] as const
+  const built = buildLayout([...ground])
+  const inGarage = (tx: number, tz: number) =>
+    tx >= GARAGE.tx && tx < GARAGE.tx + GARAGE.w && tz >= GARAGE.tz && tz < GARAGE.tz + GARAGE.h
+  /** Every slot full, as in the wing's tests. */
+  function fullGrid(l: Layout) {
+    const g = createGrid(l)
+    applyToGrid(g, inventory)
+    for (const p of PLATFORMS) g.setRectBlocked(p.rect, true)
+    for (const sp of PARKING_SPACES) g.setRectBlocked(parkedCarRect(sp), true)
+    return g
+  }
+  const g = fullGrid(built)
+
+  it('stands in the parcel’s north-east corner, clear of the wing, the spaces and the lane', () => {
+    for (const [tx, tz] of tiles(GARAGE)) {
+      expect(tx >= WING.tx + WING.w, `${tx},${tz}`).toBe(true)
+      expect(tx < GRID_WIDTH - 1 && tz > 0, `${tx},${tz}`).toBe(true)
+    }
+    for (const sp of PARKING_SPACES) {
+      expect(tiles(sp.rect).some(([tx, tz]) => inGarage(tx, tz))).toBe(false)
+    }
+    for (const sp of CUSTOMER_PARKING) {
+      expect(tiles(sp.rect).some(([tx, tz]) => inGarage(tx, tz))).toBe(false)
+    }
+    // Room in front of it for the service drive.
+    for (let tx = GARAGE.tx; tx < GARAGE.tx + GARAGE.w; tx++) {
+      expect(g.isWalkable(tx, GARAGE.tz + GARAGE.h), `${tx}`).toBe(true)
+    }
+    expect(g.isWalkable(GARAGE_SIGN.tx, GARAGE_SIGN.tz)).toBe(false)
+  })
+
+  it('is nothing until it is built, and needs the east lot', () => {
+    for (const l of [buildLayout(['east-lot']), buildLayout(['service-bay'])]) {
+      expect(zoneAt(l, 52, 4)).not.toBe('garage')
+      expect(wallAt(l, GARAGE.tx, 4)).toBeNull()
+      expect(l.props.some((p) => p.id === SERVICE_CHAIR_ID)).toBe(false)
+      expect(l.blocked).toEqual([])
+    }
+  })
+
+  it('is indoors, walled, with a door per bay and one for clients', () => {
+    expect(zoneAt(built, 52, 4)).toBe('garage')
+    expect(isIndoor(built, 52, 4)).toBe(true)
+    expect(wallAt(built, GARAGE.tx, 4)).toBe('solid')
+    expect(wallAt(built, 52, GARAGE.tz)).toBe('solid')
+    expect(wallAt(built, 55, GARAGE.tz + GARAGE.h - 1)).toBe('solid')
+    for (const bay of SERVICE_BAYS) {
+      for (const [tx, tz] of tiles(bay.door)) expect(wallAt(built, tx, tz)).toBeNull()
+      // A car drives straight in through its door onto the lift.
+      expect(bay.door.tx).toBe(bay.rect.tx)
+      expect(bay.door.w).toBe(bay.rect.w)
+    }
+  })
+
+  it('blocks the lifts, and reaches each bay, the counter and every chair from the street', () => {
+    expect(serviceBays([...ground])).toBe(SERVICE_BAYS)
+    expect(serviceBays(['east-lot'])).toEqual([])
+    for (const bay of SERVICE_BAYS) {
+      for (const [tx, tz] of tiles(bay.rect)) expect(g.isWalkable(tx, tz)).toBe(false)
+      const approach = approachTilesFor(g, bay.rect)
+      expect(approach.length).toBeGreaterThan(2)
+      expect(findPathToAny(g, SIDEWALK_ENDS[2], approach)).not.toBeNull()
+    }
+    for (const id of [SERVICE_CHAIR_ID, ...SERVICE_WAIT_IDS]) {
+      const chair = built.props.find((p) => p.id === id)!
+      expect(chair, id).toBeDefined()
+      const approach = approachTilesFor(g, chair.rect)
+      expect(findPathToAny(g, SIDEWALK_ENDS[2], approach), id).not.toBeNull()
+    }
+    for (const t of GARAGE_STANDBY_TILES) {
+      expect(inGarage(t.tx, t.tz)).toBe(true)
+      expect(findPath(g, SIDEWALK_ENDS[2], t), `${t.tx},${t.tz}`).not.toBeNull()
+    }
+  })
+
+  it('places its furniture inside it, off walls and without overlapping anything', () => {
+    const added = built.props.filter((p) => p.id.startsWith('service-'))
+    expect(added.length).toBe(3 + SERVICE_WAIT_IDS.length)
+    const owner = new Map<string, string>()
+    const lifts = SERVICE_BAYS.map((b, i) => ({ id: `lift-${i}`, rect: b.rect, blocks: true }))
+    for (const p of [...built.props, ...lifts]) {
+      for (const [tx, tz] of tiles(p.rect)) {
+        expect(wallAt(built, tx, tz), `${p.id} on a wall`).toBeNull()
+        if (p.blocks === false) continue
+        const key = `${tx},${tz}`
+        expect(owner.get(key), `${p.id} overlaps ${owner.get(key)}`).toBeUndefined()
+        owner.set(key, p.id)
+      }
+    }
+    for (const p of added)
+      expect(
+        tiles(p.rect).every(([tx, tz]) => inGarage(tx, tz)),
+        p.id,
+      ).toBe(true)
+  })
+
+  it('leaves the lot’s and the wing’s cars and chairs reachable', () => {
+    for (const sp of PARKING_SPACES) {
+      const approach = approachTilesFor(g, parkedCarRect(sp))
+      expect(findPathToAny(g, LOT_ENTRY_TILES[0], approach)).not.toBeNull()
+    }
+    for (const d of SALES_DESKS) {
+      const chair = built.props.find((p) => p.id === d.chairId)!
+      expect(findPathToAny(g, SPAWN_TILE, approachTilesFor(g, chair.rect))).not.toBeNull()
     }
   })
 })

@@ -91,6 +91,20 @@ export function DaySummary() {
               <dd className="price summary-sub">{formatMoney(split.used)}</dd>
             </>
           )}
+          {stats.service.overtime > 0 && (
+            <>
+              <dt>Garage overtime</dt>
+              <dd className="price">{formatMoney(-stats.service.overtime)}</dd>
+            </>
+          )}
+          {stats.service.recon > 0 && (
+            <>
+              <dt>Reconditioned</dt>
+              <dd>
+                {stats.service.recon} used car{stats.service.recon === 1 ? '' : 's'}
+              </dd>
+            </>
+          )}
           <dt>Wages</dt>
           <dd className="price">{formatMoney(-stats.wages || 0)}</dd>
           <dt>Commissions</dt>

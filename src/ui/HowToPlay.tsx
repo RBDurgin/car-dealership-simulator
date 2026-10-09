@@ -38,6 +38,14 @@ import {
 } from '../sim/quota'
 import { rankById, rankGross, RANKS } from '../sim/progression'
 import { EXPANSION_IDS, EXPANSIONS } from '../sim/expansions'
+import {
+  GARAGE_BAYS,
+  GARAGE_EXPANSION,
+  JOBS,
+  OVERTIME_HOURLY,
+  RECON_MAX,
+  RECON_STEP,
+} from '../sim/service'
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
@@ -264,6 +272,14 @@ function SellingTab({ click }: TabProps) {
           too: a car in good shape is easier to sell, a worn one harder.
         </p>
         <p>
+          Once you have a service garage and a mechanic, {click.toLowerCase()} a worn used car and
+          choose <b>Recondition</b>, or use the <b>Service</b> tab. You pay for the parts (
+          {formatMoney(JOBS.recon.parts.min)}–{formatMoney(JOBS.recon.parts.max)}) and the car
+          leaves the lot for a bay. It comes back {Math.round(RECON_STEP * 100)} points better (up
+          to {Math.round(RECON_MAX * 100)}%), washed and on sale at what it&apos;s worth now, with
+          the parts on its cost. It pays best on the roughest cars.
+        </p>
+        <p>
           The stock panel shows each used car&apos;s days in stock and today&apos;s value, and flags
           it <b>Stale</b> after {STALE_DAYS} days. The summary splits gross profit between new and
           used cars, so you can see what your used stock really makes.
@@ -391,6 +407,22 @@ function BusinessTab({ touch, click }: TabProps) {
             )
           })}
         </ul>
+      </section>
+      <section>
+        <h3>Service garage</h3>
+        <p>
+          The {EXPANSIONS[GARAGE_EXPANSION].label.toLowerCase()} has {GARAGE_BAYS} bays. Hire a
+          mechanic for each from the staff panel; they work from opening to closing. The{' '}
+          <b>Service</b> tab on the office computer (<OfficeKey touch={touch} keyName="B" />) shows
+          what&apos;s in each bay and when it&apos;ll be done, and the used cars worth
+          reconditioning. It can also send the used cars you take in to the shop the next morning on
+          their own.
+        </p>
+        <p>
+          A job still in a bay at closing is finished in overtime, at {formatMoney(OVERTIME_HOURLY)}{' '}
+          an hour, taken off the day&apos;s net. Cars still waiting for a bay go back on sale and
+          the parts money comes back.
+        </p>
       </section>
       <section>
         <h3>The rival across the road</h3>
@@ -572,7 +604,9 @@ function PeopleTab({ touch, click }: TabProps) {
           can have up to {ROLE_LIMITS.sales} salespeople and one of each other role; the{' '}
           {EXPANSIONS['showroom-wing'].label.toLowerCase()} makes room for{' '}
           {roleLimits(['showroom-wing']).sales} salespeople and{' '}
-          {roleLimits(['showroom-wing']).porter} lot porters (see <b>Business</b>).
+          {roleLimits(['showroom-wing']).porter} lot porters, and the{' '}
+          {EXPANSIONS[GARAGE_EXPANSION].label.toLowerCase()} for a mechanic per bay (see{' '}
+          <b>Business</b>).
         </p>
         <ul>
           <li>
@@ -598,6 +632,11 @@ function PeopleTab({ touch, click }: TabProps) {
           <li>
             A <b>security guard</b> patrols the lot and deals with Nazma (below); the more skilled,
             the further they see.
+          </li>
+          <li>
+            A <b>mechanic</b> works a bay in the service garage, once you&apos;ve built it,
+            reconditioning used cars. The more skilled, the faster the work. Someone thinking of
+            quitting downs tools, and a job left in a bay waits for the next mechanic.
           </li>
         </ul>
       </section>

@@ -25,6 +25,8 @@ export type ActionId =
   | 'improve'
   | 'calendar'
   | 'rival'
+  | 'service'
+  | 'recondition'
   | 'confront'
 
 /** Real seconds the player spends looking a seller's car over. */
@@ -86,12 +88,20 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   // At the desk with a buyer in tow: the finance manager takes them from there.
   handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
-  // At the office computer: opens the stock panel, on its stock, marketing, upgrades, calendar or rival tab.
+  // At the office computer: opens the stock panel, on its stock, marketing, upgrades, calendar, rival or service tab.
   orderStock: { id: 'orderStock', label: 'Order stock', verb: 'Ordering stock', mode: 'instant' },
   advertise: { id: 'advertise', label: 'Marketing', verb: 'Planning ads', mode: 'instant' },
   improve: { id: 'improve', label: 'Upgrades', verb: 'Planning upgrades', mode: 'instant' },
   calendar: { id: 'calendar', label: 'Calendar', verb: 'Checking the calendar', mode: 'instant' },
   rival: { id: 'rival', label: 'Rival', verb: 'Checking on Nazma', mode: 'instant' },
+  service: { id: 'service', label: 'Service', verb: 'Checking the garage', mode: 'instant' },
+  // A used car in stock: off to the service garage to be reconditioned.
+  recondition: {
+    id: 'recondition',
+    label: 'Recondition',
+    verb: 'Sending it to the shop',
+    mode: 'instant',
+  },
   // Reaching Nazma runs him off the lot (see scene/Player, which chases him as he moves).
   confront: { id: 'confront', label: 'Confront', verb: 'Confronting', mode: 'instant' },
 }
@@ -214,7 +224,7 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         kind: 'computer',
         name: 'Office computer',
         approachTiles: screenApproachTiles(grid, p.rect, p.facing),
-        actions: ['orderStock', 'advertise', 'improve', 'calendar', 'rival'],
+        actions: ['orderStock', 'advertise', 'improve', 'calendar', 'rival', 'service'],
       })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })

@@ -73,10 +73,14 @@ describe('expansions', () => {
 
   it('tells which a rank-up makes available', () => {
     expect(unlockedBy('trusted-dealer', 'regional-name')).toEqual(['showroom-wing'])
-    expect(unlockedBy('corner-lot', 'dealer-of-the-year')).toEqual(['east-lot', 'showroom-wing'])
+    expect(unlockedBy('corner-lot', 'dealer-of-the-year')).toEqual([
+      'east-lot',
+      'service-bay',
+      'showroom-wing',
+    ])
     expect(unlockedBy('corner-lot', 'main-street')).toEqual(['east-lot'])
-    expect(unlockedBy('corner-lot', 'trusted-dealer')).toEqual(['east-lot'])
-    expect(unlockedBy('main-street', 'trusted-dealer')).toEqual([])
+    expect(unlockedBy('corner-lot', 'trusted-dealer')).toEqual(['east-lot', 'service-bay'])
+    expect(unlockedBy('main-street', 'trusted-dealer')).toEqual(['service-bay'])
     expect(unlockedBy('corner-lot', 'corner-lot')).toEqual([])
   })
 })

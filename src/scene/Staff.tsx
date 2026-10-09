@@ -7,7 +7,15 @@ import { hasBuyersInHand } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { expansionsUp } from '../sim/expansions'
-import { GUARD_PATROL_TILES, patrolTiles, PORTER_STANDBY_TILES, SIDEWALK_ENDS } from '../sim/layout'
+import {
+  GARAGE,
+  GARAGE_STANDBY_TILES,
+  GUARD_PATROL_TILES,
+  patrolTiles,
+  PORTER_STANDBY_TILES,
+  SERVICE_BAYS,
+  SIDEWALK_ENDS,
+} from '../sim/layout'
 import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
@@ -25,7 +33,14 @@ import {
   type Employee,
   type Role,
 } from '../sim/staff'
-import { nextGuardTask, nextPorterTask, nextSalesTask, type SalesTask } from '../sim/staffAi'
+import { bayCount } from '../sim/service'
+import {
+  nextGuardTask,
+  nextMechanicTask,
+  nextPorterTask,
+  nextSalesTask,
+  type SalesTask,
+} from '../sim/staffAi'
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
@@ -65,6 +80,8 @@ const STANDBY_TILES: Tile[] = [
 const SHOWROOM_CENTER = grid.tileToWorld(22, 8)
 /** What the porter faces while waiting for a car to need a wash: the lot. */
 const LOT_CENTER = grid.tileToWorld(20, 18)
+/** What mechanics waiting for work face: the middle of the garage. */
+const GARAGE_CENTER = grid.tileToWorld(GARAGE.tx + GARAGE.w / 2, GARAGE.tz + GARAGE.h / 2)
 /** Game seconds the guard stands at each patrol stop, looking over the lot. */
 const PATROL_PAUSE_SECONDS = 5
 /** Close enough to Nazma for the guard to run him off. */
@@ -76,6 +93,7 @@ const CHASE_REPLAN_SECONDS = 0.4
 function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
   if (e.role === 'porter') return { tiles: PORTER_STANDBY_TILES, faceTo: LOT_CENTER }
   if (e.role === 'security') return { tiles: GUARD_PATROL_TILES, faceTo: LOT_CENTER }
+  if (e.role === 'mechanic') return { tiles: GARAGE_STANDBY_TILES, faceTo: GARAGE_CENTER }
   return { tiles: STANDBY_TILES, faceTo: SHOWROOM_CENTER }
 }
 
@@ -348,6 +366,55 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.timer >= skillSeconds(PORTER_WASH_SECONDS, e.skill)) game.staffWash(e.id, task.carId)
 }
 
+const JOB_PREFIX = 'job:'
+
+/** The jobs mechanics other than `id` are on their way to, and the bay each is headed for. */
+function jobsBesides(id: string): Map<string, number> {
+  const jobs = new Map<string, number>()
+  for (const [other, w] of walkers) {
+    if (other === id || !w.task?.startsWith(JOB_PREFIX)) continue
+    const [jobId, bay] = w.task.slice(JOB_PREFIX.length).split('@')
+    jobs.set(jobId, Number(bay))
+  }
+  return jobs
+}
+
+/**
+ * A mechanic's day: walk to the bay of the next job (a client's car first,
+ * then our own reconditioning), start on it and work it until it's done;
+ * with nothing to do, wait in the garage. The job's time runs on the clock
+ * (see the store's `tickClock`), not here.
+ */
+function updateMechanic(e: Employee, w: StaffWalker, seconds: number): void {
+  const game = useGame.getState()
+  const task = nextMechanicTask(e, game.serviceJobs, {
+    roster: game.roster,
+    bays: bayCount(expansionsUp(game)),
+    taken: jobsBesides(e.id),
+  })
+  if (task.kind === 'idle') {
+    if (w.task !== 'post') plan(e, w, 'post')
+    return updatePost(e, w, seconds)
+  }
+  const bay = SERVICE_BAYS[task.bay]
+  const key = `${JOB_PREFIX}${task.jobId}@${task.bay}`
+  if (key !== w.task) {
+    w.task = key
+    w.timer = 0
+    standUp(w)
+    const b = grid.tileToWorld(bay.rect.tx, bay.rect.tz)
+    w.faceTo = { x: b.x + (bay.rect.w - 1) / 2, z: b.z + (bay.rect.h - 1) / 2 }
+    pathTo(w, approachTilesFor(grid, bay.rect))
+  }
+  walk(w, STAFF_SPEED, seconds, w.faceTo)
+  if (w.waypoints.length > 0) return
+  const job = game.serviceJobs.find((j) => j.id === task.jobId)
+  if (job?.status !== 'inBay' || job.mechanicId !== e.id) {
+    game.staffStartJob(e.id, task.jobId, task.bay)
+  }
+  w.anim.current = 'interact-right'
+}
+
 /**
  * The security guard's rounds: stop by stop round the patrol, pausing at each
  * to look over the lot. Once Nazma comes within sight they run after him and,
@@ -425,6 +492,7 @@ function update(
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
   if (e.role === 'porter' && !leaving) return updatePorter(e, w, seconds)
   if (e.role === 'security' && !leaving) return updateGuard(e, w, seconds)
+  if (e.role === 'mechanic' && !leaving) return updateMechanic(e, w, seconds)
   const task = leaving ? 'leave' : 'post'
   if (task !== w.task) plan(e, w, task)
   updatePost(e, w, seconds)
@@ -475,7 +543,8 @@ const onLot = (e: Employee) => e.status !== 'off'
  * Every employee in the world, moved by one `useFrame` (like Customers): they
  * walk in from the sidewalk at opening (or when hired), work from their post
  * (the finance manager signs buyers' paperwork at the office desk, the porter
- * washes the dirtiest cars, the guard patrols the lot and chases off Nazma), and walk
+ * washes the dirtiest cars, the guard patrols the lot and chases off Nazma,
+ * mechanics work the garage's bays), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */

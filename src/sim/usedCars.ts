@@ -224,6 +224,13 @@ export function usedTag(info: UsedInfo): string {
   return `Used · ${info.year} · ${Math.round(info.miles / 1000)}k mi`
 }
 
+/** "Fair (45%)": how a used car's `condition` reads in the panels. */
+export function shapeLabel(condition: number): string {
+  const word =
+    condition >= 0.75 ? 'Good' : condition >= 0.5 ? 'Fair' : condition >= 0.25 ? 'Worn' : 'Rough'
+  return `${word} (${Math.round(condition * 100)}%)`
+}
+
 /** After this many days in stock a used car is flagged as stale in the stock panel. */
 export const STALE_DAYS = 10
 
