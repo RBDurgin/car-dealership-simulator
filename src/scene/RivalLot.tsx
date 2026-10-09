@@ -57,6 +57,7 @@ const PLANKS = mat('#8a6a48')
 const POLE = mat('#5b6168', 0.5, 0.5)
 const CONE = mat('#f97316', 0.7)
 const BOARD = mat('#1f1f1f', 0.7)
+const ROOF = mat('#8d9096', 0.95)
 
 /** A canvas texture `w` by `h`, drawn by `draw`. */
 function canvasTexture(
@@ -224,11 +225,24 @@ function Banner({ rival }: { rival: Rival }) {
   )
 }
 
-/** His showroom: walls, glass to the road (boarded while closed), an orange fascia and his name on the roof. */
+/** The fascia's depth past the wall, its thickness inward and its rise over the roof. */
+const FASCIA = { out: 0.08, in: 0.12, rise: 0.08 }
+/** The roof's cap sits this far over the wall's top, so the two never share a plane. */
+const ROOF_CAP = 0.03
+
+/**
+ * His showroom: walls, glass to the road (boarded while closed), an orange
+ * fascia rising a little past a gray roof, and his name on the roof. The
+ * fascia is a ring and the roof a thin cap over the walls, so no two faces
+ * seen from above lie in one plane (which flickers as the camera moves).
+ */
 function Showroom({ rival }: { rival: Rival }) {
   const map = useNameTexture(rival.name)
   const b = BUILDING
   const signW = b.x1 - b.x0 - 1.5
+  const f = FASCIA
+  const fasciaY = b.h - 0.5
+  const fasciaH = 0.5 + f.rise
   return (
     <>
       <Block {...b} material={WALL} />
@@ -241,14 +255,48 @@ function Showroom({ rival }: { rival: Rival }) {
         y={0.1}
         material={rival.status === 'closed' ? PLANKS : GLASS}
       />
+      {/* Front and back, full width; the sides fit between them. */}
       <Block
-        x0={b.x0 - 0.05}
-        x1={b.x1 + 0.05}
-        z0={b.z0 - 0.1}
-        z1={b.z1 + 0.05}
-        h={0.5}
-        y={b.h - 0.5}
+        x0={b.x0 - f.out}
+        x1={b.x1 + f.out}
+        z0={b.z0 - f.out}
+        z1={b.z0 + f.in}
+        h={fasciaH}
+        y={fasciaY}
         material={TRIM}
+      />
+      <Block
+        x0={b.x0 - f.out}
+        x1={b.x1 + f.out}
+        z0={b.z1 - f.in}
+        z1={b.z1 + f.out}
+        h={fasciaH}
+        y={fasciaY}
+        material={TRIM}
+      />
+      {[
+        [b.x0 - f.out, b.x0 + f.in],
+        [b.x1 - f.in, b.x1 + f.out],
+      ].map(([x0, x1]) => (
+        <Block
+          key={x0}
+          x0={x0}
+          x1={x1}
+          z0={b.z0 + f.in}
+          z1={b.z1 - f.in}
+          h={fasciaH}
+          y={fasciaY}
+          material={TRIM}
+        />
+      ))}
+      <Block
+        x0={b.x0 + f.in}
+        x1={b.x1 - f.in}
+        z0={b.z0 + f.in}
+        z1={b.z1 - f.in}
+        h={ROOF_CAP}
+        y={b.h}
+        material={ROOF}
       />
       <Board
         x={(b.x0 + b.x1) / 2}
