@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08, 13f on 2026-10-09. Phase 13 is built. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08, 13f on 2026-10-09. **Phase 13 is done.** Still open: the real-phone `?fps` check (see Performance). We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
