@@ -218,15 +218,21 @@ const THEFT_SEED = 19_000
  * changes mid-game.
  */
 export function isTheftNight(day: number, chance = 1): boolean {
-  let last = -Infinity
+  return day >= FIRST_THEFT_DAY && lastTheftNight(day, chance) === day
+}
+
+/**
+ * The last night up to and including the one before `day`'s morning that
+ * Nazma tried to steal a car, replayed as in `isTheftNight`, or 0 if he never
+ * has.
+ */
+export function lastTheftNight(day: number, chance = 1): number {
+  let last = 0
   for (let d = FIRST_THEFT_DAY; d <= day; d++) {
-    if (d - last < THEFT_GAP_DAYS) continue
-    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE * chance) {
-      if (d === day) return true
-      last = d
-    }
+    if (last > 0 && d - last < THEFT_GAP_DAYS) continue
+    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE * chance) last = d
   }
-  return false
+  return last
 }
 
 /** The seed for picking which car goes, apart from the roll in `isTheftNight`. */

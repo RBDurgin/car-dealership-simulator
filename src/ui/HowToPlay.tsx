@@ -15,6 +15,7 @@ import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
+import { MAX_SHARE, OPENING_RANK, RIVAL_NAMES } from '../sim/rival'
 import { ownerBonus } from '../sim/owner'
 import {
   HOLDBACK_FLOOR,
@@ -357,6 +358,19 @@ function BusinessTab({ touch, click }: TabProps) {
             )
           })}
         </ul>
+      </section>
+      <section>
+        <h3>The rival across the road</h3>
+        <p>
+          Once you reach {rankById(OPENING_RANK).name}, Nazma buys the lot across the road. A week
+          or so later {RIVAL_NAMES[0]} opens there, a little under your prices, and some of the
+          town&apos;s shoppers go to him instead of you: up to {Math.round(MAX_SHARE * 100)}% of
+          them.
+        </p>
+        <p>
+          A better reputation and ads running keep more of them coming to you, and so does pricing
+          close to his. He grows stronger while he does well and weaker while he doesn&apos;t.
+        </p>
       </section>
       <section>
         <h3>Manufacturer&apos;s quota</h3>

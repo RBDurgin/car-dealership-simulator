@@ -78,6 +78,7 @@ import {
   type OwnedImprovement,
 } from '../sim/improvements'
 import {
+  activeCampaigns,
   CHANNELS,
   launchCampaign,
   trafficBoost,
@@ -89,6 +90,7 @@ import {
   confrontBlocker,
   emptyNazmaStats,
   isNazmaDay,
+  isTheftNight,
   NAZMA_ID,
   nextTarget,
   planTheft,
@@ -133,6 +135,15 @@ import {
   visitorScale,
   type RepScale,
 } from '../sim/reputation'
+import {
+  emptyRival,
+  emptyRivalStats,
+  marketShare,
+  rivalDay,
+  rivalMorning,
+  rivalNotice,
+  type Rival,
+} from '../sim/rival'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
@@ -207,6 +218,7 @@ const OWNER_SEED = 12_000
 const WALK_IN_SEED = 14_000
 const DELIVERY_SEED = 16_000
 const DRIVE_SEED = 18_000
+const RIVAL_SEED = 21_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -264,6 +276,8 @@ interface GameState {
   won: boolean
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
+  /** Nazma's lot across the road. Moves each morning (opening) and when the day is settled. Saved. */
+  rival: Rival
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -532,6 +546,7 @@ function dayOne(difficulty: Difficulty) {
     career: emptyCareer(),
     franchise: START_TIER,
     won: false,
+    rival: emptyRival(),
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
@@ -621,8 +636,9 @@ export const useGame = create<GameState>((set, get) => {
    * day's customers move reputation. On the month's last day the manufacturer
    * pays the holdback on the month's sales (scaled by the franchise tier), and
    * the month's result moves the tier. The day's gross goes on the
-   * career, which may earn a new rank. Used cars bought today go into stock,
-   * in the lot spaces held for them, so the save keeps them.
+   * career, which may earn a new rank. Nazma's lot across the road takes in
+   * the day (see `rivalDay`). Used cars bought today go into stock, in the lot
+   * spaces held for them, so the save keeps them.
    */
   const settleDay = () => {
     const s = get()
@@ -667,6 +683,12 @@ export const useGame = create<GameState>((set, get) => {
       reputation,
       career,
       franchise: quota?.tier.to ?? s.franchise,
+      rival: rivalDay(
+        s.rival,
+        s.dayStats,
+        createRng(RIVAL_SEED + s.clock.day),
+        level.rivalStrength,
+      ),
       ...(s.purchases.length > 0 && {
         inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
         purchases: [],
@@ -1024,6 +1046,8 @@ export const useGame = create<GameState>((set, get) => {
    * weekday, the weather and any sale weekend) and applicants, and the staff
    * head in. On the 1st the manufacturer sets the month's quota, from
    * reputation. A sale weekend is announced a week ahead and on its first day.
+   * Nazma announces his rival lot once the dealership is a Main Street one,
+   * and while it's open it takes its share of the day's visitors.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
@@ -1042,6 +1066,14 @@ export const useGame = create<GameState>((set, get) => {
     const level = tuning()
     const guarded = isGuarded(s.roster)
     const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, level.theftChance)
+    const opening = rivalMorning(s.rival, day, s.career.rank, level.rivalStrength)
+    const rival = isTheftNight(day, level.theftChance)
+      ? { ...opening.rival, lastTheftDay: day }
+      : opening.rival
+    const share = marketShare(rival, {
+      reputation: s.reputation,
+      campaigns: activeCampaigns(campaigns, day).length,
+    })
     const stolen = theft?.outcome === 'stolen' ? theft.car : null
     const inventory = [
       ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
@@ -1076,12 +1108,14 @@ export const useGame = create<GameState>((set, get) => {
             weekdayTraffic(day) *
             effects.traffic *
             (event?.traffic ?? 1) *
-            level.traffic,
+            level.traffic *
+            (1 - share),
           referrals: referralVisitors(s.reputation),
         },
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
       purchases: [],
+      rival,
       dayStats: {
         ...emptyStats(),
         nazma: {
@@ -1089,6 +1123,7 @@ export const useGame = create<GameState>((set, get) => {
           stolen: stolen ? [stolenRecord(stolen)] : [],
           foiled: theft?.outcome === 'foiled',
         },
+        rival: rival.status === 'open' ? emptyRivalStats(share) : null,
       },
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day),
@@ -1100,6 +1135,7 @@ export const useGame = create<GameState>((set, get) => {
       s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
       s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
+      opening.event && rivalNotice(rival, opening.event),
       eventNotice(day),
       theft && theftNotice(theft),
       delivered.length > 0 && deliveryNotice(delivered),
@@ -1693,6 +1729,7 @@ export const useGame = create<GameState>((set, get) => {
         career: save.career,
         franchise: save.franchise,
         won: save.won,
+        rival: save.rival,
         tipsSeen: save.tipsSeen,
       })
       beginDay(save.day + 1)

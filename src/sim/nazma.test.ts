@@ -8,6 +8,7 @@ import {
   FIRST_THEFT_DAY,
   isNazmaDay,
   isTheftNight,
+  lastTheftNight,
   nazmaSummary,
   nextTarget,
   planTheft,
@@ -223,6 +224,22 @@ describe('isTheftNight', () => {
     expect(hard.length).toBeGreaterThan(nights.length)
     expect(easy.length).toBeLessThan(nights.length)
     expect(easy[0]).toBeGreaterThanOrEqual(FIRST_THEFT_DAY)
+  })
+})
+
+describe('lastTheftNight', () => {
+  it('is the latest theft night up to the day, or 0 before the first', () => {
+    const nights = days(200).filter((d) => isTheftNight(d))
+    expect(lastTheftNight(nights[0] - 1)).toBe(0)
+    for (const d of days(200)) {
+      const before = nights.filter((n) => n <= d)
+      expect(lastTheftNight(d)).toBe(before.length > 0 ? before[before.length - 1] : 0)
+    }
+  })
+
+  it('replays at the level’s chance', () => {
+    const hard = days(200).filter((d) => isTheftNight(d, 1.5))
+    expect(lastTheftNight(200, 1.5)).toBe(hard[hard.length - 1])
   })
 })
 

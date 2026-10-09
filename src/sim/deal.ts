@@ -18,6 +18,7 @@ import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
+import type { RivalStats } from './rival'
 import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
 import type { QuotaResult } from './quota'
@@ -282,6 +283,8 @@ export interface DayStats {
   bought: BoughtCar[]
   /** The rank reached when the day was settled, or null if it didn't change. */
   rankUp: RankId | null
+  /** How Nazma's lot across the road stood today, or null while it isn't open. */
+  rival: RivalStats | null
 }
 
 export function emptyStats(): DayStats {
@@ -309,6 +312,7 @@ export function emptyStats(): DayStats {
     bailout: 0,
     bought: [],
     rankUp: null,
+    rival: null,
   }
 }
 

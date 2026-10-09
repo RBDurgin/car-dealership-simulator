@@ -49,6 +49,8 @@ export interface Tuning {
   tradeHope: number
   /** × the lifetime gross each dealer rank needs. */
   rankScale: number
+  /** × Nazma's rival lot's opening strength and how fast it grows. */
+  rivalStrength: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -80,6 +82,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 0.7,
     tradeHope: 0.95,
     rankScale: 0.75,
+    rivalStrength: 0.75,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -105,6 +108,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 1,
     tradeHope: 1,
     rankScale: 1,
+    rivalStrength: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -130,6 +134,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 1.2,
     tradeHope: 1.05,
     rankScale: 1.15,
+    rivalStrength: 1.25,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

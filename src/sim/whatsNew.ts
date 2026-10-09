@@ -160,6 +160,15 @@ export const UPDATES: readonly Update[] = [
       'Keep playing afterwards as long as you like. A save that has won shows a trophy on the title screen.',
     ],
   },
+  {
+    id: 15,
+    phase: '14',
+    title: 'A rival across the road',
+    items: [
+      'Reach Main Street and Nazma buys the lot across the road. You get a week’s notice before his dealership opens.',
+      'Once it’s open, some shoppers go to him instead. A good reputation, running ads and fair prices win them back.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

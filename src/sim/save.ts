@@ -1,16 +1,18 @@
 import { calendarOf } from './calendar'
 import type { GameTime } from './clock'
-import { isDifficulty, type Difficulty } from './difficulty'
+import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { PARKING_SPACES, PLATFORMS } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
+import { lastTheftNight } from './nazma'
 import { BASE_SLOTS, type Order } from './ordering'
 import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
+import { emptyRival, isRival, type Rival } from './rival'
 import { dressFor, ROLES, type Employee } from './staff'
 import { isTipId, type TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
@@ -25,7 +27,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 17
+export const SAVE_VERSION = 18
 
 export interface SaveData {
   version: number
@@ -64,6 +66,8 @@ export interface SaveData {
   won: boolean
   /** The latest update (see `sim/whatsNew.ts`) this game's player has been shown. */
   news: number
+  /** Nazma's lot across the road (see `sim/rival.ts`). */
+  rival: Rival
 }
 
 export interface SaveSource {
@@ -84,6 +88,7 @@ export interface SaveSource {
   career: Career
   franchise: FranchiseTier
   won: boolean
+  rival: Rival
 }
 
 /**
@@ -114,6 +119,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     franchise: s.franchise,
     won: s.won,
     news: LATEST_NEWS,
+    rival: s.rival,
   }
 }
 
@@ -197,6 +203,20 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   15: (raw) => ({ ...raw, expansions: [] }),
   // v17: the win. Nobody had seen the win screen before it.
   16: (raw) => ({ ...raw, won: false }),
+  // v18: Nazma's rival lot, not yet announced. His last theft night is replayed
+  // at the save's level, so the gap after it holds.
+  17: (raw) => ({
+    ...raw,
+    rival: {
+      ...emptyRival(),
+      lastTheftDay: isNumber(raw.day)
+        ? lastTheftNight(
+            raw.day,
+            isDifficulty(raw.difficulty) ? TUNING[raw.difficulty].theftChance : 1,
+          )
+        : 0,
+    },
+  }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -221,7 +241,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions, won } = raw
+  const { expansions, won, rival } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -239,6 +259,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isCareer(career)) return null
   if (!isFranchiseTier(franchise)) return null
   if (typeof won !== 'boolean') return null
+  if (!isRival(rival)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
