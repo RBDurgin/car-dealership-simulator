@@ -92,6 +92,13 @@ describe('customerActions', () => {
     expect(customerActions(at('talking'))).toEqual(['offer'])
   })
 
+  it('offers nothing while a salesperson has them, so the player can’t ask into their deal', () => {
+    for (const phase of ['browsing', 'waiting', 'talking'] as const) {
+      expect(customerActions(at(phase, { handlerId: 'emp-1' })), phase).toEqual([])
+    }
+    expect(customerActions(mine('talking'))).toEqual(['offer'])
+  })
+
   it('offers nothing while arriving, mid-deal or leaving', () => {
     for (const phase of ['arriving', 'considering', 'following', 'signing', 'leaving'] as const) {
       expect(customerActions(at(phase)), phase).toEqual([])

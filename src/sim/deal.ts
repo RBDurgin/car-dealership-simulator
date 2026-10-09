@@ -113,8 +113,12 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
   return financeOnDuty(roster)?.id === e.id ? ['handOff', 'inspect'] : ['inspect']
 }
 
-/** What the player can do with a customer right now. A seller waits for an offer. */
+/**
+ * What the player can do with a customer right now. A seller waits for an
+ * offer. Nothing while a salesperson has them: the deal is theirs.
+ */
 export function customerActions(c: Customer): ActionId[] {
+  if (staffHandled(c)) return []
   switch (c.phase) {
     case 'browsing':
     case 'waiting':
