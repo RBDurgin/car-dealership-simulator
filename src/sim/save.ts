@@ -4,8 +4,9 @@ import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
+import { CAR_MODELS } from './customers'
 import { COST_FRACTION, type InventoryCar } from './inventory'
-import { PARKING_SPACES, PLATFORMS } from './layout'
+import { PARKING_SPACES, PLATFORMS, type CarModel } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import { lastTheftNight } from './nazma'
 import { BASE_SLOTS, type Order } from './ordering'
@@ -13,6 +14,7 @@ import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
+import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { dressFor, ROLES, type Employee } from './staff'
 import { isTipId, type TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
@@ -27,7 +29,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 21
+export const SAVE_VERSION = 22
 
 export interface SaveData {
   version: number
@@ -68,6 +70,8 @@ export interface SaveData {
   news: number
   /** Nazma's lot across the road (see `sim/rival.ts`). */
   rival: Rival
+  /** The service department's settings (see `sim/service.ts`). */
+  service: ServiceSettings
 }
 
 export interface SaveSource {
@@ -89,6 +93,7 @@ export interface SaveSource {
   franchise: FranchiseTier
   won: boolean
   rival: Rival
+  service: ServiceSettings
 }
 
 /**
@@ -120,6 +125,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     won: s.won,
     news: LATEST_NEWS,
     rival: s.rival,
+    service: s.service,
   }
 }
 
@@ -237,6 +243,30 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
     rival: isObject(raw.rival) ? { ...raw.rival, closedDay: 0 } : raw.rival,
     career: isObject(raw.career) ? { ...raw.career, rivalsBeaten: 0 } : raw.career,
   }),
+  // v22: the service department at its defaults, and cars sold by model, the
+  // career's sales spread evenly over the models so recalls have buyers to call.
+  21: (raw) => ({
+    ...raw,
+    service: defaultService(),
+    career: isObject(raw.career)
+      ? {
+          ...raw.career,
+          soldByModel: spreadSales(isNumber(raw.career.sales) ? raw.career.sales : 0),
+        }
+      : raw.career,
+  }),
+}
+
+/** `sales` cars spread evenly over the models, the remainder to the first ones. */
+function spreadSales(sales: number): Partial<Record<CarModel, number>> {
+  const each = Math.floor(sales / CAR_MODELS.length)
+  const extra = sales % CAR_MODELS.length
+  const spread: Partial<Record<CarModel, number>> = {}
+  CAR_MODELS.forEach((model, i) => {
+    const count = each + (i < extra ? 1 : 0)
+    if (count > 0) spread[model] = count
+  })
+  return spread
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -261,7 +291,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions, won, rival } = raw
+  const { expansions, won, rival, service } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -280,6 +310,8 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isFranchiseTier(franchise)) return null
   if (typeof won !== 'boolean') return null
   if (!isRival(rival)) return null
+  if (!isObject(service) || !isRateLevel(service.rate) || typeof service.autoRecon !== 'boolean')
+    return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
@@ -312,7 +344,11 @@ function isCareer(v: unknown): boolean {
     isNumber(v.monthGross) &&
     isNumber(v.bestMonth) &&
     isRankId(v.rank) &&
-    isNumber(v.rivalsBeaten)
+    isNumber(v.rivalsBeaten) &&
+    isObject(v.soldByModel) &&
+    Object.entries(v.soldByModel).every(
+      ([model, n]) => (CAR_MODELS as readonly string[]).includes(model) && isNumber(n),
+    )
   )
 }
 

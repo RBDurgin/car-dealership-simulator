@@ -39,7 +39,13 @@ import {
   type Sale,
 } from '../sim/deal'
 import { eventNotice, eventOn } from '../sim/events'
-import { buyExpansion, EXPANSIONS, expansionsUp, type OwnedExpansion } from '../sim/expansions'
+import {
+  buyExpansion,
+  EXPANSIONS,
+  expansionsUp,
+  installedExpansions,
+  type OwnedExpansion,
+} from '../sim/expansions'
 import { carName, type ActionId } from '../sim/interactables'
 import {
   clampAllowance,
@@ -190,6 +196,16 @@ import {
   vehicleTargetId,
   type Purchase,
 } from '../sim/sellers'
+import {
+  bayCount,
+  defaultService,
+  emptySchedule,
+  planServiceVisits,
+  serviceDemand,
+  type ServiceJob,
+  type ServiceSchedule,
+  type ServiceSettings,
+} from '../sim/service'
 import { assignTrades, tradeRecord } from '../sim/tradeIns'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
@@ -229,6 +245,7 @@ const DELIVERY_SEED = 16_000
 const DRIVE_SEED = 18_000
 const RIVAL_SEED = 21_000
 const QUOTE_SEED = 22_000
+const SERVICE_SEED = 23_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -262,6 +279,12 @@ interface GameState {
    * holding a lot space, until the day is settled and it goes into stock.
    */
   purchases: Purchase[]
+  /** The service department's jobs today, in the bays or waiting for one. Never saved. */
+  serviceJobs: ServiceJob[]
+  /** Today's service visits and how many have driven in. */
+  serviceVisits: ServiceSchedule
+  /** The shop rate and whether trade-ins are reconditioned on their own. Saved. */
+  service: ServiceSettings
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
@@ -461,6 +484,8 @@ let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
 let driveRng: Rng = createRng(DRIVE_SEED + 1)
 /** Which shoppers have been to the rival's lot first. Apart, so the rest of the day plays as before. */
 let quoteRng: Rng = createRng(QUOTE_SEED + 1)
+/** Service clients and their quotes. Apart, so a day without a garage plays as before. */
+let serviceRng: Rng = createRng(SERVICE_SEED + 1)
 
 /**
  * Time stands still and the player can't move behind the title screen, the
@@ -553,6 +578,7 @@ function dayOne(difficulty: Difficulty) {
   walkInRng = createRng(WALK_IN_SEED + 1)
   driveRng = createRng(DRIVE_SEED + 1)
   quoteRng = createRng(QUOTE_SEED + 1)
+  serviceRng = createRng(SERVICE_SEED + 1)
   const tuning = TUNING[difficulty]
   return {
     difficulty,
@@ -565,6 +591,10 @@ function dayOne(difficulty: Difficulty) {
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
+    // Day 1 has no garage.
+    serviceJobs: [] as ServiceJob[],
+    serviceVisits: emptySchedule(),
+    service: defaultService(),
     quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
@@ -1109,6 +1139,7 @@ export const useGame = create<GameState>((set, get) => {
     walkInRng = createRng(WALK_IN_SEED + day)
     driveRng = createRng(DRIVE_SEED + day)
     quoteRng = createRng(QUOTE_SEED + day)
+    serviceRng = createRng(SERVICE_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
@@ -1180,6 +1211,15 @@ export const useGame = create<GameState>((set, get) => {
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
       purchases: [],
+      serviceJobs: [],
+      serviceVisits: planServiceVisits(
+        serviceRng,
+        serviceDemand(day, s.career, {
+          bays: bayCount(installedExpansions(s.expansions, day)),
+          rate: s.service.rate,
+          factor: level.serviceDemand,
+        }),
+      ),
       rival,
       ...(bust && {
         reputation: applyChange(s.reputation, BUST_REPUTATION),
@@ -1808,6 +1848,7 @@ export const useGame = create<GameState>((set, get) => {
         won: save.won,
         rival: save.rival,
         tipsSeen: save.tipsSeen,
+        service: save.service,
       })
       beginDay(save.day + 1)
     },

@@ -23,6 +23,7 @@ import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
+import { emptyServiceStats, type ServiceStats } from './service'
 import { financeOnDuty, type Employee } from './staff'
 import { tradeOver, type TradeRecord } from './tradeIns'
 
@@ -285,6 +286,8 @@ export interface DayStats {
   rankUp: RankId | null
   /** How Nazma's lot across the road stood today, or null while it isn't open. */
   rival: RivalStats | null
+  /** The service department's day (see `sim/service.ts`). */
+  service: ServiceStats
 }
 
 export function emptyStats(): DayStats {
@@ -313,6 +316,7 @@ export function emptyStats(): DayStats {
     bought: [],
     rankUp: null,
     rival: null,
+    service: emptyServiceStats(),
   }
 }
 
@@ -325,9 +329,23 @@ export function costOfSales(stats: DayStats): number {
   return stats.sales.reduce((sum, s) => sum + s.cost, 0)
 }
 
-/** Revenue less the cost of the cars sold. */
+/** Revenue less the cost of the cars sold. Car sales only: see `totalGross`. */
 export function grossProfit(stats: DayStats): number {
   return revenue(stats) - costOfSales(stats)
+}
+
+/**
+ * The service department's gross: labor and parts billed less what the parts
+ * cost, plus the manufacturer's warranty pay, less overtime.
+ */
+export function serviceGross(stats: DayStats): number {
+  const s = stats.service
+  return s.labor + s.parts - s.partsCost + s.warranty - s.overtime
+}
+
+/** Gross profit on car sales and service together, for the career and the owner. */
+export function totalGross(stats: DayStats): number {
+  return grossProfit(stats) + serviceGross(stats)
 }
 
 /** Gross profit on new cars and on used ones, apart. */
@@ -343,12 +361,13 @@ export function theftLoss(stats: DayStats): number {
 }
 
 /**
- * Gross profit less the day's staff costs, floor plan interest, ad spend,
- * improvements, expansions and stolen stock, plus any bonus from the owner and the month-end holdback.
+ * Gross profit on sales and service less the day's staff costs, floor plan
+ * interest, ad spend, improvements, expansions and stolen stock, plus any
+ * bonus from the owner and the month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
   return (
-    grossProfit(stats) -
+    totalGross(stats) -
     stats.wages -
     stats.commissions -
     stats.interest -

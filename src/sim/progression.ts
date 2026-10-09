@@ -1,4 +1,5 @@
-import { grossProfit, type DayStats } from './deal'
+import { totalGross, type DayStats } from './deal'
+import type { CarModel } from './layout'
 
 /**
  * The dealership's career: lifetime totals, added to each time a day is
@@ -34,12 +35,14 @@ export const RANK_IDS = RANKS.map((r) => r.id)
 export const TOP_RANK = RANKS[RANKS.length - 1]
 
 export interface Career {
-  /** Lifetime gross profit (sale prices less dealer cost). */
+  /** Lifetime gross profit: sale prices less dealer cost, plus the service department's gross. */
   gross: number
   /** Cars sold, new and used. */
   sales: number
   /** Days settled. */
   days: number
+  /** Cars sold by model, new and used (for manufacturer recalls). */
+  soldByModel: Partial<Record<CarModel, number>>
   /** Gross profit so far this month, toward `bestMonth`. */
   monthGross: number
   /** The best month's gross profit, counted once a month is over. */
@@ -54,6 +57,7 @@ export function emptyCareer(): Career {
   return {
     gross: 0,
     sales: 0,
+    soldByModel: {},
     days: 0,
     monthGross: 0,
     bestMonth: 0,
@@ -112,7 +116,7 @@ export function nextRank(id: RankId): Rank | null {
 }
 
 /**
- * The day's sales added to `career`, its rank brought up to date at
+ * The day's sales and service added to `career`, its rank brought up to date at
  * `reputation` (after the day). On the month's last day (`monthEnd`) the
  * month's gross is weighed against the best month and starts again.
  */
@@ -123,10 +127,14 @@ export function addDay(
   monthEnd: boolean,
   scale = 1,
 ): Career {
-  const monthGross = career.monthGross + grossProfit(stats)
+  const gross = totalGross(stats)
+  const monthGross = career.monthGross + gross
+  const soldByModel = { ...career.soldByModel }
+  for (const s of stats.sales) soldByModel[s.model] = (soldByModel[s.model] ?? 0) + 1
   const next: Career = {
-    gross: career.gross + grossProfit(stats),
+    gross: career.gross + gross,
     sales: career.sales + stats.sales.length,
+    soldByModel,
     days: career.days + 1,
     monthGross: monthEnd ? 0 : monthGross,
     bestMonth: monthEnd ? Math.max(career.bestMonth, monthGross) : career.bestMonth,

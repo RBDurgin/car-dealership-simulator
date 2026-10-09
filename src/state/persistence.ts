@@ -45,7 +45,7 @@ export function clearSave(): void {
 
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
- * payroll is paid, then again for any hiring, firing, ordering, advertising or improving from the day summary
+ * payroll is paid, then again for any hiring, firing, ordering, advertising, improving or changing the service settings from the day summary
  * (or a tip shown after closing, or Keep playing on the win screen).
  */
 export function startAutosave(): () => void {
@@ -62,6 +62,7 @@ export function startAutosave(): () => void {
       s.improvements !== prev.improvements ||
       s.roster !== prev.roster ||
       s.tipsSeen !== prev.tipsSeen ||
+      s.service !== prev.service ||
       s.won !== prev.won
     if (changed) writeSave(createSave(s, Date.now()))
   })

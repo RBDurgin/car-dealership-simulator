@@ -15,6 +15,7 @@ import {
 } from './owner'
 import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from './reputation'
 import { createRng } from './rng'
+import { emptyServiceStats } from './service'
 
 const inventory = buildInventory(createRng(42))
 const formatMoney = (n: number) => `$${n.toLocaleString('en-US')}`
@@ -135,6 +136,11 @@ describe('goalProgress', () => {
     const goal: OwnerGoal = { kind: 'profit', amount: 7_000 }
     expect(goalProgress(goal, withSales(sale('van', 35_000))).current).toBe(4_000)
     expect(goalProgress(goal, withSales(sale('van', 35_000), sale('suv', 25_000))).met).toBe(true)
+    const serviced = {
+      ...withSales(sale('van', 35_000)),
+      service: { ...emptyServiceStats(), labor: 600 },
+    }
+    expect(goalProgress(goal, serviced).current).toBe(4_600)
   })
 
   it('is met until somebody walks out impatient', () => {

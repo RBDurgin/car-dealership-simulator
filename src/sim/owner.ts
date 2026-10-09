@@ -1,4 +1,4 @@
-import { grossProfit, revenue, type DayStats } from './deal'
+import { revenue, totalGross, type DayStats } from './deal'
 import { carName } from './interactables'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
@@ -138,7 +138,7 @@ export function goalProgress(
       return { current, target: goal.amount, met: current >= goal.amount }
     }
     case 'profit': {
-      const current = grossProfit(stats)
+      const current = totalGross(stats)
       return { current, target: goal.amount, met: current >= goal.amount }
     }
     case 'reputation': {

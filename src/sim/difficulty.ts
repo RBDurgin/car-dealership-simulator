@@ -55,6 +55,10 @@ export interface Tuning {
   rivalUndercut: number
   /** × the days Nazma's rival lot stays closed after going bust. */
   rivalComeback: number
+  /** × the service department's daily visits. */
+  serviceDemand: number
+  /** × the odds a serviced car comes back for a redo. */
+  comebackScale: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -89,6 +93,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalStrength: 0.75,
     rivalUndercut: 0.8,
     rivalComeback: 1.5,
+    serviceDemand: 1.2,
+    comebackScale: 0.5,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -117,6 +123,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalStrength: 1,
     rivalUndercut: 1,
     rivalComeback: 1,
+    serviceDemand: 1,
+    comebackScale: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -145,6 +153,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalStrength: 1.25,
     rivalUndercut: 1.2,
     rivalComeback: 0.7,
+    serviceDemand: 0.8,
+    comebackScale: 1.5,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

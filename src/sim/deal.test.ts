@@ -18,6 +18,8 @@ import {
   hasBuyersInHand,
   inConversation,
   netIncome,
+  serviceGross,
+  totalGross,
   recordDepartures,
   missedSummary,
   recordMissed,
@@ -29,6 +31,7 @@ import {
   type Sale,
   walkOuts,
 } from './deal'
+import { emptyServiceStats } from './service'
 import { Grid } from './grid'
 import { buildInventory } from './inventory'
 import { GUEST_CHAIR_ID } from './layout'
@@ -305,6 +308,27 @@ describe('day stats', () => {
       owner: { goal: { kind: 'sales' as const, count: 1 }, met: true, bonus: 1_500, line: '' },
     }
     expect(netIncome(stats)).toBe(3_000 - 400 - 750 - 160 - 1_200 - 3_000 + 1_500)
+  })
+
+  it('adds the service gross to the net, but keeps gross profit to car sales', () => {
+    const stats = {
+      ...emptyStats(),
+      sales: [sale(30_000, 27_000)],
+      service: {
+        ...emptyServiceStats(),
+        jobs: 3,
+        labor: 540,
+        parts: 420,
+        partsCost: 300,
+        warranty: 120,
+        overtime: 60,
+      },
+    }
+    expect(serviceGross(emptyStats())).toBe(0)
+    expect(serviceGross(stats)).toBe(540 + 420 - 300 + 120 - 60)
+    expect(grossProfit(stats)).toBe(3_000)
+    expect(totalGross(stats)).toBe(3_000 + 720)
+    expect(netIncome(stats)).toBe(3_000 + 720)
   })
 
   it('writes off stolen stock, floored or not', () => {

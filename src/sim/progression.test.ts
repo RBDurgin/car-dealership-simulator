@@ -17,6 +17,7 @@ import {
   type Career,
 } from './progression'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
+import { emptyServiceStats } from './service'
 
 const sale = (price: number, cost: number): Sale => ({
   customerName: 'Alex B.',
@@ -99,6 +100,25 @@ describe('career', () => {
     const next = addDay(emptyCareer(), day(sale(30_000, 27_000), sale(25_000, 23_500)), 50, false)
     expect(next).toMatchObject({ gross: 4_500, sales: 2, days: 1, monthGross: 4_500, bestMonth: 0 })
     expect(addDay(next, day(), 50, false)).toMatchObject({ gross: 4_500, sales: 2, days: 2 })
+  })
+
+  it('counts the service department’s gross toward the career', () => {
+    const stats = { ...day(sale(30_000, 27_000)), service: { ...emptyServiceStats(), labor: 500 } }
+    expect(addDay(emptyCareer(), stats, 50, false)).toMatchObject({
+      gross: 3_500,
+      monthGross: 3_500,
+    })
+  })
+
+  it('counts cars sold by model', () => {
+    const truck = { ...sale(40_000, 36_000), model: 'truck' as const }
+    const next = addDay(emptyCareer(), day(sale(30_000, 27_000), truck, truck), 50, false)
+    expect(next.soldByModel).toEqual({ van: 1, truck: 2 })
+    expect(addDay(next, day(sale(30_000, 27_000)), 50, false).soldByModel).toEqual({
+      van: 2,
+      truck: 2,
+    })
+    expect(emptyCareer().soldByModel).toEqual({})
   })
 
   it('takes a loss off the gross', () => {

@@ -4,6 +4,7 @@ import type { OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
 import { PARKING_SPACES } from './layout'
 import type { OwnedImprovement } from './improvements'
+import { CAR_MODELS } from './customers'
 import { buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
@@ -15,6 +16,7 @@ import { monthlyQuota } from './quota'
 import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
+import { defaultService, type ServiceSettings } from './service'
 import type { TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 import type { Employee } from './staff'
@@ -59,6 +61,8 @@ const source = () => ({
   won: false,
   // As a v17 save of day 3 upgrades (no theft yet), so the older upgrades compare equal.
   rival: emptyRival() as Rival,
+  // As a v21 save upgrades, so the older upgrades compare equal.
+  service: defaultService() as ServiceSettings,
 })
 
 const order: Order = {
@@ -363,6 +367,31 @@ describe('save data', () => {
     expect(parseSave({ ...save, career: oldCareer })).toBeNull()
   })
 
+  it('upgrades a version 21 save: the shop at its defaults, its sales spread over the models', () => {
+    const career: Career = { ...emptyCareer(), sales: 2 * CAR_MODELS.length + 1 }
+    const save = createSave({ ...source(), career }, 123)
+    const { soldByModel: _, ...oldCareer } = career
+    const v21 = { ...save, version: 21, career: oldCareer, service: undefined }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v21)))
+    expect(upgraded?.service).toEqual(defaultService())
+    const spread = upgraded?.career.soldByModel ?? {}
+    expect(Object.values(spread).reduce((a, b) => a + b, 0)).toBe(career.sales)
+    expect(spread[CAR_MODELS[0]]).toBe(3)
+    expect(spread[CAR_MODELS[1]]).toBe(2)
+    const none = createSave(source(), 123)
+    const { soldByModel: __, ...empty } = none.career
+    expect(parseSave({ ...none, version: 21, career: empty, service: undefined })).toEqual(none)
+  })
+
+  it('keeps the service settings, and rejects a rate it doesn’t know', () => {
+    const service: ServiceSettings = { rate: 'premium', autoRecon: true }
+    const save = createSave({ ...source(), service }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.service).toEqual(service)
+    expect(parseSave({ ...save, service: { ...service, rate: 'free' } })).toBeNull()
+    expect(parseSave({ ...save, service: { rate: 'budget' } })).toBeNull()
+    expect(parseSave({ ...save, service: undefined })).toBeNull()
+  })
+
   it('keeps the rival, and rejects a malformed one', () => {
     const rival: Rival = {
       ...emptyRival(),
@@ -418,11 +447,14 @@ describe('save data', () => {
       bestMonth: 95_000,
       rank: 'main-street',
       rivalsBeaten: 2,
+      soldByModel: { sedan: 30, truck: 11 },
     }
     const save = createSave({ ...source(), career }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.career).toEqual(career)
     expect(parseSave({ ...save, career: { ...career, rank: 'emperor' } })).toBeNull()
     expect(parseSave({ ...save, career: { ...career, gross: 'lots' } })).toBeNull()
+    expect(parseSave({ ...save, career: { ...career, soldByModel: { hovercar: 1 } } })).toBeNull()
+    expect(parseSave({ ...save, career: { ...career, soldByModel: undefined } })).toBeNull()
   })
 
   it('keeps a used car, and rejects one whose condition is out of range', () => {
