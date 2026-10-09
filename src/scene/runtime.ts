@@ -40,6 +40,22 @@ export const interactables = new Map<string, Interactable>()
 let upNow: ImprovementId[] = []
 
 /**
+ * Customer-parking spaces with a car parked in them (a visitor's, or one we
+ * bought today), which block its footprint.
+ */
+let parkedSpots = new Set<number>()
+
+/**
+ * Starts the grid again from the layout, with the parked cars back on it.
+ * Runs each morning, before `syncWorld` puts the stock and improvements back,
+ * so ground that changed overnight is walkable (or not) from the start of the day.
+ */
+function resetGrid(): void {
+  grid.copyFrom(createGrid(layout))
+  for (const n of parkedSpots) grid.setRectBlocked(parkedCarRect(CUSTOMER_PARKING[n]), true)
+}
+
+/**
  * Blocks/frees car and improvement footprints and rebuilds the interactables
  * to match. Improvements are only ever added.
  */
@@ -64,7 +80,9 @@ syncWorld(useGame.getState().inventory, upOn(useGame.getState()))
 useGame.subscribe((s, prev) => {
   const up = upOn(s)
   const raised = up.filter((id) => !upNow.includes(id))
-  if (s.inventory === prev.inventory && raised.length === 0) return
+  const morning = s.clock.day !== prev.clock.day
+  if (!morning && s.inventory === prev.inventory && raised.length === 0) return
+  if (morning) resetGrid()
   syncWorld(s.inventory, up)
   // A car delivered or an improvement put up overnight where the player ended
   // the day steps them out. Only new ones: the player sits on a blocked chair tile.
@@ -77,12 +95,6 @@ useGame.subscribe((s, prev) => {
     Object.assign(playerPos, nearestStandable(grid, playerPos))
   }
 })
-
-/**
- * Customer-parking spaces with a car parked in them (a visitor's, or one we
- * bought today), which block its footprint.
- */
-let parkedSpots = new Set<number>()
 
 useGame.subscribe((s, prev) => {
   if (s.customers === prev.customers && s.purchases === prev.purchases) return
@@ -239,11 +251,13 @@ export function findInteractable(id: string): Interactable | undefined {
 
 /**
  * Camera yaw in radians: `yaw` is the current (eased) value, `yawTarget` where it's
- * heading. 0 = camera on +z looking toward -z.
+ * heading. 0 = camera on +z looking toward -z. `focus` is the ground point it
+ * looks at, easing after the player.
  */
 export const cameraState = {
   yaw: useGame.getState().viewYaw,
   yawTarget: useGame.getState().viewYaw,
+  focus: { x: playerPos.x, z: playerPos.z },
 }
 
 /** Turns the view a quarter turn: 1 = counter-clockwise (Q), -1 = clockwise (E). */

@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import {
   BoxGeometry,
+  type DirectionalLight,
   Euler,
   type InstancedMesh,
   Matrix4,
@@ -12,7 +13,8 @@ import {
 import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
 import { isIndoor } from '../sim/layout'
 import type { Weather } from '../sim/weather'
-import { grid, layout, playerPos } from './runtime'
+import { cameraState, grid, layout, playerPos } from './runtime'
+import { snappedSunTarget } from './sunFollow'
 import { useWeather } from './useWeather'
 
 /** Phones and small screens get a third of the drops (decided once, like the shadow map). */
@@ -40,23 +42,46 @@ const LIGHT: Record<
 /** Rain hazes the distance a little. */
 const RAIN_FOG = { color: '#7d8796', near: 45, far: 120 }
 
-/** The sun and sky, tinted by the day's weather. */
+/** Where the sun sits from the point it shines on. */
+const SUN = { x: 12, y: 20, z: 8 }
+/** Half the width of the square the sun casts shadows over, centred on the camera's focus. */
+const SHADOW_REACH = 30
+
+/**
+ * The sun and sky, tinted by the day's weather. The sun follows the camera, so
+ * shadows fall wherever the player is on a map wider than its shadow camera.
+ */
 export function WeatherLights({ shadowMapSize }: { shadowMapSize: number }) {
   const weather = useWeather()
   const l = LIGHT[weather]
+  const sun = useRef<DirectionalLight>(null)
+  const texel = (2 * SHADOW_REACH) / shadowMapSize
+
+  useFrame(() => {
+    const light = sun.current
+    if (!light) return
+    const { focus } = cameraState
+    const t = snappedSunTarget({ x: focus.x, y: 0, z: focus.z }, SUN, texel)
+    light.target.position.set(t.x, t.y, t.z)
+    // The target isn't in the scene, so nothing else updates its matrix.
+    light.target.updateMatrixWorld()
+    light.position.set(t.x + SUN.x, t.y + SUN.y, t.z + SUN.z)
+  })
+
   return (
     <>
       <hemisphereLight args={[l.sky, l.ground, l.hemi]} />
       <directionalLight
-        position={[12, 20, 8]}
+        ref={sun}
+        position={[SUN.x, SUN.y, SUN.z]}
         color={l.sun}
         intensity={l.sunIntensity}
         castShadow
         shadow-mapSize={[shadowMapSize, shadowMapSize]}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-left={-SHADOW_REACH}
+        shadow-camera-right={SHADOW_REACH}
+        shadow-camera-top={SHADOW_REACH}
+        shadow-camera-bottom={-SHADOW_REACH}
         shadow-normalBias={0.03}
       />
       {weather === 'rain' && (

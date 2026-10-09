@@ -6,7 +6,12 @@ import { Grid, type Tile } from './grid'
  * from the tables below, so this file is the single source of truth.
  */
 
-export const GRID_WIDTH = 40
+/**
+ * The old lot is tx 0–39. The parcel east of it (`PARCEL`) is for sale until
+ * the lot expansion is bought, and leaves room for the showroom wing on its
+ * north side and, later, a service garage in its north-east corner.
+ */
+export const GRID_WIDTH = 60
 export const GRID_HEIGHT = 30
 export const SPAWN_TILE: Tile = { tx: 18, tz: 25 }
 export const DEALERSHIP_NAME = "Charles' Discount Automotive"
@@ -57,15 +62,26 @@ export interface Rect {
 }
 
 export type ZoneKind =
-  'grass' | 'asphalt' | 'concrete' | 'sidewalk' | 'road' | 'showroom' | 'office' | 'lounge'
+  | 'grass'
+  | 'asphalt'
+  | 'concrete'
+  | 'sidewalk'
+  | 'road'
+  | 'showroom'
+  | 'office'
+  | 'lounge'
+  | 'parcel'
 
 const INDOOR: ReadonlySet<ZoneKind> = new Set(['showroom', 'office', 'lounge'])
-const BLOCKING_ZONES: ReadonlySet<ZoneKind> = new Set(['road'])
+const BLOCKING_ZONES: ReadonlySet<ZoneKind> = new Set(['road', 'parcel'])
 
 export interface Zone {
   kind: ZoneKind
   rect: Rect
 }
+
+/** The empty ground east of the lot, inside its own fence: rough grass, closed until it's bought. */
+export const PARCEL: Rect = { tx: 40, tz: 1, w: GRID_WIDTH - 41, h: 23 }
 
 /** Floor zones, painted in order (later entries win). Tiles default to grass. */
 export const ZONES: Zone[] = [
@@ -75,8 +91,9 @@ export const ZONES: Zone[] = [
   { kind: 'showroom', rect: { tx: 16, tz: 2, w: 21, h: 12 } },
   { kind: 'office', rect: { tx: 29, tz: 2, w: 8, h: 7 } },
   { kind: 'lounge', rect: { tx: 30, tz: 9, w: 7, h: 5 } },
-  { kind: 'sidewalk', rect: { tx: 0, tz: 25, w: 40, h: 2 } },
-  { kind: 'road', rect: { tx: 0, tz: 27, w: 40, h: 3 } },
+  { kind: 'parcel', rect: PARCEL },
+  { kind: 'sidewalk', rect: { tx: 0, tz: 25, w: GRID_WIDTH, h: 2 } },
+  { kind: 'road', rect: { tx: 0, tz: 27, w: GRID_WIDTH, h: 3 } },
 ]
 
 export type WallKind = 'solid' | 'glass' | 'fence'
@@ -88,10 +105,12 @@ export interface WallRun {
 
 /** One-tile-thick wall runs, applied in order (later entries win at overlaps). */
 export const WALL_RUNS: WallRun[] = [
-  // Perimeter fence
-  { kind: 'fence', rect: { tx: 0, tz: 0, w: 40, h: 1 } },
-  { kind: 'fence', rect: { tx: 0, tz: 24, w: 40, h: 1 } },
+  // Perimeter fence, round the lot and the parcel
+  { kind: 'fence', rect: { tx: 0, tz: 0, w: GRID_WIDTH, h: 1 } },
+  { kind: 'fence', rect: { tx: 0, tz: 24, w: GRID_WIDTH, h: 1 } },
   { kind: 'fence', rect: { tx: 0, tz: 0, w: 1, h: 25 } },
+  { kind: 'fence', rect: { tx: GRID_WIDTH - 1, tz: 0, w: 1, h: 25 } },
+  // Between the lot and the parcel
   { kind: 'fence', rect: { tx: 39, tz: 0, w: 1, h: 25 } },
   // Showroom glass (street and lot sides)
   { kind: 'glass', rect: { tx: 16, tz: 2, w: 1, h: 12 } },
@@ -142,6 +161,7 @@ export type PropModel =
   | 'bookcaseClosedWide'
   | 'trashcan'
   | 'sign'
+  | 'forSaleSign'
 
 export type CarModel = Extract<
   PropModel,
@@ -370,9 +390,25 @@ const FIXED_PROPS: Prop[] = [
 /** Fixed furniture and fittings. Cars come from the inventory and can leave. */
 export const PROPS: Prop[] = FIXED_PROPS
 
+/** Ground bought as the dealership grows. Nothing sells it yet. */
+export type ExpansionId = 'east-lot'
+
+/** Where the fence between the lot and the parcel opens once the parcel is bought. */
+export const PARCEL_GATE: Rect = { tx: 39, tz: 15, w: 1, h: 9 }
+
+/** Out front of the parcel while it's for sale, facing the street. */
+const FOR_SALE_SIGN: Prop = {
+  id: 'for-sale-sign',
+  model: 'forSaleSign',
+  rect: { tx: 48, tz: 23, w: 3, h: 1 },
+  facing: 0,
+}
+
 export interface Layout {
   width: number
   height: number
+  /** The floor zones as painted, in order (later entries win). */
+  areas: Zone[]
   zones: ZoneKind[]
   walls: (WallKind | null)[]
   props: Prop[]
@@ -384,15 +420,26 @@ function forEachTile(r: Rect, fn: (tx: number, tz: number) => void): void {
   }
 }
 
-export function buildLayout(): Layout {
+/**
+ * The dealership with the `expansions` that are up. Until the east lot is
+ * bought, the parcel is closed off behind its fence with a sign out front;
+ * once it is, the parcel is asphalt and the fence between them opens.
+ */
+export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
+  const lot = expansions.includes('east-lot')
+  const areas = ZONES.map((z) =>
+    lot && z.kind === 'parcel' ? { ...z, kind: 'asphalt' as const } : z,
+  )
+  const openings = lot ? [...OPENINGS, PARCEL_GATE] : OPENINGS
   const n = GRID_WIDTH * GRID_HEIGHT
   const idx = (tx: number, tz: number) => tz * GRID_WIDTH + tx
   const zones: ZoneKind[] = new Array<ZoneKind>(n).fill('grass')
   const walls: (WallKind | null)[] = new Array<WallKind | null>(n).fill(null)
-  for (const z of ZONES) forEachTile(z.rect, (tx, tz) => (zones[idx(tx, tz)] = z.kind))
+  for (const z of areas) forEachTile(z.rect, (tx, tz) => (zones[idx(tx, tz)] = z.kind))
   for (const w of WALL_RUNS) forEachTile(w.rect, (tx, tz) => (walls[idx(tx, tz)] = w.kind))
-  for (const o of OPENINGS) forEachTile(o, (tx, tz) => (walls[idx(tx, tz)] = null))
-  return { width: GRID_WIDTH, height: GRID_HEIGHT, zones, walls, props: PROPS }
+  for (const o of openings) forEachTile(o, (tx, tz) => (walls[idx(tx, tz)] = null))
+  const props = lot ? PROPS : [...PROPS, FOR_SALE_SIGN]
+  return { width: GRID_WIDTH, height: GRID_HEIGHT, areas, zones, walls, props }
 }
 
 export function zoneAt(layout: Layout, tx: number, tz: number): ZoneKind | null {

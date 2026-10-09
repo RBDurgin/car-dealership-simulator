@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b on 2026-10-08; 13c is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b and 13c on 2026-10-08; 13d is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -83,6 +83,17 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - The camera's pan bounds cover the parcel.
 - The performance fixes below (pathfinding and shadows).
 - Done when: the game looks and plays as before, apart from the empty parcel.
+
+**13c implementation notes:**
+
+- **Width 60, not 54.** At 54 the parcel's inside is 13 tiles wide, which doesn't hold the wing, about 12 spaces and a 10×8 garage with its lane (about 360 tiles against 299). At 60 it's 19×23 (437 tiles). `PARCEL` is tx 40–58, tz 1–23, inside a fence on all four sides (the old east fence at tx 39 is now the dividing fence). The rough split for later is: the wing on the north side next to the building (about tx 37–48, tz 2–12), the garage in the north-east corner (about tx 49–58, tz 1–8) with its lane down the east side to a second south gate, and the lot rows in the south-west (about tx 40–55, tz 13–23). 13d, 13e and Phase 15 make the final calls.
+- The grid stays centred on the world origin, so every world x moved 10 units west. Only the sun had a hardcoded position. Everything else goes through `tileToWorld`, and the camera follows the player with no pan bounds, so the parcel needed no camera change.
+- The closed parcel is the zone `parcel`, which blocks like the road and is painted rough grass. So a click on it fails at once instead of searching the whole map. The For Sale sign (`forSaleSign`, drawn in `scene/Props.tsx`) is in `layout.props` only while the parcel is unbought.
+- `buildLayout(expansions)` takes `ExpansionId[]` (only `east-lot` for now). With `east-lot`, the parcel turns to asphalt, the sign goes and the dividing fence opens at `PARCEL_GATE` (tx 39, tz 15–23). 13d adds the spaces and can move the gate. `Layout.areas` is the painted zone list, which `scene/Floors` now draws from.
+- `scene/runtime` rebuilds the grid from the layout each morning (`resetGrid`, then the parked cars, stock and improvements go back on). For 13d: build the layout from the expansions up that day, replace `layout` in place before `resetGrid`, and give `Floors`, `Walls` and `Props` a signal to redraw, since they read `layout` once.
+- **Pathfinding:** a binary heap (`OpenHeap`) with lazy deletion replaces the linear open list and the `open.includes` check. A tile is pushed again whenever its cost improves, and stale entries are skipped once the tile is closed, so no `inOpen` array is needed. The tests check path cost against a plain Dijkstra on random grids, with and without crowd surcharges. Paths can differ tile for tile on ties, but never in cost. Timings on the 60×30 map in Node on a desktop: crossing the sidewalk 0.10 ms (both versions), an open diagonal 0.26 → 0.09 ms, office to the far sidewalk end with a crowd 0.40 → 0.34 ms, and an unreachable goal 0.50 → 0.37 ms. The gain is modest at today's sizes. The real protection is that the closed parcel is blocked.
+- **Shadows:** the sun and its target follow `cameraState.focus` (moved there from a ref in `CameraRig`). `snappedSunTarget` (`scene/sunFollow.ts`) rounds the target to whole shadow-map texels in the light's own axes, so shadows don't shimmer as the camera eases. The frustum is still ±30.
+- No What's new entry and no help changes: nothing the player can do has changed.
 
 ### 13d: Lot expansion
 

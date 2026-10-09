@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Grid, type Tile } from './grid'
 import { hasLineOfSight } from './movement'
-import { findPath, smoothPath } from './pathfinding'
+import { findPath, findPathToAny, smoothPath } from './pathfinding'
+import { createRng } from './rng'
 
 function assertValidSteps(grid: Grid, path: Tile[]) {
   for (let i = 0; i < path.length; i++) {
@@ -114,5 +115,89 @@ describe('smoothPath', () => {
       const b = grid.tileToWorld(smooth[i].tx, smooth[i].tz)
       expect(hasLineOfSight(grid, a, b)).toBe(true)
     }
+  })
+})
+
+/** What a path costs to walk: 1 a straight step, √2 a diagonal, plus `extra` per tile stepped on. */
+function pathCost(grid: Grid, path: Tile[], extra: (i: number) => number = () => 0): number {
+  let cost = 0
+  for (let i = 1; i < path.length; i++) {
+    const diagonal = path[i].tx !== path[i - 1].tx && path[i].tz !== path[i - 1].tz
+    cost += (diagonal ? Math.SQRT2 : 1) + extra(grid.index(path[i].tx, path[i].tz))
+  }
+  return cost
+}
+
+/** The cheapest cost from `start` to each tile, by plain Dijkstra over the same moves. */
+function cheapest(grid: Grid, start: Tile, extra: (i: number) => number): Float64Array {
+  const dist = new Float64Array(grid.width * grid.height).fill(Infinity)
+  const done = new Uint8Array(dist.length)
+  dist[grid.index(start.tx, start.tz)] = 0
+  for (;;) {
+    let cur = -1
+    for (let i = 0; i < dist.length; i++) {
+      if (!done[i] && dist[i] < Infinity && (cur < 0 || dist[i] < dist[cur])) cur = i
+    }
+    if (cur < 0) return dist
+    done[cur] = 1
+    const cx = cur % grid.width
+    const cz = Math.floor(cur / grid.width)
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if ((dx === 0 && dz === 0) || !grid.isWalkable(cx + dx, cz + dz)) continue
+        if (dx && dz && !(grid.isWalkable(cx + dx, cz) && grid.isWalkable(cx, cz + dz))) continue
+        const ni = grid.index(cx + dx, cz + dz)
+        const cost = dist[cur] + (dx && dz ? Math.SQRT2 : 1) + extra(ni)
+        if (cost < dist[ni]) dist[ni] = cost
+      }
+    }
+  }
+}
+
+describe('findPathToAny', () => {
+  it('finds the cheapest path on random grids, with and without extra costs', () => {
+    const rng = createRng(7)
+    for (let trial = 0; trial < 60; trial++) {
+      const grid = new Grid(18, 12)
+      for (let i = 0; i < 60; i++) grid.setBlocked(rng.int(0, 17), rng.int(0, 11))
+      const costly = new Set(Array.from({ length: 20 }, () => rng.int(0, 18 * 12 - 1)))
+      const extra = trial % 2 ? (i: number) => (costly.has(i) ? 3 : 0) : () => 0
+      const start = { tx: rng.int(0, 17), tz: rng.int(0, 11) }
+      grid.setBlocked(start.tx, start.tz, false)
+      const goals = Array.from({ length: rng.int(1, 3) }, () => ({
+        tx: rng.int(0, 17),
+        tz: rng.int(0, 11),
+      }))
+      const dist = cheapest(grid, start, extra)
+      const best = Math.min(
+        ...goals
+          .filter((t) => grid.isWalkable(t.tx, t.tz))
+          .map((t) => dist[grid.index(t.tx, t.tz)]),
+      )
+      const path = findPathToAny(grid, start, goals, extra)
+      if (best === Infinity) {
+        expect(path, `trial ${trial}`).toBeNull()
+        continue
+      }
+      expect(path, `trial ${trial}`).not.toBeNull()
+      assertValidSteps(grid, path!)
+      expect(path![0]).toEqual(start)
+      expect(goals).toContainEqual(path![path!.length - 1])
+      expect(pathCost(grid, path!, extra)).toBeCloseTo(best, 9)
+    }
+  })
+
+  it('crosses the full-size map quickly, and gives up on a walled-off goal', () => {
+    const grid = new Grid(60, 30)
+    for (let tx = 4; tx < 56; tx += 6) grid.blockRect(tx, tx % 12 ? 0 : 4, 1, 26)
+    const t0 = performance.now()
+    for (let i = 0; i < 50; i++) {
+      expect(findPath(grid, { tx: 0, tz: 0 }, { tx: 59, tz: 29 })).not.toBeNull()
+    }
+    grid.blockRect(57, 27, 3, 1)
+    grid.blockRect(57, 28, 1, 2)
+    expect(findPath(grid, { tx: 0, tz: 0 }, { tx: 59, tz: 29 })).toBeNull()
+    // Generous, so a slow CI machine doesn't fail it; the old linear open list took far longer.
+    expect(performance.now() - t0).toBeLessThan(500)
   })
 })

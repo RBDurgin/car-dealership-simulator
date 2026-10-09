@@ -21,7 +21,6 @@ import {
   DEALERSHIP_NAME,
   DISPLAY_CARS,
   FURNITURE_SCALE,
-  PROPS,
   type CarModel,
   type Prop,
   type PropModel,
@@ -30,7 +29,7 @@ import {
 import { PLAYER_RADIUS } from '../sim/movement'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
-import { customerPos, interactables, playerPos, rectBounds } from './runtime'
+import { customerPos, interactables, layout, playerPos, rectBounds } from './runtime'
 import { useUpNow } from './useUpNow'
 
 const BASE = `${import.meta.env.BASE_URL}models`
@@ -53,7 +52,7 @@ const furniture = (name: string, opts: { yaw?: number; fit?: boolean } = {}): Mo
   ...opts,
 })
 
-const MODELS: Record<Exclude<PropModel, 'sign'>, ModelDef> = {
+const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign'>, ModelDef> = {
   sedan: car('sedan'),
   'sedan-sports': car('sedan-sports'),
   suv: car('suv'),
@@ -211,6 +210,65 @@ function useSignTexture(): CanvasTexture {
   }, [])
 }
 
+/** The For Sale board out front of the parcel: red on white, like an estate agent's. */
+function useForSaleTexture(): CanvasTexture {
+  return useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 512
+    canvas.height = 256
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#f7f5ef'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#c0392b'
+    ctx.fillRect(0, 0, canvas.width, 26)
+    ctx.fillRect(0, canvas.height - 26, canvas.width, 26)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const maxWidth = canvas.width - 48
+    ctx.font = 'bold 104px system-ui, sans-serif'
+    ctx.fillText('FOR SALE', canvas.width / 2, 112, maxWidth)
+    ctx.fillStyle = '#3d4148'
+    ctx.font = '600 34px system-ui, sans-serif'
+    ctx.fillText('COMMERCIAL LOT', canvas.width / 2, 192, maxWidth)
+    const tex = new CanvasTexture(canvas)
+    tex.colorSpace = SRGBColorSpace
+    tex.anisotropy = 8
+    return tex
+  }, [])
+}
+
+const FOR_SALE_BOARD_Y = 1.25
+
+/** A board on two wooden posts, the same face on both sides. */
+function ForSaleSign({ width }: { width: number }) {
+  const texture = useForSaleTexture()
+  const boardW = Math.min(width - 0.6, 2)
+  const boardH = boardW / 2
+  const postH = FOR_SALE_BOARD_Y + boardH / 2
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[(side * boardW) / 2.4, postH / 2, 0]} castShadow>
+          <boxGeometry args={[0.1, postH, 0.1]} />
+          <meshStandardMaterial color="#8a6a48" />
+        </mesh>
+      ))}
+      <mesh position-y={FOR_SALE_BOARD_Y} castShadow>
+        <boxGeometry args={[boardW, boardH, 0.1]} />
+        <meshStandardMaterial color="#f7f5ef" />
+      </mesh>
+      {[0, Math.PI].map((rot) => (
+        <group key={rot} rotation-y={rot}>
+          <mesh position={[0, FOR_SALE_BOARD_Y, 0.051]}>
+            <planeGeometry args={[boardW, boardH]} />
+            <meshStandardMaterial map={texture} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 /** How each tier of the sign is built: the board's height off the ground and how far it overhangs. */
 const SIGN_TIERS = [
   { boardY: 2.3, extraWidth: 0, post: 0.14 },
@@ -343,6 +401,8 @@ function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps)
     <group position-y={y} rotation-y={(prop.facing * Math.PI) / 2}>
       {prop.model === 'sign' ? (
         <Sign width={turned ? b.h : b.w} />
+      ) : prop.model === 'forSaleSign' ? (
+        <ForSaleSign width={turned ? b.h : b.w} />
       ) : (
         <Model
           def={MODELS[prop.model]}
@@ -549,7 +609,7 @@ export function Props() {
   const up = useUpNow()
   return (
     <>
-      {PROPS.map((p) => {
+      {layout.props.map((p) => {
         const model = swappedModel(up, p.id)
         return <PropView key={p.id} prop={model ? { ...p, model } : p} />
       })}

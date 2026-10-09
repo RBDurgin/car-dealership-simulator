@@ -6,10 +6,13 @@ import {
   DESK_CHAIR_ID,
   DISPLAY_CARS,
   GUARD_PATROL_TILES,
+  GRID_WIDTH,
   GUEST_CHAIR_ID,
   LOT_ENTRY_TILES,
   OPENINGS,
   OWNER_OFFICE_TILES,
+  PARCEL,
+  PARCEL_GATE,
   PARKING_SPACES,
   parkedCarRect,
   PORTER_STANDBY_TILES,
@@ -215,5 +218,64 @@ describe('dealership layout', () => {
       expect(approach.length, car.model).toBeGreaterThanOrEqual(4)
       expect(findPathToAny(grid, SPAWN_TILE, approach), car.model).not.toBeNull()
     }
+  })
+})
+
+describe('the parcel east of the lot', () => {
+  it('runs the street, sidewalk and fence the full width of the map', () => {
+    for (let tx = 0; tx < GRID_WIDTH; tx++) {
+      expect(zoneAt(layout, tx, 25), `${tx}`).toBe('sidewalk')
+      expect(zoneAt(layout, tx, 28), `${tx}`).toBe('road')
+      expect(wallAt(layout, tx, 0), `${tx}`).toBe('fence')
+      const gate = OPENINGS.some((o) => tx >= o.tx && tx < o.tx + o.w && o.tz === 24)
+      expect(wallAt(layout, tx, 24), `${tx}`).toBe(gate ? null : 'fence')
+    }
+    expect(SIDEWALK_ENDS.map((t) => t.tx).sort((a, b) => a - b)).toEqual([
+      0,
+      0,
+      GRID_WIDTH - 1,
+      GRID_WIDTH - 1,
+    ])
+  })
+
+  it('is closed off behind its own fence until it is bought', () => {
+    for (const [tx, tz] of tiles(PARCEL)) {
+      expect(zoneAt(layout, tx, tz), `${tx},${tz}`).toBe('parcel')
+      expect(grid.isWalkable(tx, tz), `${tx},${tz}`).toBe(false)
+    }
+    for (let tz = 0; tz < 25; tz++) {
+      expect(wallAt(layout, PARCEL.tx - 1, tz)).toBe('fence')
+      expect(wallAt(layout, GRID_WIDTH - 1, tz)).toBe('fence')
+    }
+    // Nobody can be sent there, so a click on it never searches the whole map.
+    expect(findPath(grid, SPAWN_TILE, { tx: PARCEL.tx + 5, tz: 10 })).toBeNull()
+  })
+
+  it('has a For Sale sign out front, which comes down once the lot is bought', () => {
+    const sign = layout.props.find((p) => p.model === 'forSaleSign')!
+    expect(sign).toBeDefined()
+    expect(sign.facing).toBe(0)
+    for (const [tx, tz] of tiles(sign.rect)) expect(zoneAt(layout, tx, tz)).toBe('parcel')
+    expect(buildLayout(['east-lot']).props.some((p) => p.model === 'forSaleSign')).toBe(false)
+  })
+
+  it('opens onto the lot once the east lot is bought', () => {
+    const open = buildLayout(['east-lot'])
+    const g = createGrid(open)
+    applyToGrid(g, inventory)
+    for (const [tx, tz] of tiles(PARCEL)) {
+      expect(zoneAt(open, tx, tz), `${tx},${tz}`).toBe('asphalt')
+      expect(g.isWalkable(tx, tz), `${tx},${tz}`).toBe(true)
+    }
+    for (const [tx, tz] of tiles(PARCEL_GATE)) expect(wallAt(open, tx, tz)).toBeNull()
+    const far = { tx: GRID_WIDTH - 2, tz: 3 }
+    const path = findPath(g, LOT_ENTRY_TILES[0], far)!
+    expect(path).not.toBeNull()
+    expect(path.some((t) => tiles(PARCEL_GATE).some(([x, z]) => x === t.tx && z === t.tz))).toBe(
+      true,
+    )
+    // The rest of the dealership is as it was.
+    expect(open.props.filter((p) => p.model !== 'forSaleSign')).toEqual(PROPS)
+    expect(wallAt(open, PARCEL.tx - 1, 5)).toBe('fence')
   })
 })

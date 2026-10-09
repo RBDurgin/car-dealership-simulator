@@ -49,6 +49,11 @@ export class Grid {
     }
   }
 
+  /** Takes on `other`'s blocked tiles. It must be the same size. */
+  copyFrom(other: Grid): void {
+    this.blocked.set(other.blocked)
+  }
+
   tileToWorld(tx: number, tz: number): Vec2 {
     return { x: tx - this.width / 2 + 0.5, z: tz - this.height / 2 + 0.5 }
   }

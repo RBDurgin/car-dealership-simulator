@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
 import { slotTier } from '../sim/improvements'
-import { PARKING_SPACES, ZONES, type ZoneKind } from '../sim/layout'
-import { rectBounds } from './runtime'
+import { PARKING_SPACES, type ZoneKind } from '../sim/layout'
+import { layout, rectBounds } from './runtime'
 import { useUpNow } from './useUpNow'
 import { useWeather, wetLook } from './useWeather'
 
@@ -15,13 +15,21 @@ const ZONE_COLORS: Record<ZoneKind, string> = {
   showroom: '#e9e7e2',
   office: '#7d8aa0',
   lounge: '#cdb48f',
+  parcel: '#7d8f55',
 }
 
 // The street runs past the whole property, so these zones extend to the horizon.
 const EXTEND_X: ReadonlySet<ZoneKind> = new Set(['road', 'sidewalk'])
 const HORIZON = 160
 /** Floors that are out in the weather, so get wet in the rain. */
-const OUTDOOR: ReadonlySet<ZoneKind> = new Set(['grass', 'asphalt', 'concrete', 'sidewalk', 'road'])
+const OUTDOOR: ReadonlySet<ZoneKind> = new Set([
+  'grass',
+  'asphalt',
+  'concrete',
+  'sidewalk',
+  'road',
+  'parcel',
+])
 const STRIPE = 0.08
 
 function Plane({
@@ -122,12 +130,12 @@ function useStripes() {
 export function Floors() {
   const stripes = useStripes()
   const raining = useWeather() === 'rain'
-  const road = ZONES.find((z) => z.kind === 'road')
+  const road = layout.areas.find((z) => z.kind === 'road')
   const roadBounds = road ? rectBounds(road.rect) : null
 
   return (
     <group>
-      {ZONES.map((zone, i) => {
+      {layout.areas.map((zone, i) => {
         const b = rectBounds(zone.rect)
         const wide = EXTEND_X.has(zone.kind)
         // Later zones sit a hair higher so overlaps never z-fight.

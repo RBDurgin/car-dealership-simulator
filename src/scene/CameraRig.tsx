@@ -16,7 +16,6 @@ export function CameraRig() {
   const camera = useRef<OrthoCamera>(null)
   const domElement = useThree((s) => s.gl.domElement)
   const zoomTarget = useRef(START_ZOOM)
-  const focus = useRef({ x: playerPos.x, z: playerPos.z })
 
   useTouchTracking()
 
@@ -52,19 +51,20 @@ export function CameraRig() {
     const dt = Math.min(rawDelta, 0.05)
 
     cameraState.yaw = MathUtils.damp(cameraState.yaw, cameraState.yawTarget, 8, dt)
-    focus.current.x = MathUtils.damp(focus.current.x, playerPos.x, 6, dt)
-    focus.current.z = MathUtils.damp(focus.current.z, playerPos.z, 6, dt)
+    const { focus } = cameraState
+    focus.x = MathUtils.damp(focus.x, playerPos.x, 6, dt)
+    focus.z = MathUtils.damp(focus.z, playerPos.z, 6, dt)
     cam.zoom = MathUtils.damp(cam.zoom, zoomTarget.current, 10, dt)
     cam.updateProjectionMatrix()
 
     const { yaw } = cameraState
     const horizontal = DISTANCE * Math.cos(PITCH)
     cam.position.set(
-      focus.current.x + horizontal * Math.sin(yaw),
+      focus.x + horizontal * Math.sin(yaw),
       DISTANCE * Math.sin(PITCH),
-      focus.current.z + horizontal * Math.cos(yaw),
+      focus.z + horizontal * Math.cos(yaw),
     )
-    cam.lookAt(focus.current.x, 0, focus.current.z)
+    cam.lookAt(focus.x, 0, focus.z)
   })
 
   return <OrthographicCamera ref={camera} makeDefault zoom={START_ZOOM} near={0.1} far={200} />

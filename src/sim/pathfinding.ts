@@ -48,12 +48,11 @@ export function findPathToAny(
 
   const n = grid.width * grid.height
   const g = new Float64Array(n).fill(Infinity)
-  const f = new Float64Array(n)
   const parent = new Int32Array(n).fill(-1)
   const closed = new Uint8Array(n)
   const isGoal = new Uint8Array(n)
   for (const t of targets) isGoal[grid.index(t.tx, t.tz)] = 1
-  const open: number[] = []
+  const open = new OpenHeap()
   // Admissible with several goals: the distance to the closest one.
   const h = (x: number, z: number) => {
     let best = Infinity
@@ -63,15 +62,12 @@ export function findPathToAny(
 
   const s = grid.index(start.tx, start.tz)
   g[s] = 0
-  f[s] = h(start.tx, start.tz)
-  open.push(s)
+  open.push(s, h(start.tx, start.tz))
 
-  while (open.length > 0) {
-    let best = 0
-    for (let i = 1; i < open.length; i++) if (f[open[i]] < f[open[best]]) best = i
-    const cur = open[best]
-    open[best] = open[open.length - 1]
-    open.pop()
+  while (open.size > 0) {
+    const cur = open.pop()
+    // A tile is pushed again each time its cost improves; the older entries are stale.
+    if (closed[cur]) continue
 
     if (isGoal[cur]) {
       const path: Tile[] = []
@@ -96,13 +92,64 @@ export function findPathToAny(
       const cost = g[cur] + (dx !== 0 && dz !== 0 ? Math.SQRT2 : 1) + (extraCost?.(ni) ?? 0)
       if (cost < g[ni]) {
         g[ni] = cost
-        f[ni] = cost + h(nx, nz)
         parent[ni] = cur
-        if (!open.includes(ni)) open.push(ni)
+        open.push(ni, cost + h(nx, nz))
       }
     }
   }
   return null
+}
+
+/**
+ * A binary min-heap of tile indices keyed by f. No decrease-key: a tile whose
+ * cost improves is pushed again, and the search skips it once it's closed.
+ */
+class OpenHeap {
+  private items = new Int32Array(64)
+  private keys = new Float64Array(64)
+  size = 0
+
+  push(item: number, key: number): void {
+    if (this.size === this.items.length) {
+      const items = new Int32Array(this.size * 2)
+      const keys = new Float64Array(this.size * 2)
+      items.set(this.items)
+      keys.set(this.keys)
+      this.items = items
+      this.keys = keys
+    }
+    let i = this.size++
+    while (i > 0) {
+      const up = (i - 1) >> 1
+      if (this.keys[up] <= key) break
+      this.items[i] = this.items[up]
+      this.keys[i] = this.keys[up]
+      i = up
+    }
+    this.items[i] = item
+    this.keys[i] = key
+  }
+
+  /** Takes the item with the smallest key. Only call while `size > 0`. */
+  pop(): number {
+    const top = this.items[0]
+    const last = --this.size
+    const item = this.items[last]
+    const key = this.keys[last]
+    let i = 0
+    for (;;) {
+      let child = 2 * i + 1
+      if (child >= last) break
+      if (child + 1 < last && this.keys[child + 1] < this.keys[child]) child++
+      if (this.keys[child] >= key) break
+      this.items[i] = this.items[child]
+      this.keys[i] = this.keys[child]
+      i = child
+    }
+    this.items[i] = item
+    this.keys[i] = key
+    return top
+  }
 }
 
 /** Greedy string-pulling: drops waypoints whenever a straight, clearance-safe line exists. */

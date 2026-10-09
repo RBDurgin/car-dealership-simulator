@@ -1,6 +1,6 @@
 import type { Customer } from './customers'
 import type { Tile, Vec2 } from './grid'
-import { CUSTOMER_PARKING, parkedCarRect, type CarModel } from './layout'
+import { CUSTOMER_PARKING, GRID_WIDTH, parkedCarRect, type CarModel } from './layout'
 import { driveInChance } from './marketing'
 import { createRng, hashSeed, type Rng } from './rng'
 import { rollUsedCar, type UsedInfo } from './usedCars'
@@ -100,7 +100,7 @@ export type RoadEnd = 'west' | 'east'
 /** How far past the map's edge a car starts and ends, in tiles. */
 const OFF_MAP = 4
 const ROAD_WEST = -OFF_MAP
-const ROAD_EAST = 39 + OFF_MAP
+const ROAD_EAST = GRID_WIDTH - 1 + OFF_MAP
 /** Eastbound cars keep to the far lane, westbound to the near one. */
 const LANE: Record<'eastbound' | 'westbound', number> = { eastbound: 28.5, westbound: 27.5 }
 /** Through the driveway gate: in on its east side, out on its west. */
