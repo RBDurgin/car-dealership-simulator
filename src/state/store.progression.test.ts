@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DAYS_PER_MONTH } from '../sim/calendar'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { emptyStats, type Sale } from '../sim/deal'
-import { emptyCareer, RANKS } from '../sim/progression'
+import { emptyCareer, RANKS, TOP_RANK } from '../sim/progression'
 import { createSave, parseSave } from '../sim/save'
-import { useGame } from './store'
+import { useGame, winShowing } from './store'
 
 const initial = useGame.getState()
 const game = () => useGame.getState()
@@ -68,7 +68,7 @@ describe('career and ranks', () => {
     expect(game().career.rank).toBe('corner-lot')
     useGame.setState(initial, true)
     game().newGame('easy')
-    useGame.setState({ career: { ...emptyCareer(), gross: 30_000 } })
+    useGame.setState({ career: { ...emptyCareer(), gross: RANKS[1].gross * 0.75 } })
     endDay()
     expect(game().career.rank).toBe('main-street')
   })
@@ -88,5 +88,53 @@ describe('career and ranks', () => {
     useGame.setState(initial, true)
     game().loadGame(save)
     expect(game().career).toMatchObject({ gross: 3_000, sales: 1, days: 1 })
+  })
+})
+
+describe('Dealer of the Year', () => {
+  const almost = () => ({
+    ...emptyCareer(),
+    gross: TOP_RANK.gross - 1_000,
+    rank: RANKS[RANKS.length - 2].id,
+  })
+
+  beforeEach(() => {
+    useGame.setState(initial, true)
+    game().newGame()
+    useGame.setState({ career: almost(), reputation: TOP_RANK.reputation })
+  })
+
+  it('shows the win screen over the summary once the top rank is reached', () => {
+    expect(game().won).toBe(false)
+    endDay(sale(30_000, 28_000))
+    expect(game().career.rank).toBe(TOP_RANK.id)
+    expect(winShowing(game())).toBe(true)
+  })
+
+  it('isn’t won short of the top rank', () => {
+    endDay()
+    expect(winShowing(game())).toBe(false)
+  })
+
+  it('goes away for good on Keep playing, and play goes on', () => {
+    endDay(sale(30_000, 28_000))
+    game().keepPlaying()
+    expect(winShowing(game())).toBe(false)
+    game().startNextDay()
+    expect(game().clock.day).toBe(2)
+    endDay(sale(30_000, 28_000))
+    expect(winShowing(game())).toBe(false)
+  })
+
+  it('keeps the win through a save, and a new game starts without it', () => {
+    endDay(sale(30_000, 28_000))
+    game().keepPlaying()
+    const save = parseSave(JSON.parse(JSON.stringify(createSave(game(), 1))))!
+    expect(save.won).toBe(true)
+    useGame.setState(initial, true)
+    game().loadGame(save)
+    expect(game().won).toBe(true)
+    game().newGame()
+    expect(game().won).toBe(false)
   })
 })

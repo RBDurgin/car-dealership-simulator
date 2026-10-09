@@ -19,15 +19,15 @@ import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 const SLOTS = 30
 
 describe('monthly quota', () => {
-  it('is about half a car per slot, more in busy months', () => {
-    expect(monthlyQuota(2, SLOTS, START_REPUTATION)).toBe(15)
-    expect(monthlyQuota(0, SLOTS, START_REPUTATION)).toBeLessThan(15)
-    expect(monthlyQuota(11, SLOTS, START_REPUTATION)).toBeGreaterThan(15)
+  it('is about three cars per slot, more in busy months', () => {
+    expect(monthlyQuota(2, SLOTS, START_REPUTATION)).toBe(90)
+    expect(monthlyQuota(0, SLOTS, START_REPUTATION)).toBeLessThan(90)
+    expect(monthlyQuota(11, SLOTS, START_REPUTATION)).toBeGreaterThan(90)
   })
 
   it('goes up with reputation and down without it, within range', () => {
-    expect(monthlyQuota(2, SLOTS, 80)).toBeGreaterThan(15)
-    expect(monthlyQuota(2, SLOTS, 20)).toBeLessThan(15)
+    expect(monthlyQuota(2, SLOTS, 80)).toBe(102)
+    expect(monthlyQuota(2, SLOTS, 20)).toBe(78)
     for (let month = 0; month < 12; month++) {
       for (const rep of [0, START_REPUTATION, MAX_REPUTATION]) {
         const q = monthlyQuota(month, SLOTS, rep)
@@ -46,10 +46,10 @@ describe('monthly quota by level', () => {
   })
 
   it('scales after the range clamp, and rounds', () => {
-    const top = monthlyQuota(11, SLOTS, MAX_REPUTATION)
+    const top = monthlyQuota(11, 60, MAX_REPUTATION)
     expect(top).toBe(QUOTA_RANGE.max)
-    expect(monthlyQuota(11, SLOTS, MAX_REPUTATION, 1.15)).toBe(Math.round(QUOTA_RANGE.max * 1.15))
-    expect(monthlyQuota(2, SLOTS, START_REPUTATION, 0.8)).toBe(12)
+    expect(monthlyQuota(11, 60, MAX_REPUTATION, 1.15)).toBe(Math.round(QUOTA_RANGE.max * 1.15))
+    expect(monthlyQuota(2, SLOTS, START_REPUTATION, 0.8)).toBe(72)
   })
 
   it('asks for at least one car', () => {

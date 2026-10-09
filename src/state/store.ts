@@ -10,7 +10,7 @@ import {
 import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
-import { isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
+import { dayOver, isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
 import {
   chooseTarget,
   generateCustomer,
@@ -116,6 +116,7 @@ import {
 import {
   addDay,
   emptyCareer,
+  atTopRank,
   rankUp,
   rankUpNotice,
   rankById,
@@ -259,6 +260,8 @@ interface GameState {
   career: Career
   /** The manufacturer's franchise tier, moved by the quota at month end. Saved. */
   franchise: FranchiseTier
+  /** The win screen has been seen and play went on, so it doesn't show again. Saved. */
+  won: boolean
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
@@ -412,6 +415,8 @@ interface GameState {
   newGame: (difficulty?: Difficulty) => void
   /** From the title screen: resumes a saved game on the morning after its last day. */
   loadGame: (save: SaveData) => void
+  /** From the win screen: play goes on, and the win screen won't show again. */
+  keepPlaying: () => void
 }
 
 let nextOrderId = 1
@@ -437,6 +442,16 @@ let driveRng: Rng = createRng(DRIVE_SEED + 1)
  */
 export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt'>): boolean {
   return s.screen === 'title' || s.helpOpen || s.rotatePrompt
+}
+
+/**
+ * The win screen shows over the day summary once the top rank is reached,
+ * until the player picks Keep playing.
+ */
+export function winShowing(
+  s: Pick<GameState, 'screen' | 'clock' | 'customers' | 'career' | 'won'>,
+): boolean {
+  return s.screen === 'playing' && dayOver(s) && atTopRank(s.career) && !s.won
 }
 
 /** The levers of the game's difficulty level; a stable object, so fine as a selector. */
@@ -516,6 +531,7 @@ function dayOne(difficulty: Difficulty) {
     bailoutUsed: false,
     career: emptyCareer(),
     franchise: START_TIER,
+    won: false,
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
@@ -1676,9 +1692,11 @@ export const useGame = create<GameState>((set, get) => {
         bailoutUsed: save.bailoutUsed,
         career: save.career,
         franchise: save.franchise,
+        won: save.won,
         tipsSeen: save.tipsSeen,
       })
       beginDay(save.day + 1)
     },
+    keepPlaying: () => set({ won: true }),
   }
 })

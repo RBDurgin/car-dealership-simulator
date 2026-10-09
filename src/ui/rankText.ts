@@ -2,7 +2,7 @@ import type { RankProgress } from '../sim/progression'
 import { formatMoney } from './format'
 
 /**
- * "$32,000 of $40,000 lifetime gross toward Main Street, reputation 45 needed"
+ * "$90,000 of $120,000 lifetime gross toward Main Street, reputation 45 needed"
  * (or "Top rank reached").
  */
 export function rankLine(p: RankProgress, gross: number): string {

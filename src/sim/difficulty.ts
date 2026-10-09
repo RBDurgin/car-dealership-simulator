@@ -129,7 +129,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sellerHope: 1.05,
     appraisalNoise: 1.2,
     tradeHope: 1.05,
-    rankScale: 1.3,
+    rankScale: 1.15,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

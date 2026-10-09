@@ -22,13 +22,16 @@ export interface Rank {
 /** From the bottom up. Every game starts at the first. */
 export const RANKS: readonly Rank[] = [
   { id: 'corner-lot', name: 'Corner Lot', gross: 0, reputation: 0 },
-  { id: 'main-street', name: 'Main Street', gross: 40_000, reputation: 45 },
-  { id: 'trusted-dealer', name: 'Trusted Dealer', gross: 150_000, reputation: 55 },
-  { id: 'regional-name', name: 'Regional Name', gross: 400_000, reputation: 65 },
-  { id: 'dealer-of-the-year', name: 'Dealer of the Year', gross: 800_000, reputation: 80 },
+  { id: 'main-street', name: 'Main Street', gross: 120_000, reputation: 45 },
+  { id: 'trusted-dealer', name: 'Trusted Dealer', gross: 300_000, reputation: 55 },
+  { id: 'regional-name', name: 'Regional Name', gross: 550_000, reputation: 65 },
+  { id: 'dealer-of-the-year', name: 'Dealer of the Year', gross: 1_000_000, reputation: 80 },
 ]
 
 export const RANK_IDS = RANKS.map((r) => r.id)
+
+/** The top rank: reaching it wins the game (play goes on after). */
+export const TOP_RANK = RANKS[RANKS.length - 1]
 
 export interface Career {
   /** Lifetime gross profit (sale prices less dealer cost). */
@@ -78,6 +81,19 @@ export function rankOf(career: Career, reputation: number, scale = 1): Rank {
   let earned = 0
   while (earned + 1 < RANKS.length && meets(RANKS[earned + 1], career, reputation, scale)) earned++
   return RANKS[Math.max(earned, indexOf(career.rank))]
+}
+
+/** `career` has reached the top rank. */
+export function atTopRank(career: Career): boolean {
+  return career.rank === TOP_RANK.id
+}
+
+/**
+ * The best month's gross so far, counting the month under way (which only
+ * goes into `bestMonth` once it's over).
+ */
+export function bestMonthSoFar(career: Career): number {
+  return Math.max(career.bestMonth, career.monthGross)
 }
 
 /** The rank after `id`, or null at the top. */

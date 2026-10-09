@@ -46,7 +46,7 @@ export function clearSave(): void {
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
  * payroll is paid, then again for any hiring, firing, ordering, advertising or improving from the day summary
- * (or a tip shown after closing).
+ * (or a tip shown after closing, or Keep playing on the win screen).
  */
 export function startAutosave(): () => void {
   return useGame.subscribe((s, prev) => {
@@ -61,7 +61,8 @@ export function startAutosave(): () => void {
       s.campaigns !== prev.campaigns ||
       s.improvements !== prev.improvements ||
       s.roster !== prev.roster ||
-      s.tipsSeen !== prev.tipsSeen
+      s.tipsSeen !== prev.tipsSeen ||
+      s.won !== prev.won
     if (changed) writeSave(createSave(s, Date.now()))
   })
 }

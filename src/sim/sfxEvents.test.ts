@@ -4,6 +4,7 @@ import { generateCustomer, type Customer } from './customers'
 import { nextEvent } from './events'
 import { buildInventory } from './inventory'
 import { NAZMA_ID, type NazmaVisit } from './nazma'
+import { emptyCareer, TOP_RANK } from './progression'
 import { createRng } from './rng'
 import {
   allowCue,
@@ -36,6 +37,7 @@ const base: SfxState = {
   orders: [],
   campaigns: [],
   improvements: [],
+  career: emptyCareer(),
   notice: null,
   staffOpen: false,
   stockOpen: false,
@@ -108,6 +110,13 @@ describe('sfxFor', () => {
   it('opens a sale weekend with a fanfare instead', () => {
     const { day } = nextEvent(1)
     expect(cues({ clock: startOfDay(day) }, { clock: startOfDay(day - 1) })).toEqual(['fanfare'])
+  })
+
+  it('plays a fanfare on reaching the top rank, once', () => {
+    const top = { ...emptyCareer(), rank: TOP_RANK.id }
+    const before = { ...emptyCareer(), rank: 'regional-name' as const }
+    expect(cues({ career: top }, { career: before })).toEqual(['fanfare'])
+    expect(cues({ career: top }, { career: top })).toEqual([])
   })
 
   it('turns the page when the day summary comes up', () => {

@@ -4,6 +4,7 @@ import { eventOn } from './events'
 import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
 import { NAZMA_ID, type NazmaVisit } from './nazma'
+import { atTopRank, type Career } from './progression'
 import type { Employee } from './staff'
 
 /** What a sound effect is for. `audio/samples.ts` maps each to a file (or a synth). */
@@ -53,6 +54,7 @@ export interface SfxState {
   orders: readonly unknown[]
   campaigns: readonly unknown[]
   improvements: readonly unknown[]
+  career: Career
   nazma: NazmaVisit | null
   notice: { id: number } | null
   staffOpen: boolean
@@ -103,6 +105,8 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
     out.push({ cue: eventOn(next.clock.day) ? 'fanfare' : 'bell' })
   }
   if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
+  // The top rank: the win screen opens over the summary.
+  if (atTopRank(next.career) && !atTopRank(prev.career)) out.push({ cue: 'fanfare' })
 
   if (next.customers !== prev.customers) {
     const before = new Map(prev.customers.map((c) => [c.id, c]))

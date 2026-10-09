@@ -151,6 +151,15 @@ export const UPDATES: readonly Update[] = [
       'With the wing up you can hire up to 4 salespeople and 2 lot porters. Porters split the washing between them.',
     ],
   },
+  {
+    id: 14,
+    phase: '13',
+    title: 'Dealer of the Year',
+    items: [
+      'Reach the top rank, Dealer of the Year, to win: a trophy screen sums up your career.',
+      'Keep playing afterwards as long as you like. A save that has won shows a trophy on the title screen.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

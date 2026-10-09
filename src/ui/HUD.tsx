@@ -4,7 +4,7 @@ import { PLAYER_ID } from '../sim/customers'
 import { dealCustomer } from '../sim/deal'
 import { ACTIONS } from '../sim/interactables'
 import { findInteractable } from '../scene/runtime'
-import { useGame } from '../state/store'
+import { useGame, winShowing } from '../state/store'
 import { ActionMenu } from './ActionMenu'
 import { AudioPanel } from './AudioPanel'
 import { ControlsHint } from './ControlsHint'
@@ -16,6 +16,7 @@ import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
 import { StockPanel } from './StockPanel'
 import { TitleScreen } from './TitleScreen'
+import { WinScreen } from './WinScreen'
 import { TopBar } from './TopBar'
 import { ViewControls } from './ViewControls'
 import './hud.css'
@@ -113,6 +114,8 @@ export function HUD() {
         return
       }
       if (game.screen === 'title') return
+      // The win screen waits for Keep playing.
+      if (winShowing(game)) return
       if (e.code === 'Escape') game.cancelAll()
       else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
       else if (e.code === 'KeyI' && !e.repeat) game.toggleStockPanel(undefined, 'stock')
@@ -139,6 +142,7 @@ export function HUD() {
       <StockPanel />
       <ActionMenu />
       <DaySummary />
+      <WinScreen />
       <TitleScreen />
       <HowToPlay />
       <AudioPanel />

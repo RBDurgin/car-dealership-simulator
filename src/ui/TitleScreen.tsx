@@ -70,6 +70,11 @@ export function TitleScreen() {
                 onClick={() => useGame.getState().loadGame(save)}
               >
                 Continue
+                {save.won && (
+                  <span className="title-trophy" role="img" aria-label="Dealer of the Year">
+                    🏆
+                  </span>
+                )}
                 <span className="title-save">
                   {longDate(save.day + 1)} · {formatMoney(save.cash)} ·{' '}
                   {difficultyLabel(save.difficulty)}

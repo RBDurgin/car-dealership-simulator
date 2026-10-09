@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08; 13f is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08, 13f on 2026-10-09. Phase 13 is built. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -43,7 +43,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 
 **13a implementation notes:**
 
-- Thresholds (Medium, before `rankScale`): Main Street $40k gross and reputation 45, Trusted Dealer $150k and 55, Regional Name $400k and 65, Dealer of the Year $800k and 80. First guesses, for the 13f tuning pass.
+- Thresholds (Medium, before `rankScale`): first guesses were Main Street $40k, Trusted Dealer $150k, Regional Name $400k and Dealer of the Year $800k; 13f retuned them (see its notes).
 - A rank is kept once reached (`Career.rank`), so an expansion bought at a rank can't be stranded by a bad week. Ranks are earned in order: a reputation short of one rank holds back those above it.
 - `rankScale` scales only the gross. Reputation is already scaled by `repGain`/`repLoss`.
 - `bestMonth` is a month's gross profit, counted on the month's last day from `Career.monthGross`.
@@ -148,6 +148,16 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - Reaching the top rank opens the win screen (`ui/WinScreen.tsx`). It shows days played, lifetime gross, best month and franchise tier.
 - **Keep playing** sets `won: true` (saved in the next save version, false for an older save), so the win screen shows once. The title screen shows a trophy on a save that has won.
 - Tuning pass to hit the targets below.
+
+**13f implementation notes:**
+
+- Save v17 keeps `won`; an older save gets `false`, so a game that already reached the top rank sees the win screen at its next day summary.
+- `winShowing(s)` in the store: the screen is playing, the day is over, the career is at `TOP_RANK` (`atTopRank`) and `won` is false. So the win screen (`ui/WinScreen.tsx`) opens over the summary on the evening of the rank-up. Keep playing calls `keepPlaying()`, which sets `won`, and autosave writes it at once. While it's up, the game keys are ignored. It shows days played, cars sold, lifetime gross, the best month (`bestMonthSoFar`, counting the month under way) and the tier. `sfxFor` plays the `fanfare` when the career reaches the top rank. The title screen's Continue shows a trophy on a save with `won`.
+- **The tuning was done with a model, not real play.** Headless SwiftShader distorts walking time too much to measure sales. So a throwaway Monte Carlo used the real `planArrivals`, `generateCustomer`, `acceptChance`, `reputationChange`, `addDay`, `monthlyQuota` and `nextTier`. It assumed a player who asks the customer's hope price and serves a set number of customers a day (3 by the player, 2 per salesperson, 2 salespeople from day 4). It was calibrated to Robert's figure of 3–5 sales a day early on and more later: about 3.5 a day for the first 10 days and 4.4 a day in days 30–60, at about $3k gross a car. It leaves out stock capital, marketing and improvements, and what the wing adds.
+- Rank thresholds (Medium) are now Main Street $120k, Trusted Dealer $300k, Regional Name $550k and Dealer of the Year $1M. Reputation is unchanged (45/55/65/80). Model medians: Main Street day 13–14, Trusted Dealer 28–31, Regional Name 45–51, Dealer of the Year 71–79. Easy reaches the top rank around day 47–52. Hard's `rankScale` went from 1.3 to 1.15, because lower traffic already slows Hard: about day 115, and reputation 80 is the real gate there.
+- **The quota was far too easy at that pace:** 12–20 cars against 100+ sold, so every player was Gold by month 3. It's now `CARS_PER_SLOT` 3 (from 0.5), `REPUTATION_SLOPE` 0.4 (from 0.08) and `QUOTA_RANGE` 40–160. A new game's January target is 81 on Medium. In the model a good Medium player meets it every month (Silver in month 2, Gold in month 3), and a weaker one (about 3 a day) hovers at 80–100% and climbs slowly. Hard's ×1.15 makes it a real stretch. The holdback is still a share of the month's MSRP sold, so its size barely changes. The quota still uses `BASE_SLOTS`: visitors, not spaces, limit sales, so it doesn't grow with the lot.
+- Expansion prices are unchanged ($60k and $150k). Main Street now comes around day 14, so the east lot can be bought from then, which meets "affordable by about day 25".
+- What's new: update 14. Help: the Progress section says the top rank wins and play goes on.
 
 ## Performance
 

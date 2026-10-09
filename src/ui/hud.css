@@ -1076,6 +1076,21 @@ kbd {
 .title-screen .btn {
   width: 100%;
 }
+.win-screen {
+  text-align: center;
+}
+.win-screen .summary-stats {
+  text-align: left;
+}
+.win-trophy {
+  font-size: 56px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.title-trophy {
+  margin-left: 6px;
+}
+
 .title-save {
   display: block;
   font-size: 12px;

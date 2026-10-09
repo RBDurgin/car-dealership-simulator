@@ -53,6 +53,8 @@ const source = () => ({
   franchise: 'bronze' as FranchiseTier,
   // As a v15 save upgrades, so the older upgrades compare equal.
   expansions: [] as OwnedExpansion[],
+  // As a v16 save upgrades, so the older upgrades compare equal.
+  won: false,
 })
 
 const order: Order = {
@@ -112,6 +114,8 @@ describe('save data', () => {
       campaigns: [],
       improvements: [],
       reputation: START_REPUTATION,
+      // The month's target is set at the reputation the save is upgraded to.
+      quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION),
     })
     expect(upgraded?.roster).toEqual(save.roster)
     upgraded?.inventory.forEach((car, i) => {
@@ -142,6 +146,8 @@ describe('save data', () => {
       campaigns: [],
       improvements: [],
       reputation: START_REPUTATION,
+      // The month's target is set at the reputation the save is upgraded to.
+      quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION),
     })
   })
 
@@ -160,6 +166,8 @@ describe('save data', () => {
       campaigns: [],
       improvements: [],
       reputation: START_REPUTATION,
+      // The month's target is set at the reputation the save is upgraded to.
+      quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION),
     })
   })
 
@@ -171,6 +179,8 @@ describe('save data', () => {
       news: legacyNews(5),
       improvements: [],
       reputation: START_REPUTATION,
+      // The month's target is set at the reputation the save is upgraded to.
+      quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION),
     })
   })
 
@@ -181,6 +191,8 @@ describe('save data', () => {
       ...save,
       news: legacyNews(6),
       reputation: START_REPUTATION,
+      // The month's target is set at the reputation the save is upgraded to.
+      quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION),
     })
   })
 
@@ -298,6 +310,19 @@ describe('save data', () => {
     const save = createSave(source(), 123)
     const v15 = { ...save, version: 15, expansions: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v15)))).toEqual(save)
+  })
+
+  it('upgrades a version 16 save that hasn’t won', () => {
+    const save = createSave(source(), 123)
+    const v16 = { ...save, version: 16, won: undefined }
+    expect(parseSave(JSON.parse(JSON.stringify(v16)))).toEqual(save)
+  })
+
+  it('keeps the win, and rejects a save without one', () => {
+    const save = createSave({ ...source(), won: true }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.won).toBe(true)
+    expect(parseSave({ ...save, won: 'yes' })).toBeNull()
+    expect(parseSave({ ...save, won: undefined })).toBeNull()
   })
 
   it('keeps the expansions, and rejects one it doesn’t know', () => {

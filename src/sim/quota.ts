@@ -10,11 +10,11 @@ import { START_REPUTATION } from './reputation'
  */
 
 /** The target is held between these. */
-export const QUOTA_RANGE = { min: 12, max: 20 }
+export const QUOTA_RANGE = { min: 40, max: 160 }
 /** Cars a month per stock slot, before the season and reputation. */
-const CARS_PER_SLOT = 0.5
+const CARS_PER_SLOT = 3
 /** Extra cars on the target per reputation point above the start (fewer below). */
-const REPUTATION_SLOPE = 0.08
+const REPUTATION_SLOPE = 0.4
 /** The season's pull on the target, by month (0 = January). */
 export const MONTH_QUOTA = [0.9, 0.9, 1.0, 1.0, 1.1, 1.05, 1.0, 1.0, 1.0, 1.0, 1.05, 1.1]
 

@@ -338,6 +338,10 @@ function BusinessTab({ touch, click }: TabProps) {
           ))}
         </ul>
         <p>Once you reach a rank you keep it, even if your reputation slips later.</p>
+        <p>
+          Reaching {RANKS[RANKS.length - 1].name} wins the game. You&apos;ll see your career on a
+          trophy screen, then you can keep playing for as long as you like.
+        </p>
         <h4>Expansion</h4>
         <p>
           A rank lets you buy more ground and building on the <b>Upgrades</b> tab. You pay up front

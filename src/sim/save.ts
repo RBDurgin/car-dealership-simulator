@@ -25,7 +25,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 16
+export const SAVE_VERSION = 17
 
 export interface SaveData {
   version: number
@@ -60,6 +60,8 @@ export interface SaveData {
   career: Career
   /** The manufacturer's franchise tier (see `sim/franchise.ts`). */
   franchise: FranchiseTier
+  /** The top rank's win screen has been seen, and play went on. */
+  won: boolean
   /** The latest update (see `sim/whatsNew.ts`) this game's player has been shown. */
   news: number
 }
@@ -81,6 +83,7 @@ export interface SaveSource {
   tipsSeen: TipId[]
   career: Career
   franchise: FranchiseTier
+  won: boolean
 }
 
 /**
@@ -109,6 +112,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     tipsSeen: s.tipsSeen,
     career: s.career,
     franchise: s.franchise,
+    won: s.won,
     news: LATEST_NEWS,
   }
 }
@@ -191,6 +195,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   14: (raw) => ({ ...raw, franchise: START_TIER }),
   // v16: expansions. Nothing was bought before them.
   15: (raw) => ({ ...raw, expansions: [] }),
+  // v17: the win. Nobody had seen the win screen before it.
+  16: (raw) => ({ ...raw, won: false }),
 }
 
 /** `raw` brought up to `SAVE_VERSION`, or null if it's too old (or new) to upgrade. */
@@ -215,7 +221,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions } = raw
+  const { expansions, won } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -232,6 +238,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Array.isArray(tipsSeen) || !tipsSeen.every(isTipId)) return null
   if (!isCareer(career)) return null
   if (!isFranchiseTier(franchise)) return null
+  if (typeof won !== 'boolean') return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
