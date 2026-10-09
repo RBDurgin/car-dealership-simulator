@@ -6,6 +6,7 @@ import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
+import { DrawCalls } from './DrawCalls'
 import { DrivenCars } from './DrivenCar'
 import { Floors } from './Floors'
 import { GameClock } from './GameClock'
@@ -28,7 +29,7 @@ import { WeatherEffects, WeatherLights } from './Weather'
  */
 const SHADOW_MAP_SIZE = matchesMedia(COMPACT) || matchesMedia(COARSE) ? 2048 : 4096
 
-/** `?fps` in the URL shows a frame rate meter, for checking phones without a console. */
+/** `?fps` in the URL shows a frame rate meter and the draw calls, for checking phones without a console. */
 const SHOW_FPS = new URLSearchParams(window.location.search).has('fps')
 
 export function Scene() {
@@ -57,6 +58,7 @@ export function Scene() {
       <Chatter />
       <WeatherEffects />
       {SHOW_FPS && <Stats className="fps-stats" />}
+      {SHOW_FPS && <DrawCalls />}
     </>
   )
 }

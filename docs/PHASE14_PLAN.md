@@ -123,7 +123,7 @@ Nazma (Phase 9) is a nuisance with no business behind him. He smudges cars, stea
 
 - The lot across the road is a handful of static meshes with shared materials and no shadows, about as many draw calls as two or three cars. It isn't on the grid, so pathfinding and the crowd don't change.
 - The rival runs once a day (`beginDay`, `settleDay`). Nothing new runs per frame apart from Nazma's short road crossing.
-- Check `?fps` and `renderer.info.render.calls` with the lot in view, as in Phase 13.
+- Check `?fps` and `renderer.info.render.calls` with the lot in view, as in Phase 13. Checked on Robert's phone on 2026-10-09: about 60 fps on average.
 
 ## Help (every sub-phase)
 

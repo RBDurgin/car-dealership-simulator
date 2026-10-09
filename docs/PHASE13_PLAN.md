@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08, 13f on 2026-10-09. **Phase 13 is done.** Still open: the real-phone `?fps` check (see Performance). We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08, 13f on 2026-10-09. **Phase 13 is done.** The real-phone `?fps` check passed on 2026-10-09 (about 60 fps). We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -141,7 +141,7 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - Two porters used to pick the same car. `PorterContext.taken` is what the others are washing (`washesBesides` in `scene/Staff`).
 - The scene reads chairs and sofas from the live `layout.props` (`scene/Staff`, `scene/Customers`), and `scene/runtime` holds the new desks' approach tiles (`holdSeats`) when the layout is rebuilt. Buyers queued for finance take the lounge sofa's seats first, then the wing's. The spotlights upgrade lights only the platforms that stand; the designer sofa swaps both sofas (`swap.propIds`).
 - What's new: update 13. Help: the Staff section in the People tab gives the limits; the Expansion list in Business picks up the wing from `EXPANSIONS`. The `expansion` tip no longer says "ground".
-- Performance: not yet checked on a real phone. Headless (SwiftShader) with the wing built, 21 cars, 6 staff and about 10 customers drew about 519 calls a frame; fps there means nothing. The `?fps` check on the mid-range Android phone is still to do before 13f.
+- Performance: checked on Robert's phone on 2026-10-09, averaging about 60 fps. Headless (SwiftShader) with the wing built, 21 cars, 6 staff and about 10 customers drew about 519 calls a frame; fps there means nothing.
 
 ### 13f: Dealer of the Year, sandbox and balance
 
