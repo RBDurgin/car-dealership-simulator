@@ -141,6 +141,16 @@ export const UPDATES: readonly Update[] = [
       'Stock goes there once the old lot is full, and your security guard adds it to their rounds.',
     ],
   },
+  {
+    id: 13,
+    phase: '13',
+    title: 'The showroom wing',
+    items: [
+      'From Regional Name, with the east lot bought, build a showroom wing next to the lounge on the Upgrades tab.',
+      'It adds 2 display platforms, sales desks 3 and 4 and a second sofa for buyers waiting on finance.',
+      'With the wing up you can hire up to 4 salespeople and 2 lot porters. Porters split the washing between them.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
+import { expansionsUp } from '../sim/expansions'
 import {
   canHire,
   MAX_SKILL,
@@ -61,6 +63,7 @@ export function StaffPanel() {
   const open = useGame((s) => s.staffOpen)
   const roster = useGame((s) => s.roster)
   const candidates = useGame((s) => s.candidates)
+  const ground = useGame(useShallow(expansionsUp))
   const touch = useMediaQuery(COARSE)
   if (!open) return null
 
@@ -108,7 +111,7 @@ export function StaffPanel() {
       ) : (
         <ul className="staff-list">
           {candidates.map((c) => {
-            const blocker = canHire(roster, c.role)
+            const blocker = canHire(roster, c.role, ground)
             return (
               <StaffRow key={c.id} e={c} blurb>
                 <span />

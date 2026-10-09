@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
 import { netIncome } from '../sim/deal'
 import { FLOOR_PLAN_DAILY_RATE } from '../sim/floorPlan'
-import { DISPLAY_CARS } from '../sim/layout'
+import { PLATFORMS } from '../sim/layout'
 import { dailyIncentive, invoicePrice, orderCost } from '../sim/ordering'
 import { createSave, parseSave } from '../sim/save'
 import { STARTING_CASH, useGame } from './store'
@@ -86,7 +86,7 @@ describe('ordering stock', () => {
     expect(sedan).toMatchObject({
       model: 'sedan',
       location: 'showroom',
-      rect: DISPLAY_CARS[1].rect,
+      rect: PLATFORMS[1].rect,
       cost: cashOrder.cost,
       floored: false,
       cleanliness: 1,

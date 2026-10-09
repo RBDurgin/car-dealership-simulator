@@ -51,7 +51,29 @@ describe('expansions', () => {
     expect(expansionsUp({ expansions: owned })).toEqual([])
   })
 
+  it('sells the showroom wing from Regional Name, once the east lot is bought', () => {
+    const lot = [{ id: 'east-lot' as const, day: 3 }]
+    const rich = book({ cash: 200_000, rank: 'regional-name', expansions: lot })
+    expect(EXPANSIONS['showroom-wing'].cost).toBe(150_000)
+    expect(expansionBlocker({ ...rich, rank: 'trusted-dealer' }, 'showroom-wing')).toBe(
+      'Needs the Regional Name rank.',
+    )
+    expect(expansionBlocker({ ...rich, expansions: [] }, 'showroom-wing')).toBe(
+      'Needs the east lot first.',
+    )
+    expect(expansionBlocker({ ...rich, cash: 149_999 }, 'showroom-wing')).toBe(
+      'Not enough cash for that.',
+    )
+    expect(buyExpansion(rich, 'showroom-wing', 40)).toEqual({
+      ok: true,
+      cash: 50_000,
+      expansions: [...lot, { id: 'showroom-wing', day: 40 }],
+    })
+  })
+
   it('tells which a rank-up makes available', () => {
+    expect(unlockedBy('trusted-dealer', 'regional-name')).toEqual(['showroom-wing'])
+    expect(unlockedBy('corner-lot', 'dealer-of-the-year')).toEqual(['east-lot', 'showroom-wing'])
     expect(unlockedBy('corner-lot', 'main-street')).toEqual(['east-lot'])
     expect(unlockedBy('corner-lot', 'trusted-dealer')).toEqual(['east-lot'])
     expect(unlockedBy('main-street', 'trusted-dealer')).toEqual([])

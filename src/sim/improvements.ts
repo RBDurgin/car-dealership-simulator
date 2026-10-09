@@ -79,8 +79,8 @@ export interface ImprovementInfo {
   blurb: string
   /** Props it puts up in the world. */
   props?: Prop[]
-  /** A fixed prop it swaps the model of. */
-  swap?: { propId: string; model: PropModel }
+  /** Fixed props it swaps the model of. */
+  swap?: { propIds: string[]; model: PropModel }
 }
 
 // Heights (world units) that stacked props sit at: the model's height times its scale.
@@ -174,8 +174,8 @@ export const IMPROVEMENTS: Record<ImprovementId, ImprovementInfo> = {
     area: 'lounge',
     tier: 1,
     effects: { patienceSaved: 0.1 },
-    blurb: 'A comfier sofa in place of the old one.',
-    swap: { propId: 'lounge-sofa', model: 'loungeDesignSofa' },
+    blurb: 'A comfier sofa in place of the old one, and in the wing once it’s built.',
+    swap: { propIds: ['lounge-sofa', 'wing-sofa'], model: 'loungeDesignSofa' },
   },
   'coffee-bar': {
     label: 'Coffee bar',
@@ -226,7 +226,7 @@ export function improvementProps(ids: readonly ImprovementId[]): Prop[] {
 
 /** The model the fixed prop `propId` is drawn with once `ids` are up, if one swaps it. */
 export function swappedModel(ids: readonly ImprovementId[], propId: string): PropModel | null {
-  const id = topTiers(ids).find((x) => IMPROVEMENTS[x].swap?.propId === propId)
+  const id = topTiers(ids).find((x) => IMPROVEMENTS[x].swap?.propIds.includes(propId))
   return id ? IMPROVEMENTS[id].swap!.model : null
 }
 

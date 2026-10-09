@@ -51,7 +51,7 @@ export const TIPS: Record<TipId, string> = {
   franchise:
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
   expansion:
-    'Your new rank lets you expand. Buy more ground in the office computer’s Upgrades tab: it’s built overnight, with more spaces to fill.',
+    'Your new rank lets you expand. See the office computer’s Upgrades tab: what you buy there is built overnight.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }

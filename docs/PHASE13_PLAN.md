@@ -1,6 +1,6 @@
 # Phase 13 Plan: Expansion and Progression
 
-**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c and 13d on 2026-10-08; 13e is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
+**Status:** planned 2026-10-07. 13a built 2026-10-07, 13b, 13c, 13d and 13e on 2026-10-08; 13f is next. We do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 12. 13a made the save v13 and 13b v15 (12.5a took v14). 13d and 13f each add to the save and take the next save version when they're built.
 
 ## Context
 
@@ -129,6 +129,19 @@ The game's goal is to build a rich client base and grow revenue, but nothing gro
 - `roleLimits(expansions)`: 4 salespeople and 2 porters.
 - `nextSalesTask` and `nextPorterTask` already handle any number of staff. Check that desks are handed out to the new chairs.
 - The performance check below runs here, with everything built.
+
+**13e implementation notes:**
+
+- `showroom-wing` is $150k from Regional Name and needs the east lot. No save change: `expansions` already holds it (v16).
+- **The wing is `WING` (tx 37–48, tz 2–13, walls included)**, its glass front in line with the building's at tz 13 and its east wall at tx 48, leaving tx 49–58 for the garage. `buildLayout` paints it `showroom`, adds its walls (`WING_WALLS`), clears the old dividing fence inside it and cuts two doors (`WING_OPENINGS`): one from the lounge's south-east corner (tx 36, tz 12) and a 2-wide front door at tx 37–38 onto the apron by the gate.
+- **The lounge door is in the corner, not the middle of the east wall**, because the coffee bar upgrade fills tx 35, tz 10–11 and the counters tz 9. The lounge plant stood in that corner, so with the wing up it moves to tx 30, tz 9 (only then; the lounge looks the same before).
+- Inside: the second sofa (`wing-sofa`) in the north-west corner, platforms 3–4 (`PLATFORMS`, with `requires: 'showroom-wing'`) along the north wall, sales desks 3–4 in front of them and two plants. `DISPLAY_CARS` is now the opening stock by platform index (like `LOT_CARS`), and `PLATFORMS` the platforms (like `PARKING_SPACES`). `platformOpen`/`slotUnlocked` gate them, so `freeSlots` fills the wing's platforms before any lot space once it's up. `BASE_SLOTS` is still 30.
+- `SALES_DESKS` has 4 desks (3–4 `requires` the wing); `salesDesks(expansions)` is those standing. `salesDeskOf`, `postChairId`, `leadChoice` and `SalesContext` take the expansions up, so a let-go third salesperson still has no desk without the wing.
+- `roleLimits(expansions)`: 4 salespeople and 2 porters with the wing (`canHire` takes the expansions up; the store and the Staff panel pass `expansionsUp`). Plural messages are proper plurals now ("2 lot porters").
+- Two porters used to pick the same car. `PorterContext.taken` is what the others are washing (`washesBesides` in `scene/Staff`).
+- The scene reads chairs and sofas from the live `layout.props` (`scene/Staff`, `scene/Customers`), and `scene/runtime` holds the new desks' approach tiles (`holdSeats`) when the layout is rebuilt. Buyers queued for finance take the lounge sofa's seats first, then the wing's. The spotlights upgrade lights only the platforms that stand; the designer sofa swaps both sofas (`swap.propIds`).
+- What's new: update 13. Help: the Staff section in the People tab gives the limits; the Expansion list in Business picks up the wing from `EXPANSIONS`. The `expansion` tip no longer says "ground".
+- Performance: not yet checked on a real phone. Headless (SwiftShader) with the wing built, 21 cars, 6 staff and about 10 customers drew about 519 calls a frame; fps there means nothing. The `?fps` check on the mid-range Android phone is still to do before 13f.
 
 ### 13f: Dealer of the Year, sandbox and balance
 

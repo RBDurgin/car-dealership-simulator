@@ -3,7 +3,7 @@ import type { Customer } from './customers'
 import { financeBusy } from './deal'
 import type { InventoryCar } from './inventory'
 import type { Tile } from './grid'
-import { GUARD_PATROL_TILES, SALES_DESKS } from './layout'
+import { GUARD_PATROL_TILES, SALES_DESKS, type ExpansionId } from './layout'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 
 /**
@@ -43,6 +43,8 @@ export interface SalesContext {
   atCar?: ReadonlySet<string>
   /** There's lot space and cash to buy a seller's car; otherwise sellers are left alone. */
   buying?: boolean
+  /** The expansions up, which say which sales desks stand (just the showroom's if left out). */
+  expansions?: readonly ExpansionId[]
 }
 
 const IDLE: SalesTask = { kind: 'idle' }
@@ -83,10 +85,11 @@ export function leadChoice(
   e: Employee,
   customers: readonly Customer[],
   roster: readonly Employee[],
+  expansions: readonly ExpansionId[] = [],
 ): LeadChoice | null {
   const finance = !!financeOnDuty(roster)
   if (finance && !financeBusy(customers)) return { kind: 'handOff' }
-  const desk = salesDeskOf(roster, e.id)
+  const desk = salesDeskOf(roster, e.id, expansions)
   if (desk) return { kind: 'desk', chairId: desk.guestChairId }
   return finance ? { kind: 'handOff' } : null
 }
@@ -127,7 +130,7 @@ export function nextSalesTask(
   }
   if (e.status !== 'atPost' || e.fired) return IDLE
   // Don't start a deal there'd be nowhere to close.
-  if (!salesDeskOf(ctx.roster, e.id) && !financeOnDuty(ctx.roster)) return IDLE
+  if (!salesDeskOf(ctx.roster, e.id, ctx.expansions) && !financeOnDuty(ctx.roster)) return IDLE
   const exclude = new Set(ctx.exclude)
   if (ctx.playerTargetId) exclude.add(ctx.playerTargetId)
   // Newer salespeople let customers get to a car before going over.
@@ -156,11 +159,13 @@ export interface PorterContext {
   exclude?: ReadonlySet<string>
   /** The car they're already washing, which they finish before moving on. */
   current?: string | null
+  /** Cars another porter is washing, which this one leaves to them. */
+  taken?: ReadonlySet<string>
 }
 
 /**
  * Porter `e`'s next task while they're at work: finish the car they're on,
- * otherwise the dirtiest car that needs it.
+ * otherwise the dirtiest car that needs it and no other porter is washing.
  */
 export function nextPorterTask(
   e: Employee,
@@ -174,7 +179,7 @@ export function nextPorterTask(
       return { kind: 'wash', carId: current.id }
     }
   }
-  const exclude = new Set(ctx.exclude)
+  const exclude = new Set([...(ctx.exclude ?? []), ...(ctx.taken ?? [])])
   if (ctx.playerTargetId) exclude.add(ctx.playerTargetId)
   const car = dirtiestCar(inventory, exclude)
   return car ? { kind: 'wash', carId: car.id } : IDLE_PORTER

@@ -4,7 +4,6 @@ import {
   createGrid,
   CUSTOMER_PARKING,
   DESK_CHAIR_ID,
-  DISPLAY_CARS,
   GUARD_PATROL_TILES,
   GRID_WIDTH,
   GUEST_CHAIR_ID,
@@ -16,15 +15,21 @@ import {
   PARKING_SPACES,
   parkedCarRect,
   patrolTiles,
+  PLATFORMS,
   PORTER_STANDBY_TILES,
   PROPS,
   RECEPTION_CHAIR_ID,
   SALES_DESKS,
+  salesDesks,
   SIDEWALK_ENDS,
+  SOFA_IDS,
   spaceOpen,
   SPAWN_TILE,
+  WING,
   wallAt,
+  isIndoor,
   zoneAt,
+  type Layout,
   type Rect,
 } from './layout'
 import { applyToGrid, buildInventory, carProp } from './inventory'
@@ -201,7 +206,7 @@ describe('dealership layout', () => {
       RECEPTION_CHAIR_ID,
       DESK_CHAIR_ID,
       GUEST_CHAIR_ID,
-      ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
+      ...salesDesks([]).flatMap((d) => [d.chairId, d.guestChairId]),
     ]
     for (const id of chairs) {
       const chair = PROPS.find((p) => p.id === id)
@@ -215,10 +220,10 @@ describe('dealership layout', () => {
   it('keeps the lounge sofa and every display car reachable around the sales desks', () => {
     const sofa = PROPS.find((p) => p.id === 'lounge-sofa')!
     expect(findPathToAny(grid, SPAWN_TILE, approachTilesFor(grid, sofa.rect))).not.toBeNull()
-    for (const car of DISPLAY_CARS) {
+    for (const [i, car] of PLATFORMS.filter((p) => !p.requires).entries()) {
       const approach = approachTilesFor(grid, car.rect)
-      expect(approach.length, car.model).toBeGreaterThanOrEqual(4)
-      expect(findPathToAny(grid, SPAWN_TILE, approach), car.model).not.toBeNull()
+      expect(approach.length, `${i}`).toBeGreaterThanOrEqual(4)
+      expect(findPathToAny(grid, SPAWN_TILE, approach), `${i}`).not.toBeNull()
     }
   })
 })
@@ -338,5 +343,134 @@ describe('the parcel east of the lot', () => {
       const cars = east.flatMap((sp) => approachTilesFor(g, parkedCarRect(sp)))
       expect(cars, at).not.toContainEqual(t)
     })
+  })
+})
+
+describe('the showroom wing', () => {
+  const wing = buildLayout(['east-lot', 'showroom-wing'])
+  const inWing = (t: { tx: number; tz: number }) =>
+    t.tx >= WING.tx && t.tx < WING.tx + WING.w && t.tz >= WING.tz && t.tz < WING.tz + WING.h
+  /** The wing's grid with every slot full: the opening stock, both wing platforms and every lot space. */
+  function fullGrid(l: Layout) {
+    const g = createGrid(l)
+    applyToGrid(g, inventory)
+    for (const p of PLATFORMS) g.setRectBlocked(p.rect, true)
+    for (const sp of PARKING_SPACES) g.setRectBlocked(parkedCarRect(sp), true)
+    return g
+  }
+  const g = fullGrid(wing)
+
+  it('stands on the parcel’s north side, against the building, indoors', () => {
+    expect(WING.tx).toBe(37)
+    expect(WING.tx + WING.w).toBeLessThanOrEqual(49) // the garage corner is east of it
+    for (const [tx, tz] of tiles(WING)) {
+      expect(zoneAt(wing, tx, tz), `${tx},${tz}`).toBe('showroom')
+      expect(isIndoor(wing, tx, tz)).toBe(true)
+    }
+    // Nothing of it before it's built.
+    const lot = buildLayout(['east-lot'])
+    expect(zoneAt(lot, 40, 6)).toBe('asphalt')
+    expect(wallAt(lot, WING.tx + WING.w - 1, 5)).toBeNull()
+    expect(lot.props.some((p) => p.id === 'wing-sofa')).toBe(false)
+  })
+
+  it('moves the lounge plant out of the corner the door opens from', () => {
+    const plant = (l: Layout) => l.props.find((p) => p.id === 'lounge-plant')!.rect
+    expect(plant(layout)).toEqual({ tx: 35, tz: 12, w: 1, h: 1 })
+    expect(zoneAt(wing, plant(wing).tx, plant(wing).tz)).toBe('lounge')
+    expect(g.isWalkable(35, 12)).toBe(true)
+  })
+
+  it('has walls round it, a door from the lounge and a door onto the lot', () => {
+    expect(wallAt(wing, 40, WING.tz)).toBe('solid')
+    expect(wallAt(wing, WING.tx + WING.w - 1, 6)).toBe('solid')
+    expect(wallAt(wing, 42, WING.tz + WING.h - 1)).toBe('glass')
+    // The old fence between the lots is gone inside it.
+    for (let tz = WING.tz + 1; tz < WING.tz + WING.h - 1; tz++)
+      expect(wallAt(wing, 39, tz)).toBeNull()
+    const lounge = findPath(g, { tx: 33, tz: 10 }, { tx: 38, tz: 8 })!
+    expect(lounge).toContainEqual({ tx: 36, tz: 12 })
+    expect(lounge.every((t) => isIndoor(wing, t.tx, t.tz))).toBe(true)
+    // With every lounge upgrade in, too.
+    const ups = fullGrid(wing)
+    for (const r of improvementFootprints(Object.keys(IMPROVEMENTS) as ImprovementId[])) {
+      ups.setRectBlocked(r, true)
+    }
+    expect(findPath(ups, { tx: 33, tz: 10 }, { tx: 38, tz: 8 })).not.toBeNull()
+    const outside = findPath(g, { tx: 38, tz: 16 }, { tx: 43, tz: 9 })!
+    expect(outside.some((t) => t.tz === 13 && (t.tx === 37 || t.tx === 38))).toBe(true)
+    // Customers walk in from the street through either door.
+    expect(findPath(g, LOT_ENTRY_TILES[0], { tx: 43, tz: 9 })).not.toBeNull()
+    // The building's own doors and walls are as they were.
+    expect(wallAt(wing, 36, 5)).toBe('solid')
+    expect(wallAt(wing, 39, 14)).toBe('fence')
+  })
+
+  it('places its furniture inside it, off walls and without overlapping anything', () => {
+    const owner = new Map<string, string>()
+    const platforms = PLATFORMS.map((p, i) => ({ id: `platform-${i}`, rect: p.rect, blocks: true }))
+    for (const p of [...wing.props, ...platforms]) {
+      for (const [tx, tz] of tiles(p.rect)) {
+        expect(wallAt(wing, tx, tz), `${p.id} on a wall`).toBeNull()
+        if (p.blocks === false) continue
+        const key = `${tx},${tz}`
+        expect(owner.get(key), `${p.id} overlaps ${owner.get(key)}`).toBeUndefined()
+        owner.set(key, p.id)
+      }
+    }
+    const added = wing.props.filter((p) => !PROPS.some((q) => q.id === p.id))
+    expect(added.length).toBeGreaterThan(0)
+    for (const p of added)
+      expect(
+        tiles(p.rect).every(([tx, tz]) => inWing({ tx, tz })),
+        p.id,
+      ).toBe(true)
+    for (const p of PLATFORMS.filter((x) => x.requires)) {
+      expect(p.requires).toBe('showroom-wing')
+      expect(inWing(p.rect)).toBe(true)
+    }
+  })
+
+  it('adds sales desks 3 and 4, and every chair is reachable with every slot full', () => {
+    expect(salesDesks([])).toEqual(SALES_DESKS.slice(0, 2))
+    expect(salesDesks(['east-lot', 'showroom-wing'])).toEqual(SALES_DESKS)
+    expect(SALES_DESKS).toHaveLength(4)
+    const chairs = [
+      RECEPTION_CHAIR_ID,
+      DESK_CHAIR_ID,
+      GUEST_CHAIR_ID,
+      ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
+    ]
+    for (const id of chairs) {
+      const chair = wing.props.find((p) => p.id === id)
+      expect(chair, id).toBeDefined()
+      const approach = approachTilesFor(g, chair!.rect)
+      expect(approach.length, id).toBeGreaterThan(0)
+      expect(findPathToAny(g, SIDEWALK_ENDS[0], approach), id).not.toBeNull()
+    }
+  })
+
+  it('reaches every sofa seat and every platform car', () => {
+    const sofas = SOFA_IDS.map((id) => wing.props.find((p) => p.id === id)!)
+    expect(sofas).toHaveLength(2)
+    for (const sofa of sofas) {
+      for (let i = 0; i < sofa.rect.w; i++) {
+        const seat = { ...sofa.rect, tx: sofa.rect.tx + i, w: 1 }
+        const approach = approachTilesFor(g, seat)
+        expect(findPathToAny(g, SPAWN_TILE, approach), `${sofa.id} ${i}`).not.toBeNull()
+      }
+    }
+    for (const [i, p] of PLATFORMS.entries()) {
+      const approach = approachTilesFor(g, p.rect)
+      expect(approach.length, `${i}`).toBeGreaterThanOrEqual(4)
+      expect(findPathToAny(g, SPAWN_TILE, approach), `${i}`).not.toBeNull()
+    }
+  })
+
+  it('leaves the east lot’s cars reachable', () => {
+    for (const sp of PARKING_SPACES) {
+      const approach = approachTilesFor(g, parkedCarRect(sp))
+      expect(findPathToAny(g, LOT_ENTRY_TILES[0], approach)).not.toBeNull()
+    }
   })
 })

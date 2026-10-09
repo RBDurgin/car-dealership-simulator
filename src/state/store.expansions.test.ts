@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { netIncome } from '../sim/deal'
 import { EXPANSIONS, expansionsUp } from '../sim/expansions'
-import { PARKING_SPACES } from '../sim/layout'
+import { PARKING_SPACES, PLATFORMS } from '../sim/layout'
 import { createSave, parseSave } from '../sim/save'
+import type { Employee, Role } from '../sim/staff'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -81,5 +82,57 @@ describe('expansions', () => {
     game().loadGame(save)
     expect(game().clock.day).toBe(2)
     expect(expansionsUp(game())).toEqual(['east-lot'])
+  })
+
+  describe('the showroom wing', () => {
+    /** Owns the east lot (up since day 1) and has reached Regional Name, with cash to spare. */
+    const regional = () =>
+      useGame.setState({
+        cash: 400_000,
+        career: { ...game().career, rank: 'regional-name' },
+        expansions: [{ id: 'east-lot', day: 0 }],
+      })
+    /** Puts an applicant for `role` on today's list and hires them. */
+    const hire = (role: Role, n: number) => {
+      const c: Employee = { ...game().candidates[0], id: `staff-x-${role}-${n}`, role }
+      useGame.setState({ candidates: [...game().candidates, c] })
+      game().hire(c.id)
+      return game().roster.some((e) => e.id === c.id)
+    }
+
+    it('needs the east lot first', () => {
+      useGame.setState({ cash: 400_000, career: { ...game().career, rank: 'regional-name' } })
+      expect(game().buyExpansion('showroom-wing')).toBe(false)
+      expect(game().notice?.text).toBe('Needs the east lot first.')
+    })
+
+    it('allows 4 salespeople and 2 porters once it’s up', () => {
+      regional()
+      expect(game().buyExpansion('showroom-wing')).toBe(true)
+      expect([1, 2, 3].map((n) => hire('sales', n))).toEqual([true, true, false])
+      expect(game().notice?.text).toBe('You already have 2 salespeople.')
+      expect([1, 2].map((n) => hire('porter', n))).toEqual([true, false])
+      endDay()
+      game().startNextDay()
+      expect(expansionsUp(game())).toEqual(['east-lot', 'showroom-wing'])
+      expect([3, 4, 5].map((n) => hire('sales', n))).toEqual([true, true, false])
+      expect(game().notice?.text).toBe('You already have 4 salespeople.')
+      expect(hire('porter', 3)).toBe(true)
+      expect(hire('porter', 4)).toBe(false)
+    })
+
+    it('puts new stock on its platforms first once it’s up', () => {
+      regional()
+      game().buyExpansion('showroom-wing')
+      endDay()
+      game().startNextDay()
+      useGame.setState({ cash: 2_000_000 })
+      game().orderCar('sedan', 'cash')
+      game().orderCar('sedan', 'cash')
+      const showroom = game().orders.filter((o) => o.slot.location === 'showroom')
+      expect(showroom.map((o) => o.slot.index)).toEqual(
+        PLATFORMS.flatMap((p, i) => (p.requires ? [i] : [])),
+      )
+    })
   })
 })

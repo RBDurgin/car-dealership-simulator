@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLOSEOUT_REBATE, closeoutOn } from './events'
 import { FLOOR_PLAN_LIMIT } from './floorPlan'
 import { BASE_MSRP, buildInventory, MSRP_VARIATION, sellCar, type InventoryCar } from './inventory'
-import { DISPLAY_CARS, PARKING_SPACES, parkedCarRect, type CarModel } from './layout'
+import { PARKING_SPACES, parkedCarRect, PLATFORMS, type CarModel } from './layout'
 import {
   ALL_SLOTS,
   BASE_SLOTS,
@@ -93,12 +93,30 @@ describe('catalog', () => {
 })
 
 describe('free slots', () => {
-  it('has 30 slots open, 3 on the showroom floor, and 12 more on the east lot', () => {
+  it('has 30 slots open, 3 on the showroom floor, 12 more on the east lot and 2 in the wing', () => {
     expect(BASE_SLOTS).toBe(30)
     expect(openSlots([])).toHaveLength(30)
-    expect(ALL_SLOTS.filter((s) => s.location === 'showroom')).toHaveLength(3)
+    expect(openSlots([]).filter((s) => s.location === 'showroom')).toHaveLength(3)
     expect(openSlots(['east-lot'])).toHaveLength(42)
-    expect(ALL_SLOTS).toHaveLength(42)
+    const all = openSlots(['east-lot', 'showroom-wing'])
+    expect(all).toHaveLength(44)
+    expect(all.filter((s) => s.location === 'showroom')).toHaveLength(5)
+    expect(ALL_SLOTS).toEqual(all)
+  })
+
+  it('fills the wing’s platforms first once it’s up, before the lot', () => {
+    const full = PLATFORMS.slice(0, 3).map((p, i) => ({
+      ...opening[i],
+      rect: p.rect,
+      facing: p.facing,
+    }))
+    const free = freeSlots(full, [], [], ['east-lot', 'showroom-wing'])
+    expect(free.slice(0, 2)).toEqual([
+      { location: 'showroom', index: 3 },
+      { location: 'showroom', index: 4 },
+    ])
+    expect(free[2].location).toBe('lot')
+    expect(freeSlots(full, [], [], ['east-lot'])[0].location).toBe('lot')
   })
 
   it('lists the empty lot spaces when the showroom is full', () => {
@@ -238,8 +256,8 @@ describe('delivery', () => {
       model: 'truck',
       location: 'showroom',
       spaceIndex: null,
-      rect: DISPLAY_CARS[2].rect,
-      facing: DISPLAY_CARS[2].facing,
+      rect: PLATFORMS[2].rect,
+      facing: PLATFORMS[2].facing,
       cost: b.orders[0].cost,
       status: 'available',
       cleanliness: 1,

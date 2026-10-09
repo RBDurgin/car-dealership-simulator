@@ -17,7 +17,7 @@ import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
 import { doorTile } from '../sim/driving'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, PROPS, SIDEWALK_ENDS, type Prop } from '../sim/layout'
+import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, SIDEWALK_ENDS, SOFA_IDS, type Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { useGame } from '../state/store'
@@ -31,6 +31,7 @@ import {
   gameTime,
   grid,
   interactables,
+  layout,
   playerPos,
   staffPos,
   walkInSpawns,
@@ -59,15 +60,19 @@ const FOLLOW_STOP = 1.3
 const FOLLOW_START = 2
 /** A couple's companion walks a touch faster, so they catch up when left behind. */
 const COMPANION_SPEED = CUSTOMER_SPEED * 1.15
-/** A guest chair by id: the office's, or a sales desk's. */
-const guestChair = (id: string | null) => PROPS.find((p) => p.id === (id ?? GUEST_CHAIR_ID))
-const SOFA = PROPS.find((p) => p.id === 'lounge-sofa')!
-/** One seat per tile of the lounge sofa, where buyers wait for finance. */
-const SOFA_SEATS: Prop[] = Array.from({ length: SOFA.rect.w }, (_, i) => ({
-  ...SOFA,
-  id: `${SOFA.id}-${i + 1}`,
-  rect: { tx: SOFA.rect.tx + i, tz: SOFA.rect.tz, w: 1, h: 1 },
-}))
+/** A guest chair by id: the office's, or a sales desk's (the wing's only once it's up). */
+const guestChair = (id: string | null) => layout.props.find((p) => p.id === (id ?? GUEST_CHAIR_ID))
+/** The sofas standing today: the lounge's, and the wing's once it's up. */
+const sofas = () => SOFA_IDS.flatMap((id) => layout.props.filter((p) => p.id === id))
+/** One seat per tile of each sofa, where buyers wait for finance, the lounge's first. */
+const sofaSeats = (): Prop[] =>
+  sofas().flatMap((sofa) =>
+    Array.from({ length: sofa.rect.w }, (_, i) => ({
+      ...sofa,
+      id: `${sofa.id}-${i + 1}`,
+      rect: { tx: sofa.rect.tx + i, tz: sofa.rect.tz, w: 1, h: 1 },
+    })),
+  )
 /** Who has each sofa seat, by seat id. */
 const sofaTaken = new Map<string, string>()
 
@@ -260,14 +265,14 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
       return
     }
     case 'queued': {
-      // A free sofa seat; with the sofa full they stand by it.
-      const seat = SOFA_SEATS.find((p) => !sofaTaken.has(p.id))
+      // A free sofa seat; with the sofas full they stand by the lounge's.
+      const seat = sofaSeats().find((p) => !sofaTaken.has(p.id))
       w.faceTo = null
       if (seat) {
         sofaTaken.set(seat.id, c.id)
         w.sofaSeat = seat
       }
-      pathTo(w, approachTilesFor(grid, (seat ?? SOFA).rect))
+      pathTo(w, approachTilesFor(grid, (seat ?? sofas()[0]).rect))
       return
     }
     default:

@@ -5,9 +5,10 @@ import { lockedReason, START_TIER, type FranchiseTier } from './franchise'
 import { BASE_MSRP, rollMsrp, roundTo100, type CarLocation, type InventoryCar } from './inventory'
 import { expansionsUp, type Grounds } from './expansions'
 import {
-  DISPLAY_CARS,
   PARKING_SPACES,
   parkedCarRect,
+  platformOpen,
+  PLATFORMS,
   spaceOpen,
   type CarModel,
   type ExpansionId,
@@ -30,7 +31,7 @@ const INCENTIVE_SEED = 15_000
 
 export type Financing = 'cash' | 'floor'
 
-/** A place a car can stand: a showroom platform (`DISPLAY_CARS` index) or a lot space. */
+/** A place a car can stand: a showroom platform (`PLATFORMS` index) or a lot space. */
 export interface Slot {
   location: CarLocation
   index: number
@@ -76,13 +77,15 @@ export function orderCost(model: CarModel, day: number, invoice = 1): number {
  * the lot spaces.
  */
 export const ALL_SLOTS: readonly Slot[] = [
-  ...DISPLAY_CARS.map((_, index): Slot => ({ location: 'showroom', index })),
+  ...PLATFORMS.map((_, index): Slot => ({ location: 'showroom', index })),
   ...PARKING_SPACES.map((_, index): Slot => ({ location: 'lot', index })),
 ]
 
 /** Whether `slot` can take a car with the `expansions` that are up. */
 export function slotUnlocked(slot: Slot, expansions: readonly ExpansionId[]): boolean {
-  return slot.location !== 'lot' || spaceOpen(slot.index, expansions)
+  return slot.location === 'lot'
+    ? spaceOpen(slot.index, expansions)
+    : platformOpen(slot.index, expansions)
 }
 
 /** The slots open with the `expansions` that are up. */
@@ -99,7 +102,7 @@ export const BASE_SLOTS = openSlots([]).length
 /** Where a car in `slot` stands and which way it faces. */
 export function slotPlacement(slot: Slot): { rect: Rect; facing: Facing } {
   if (slot.location === 'showroom') {
-    const { rect, facing } = DISPLAY_CARS[slot.index]
+    const { rect, facing } = PLATFORMS[slot.index]
     return { rect, facing }
   }
   const space = PARKING_SPACES[slot.index]

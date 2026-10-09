@@ -288,11 +288,34 @@ export function parkedCarRect(space: ParkingSpace): Rect {
   }
 }
 
-/** Opening showroom stock, displayed on platforms. */
-export const DISPLAY_CARS: { model: CarModel; rect: Rect; facing: Facing }[] = [
-  { model: 'suv-luxury', rect: { tx: 18, tz: 4, w: 3, h: 4 }, facing: 0 },
-  { model: 'sedan-sports', rect: { tx: 23, tz: 4, w: 3, h: 4 }, facing: 0 },
-  { model: 'hatchback-sports', rect: { tx: 24, tz: 9, w: 4, h: 3 }, facing: 3 },
+/** A display platform: where a showroom car stands and which way it faces. */
+export interface Platform {
+  rect: Rect
+  facing: Facing
+  /** The expansion that has to be up before the platform can be used (none: always open). */
+  requires?: ExpansionId
+}
+
+/** The showroom's display platforms, then the wing's two along its north wall. */
+export const PLATFORMS: Platform[] = [
+  { rect: { tx: 18, tz: 4, w: 3, h: 4 }, facing: 0 },
+  { rect: { tx: 23, tz: 4, w: 3, h: 4 }, facing: 0 },
+  { rect: { tx: 24, tz: 9, w: 4, h: 3 }, facing: 3 },
+  { rect: { tx: 40, tz: 4, w: 3, h: 4 }, facing: 0, requires: 'showroom-wing' },
+  { rect: { tx: 44, tz: 4, w: 3, h: 4 }, facing: 0, requires: 'showroom-wing' },
+]
+
+/** Whether display platform `index` can be used with the `expansions` that are up. */
+export function platformOpen(index: number, expansions: readonly ExpansionId[]): boolean {
+  const { requires } = PLATFORMS[index]
+  return !requires || expansions.includes(requires)
+}
+
+/** Opening showroom stock: which platform holds which car. */
+export const DISPLAY_CARS: { platform: number; model: CarModel }[] = [
+  { platform: 0, model: 'suv-luxury' },
+  { platform: 1, model: 'sedan-sports' },
+  { platform: 2, model: 'hatchback-sports' },
 ]
 
 /** Where the player sits to close a deal, and where the customer sits opposite. */
@@ -307,13 +330,27 @@ export const RECEPTION_CHAIR_ID = 'reception-chair'
 export interface SalesDesk {
   chairId: string
   guestChairId: string
+  /** The expansion the desk stands in (none: the showroom's own). */
+  requires?: ExpansionId
 }
 
-/** One desk per salesperson the roster allows, in the order they're handed out. */
-export const SALES_DESKS: SalesDesk[] = [1, 2].map((n) => ({
+/**
+ * One desk per salesperson the roster allows, in the order they're handed
+ * out: two in the showroom, then two in the wing.
+ */
+export const SALES_DESKS: SalesDesk[] = [1, 2, 3, 4].map((n) => ({
   chairId: `sales-chair-${n}`,
   guestChairId: `sales-guest-${n}`,
+  ...(n > 2 && { requires: 'showroom-wing' as const }),
 }))
+
+/** The sales desks standing with the `expansions` that are up. */
+export function salesDesks(expansions: readonly ExpansionId[]): SalesDesk[] {
+  return SALES_DESKS.filter((d) => !d.requires || expansions.includes(d.requires))
+}
+
+/** The sofas buyers wait on for finance, the lounge's first. */
+export const SOFA_IDS = ['lounge-sofa', 'wing-sofa']
 
 /** How much the furniture models are scaled up, to sit in proportion with the people. */
 export const FURNITURE_SCALE = 2.3
@@ -417,7 +454,45 @@ const FIXED_PROPS: Prop[] = [
 export const PROPS: Prop[] = FIXED_PROPS
 
 /** Ground bought as the dealership grows (see `sim/expansions.ts`). */
-export type ExpansionId = 'east-lot'
+export type ExpansionId = 'east-lot' | 'showroom-wing'
+
+/**
+ * The showroom wing, walls included: on the parcel's north side, against the
+ * building's east wall, its glass front in line with the building's. It's
+ * joined to the lounge by a door in the lounge's corner and opens onto the
+ * lot by the gate through a door in its front.
+ */
+export const WING: Rect = { tx: 37, tz: 2, w: 12, h: 12 }
+
+const WING_WALLS: WallRun[] = [
+  { kind: 'solid', rect: { tx: WING.tx, tz: WING.tz, w: WING.w, h: 1 } },
+  { kind: 'solid', rect: { tx: WING.tx + WING.w - 1, tz: WING.tz, w: 1, h: WING.h } },
+  { kind: 'glass', rect: { tx: WING.tx, tz: WING.tz + WING.h - 1, w: WING.w - 1, h: 1 } },
+]
+
+const WING_OPENINGS: Rect[] = [
+  // Inside, where the fence between the lots used to run
+  { tx: WING.tx, tz: WING.tz + 1, w: WING.w - 1, h: WING.h - 2 },
+  { tx: 36, tz: 12, w: 1, h: 1 }, // the door from the lounge's corner
+  { tx: 37, tz: 13, w: 2, h: 1 }, // the front door, onto the lot by the gate
+]
+
+/** The lounge plant stands in the corner the wing's door opens from, so it moves over. */
+const LOUNGE_PLANT_ID = 'lounge-plant'
+const LOUNGE_PLANT_MOVED: Rect = { tx: 30, tz: 9, w: 1, h: 1 }
+
+/**
+ * The wing's fittings: a second sofa in the corner, sales desks 3 and 4 in
+ * front of the platforms, and plants. The two platforms along the north
+ * wall are in `PLATFORMS`.
+ */
+const WING_PROPS: Prop[] = [
+  { id: 'wing-sofa', model: 'loungeSofa', rect: { tx: 37, tz: 3, w: 2, h: 1 }, facing: 0 },
+  ...salesDesk(3, { tx: 40, tz: 10 }),
+  ...salesDesk(4, { tx: 45, tz: 10 }),
+  { id: 'wing-plant-1', model: 'pottedPlant', rect: { tx: 47, tz: 3, w: 1, h: 1 }, facing: 0 },
+  { id: 'wing-plant-2', model: 'pottedPlant', rect: { tx: 47, tz: 12, w: 1, h: 1 }, facing: 0 },
+]
 
 /** Where the fence between the lot and the parcel opens once the parcel is bought. */
 export const PARCEL_GATE: Rect = { tx: 39, tz: 15, w: 1, h: 9 }
@@ -456,22 +531,29 @@ const EAST_LOT_PAVING: Rect = { ...PARCEL, tx: PARCEL.tx - 1, w: PARCEL.w + 1 }
  * The dealership with the `expansions` that are up. Until the east lot is
  * bought, the parcel is closed off behind its fence with a sign out front;
  * once it is, the parcel and the strip under the fence are asphalt and the
- * fence between the lots opens.
+ * fence between the lots opens. The showroom wing then stands on its north
+ * side, with its furniture.
  */
 export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
   const lot = expansions.includes('east-lot')
+  const wing = expansions.includes('showroom-wing')
   const areas = ZONES.map((z) =>
     lot && z.kind === 'parcel' ? { kind: 'asphalt' as const, rect: EAST_LOT_PAVING } : z,
   )
-  const openings = lot ? [...OPENINGS, PARCEL_GATE] : OPENINGS
+  if (wing) areas.push({ kind: 'showroom', rect: WING })
+  const wallRuns = wing ? [...WALL_RUNS, ...WING_WALLS] : WALL_RUNS
+  const openings = [...OPENINGS, ...(lot ? [PARCEL_GATE] : []), ...(wing ? WING_OPENINGS : [])]
   const n = GRID_WIDTH * GRID_HEIGHT
   const idx = (tx: number, tz: number) => tz * GRID_WIDTH + tx
   const zones: ZoneKind[] = new Array<ZoneKind>(n).fill('grass')
   const walls: (WallKind | null)[] = new Array<WallKind | null>(n).fill(null)
   for (const z of areas) forEachTile(z.rect, (tx, tz) => (zones[idx(tx, tz)] = z.kind))
-  for (const w of WALL_RUNS) forEachTile(w.rect, (tx, tz) => (walls[idx(tx, tz)] = w.kind))
+  for (const w of wallRuns) forEachTile(w.rect, (tx, tz) => (walls[idx(tx, tz)] = w.kind))
   for (const o of openings) forEachTile(o, (tx, tz) => (walls[idx(tx, tz)] = null))
-  const props = lot ? PROPS : [...PROPS, FOR_SALE_SIGN]
+  const fixed = wing
+    ? PROPS.map((p) => (p.id === LOUNGE_PLANT_ID ? { ...p, rect: LOUNGE_PLANT_MOVED } : p))
+    : PROPS
+  const props = [...fixed, ...(lot ? [] : [FOR_SALE_SIGN]), ...(wing ? WING_PROPS : [])]
   return { width: GRID_WIDTH, height: GRID_HEIGHT, areas, zones, walls, props }
 }
 

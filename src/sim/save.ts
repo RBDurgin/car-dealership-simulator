@@ -5,7 +5,7 @@ import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { COST_FRACTION, type InventoryCar } from './inventory'
-import { DISPLAY_CARS, PARKING_SPACES } from './layout'
+import { PARKING_SPACES, PLATFORMS } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import { BASE_SLOTS, type Order } from './ordering'
 import { emptyCareer, isRankId, type Career } from './progression'
@@ -324,6 +324,6 @@ function isExpansion(v: unknown): boolean {
 
 function isSlot(location: unknown, index: unknown): boolean {
   const count =
-    location === 'showroom' ? DISPLAY_CARS.length : location === 'lot' ? PARKING_SPACES.length : 0
+    location === 'showroom' ? PLATFORMS.length : location === 'lot' ? PARKING_SPACES.length : 0
   return Number.isInteger(index) && (index as number) >= 0 && (index as number) < count
 }

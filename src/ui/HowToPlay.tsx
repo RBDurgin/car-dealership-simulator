@@ -34,6 +34,8 @@ import {
   MIN_COMMISSION,
   MIN_RETENTION_RAISE,
   RETENTION_RAISE,
+  ROLE_LIMITS,
+  roleLimits,
   SALES_COMMISSION,
 } from '../sim/staff'
 import { levelTuning, useGame } from '../state/store'
@@ -338,8 +340,8 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>Once you reach a rank you keep it, even if your reputation slips later.</p>
         <h4>Expansion</h4>
         <p>
-          A rank lets you buy more ground on the <b>Upgrades</b> tab. You pay up front and it&apos;s
-          built overnight. The manufacturer&apos;s quota stays the same.
+          A rank lets you buy more ground and building on the <b>Upgrades</b> tab. You pay up front
+          and it&apos;s built overnight. The manufacturer&apos;s quota stays the same.
         </p>
         <ul>
           {EXPANSION_IDS.map((id) => {
@@ -494,7 +496,11 @@ function PeopleTab({ touch, click }: TabProps) {
               Press <kbd>H</kbd> or click Staff
             </>
           )}{' '}
-          to hire from the day&apos;s applicants. Everyone on the payroll is paid at closing.
+          to hire from the day&apos;s applicants. Everyone on the payroll is paid at closing. You
+          can have up to {ROLE_LIMITS.sales} salespeople and one of each other role; the{' '}
+          {EXPANSIONS['showroom-wing'].label.toLowerCase()} makes room for{' '}
+          {roleLimits(['showroom-wing']).sales} salespeople and{' '}
+          {roleLimits(['showroom-wing']).porter} lot porters (see <b>Business</b>).
         </p>
         <ul>
           <li>

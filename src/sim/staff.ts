@@ -1,7 +1,13 @@
 import { GUARD_VARIANT, STAFF_VARIANTS, type StaffVariant } from './characters'
 import { randomName } from './customers'
 import type { Sale } from './deal'
-import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS, type SalesDesk } from './layout'
+import {
+  DESK_CHAIR_ID,
+  RECEPTION_CHAIR_ID,
+  salesDesks,
+  type ExpansionId,
+  type SalesDesk,
+} from './layout'
 import type { Rng } from './rng'
 
 /**
@@ -30,10 +36,10 @@ export const ROLE_LABELS: Record<Role, string> = {
 }
 const ROLE_PLURALS: Record<Role, string> = {
   sales: 'salespeople',
-  receptionist: 'receptionist',
-  finance: 'finance manager',
-  porter: 'lot porter',
-  security: 'security guard',
+  receptionist: 'receptionists',
+  finance: 'finance managers',
+  porter: 'lot porters',
+  security: 'security guards',
 }
 /** What each role does, for applicants in the staff panel. */
 export const ROLE_BLURBS: Record<Role, string> = {
@@ -52,13 +58,21 @@ export const ROLE_BADGES: Record<Role, string> = {
   security: 'Security',
 }
 
-/** Most of each role on the payroll at once. */
+/** Most of each role on the payroll at once, before the showroom wing. */
 export const ROLE_LIMITS: Record<Role, number> = {
   sales: 2,
   receptionist: 1,
   finance: 1,
   porter: 1,
   security: 1,
+}
+
+/** With the showroom wing up: a desk for each of 4 salespeople, and 2 porters for the bigger lot. */
+const WING_LIMITS: Partial<Record<Role, number>> = { sales: 4, porter: 2 }
+
+/** Most of each role on the payroll at once with the `expansions` that are up. */
+export function roleLimits(expansions: readonly ExpansionId[] = []): Record<Role, number> {
+  return expansions.includes('showroom-wing') ? { ...ROLE_LIMITS, ...WING_LIMITS } : ROLE_LIMITS
 }
 
 /**
@@ -167,18 +181,29 @@ export function financeSeconds(skill: number): number {
 
 /**
  * The desk salesperson `id` works from: handed out in roster (hiring) order to
- * the salespeople on the lot. Null if they aren't one, or all desks are taken
- * (a let-go salesperson still finishing up can hold one past the limit).
+ * the salespeople on the lot, from the desks standing with the `expansions`
+ * up. Null if they aren't one, or all desks are taken (a let-go salesperson
+ * still finishing up can hold one past the limit).
  */
-export function salesDeskOf(roster: readonly Employee[], id: string): SalesDesk | null {
+export function salesDeskOf(
+  roster: readonly Employee[],
+  id: string,
+  expansions: readonly ExpansionId[] = [],
+): SalesDesk | null {
   const sales = roster.filter((e) => e.role === 'sales' && e.status !== 'off')
   const i = sales.findIndex((e) => e.id === id)
-  return i < 0 ? null : (SALES_DESKS[i] ?? null)
+  return i < 0 ? null : (salesDesks(expansions)[i] ?? null)
 }
 
-/** The chair employee `e` works from, or null if they stand. */
-export function postChairId(e: Employee, roster: readonly Employee[]): string | null {
-  return e.role === 'sales' ? (salesDeskOf(roster, e.id)?.chairId ?? null) : POSTS[e.role]
+/** The chair employee `e` works from (with the `expansions` up), or null if they stand. */
+export function postChairId(
+  e: Employee,
+  roster: readonly Employee[],
+  expansions: readonly ExpansionId[] = [],
+): string | null {
+  return e.role === 'sales'
+    ? (salesDeskOf(roster, e.id, expansions)?.chairId ?? null)
+    : POSTS[e.role]
 }
 
 /** Staff models for everyone but the guard, who wears the police uniform. */
@@ -225,13 +250,17 @@ export function isBusy(_employee: Employee): boolean {
   return false
 }
 
-/** Why another `role` can't be hired, or null if they can. */
-export function canHire(roster: readonly Employee[], role: Role): string | null {
+/** Why another `role` can't be hired with the `expansions` up, or null if they can. */
+export function canHire(
+  roster: readonly Employee[],
+  role: Role,
+  expansions: readonly ExpansionId[] = [],
+): string | null {
   const count = roster.filter((e) => e.role === role && !e.fired).length
-  const limit = ROLE_LIMITS[role]
+  const limit = roleLimits(expansions)[role]
   if (count < limit) return null
   return limit === 1
-    ? `You already have a ${ROLE_PLURALS[role]}.`
+    ? `You already have a ${ROLE_LABELS[role].toLowerCase()}.`
     : `You already have ${limit} ${ROLE_PLURALS[role]}.`
 }
 

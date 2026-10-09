@@ -28,7 +28,7 @@ import {
   PARKING_SPACES,
   parkedCarRect,
   PROPS,
-  SALES_DESKS,
+  salesDesks,
   SIDEWALK_ENDS,
   SPAWN_TILE,
   zoneAt,
@@ -69,6 +69,7 @@ describe('improvement effects', () => {
   it('swaps the sofa and adds the lounge props only once they’re up', () => {
     expect(swappedModel([], 'lounge-sofa')).toBeNull()
     expect(swappedModel(['designer-sofa'], 'lounge-sofa')).toBe('loungeDesignSofa')
+    expect(swappedModel(['designer-sofa'], 'wing-sofa')).toBe('loungeDesignSofa')
     expect(swappedModel(['designer-sofa'], 'sign')).toBeNull()
     expect(improvementProps(['big-sign'])).toEqual([])
     expect(improvementProps(['lounge-tv', 'coffee-bar']).map((p) => p.id)).toEqual([
@@ -171,7 +172,7 @@ describe('improvement footprints', () => {
     }
     const sofa = PROPS.find((p) => p.id === 'lounge-sofa')!
     const seats = [
-      ...[GUEST_CHAIR_ID, ...SALES_DESKS.map((d) => d.guestChairId)].map(
+      ...[GUEST_CHAIR_ID, ...salesDesks([]).map((d) => d.guestChairId)].map(
         (id) => PROPS.find((p) => p.id === id)!.rect,
       ),
       ...Array.from({ length: sofa.rect.w }, (_, i) => ({

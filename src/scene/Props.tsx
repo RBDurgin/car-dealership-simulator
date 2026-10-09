@@ -19,8 +19,10 @@ import { improvementProps, installed, slotTier, swappedModel } from '../sim/impr
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import {
   DEALERSHIP_NAME,
-  DISPLAY_CARS,
   FURNITURE_SCALE,
+  platformOpen,
+  PLATFORMS,
+  type ExpansionId,
   type CarModel,
   type Prop,
   type PropModel,
@@ -543,16 +545,18 @@ function LightStand({ rect, corner }: { rect: Rect; corner: [number, number] }) 
   )
 }
 
-/** The spotlights upgrade: two light stands at opposite corners of each display platform. */
-function Spotlights() {
+/** The spotlights upgrade: two light stands at opposite corners of each display platform up. */
+function Spotlights({ ground }: { ground: readonly ExpansionId[] }) {
   return (
     <>
-      {DISPLAY_CARS.map(({ rect }, i) => (
-        <group key={i}>
-          <LightStand rect={rect} corner={[-1, 1]} />
-          <LightStand rect={rect} corner={[1, -1]} />
-        </group>
-      ))}
+      {PLATFORMS.map(({ rect }, i) =>
+        platformOpen(i, ground) ? (
+          <group key={i}>
+            <LightStand rect={rect} corner={[-1, 1]} />
+            <LightStand rect={rect} corner={[1, -1]} />
+          </group>
+        ) : null,
+      )}
     </>
   )
 }
@@ -607,8 +611,8 @@ function Cars({ turntables }: { turntables: boolean }) {
 /** The fixed props (as the improvements up have them), what improvements add, and the cars. */
 export function Props() {
   const up = useUpNow()
-  // The For Sale sign comes down when the lot is built.
-  useGround()
+  // The For Sale sign comes down when the lot is built, and the wing's furniture goes in.
+  const ground = useGround()
   return (
     <>
       {layout.props.map((p) => {
@@ -618,7 +622,7 @@ export function Props() {
       {improvementProps(up).map((p) => (
         <PropView key={p.id} prop={p} />
       ))}
-      {slotTier(up, 'lighting') > 0 && <Spotlights />}
+      {slotTier(up, 'lighting') > 0 && <Spotlights ground={ground} />}
       <Cars turntables={slotTier(up, 'platforms') > 0} />
     </>
   )

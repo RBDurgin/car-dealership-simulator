@@ -103,8 +103,10 @@ useGame.subscribe((s, prev) => {
   const morning = s.clock.day !== prev.clock.day
   if (!morning && s.inventory === prev.inventory && raised.length === 0) return
   // New ground only ever opens up, so nobody needs stepping out of it.
-  if (regrounded(expansionsUp(s)) || morning) resetGrid()
+  const rebuilt = regrounded(expansionsUp(s))
+  if (rebuilt || morning) resetGrid()
   syncWorld(s.inventory, up)
+  if (rebuilt) holdSeats()
   // A car delivered or an improvement put up overnight where the player ended
   // the day steps them out. Only new ones: the player sits on a blocked chair tile.
   const known = new Set(prev.inventory.map((c) => c.id))
@@ -222,12 +224,17 @@ const SEATS = [
   ...Object.values(POSTS),
   ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
 ]
-for (const id of SEATS) {
-  const chair = id && layout.props.find((p) => p.id === id)
-  if (!chair) continue
-  const tiles = approachTilesFor(grid, chair.rect).map((t) => grid.index(t.tx, t.tz))
-  reservations.hold(tiles, `seat:${id}`)
+
+/** Holds the spots by every chair standing today: again when the wing's desks go up. */
+function holdSeats(): void {
+  for (const id of SEATS) {
+    const chair = id && layout.props.find((p) => p.id === id)
+    if (!chair) continue
+    const tiles = approachTilesFor(grid, chair.rect).map((t) => grid.index(t.tx, t.tz))
+    reservations.hold(tiles, `seat:${id}`)
+  }
 }
+holdSeats()
 
 /**
  * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Nazma approached

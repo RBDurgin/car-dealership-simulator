@@ -1554,7 +1554,7 @@ export const useGame = create<GameState>((set, get) => {
       const e = s.roster.find((x) => x.id === employeeId)
       const c = staffCustomer(employeeId, ['following'])
       if (!e || !c || c.chairId !== null) return
-      const choice = leadChoice(e, s.customers, s.roster)
+      const choice = leadChoice(e, s.customers, s.roster, expansionsUp(s))
       if (!choice) {
         commit(reduceCustomers(s.customers, { type: 'cancel', id: c.id }))
         return
@@ -1596,7 +1596,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const c = s.candidates.find((x) => x.id === id)
       if (!c) return
-      const blocker = canHire(s.roster, c.role)
+      const blocker = canHire(s.roster, c.role, expansionsUp(s))
       if (blocker) return notify(blocker)
       set({ candidates: s.candidates.filter((x) => x !== c) })
       setRoster(reduceStaff(s.roster, { type: 'hire', employee: c, open: !isClosed(s.clock) }))

@@ -23,6 +23,8 @@ import {
   RECEPTION_PATIENCE_FACTOR,
   reduceStaff,
   retentionRaise,
+  ROLE_LIMITS,
+  roleLimits,
   ROLES,
   wageFor,
   type Employee,
@@ -80,6 +82,22 @@ describe('hiring limits', () => {
     expect(canHire([hand('receptionist')], 'receptionist')).toMatch(/already/)
     expect(canHire([hand('sales')], 'sales')).toBeNull()
     expect(canHire([hand('sales'), hand('sales')], 'sales')).toMatch(/2 salespeople/)
+  })
+
+  it('allows four salespeople and two porters once the showroom wing is up', () => {
+    const wing = ['east-lot', 'showroom-wing'] as const
+    expect(roleLimits([])).toEqual(ROLE_LIMITS)
+    expect(roleLimits(['east-lot'])).toEqual(ROLE_LIMITS)
+    expect(roleLimits(wing)).toEqual({ ...ROLE_LIMITS, sales: 4, porter: 2 })
+    const two = [hand('sales'), hand('sales')]
+    expect(canHire(two, 'sales', wing)).toBeNull()
+    expect(canHire([...two, ...two], 'sales', wing)).toMatch(/4 salespeople/)
+    expect(canHire([hand('porter')], 'porter')).toBe('You already have a lot porter.')
+    expect(canHire([hand('porter')], 'porter', wing)).toBeNull()
+    expect(canHire([hand('porter'), hand('porter')], 'porter', wing)).toBe(
+      'You already have 2 lot porters.',
+    )
+    expect(canHire([hand('receptionist')], 'receptionist', wing)).toMatch(/a receptionist/)
   })
 
   it("doesn't count someone already fired", () => {
@@ -157,6 +175,15 @@ describe('sales desks', () => {
     // A third (one let go, still finishing up) has no desk.
     const c = hand('sales', { status: 'atPost' })
     expect(salesDeskOf([...roster, c], c.id)).toBeNull()
+    // With the wing up, the third and fourth sit at its desks; a fifth has none.
+    const wing = ['east-lot', 'showroom-wing'] as const
+    const d = hand('sales', { status: 'atPost' })
+    const e = hand('sales', { status: 'atPost' })
+    const five = [...roster, c, d, e]
+    expect(salesDeskOf(five, c.id, wing)).toBe(SALES_DESKS[2])
+    expect(salesDeskOf(five, d.id, wing)).toBe(SALES_DESKS[3])
+    expect(salesDeskOf(five, e.id, wing)).toBeNull()
+    expect(postChairId(d, five, wing)).toBe('sales-chair-4')
   })
 
   it('gives every role its chair to work from', () => {

@@ -7,13 +7,7 @@ import { hasBuyersInHand } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { expansionsUp } from '../sim/expansions'
-import {
-  GUARD_PATROL_TILES,
-  patrolTiles,
-  PORTER_STANDBY_TILES,
-  PROPS,
-  SIDEWALK_ENDS,
-} from '../sim/layout'
+import { GUARD_PATROL_TILES, patrolTiles, PORTER_STANDBY_TILES, SIDEWALK_ENDS } from '../sim/layout'
 import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
@@ -35,7 +29,15 @@ import { nextGuardTask, nextPorterTask, nextSalesTask, type SalesTask } from '..
 import { useGame } from '../state/store'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
-import { ambientPos, customerPos, customersAtCar, grid, interactables, staffPos } from './runtime'
+import {
+  ambientPos,
+  customerPos,
+  customersAtCar,
+  grid,
+  interactables,
+  layout,
+  staffPos,
+} from './runtime'
 import {
   createWalker,
   frameSeconds,
@@ -130,8 +132,12 @@ function removeWalker(id: string): void {
   releaseWalker(id)
 }
 
-const propById = (id: string | null) => (id ? PROPS.find((p) => p.id === id) : undefined)
-const postChair = (e: Employee) => propById(postChairId(e, useGame.getState().roster))
+/** A prop standing today (the wing's desks only once it's up). */
+const propById = (id: string | null) => (id ? layout.props.find((p) => p.id === id) : undefined)
+const postChair = (e: Employee) => {
+  const game = useGame.getState()
+  return propById(postChairId(e, game.roster, expansionsUp(game)))
+}
 
 function plan(e: Employee, w: StaffWalker, task: string): void {
   w.task = task
@@ -213,6 +219,7 @@ function updateSales(
     exclude: w.unreachableIds,
     atCar: customersAtCar,
     buying: !buyBlocker(game),
+    expansions: expansionsUp(game),
   })
   if (
     task.kind === 'greet' &&
@@ -295,6 +302,15 @@ function planSales(e: Employee, w: StaffWalker, task: SalesTask, key: string): v
 
 const WASH_PREFIX = 'wash:'
 
+/** The cars porters other than `id` are washing. */
+function washesBesides(id: string): Set<string> {
+  const cars = new Set<string>()
+  for (const [other, w] of walkers) {
+    if (other !== id && w.task?.startsWith(WASH_PREFIX)) cars.add(w.task.slice(WASH_PREFIX.length))
+  }
+  return cars
+}
+
 /**
  * The lot porter's loop: walk to the dirtiest car that needs it and wash it,
  * then the next; with every car clean enough, wait at the standby spot.
@@ -305,6 +321,7 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
     playerTargetId: game.activeAction?.targetId ?? null,
     exclude: w.unreachableIds,
     current: w.task?.startsWith(WASH_PREFIX) ? w.task.slice(WASH_PREFIX.length) : null,
+    taken: washesBesides(e.id),
   })
   if (task.kind === 'idle') {
     if (w.task !== 'post') plan(e, w, 'post')

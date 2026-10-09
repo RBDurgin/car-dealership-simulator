@@ -119,6 +119,29 @@ describe('leadChoice', () => {
     expect(leadChoice(extra, [buyer, queued], [...roster, fm])).toEqual({ kind: 'handOff' })
     expect(leadChoice(extra, [buyer], roster)).toBeNull()
   })
+
+  it('sends a third and fourth salesperson to the wing’s desks once it’s up', () => {
+    const lee = staff('lee', 'sales')
+    const max = staff('max', 'sales')
+    const roster = [sam, kim, lee, max]
+    const wing = ['east-lot', 'showroom-wing'] as const
+    expect(leadChoice(lee, [buyer], roster, wing)).toEqual({
+      kind: 'desk',
+      chairId: SALES_DESKS[2].guestChairId,
+    })
+    expect(leadChoice(max, [buyer], roster, wing)).toEqual({
+      kind: 'desk',
+      chairId: SALES_DESKS[3].guestChairId,
+    })
+    expect(leadChoice(lee, [buyer], roster, ['east-lot'])).toBeNull()
+    expect(salesChairFor(SALES_DESKS[3].guestChairId)).toBe('sales-chair-4')
+    // With somewhere to close, they go after customers too.
+    expect(nextSalesTask(max, [shopper('c')], { ...ctx(roster), expansions: wing })).toEqual({
+      kind: 'greet',
+      customerId: 'c',
+    })
+    expect(nextSalesTask(max, [shopper('c')], ctx(roster))).toEqual({ kind: 'idle' })
+  })
 })
 
 describe('nextSalesTask', () => {
@@ -230,6 +253,17 @@ describe('nextPorterTask', () => {
     )
     const exclude = new Set(['lot-car-2'])
     expect(nextPorterTask(porter, dirty, { ...none, exclude })).toEqual(wash('lot-car-1'))
+  })
+
+  it('leaves a car another porter is washing to them', () => {
+    const taken = new Set(['lot-car-2'])
+    expect(nextPorterTask(porter, dirty, { ...none, taken })).toEqual({
+      kind: 'wash',
+      carId: 'lot-car-1',
+    })
+    // Every car that needs it is someone else's: wait.
+    const both = new Set(['lot-car-1', 'lot-car-2'])
+    expect(nextPorterTask(porter, dirty, { ...none, taken: both })).toEqual({ kind: 'idle' })
   })
 
   it('finishes the car they started on, even if another gets dirtier', () => {

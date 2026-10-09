@@ -4,6 +4,7 @@ import {
   LOT_CARS,
   PARKING_SPACES,
   parkedCarRect,
+  PLATFORMS,
   type CarModel,
   type Facing,
   type Prop,
@@ -75,13 +76,13 @@ type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used'>
  * same as before cars had a cost.
  */
 export function buildInventory(rng: Rng): InventoryCar[] {
-  const display = DISPLAY_CARS.map(({ model, rect, facing }, i): Uncosted => ({
+  const display = DISPLAY_CARS.map(({ platform, model }, i): Uncosted => ({
     id: `display-${i + 1}`,
     model,
     location: 'showroom',
     spaceIndex: null,
-    rect,
-    facing,
+    rect: PLATFORMS[platform].rect,
+    facing: PLATFORMS[platform].facing,
     msrp: rollMsrp(model, rng),
     status: 'available',
     cleanliness: 1,
