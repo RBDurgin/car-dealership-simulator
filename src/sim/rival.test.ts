@@ -14,10 +14,15 @@ import {
   openingDay,
   PIVOT_SHARE,
   RIVAL_NAMES,
+  bannerText,
   rivalDay,
   rivalMorning,
   rivalNotice,
+  rivalPrice,
   SHARE_DAYS,
+  shareLine,
+  weekChange,
+  WEEKS_KEPT,
   shouldAnnounce,
   START_DISCOUNT,
   type Rival,
@@ -103,6 +108,58 @@ describe('announcing and opening', () => {
       rival: emptyRival(),
       event: null,
     })
+  })
+})
+
+describe('the weekly report', () => {
+  // Day 29 is a Monday.
+  const monday = 29
+
+  it('averages last week’s shares on a Monday while he’s open', () => {
+    const rival = open({ shares: [0.1, 0.2, 0.3], weeks: [0.15] })
+    const { rival: next, event } = rivalMorning(rival, monday, 'main-street')
+    expect(event).toBe('week')
+    expect(next.weeks).toHaveLength(2)
+    expect(next.weeks[1]).toBeCloseTo(0.2)
+    expect(rivalNotice(next, 'week')).toBe(
+      "Nazma's Motors took 20% (↑5) of the town's buyers last week.",
+    )
+  })
+
+  it('keeps only the last weeks', () => {
+    const weeks = Array.from({ length: WEEKS_KEPT }, (_, i) => i / 100)
+    const next = rivalMorning(open({ shares: [0.3], weeks }), monday, 'main-street').rival
+    expect(next.weeks).toHaveLength(WEEKS_KEPT)
+    expect(next.weeks[WEEKS_KEPT - 1]).toBe(0.3)
+  })
+
+  it('has nothing to report on other days, before any share, or unless open', () => {
+    expect(rivalMorning(open({ shares: [0.2] }), monday + 1, 'main-street').event).toBeNull()
+    expect(rivalMorning(open(), monday, 'main-street').event).toBeNull()
+    const closed = { ...open({ shares: [0.2] }), status: 'closed' as const }
+    expect(rivalMorning(closed, monday, 'main-street').event).toBeNull()
+  })
+
+  it('says how the share moved', () => {
+    expect(weekChange([0.2])).toBeNull()
+    expect(weekChange([0.2, 0.17])).toBe(-3)
+    expect(shareLine(0.2, null)).toBe('20%')
+    expect(shareLine(0.2, 3)).toBe('20% (↑3)')
+    expect(shareLine(0.17, -3)).toBe('17% (↓3)')
+    expect(shareLine(0.17, 0)).toBe('17% (no change)')
+  })
+})
+
+describe('his prices and banner', () => {
+  it('takes his undercut off the sticker, to the nearest hundred', () => {
+    expect(rivalPrice(open({ undercut: 0.04 }), 32_500)).toBe(31_200)
+    expect(rivalPrice(open({ undercut: 0 }), 32_500)).toBe(32_500)
+  })
+
+  it('advertises his cut while open', () => {
+    expect(bannerText(open({ undercut: 0.04 }))).toBe('4% UNDER MSRP!')
+    expect(bannerText({ ...open(), status: 'announced' })).toBe('OPENING SOON')
+    expect(bannerText({ ...open(), status: 'closed' })).toBe('CLOSED')
   })
 })
 

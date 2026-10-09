@@ -1,6 +1,7 @@
 import { calendarOf, DAYS_PER_WEEK, longDate } from './calendar'
 import type { Sale } from './deal'
 import type { CarModel } from './layout'
+import { PRICE_STEP } from './negotiation'
 import { RANK_IDS, type RankId } from './progression'
 import { START_REPUTATION } from './reputation'
 import type { Rng } from './rng'
@@ -40,6 +41,8 @@ export interface Rival {
   ourDiscount: number
   /** His share of the town's buyers on each of the last `SHARE_DAYS` open days, oldest first. */
   shares: number[]
+  /** His average share each week he was open, as reported on Mondays, oldest first (the last `WEEKS_KEPT`). */
+  weeks: number[]
   /** Models he has stolen, for sale on his lot. */
   stolen: CarModel[]
   /** Names of the staff he has poached, now working for him. */
@@ -76,6 +79,8 @@ const MAX_ADS = 3
 
 /** Days of share kept, for the weekly check. */
 export const SHARE_DAYS = DAYS_PER_WEEK
+/** Weekly shares kept, for the Rival tab and the weekly check. */
+export const WEEKS_KEPT = 8
 /** He grows when his share is above this and shrinks below it. */
 export const PIVOT_SHARE = 0.12
 /** Strength gained (or lost) per day per point of share away from `PIVOT_SHARE`. */
@@ -110,6 +115,7 @@ export function emptyRival(): Rival {
     undercut: 0,
     ourDiscount: START_DISCOUNT,
     shares: [],
+    weeks: [],
     stolen: [],
     hires: [],
     lastTheftDay: 0,
@@ -127,12 +133,13 @@ export function openingDay(day: number): number {
   return earliest + ((DAYS_PER_WEEK - calendarOf(earliest).weekday) % DAYS_PER_WEEK)
 }
 
-/** What the morning brought: his lot announced, or opened. */
-export type RivalEvent = 'announced' | 'opened'
+/** What the morning brought: his lot announced or opened, or (on a Monday) last week's report. */
+export type RivalEvent = 'announced' | 'opened' | 'week'
 
 /**
  * The rival on `day`'s morning: announced once the player is at `rank` (or
  * higher), opened on his `openDay`. `strength` is the level's `rivalStrength`.
+ * On a Monday while he's open, last week's average share goes on `weeks`.
  */
 export function rivalMorning(
   rival: Rival,
@@ -157,18 +164,76 @@ export function rivalMorning(
         strength: Math.min(100, OPEN_STRENGTH * strength),
         undercut: OPEN_UNDERCUT,
         shares: [],
+        weeks: [],
       },
       event: 'opened',
+    }
+  }
+  if (rival.status === 'open' && calendarOf(day).weekday === 0 && rival.shares.length > 0) {
+    const week = rival.shares.reduce((a, b) => a + b, 0) / rival.shares.length
+    return {
+      rival: { ...rival, weeks: [...rival.weeks, week].slice(-WEEKS_KEPT) },
+      event: 'week',
     }
   }
   return { rival, event: null }
 }
 
+const percent = (share: number) => Math.round(share * 100)
+
+/** Last week's share against the week before, in whole points, or null with only one week. */
+export function weekChange(weeks: readonly number[]): number | null {
+  if (weeks.length < 2) return null
+  return percent(weeks[weeks.length - 1]) - percent(weeks[weeks.length - 2])
+}
+
+/** "18% (↑3)": a share, and the change in points when there is one. */
+export function shareLine(share: number, change: number | null): string {
+  const arrow =
+    change === null
+      ? ''
+      : change > 0
+        ? ` (↑${change})`
+        : change < 0
+          ? ` (↓${-change})`
+          : ' (no change)'
+  return `${percent(share)}%${arrow}`
+}
+
 /** The morning's word on his lot. */
 export function rivalNotice(rival: Rival, event: RivalEvent): string {
-  return event === 'announced'
-    ? `Nazma has bought the lot across the road. ${rival.name} opens there on ${longDate(rival.openDay)}.`
-    : `${rival.name} opened across the road today. Expect some shoppers to go to him instead.`
+  switch (event) {
+    case 'announced':
+      return `Nazma has bought the lot across the road. ${rival.name} opens there on ${longDate(rival.openDay)}.`
+    case 'opened':
+      return `${rival.name} opened across the road today. Expect some shoppers to go to him instead.`
+    case 'week':
+      return `${rival.name} took ${shareLine(rival.weeks[rival.weeks.length - 1] ?? 0, weekChange(rival.weeks))} of the town's buyers last week.`
+  }
+}
+
+/** His price on a car with this sticker: MSRP less his undercut, to the nearest `PRICE_STEP`. */
+export function rivalPrice(rival: Rival, msrp: number): number {
+  return Math.round((msrp * (1 - rival.undercut)) / PRICE_STEP) * PRICE_STEP
+}
+
+/** The banner on his front fence. */
+export function bannerText(rival: Rival): string {
+  switch (rival.status) {
+    case 'announced':
+      return 'OPENING SOON'
+    case 'closed':
+      return 'CLOSED'
+    default:
+      return `${percent(rival.undercut)}% UNDER MSRP!`
+  }
+}
+
+export const RIVAL_STATUS_LABELS: Record<RivalStatus, string> = {
+  unopened: 'Not here yet',
+  announced: 'Opening soon',
+  open: 'Open',
+  closed: 'Closed',
 }
 
 /** What the player's dealership brings against him. */
@@ -260,6 +325,8 @@ export function isRival(v: unknown): v is Rival {
     isNumber(r.ourDiscount) &&
     Array.isArray(r.shares) &&
     r.shares.every(isNumber) &&
+    Array.isArray(r.weeks) &&
+    r.weeks.every(isNumber) &&
     isStrings(r.stolen) &&
     isStrings(r.hires) &&
     isNumber(r.lastTheftDay)

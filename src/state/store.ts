@@ -206,7 +206,7 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar'
+export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival'
 
 /** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
 export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash
@@ -777,6 +777,8 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'upgrades')
       case 'calendar':
         return get().toggleStockPanel(true, 'calendar')
+      case 'rival':
+        return get().toggleStockPanel(true, 'rival')
       case 'confront':
         return get().nazmaRunOff('player')
     }

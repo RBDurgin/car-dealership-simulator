@@ -169,6 +169,16 @@ export const UPDATES: readonly Update[] = [
       'Once it’s open, some shoppers go to him instead. A good reputation, running ads and fair prices win them back.',
     ],
   },
+  {
+    id: 16,
+    phase: '14',
+    title: 'Keeping an eye on Nazma',
+    items: [
+      'His lot goes up across the road, where you can see it from the sidewalk: a building site first, then his showroom, stock and a banner with his price cut.',
+      'The new Rival tab on the office computer (K) shows his share of the town’s buyers day by day, his strength and his prices.',
+      'The top bar shows his share of today’s buyers, and each Monday morning you hear how he did last week.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

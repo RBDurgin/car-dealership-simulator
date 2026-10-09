@@ -390,6 +390,87 @@ kbd {
   color: #fca5a5;
 }
 
+/* Nazma's share of the town's buyers, in the top bar while his lot is open.
+   Compact screens fold it into a badge on the Office button. */
+.rival-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.rival-icon {
+  color: #fb923c;
+}
+.office-badge {
+  display: none;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #c2410c;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rival tab: his share each day as bars, his strength, his prices */
+.rival-spark {
+  list-style: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 56px;
+  margin: 4px 0 10px;
+  padding: 0 6px;
+}
+.rival-spark li {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  width: 22px;
+  height: 100%;
+}
+.rival-spark-bar {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: #fb923c;
+}
+.rival-spark-day {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.rival-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rival-strength .cal-bar {
+  width: 120px;
+}
+.rival-strength .cal-fill {
+  background: #fb923c;
+}
+.rival-prices {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0 6px;
+  display: grid;
+  gap: 2px;
+}
+.rival-prices li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rival-prices .muted {
+  text-decoration: line-through;
+}
+
 /* The date in the top bar; only the weekday on compact screens */
 .topbar-date {
   white-space: nowrap;
@@ -1339,6 +1420,12 @@ kbd {
   .quota-left,
   .sale-label {
     display: none;
+  }
+  .rival-chip {
+    display: none;
+  }
+  .office-badge {
+    display: inline;
   }
   .rank-level {
     display: inline;

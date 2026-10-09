@@ -132,6 +132,19 @@ describe("Nazma's rival lot", () => {
     expect(game().rival.strength).toBe(rival.strength)
   })
 
+  it('reports last week’s share on Monday morning', () => {
+    useGame.setState({ rival: open({ shares: [0.1, 0.2, 0.3], weeks: [0.25] }) })
+    // Day 29 is a Monday.
+    startDay(29)
+    expect(game().rival.weeks).toHaveLength(2)
+    expect(game().notice?.text).toContain(
+      "Nazma's Motors took 20% (↓5) of the town's buyers last week.",
+    )
+    // Nothing more until next Monday.
+    startDay(30)
+    expect(game().rival.weeks).toHaveLength(2)
+  })
+
   it('remembers the last theft night', () => {
     const night = Array.from({ length: 100 }, (_, i) => i + 1).find((d) => isTheftNight(d))!
     startDay(night)

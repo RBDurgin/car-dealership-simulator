@@ -337,6 +337,14 @@ describe('save data', () => {
     expect(parseSave(hard)?.rival.lastTheftDay).toBe(lastTheftNight(40, 1.5))
   })
 
+  it('upgrades a version 18 save with no weekly shares yet', () => {
+    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [] }
+    const save = createSave({ ...source(), rival }, 123)
+    const { weeks: _, ...old } = rival
+    const v18 = { ...save, version: 18, rival: old }
+    expect(parseSave(JSON.parse(JSON.stringify(v18)))).toEqual(save)
+  })
+
   it('keeps the rival, and rejects a malformed one', () => {
     const rival: Rival = {
       ...emptyRival(),
@@ -346,6 +354,7 @@ describe('save data', () => {
       strength: 47.5,
       undercut: 0.04,
       shares: [0.15, 0.17],
+      weeks: [0.16],
       stolen: ['truck'],
       hires: ['Dana K.'],
       lastTheftDay: 31,
@@ -354,6 +363,7 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.rival).toEqual(rival)
     expect(parseSave({ ...save, rival: { ...rival, status: 'bust' } })).toBeNull()
     expect(parseSave({ ...save, rival: { ...rival, shares: ['a'] } })).toBeNull()
+    expect(parseSave({ ...save, rival: { ...rival, weeks: undefined } })).toBeNull()
     expect(parseSave({ ...save, rival: undefined })).toBeNull()
   })
 

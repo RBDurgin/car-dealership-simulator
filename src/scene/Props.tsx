@@ -88,17 +88,22 @@ for (const def of Object.values(MODELS)) useGLTF.preload(def.url)
  * Clones a GLB scene and recenters it so its footprint is centered on x/z and it
  * rests on y=0. With `ownMaterials` the clone gets its own copies of the
  * materials (which clones otherwise share), so they can be tinted per copy.
+ * Without `shadows` it neither casts nor receives them.
  * Also returns the model's unscaled size.
  */
-function useCenteredModel(url: string, ownMaterials = false): { object: Object3D; size: Vector3 } {
+function useCenteredModel(
+  url: string,
+  ownMaterials = false,
+  shadows = true,
+): { object: Object3D; size: Vector3 } {
   const { scene } = useGLTF(url)
   return useMemo(() => {
     const root = scene.clone(true)
     root.traverse((o) => {
       const mesh = o as Mesh
       if (!mesh.isMesh) return
-      mesh.castShadow = true
-      mesh.receiveShadow = true
+      mesh.castShadow = shadows
+      mesh.receiveShadow = shadows
       if (ownMaterials && !Array.isArray(mesh.material)) mesh.material = mesh.material.clone()
     })
     root.updateMatrixWorld(true)
@@ -106,7 +111,7 @@ function useCenteredModel(url: string, ownMaterials = false): { object: Object3D
     const c = box.getCenter(new Vector3())
     root.position.set(-c.x, -box.min.y, -c.z)
     return { object: root, size: box.getSize(new Vector3()) }
-  }, [scene, ownMaterials])
+  }, [scene, ownMaterials, shadows])
 }
 
 /** Paint tint and roughness of a spotless car, and of a filthy one. */
@@ -468,6 +473,20 @@ export function CarBody({
         cleanliness={cleanliness}
         condition={condition}
       />
+    </group>
+  )
+}
+
+/**
+ * A car's model as scenery: centred on the origin, nose to +z, sharing the
+ * model's materials, with no shadows and no click handling (Nazma's stock
+ * across the road, in scene/RivalLot).
+ */
+export function StaticCar({ model }: { model: CarModel }) {
+  const { object } = useCenteredModel(MODELS[model].url, false, false)
+  return (
+    <group scale={CAR_SCALE}>
+      <primitive object={object} />
     </group>
   )
 }

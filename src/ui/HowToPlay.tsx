@@ -371,6 +371,12 @@ function BusinessTab({ touch, click }: TabProps) {
           A better reputation and ads running keep more of them coming to you, and so does pricing
           close to his. He grows stronger while he does well and weaker while he doesn&apos;t.
         </p>
+        <p>
+          You can see his lot from the sidewalk. While it&apos;s open, the top bar shows the share
+          of today&apos;s buyers he takes, and every Monday morning you hear how he did last week.
+          The <b>Rival</b> tab on the office computer (<OfficeKey touch={touch} keyName="K" />) has
+          his share day by day, his strength and his price on every model.
+        </p>
       </section>
       <section>
         <h3>Manufacturer&apos;s quota</h3>

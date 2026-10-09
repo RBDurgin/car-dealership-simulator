@@ -15,6 +15,7 @@ import { Owner } from './Owner'
 import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
 import { Props } from './Props'
+import { RivalLot } from './RivalLot'
 import { TubeMan } from './TubeMan'
 import { Staff } from './Staff'
 import { Walls } from './Walls'
@@ -41,6 +42,7 @@ export function Scene() {
       <Walls />
       <Suspense fallback={null}>
         <Props />
+        <RivalLot />
       </Suspense>
       <TubeMan />
       <DebugGrid />
