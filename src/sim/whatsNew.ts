@@ -199,6 +199,16 @@ export const UPDATES: readonly Update[] = [
       'Cars he steals go up for sale on his lot, and staff he poaches go to work for him.',
     ],
   },
+  {
+    id: 19,
+    phase: '14',
+    title: 'Driving Nazma out of business',
+    items: [
+      'Keep Nazma’s share of buyers low for three weeks running and his lot goes bust.',
+      'Beating him lifts your reputation, sends his buyers to you for a week and keeps him away for a while.',
+      'He comes back a few weeks later under a new name, a little stronger. The Rival tab counts the rivals you’ve beaten.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

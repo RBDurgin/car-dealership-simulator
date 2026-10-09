@@ -139,6 +139,8 @@ import {
 import {
   assignQuotes,
   blitzScale,
+  BUST_REPUTATION,
+  bustBoost,
   emptyRival,
   emptyRivalStats,
   marketShare,
@@ -1092,7 +1094,9 @@ export const useGame = create<GameState>((set, get) => {
    * Nazma announces his rival lot once the dealership is a Main Street one,
    * and while it's open it takes its share of the day's visitors, makes his
    * weekly move on Mondays, and the worse he does the more Nazma gets up to:
-   * a car he steals goes on his lot.
+   * a car he steals goes on his lot. Kept under his bust floor for weeks, he
+   * closes: the player's reputation goes up, his buyers come over for a week,
+   * and Nazma stays away until he reopens.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
@@ -1111,13 +1115,13 @@ export const useGame = create<GameState>((set, get) => {
     const kept = dropSold(s.inventory)
     const level = tuning()
     const guarded = isGuarded(s.roster)
-    const opening = rivalMorning(
-      s.rival,
-      day,
-      s.career.rank,
-      level.rivalStrength,
-      level.rivalUndercut,
-    )
+    const opening = rivalMorning(s.rival, day, s.career.rank, {
+      strength: level.rivalStrength,
+      undercut: level.rivalUndercut,
+      comeback: level.rivalComeback,
+    })
+    // Driving him bust is worth reputation, and a mark on the career.
+    const bust = opening.event === 'bust'
     // The more desperate his lot, the more Nazma gets up to.
     const sabotage = sabotageScale(opening.rival)
     const theftChance = level.theftChance * sabotage
@@ -1169,13 +1173,18 @@ export const useGame = create<GameState>((set, get) => {
             effects.traffic *
             (event?.traffic ?? 1) *
             level.traffic *
-            (1 - share),
+            (1 - share) *
+            bustBoost(rival, day),
           referrals: referralVisitors(s.reputation),
         },
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
       purchases: [],
       rival,
+      ...(bust && {
+        reputation: applyChange(s.reputation, BUST_REPUTATION),
+        career: { ...s.career, rivalsBeaten: s.career.rivalsBeaten + 1 },
+      }),
       dayStats: {
         ...emptyStats(),
         nazma: {

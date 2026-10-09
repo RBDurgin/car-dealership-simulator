@@ -5,6 +5,8 @@ import { BASE_MSRP } from '../sim/inventory'
 import { rankById } from '../sim/progression'
 import {
   activeMove,
+  BUST_SHARE,
+  BUST_WEEKS,
   desperation,
   MAX_SHARE,
   MOVE_LABELS,
@@ -123,7 +125,8 @@ function OpenRival({ rival }: { rival: Rival }) {
         His share grows with his strength and with how far he undercuts your prices. Your reputation
         and the ads you run pull it back down. He gets stronger while he takes more than a few of
         the town&apos;s buyers, and weaker while he doesn&apos;t. Each Monday he picks a move for
-        the week: a price war, an ad blitz against yours, a sale weekend or a quiet week.
+        the week: a price war, an ad blitz against yours, a sale weekend or a quiet week. Keep his
+        weekly share under {percent(BUST_SHARE)} for {BUST_WEEKS} weeks running and he goes bust.
       </p>
     </>
   )
@@ -135,6 +138,7 @@ function OpenRival({ rival }: { rival: Rival }) {
  */
 export function RivalTab() {
   const rival = useGame((s) => s.rival)
+  const beaten = useGame((s) => s.career.rivalsBeaten)
   return (
     <>
       <h2>
@@ -153,9 +157,17 @@ export function RivalTab() {
           some ads before then.
         </p>
       ) : rival.status === 'closed' ? (
-        <p className="muted cal-intro">{rival.name} is boarded up.</p>
+        <p className="muted cal-intro">
+          {rival.name} has gone bust and is boarded up. Nazma won&apos;t trouble you while it&apos;s
+          shut, but he&apos;ll be back in a few weeks under a new name, a little stronger.
+        </p>
       ) : (
         <OpenRival rival={rival} />
+      )}
+      {beaten > 0 && (
+        <p className="cal-intro">
+          Rivals beaten: <b>{beaten}</b>
+        </p>
       )}
     </>
   )

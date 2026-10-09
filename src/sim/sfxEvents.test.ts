@@ -112,6 +112,11 @@ describe('sfxFor', () => {
     expect(cues({ clock: startOfDay(day) }, { clock: startOfDay(day - 1) })).toEqual(['fanfare'])
   })
 
+  it('opens the morning Nazma goes bust with a fanfare instead', () => {
+    const beaten = { ...emptyCareer(), rivalsBeaten: 1 }
+    expect(cues({ clock: startOfDay(2), career: beaten })).toEqual(['fanfare'])
+  })
+
   it('plays a fanfare on reaching the top rank, once', () => {
     const top = { ...emptyCareer(), rank: TOP_RANK.id }
     const before = { ...emptyCareer(), rank: 'regional-name' as const }

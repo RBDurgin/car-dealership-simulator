@@ -22,7 +22,11 @@ import { createRng, type Rng } from './rng'
  * (`planRivalWeek`), and the lower his share the more desperate he gets
  * (`desperation`), which makes Nazma's visits, thefts and poaching likelier
  * (`sabotageScale`). Cars he steals go on his lot (`rivalStole`) and staff he
- * poaches go to work for him (`rivalHired`).
+ * poaches go to work for him (`rivalHired`). Kept under `BUST_SHARE` for
+ * `BUST_WEEKS` Mondays running, he goes bust (`isBust`) and closes for
+ * `CLOSED_DAYS` (× the level's `rivalComeback`), and his buyers come to the
+ * player for a week (`bustBoost`). Then he announces his lot again, under the
+ * next of `RIVAL_NAMES`, a little stronger each time.
  */
 
 /**
@@ -43,6 +47,8 @@ export interface Rival {
   openDay: number
   /** While closed, the day he may reopen. 0 otherwise. */
   closedUntil: number
+  /** The day he last went bust. 0 until he does, and again once he reopens. */
+  closedDay: number
   /** How strong his business is, 0–100. */
   strength: number
   /** His discount off MSRP, 0–1. */
@@ -82,12 +88,35 @@ export const OPENING_RANK: RankId = 'main-street'
 /** The least notice he gives: the lot opens on the first Monday at least this far off. */
 export const NOTICE_DAYS = DAYS_PER_WEEK
 /** His names, one per opening. */
-export const RIVAL_NAMES = ["Nazma's Motors", 'N-Z Auto Outlet', 'Discount Dreams by Nazma']
+export const RIVAL_NAMES = [
+  "Nazma's Motors",
+  'N-Z Auto Outlet',
+  'Discount Dreams by Nazma',
+  "Nazma's Auto Palace",
+  'Nazma Bros. Cars',
+]
 
 /** His strength on opening, before the level's `rivalStrength`. */
 export const OPEN_STRENGTH = 40
 /** His discount off MSRP on opening, before the level's `rivalUndercut`. */
 export const OPEN_UNDERCUT = 0.04
+/** Each reopening after the first adds this to his opening strength (before `rivalStrength`). */
+export const GENERATION_STRENGTH = 5
+/** Each reopening after the first adds this to his opening undercut (before `rivalUndercut`). */
+export const GENERATION_UNDERCUT = 0.005
+
+/** A weekly share under this counts toward going bust. */
+export const BUST_SHARE = 0.08
+/** Weeks running under `BUST_SHARE` that send him bust. */
+export const BUST_WEEKS = 3
+/** Days he stays closed after going bust, before the level's `rivalComeback`. */
+export const CLOSED_DAYS = 21
+/** Reputation the player gains when he goes bust. */
+export const BUST_REPUTATION = 5
+/** The player's visitors are raised by this share for `BUST_DAYS` after he goes bust. */
+export const BUST_TRAFFIC = 0.2
+export const BUST_DAYS = DAYS_PER_WEEK
+
 /** Where the player's average discount starts, before any sale. */
 export const START_DISCOUNT = 0.04
 
@@ -137,6 +166,7 @@ export function emptyRival(): Rival {
     generation: 0,
     openDay: 0,
     closedUntil: 0,
+    closedDay: 0,
     strength: 0,
     undercut: 0,
     ourDiscount: START_DISCOUNT,
@@ -160,26 +190,64 @@ export function openingDay(day: number): number {
   return earliest + ((DAYS_PER_WEEK - calendarOf(earliest).weekday) % DAYS_PER_WEEK)
 }
 
-/** What the morning brought: his lot announced or opened, or (on a Monday) last week's report. */
-export type RivalEvent = 'announced' | 'opened' | 'week'
+/** His name for his `generation`th opening (from 1). */
+export function rivalName(generation: number): string {
+  return RIVAL_NAMES[(Math.max(1, generation) - 1) % RIVAL_NAMES.length]
+}
+
+/** Whether `weeks` ends with `BUST_WEEKS` weeks running under `BUST_SHARE`. */
+export function isBust(weeks: readonly number[]): boolean {
+  return weeks.length >= BUST_WEEKS && weeks.slice(-BUST_WEEKS).every((w) => w < BUST_SHARE)
+}
+
+/**
+ * What the morning brought: his lot announced (or announced again after going
+ * bust) or opened, or (on a Monday) last week's report, which may send him bust.
+ */
+export type RivalEvent = 'announced' | 'opened' | 'week' | 'bust'
+
+/** The level's rival levers, as `rivalMorning` takes them (all 1 on Medium). */
+export interface RivalLevers {
+  /** × his opening strength. */
+  strength: number
+  /** × his opening undercut. */
+  undercut: number
+  /** × the days he stays closed after going bust. */
+  comeback: number
+}
+
+const NEUTRAL: RivalLevers = { strength: 1, undercut: 1, comeback: 1 }
 
 /**
  * The rival on `day`'s morning: announced once the player is at `rank` (or
- * higher), opened on his `openDay`. `strength` and `undercut` are the level's
- * `rivalStrength` and `rivalUndercut`. On a Monday while he's open, last
- * week's average share goes on `weeks`, and he picks the week's move (on his
- * opening day too, a Monday).
+ * higher), opened on his `openDay`, each opening after the first a little
+ * stronger and cheaper, with nothing on his lot and nobody working for him.
+ * On a Monday while he's open, last week's average share goes on `weeks`,
+ * and he picks the week's move (on his opening day too, a Monday), unless
+ * that week makes him bust: then he closes, and on `closedUntil` he announces
+ * his lot again under his next name.
  */
 export function rivalMorning(
   rival: Rival,
   day: number,
   rank: RankId,
-  strength = 1,
-  undercut = 1,
+  levers: RivalLevers = NEUTRAL,
 ): { rival: Rival; event: RivalEvent | null } {
   if (shouldAnnounce(rank, rival)) {
     return {
       rival: { ...rival, status: 'announced', openDay: openingDay(day) },
+      event: 'announced',
+    }
+  }
+  if (rival.status === 'closed' && day >= rival.closedUntil) {
+    return {
+      rival: {
+        ...rival,
+        status: 'announced',
+        name: rivalName(rival.generation + 1),
+        openDay: openingDay(day),
+        closedUntil: 0,
+      },
       event: 'announced',
     }
   }
@@ -189,11 +257,17 @@ export function rivalMorning(
       ...rival,
       status: 'open',
       generation,
-      name: RIVAL_NAMES[(generation - 1) % RIVAL_NAMES.length],
-      strength: Math.min(100, OPEN_STRENGTH * strength),
-      undercut: OPEN_UNDERCUT * undercut,
+      name: rivalName(generation),
+      closedDay: 0,
+      strength: Math.min(
+        100,
+        (OPEN_STRENGTH + GENERATION_STRENGTH * (generation - 1)) * levers.strength,
+      ),
+      undercut: (OPEN_UNDERCUT + GENERATION_UNDERCUT * (generation - 1)) * levers.undercut,
       shares: [],
       weeks: [],
+      stolen: [],
+      hires: [],
     }
     return { rival: withMove(opened, day), event: 'opened' }
   }
@@ -201,9 +275,31 @@ export function rivalMorning(
     if (rival.shares.length === 0) return { rival: withMove(rival, day), event: null }
     const week = rival.shares.reduce((a, b) => a + b, 0) / rival.shares.length
     const reported = { ...rival, weeks: [...rival.weeks, week].slice(-WEEKS_KEPT) }
+    if (isBust(reported.weeks)) {
+      return {
+        rival: {
+          ...reported,
+          status: 'closed',
+          closedDay: day,
+          closedUntil: day + Math.round(CLOSED_DAYS * levers.comeback),
+          move: null,
+        },
+        event: 'bust',
+      }
+    }
     return { rival: withMove(reported, day), event: 'week' }
   }
   return { rival, event: null }
+}
+
+/**
+ * What the player's visitors are scaled by on `day`: raised by `BUST_TRAFFIC`
+ * for `BUST_DAYS` after he went bust, as his buyers come over the road.
+ */
+export function bustBoost(rival: Rival, day: number): number {
+  const recent =
+    rival.status === 'closed' && rival.closedDay > 0 && day < rival.closedDay + BUST_DAYS
+  return recent ? 1 + BUST_TRAFFIC : 1
 }
 
 /** `rival` with the week from Monday `day` planned. */
@@ -366,14 +462,22 @@ export function shareLine(share: number, change: number | null): string {
 /** The morning's word on his lot. */
 export function rivalNotice(rival: Rival, event: RivalEvent): string {
   switch (event) {
-    case 'announced':
-      return `Nazma has bought the lot across the road. ${rival.name} opens there on ${longDate(rival.openDay)}.`
     case 'opened':
       return `${rival.name} opened across the road today. Expect some shoppers to go to him instead.${weekLine(rival)}`
+    case 'announced':
+      return rival.generation === 0
+        ? `Nazma has bought the lot across the road. ${rival.name} opens there on ${longDate(rival.openDay)}.`
+        : `Nazma is back. He's putting his lot across the road back together, and ${rival.name} opens there on ${longDate(rival.openDay)}.`
     case 'week':
-      return `${rival.name} took ${shareLine(rival.weeks[rival.weeks.length - 1] ?? 0, weekChange(rival.weeks))} of the town's buyers last week.${weekLine(rival)}`
+      return `${rival.name} took ${lastWeekLine(rival)} of the town's buyers last week.${weekLine(rival)}`
+    case 'bust':
+      return `${rival.name} has gone bust after taking only ${lastWeekLine(rival)} of the town's buyers last week! His lot is boarded up, his buyers come to you this week, and your reputation is up ${BUST_REPUTATION}. Nazma won't be causing trouble for a while.`
   }
 }
+
+/** Last week's share and the change on the week before. */
+const lastWeekLine = (rival: Rival) =>
+  shareLine(rival.weeks[rival.weeks.length - 1] ?? 0, weekChange(rival.weeks))
 
 /** " This week: a price war: …", or nothing without a move. */
 function weekLine(rival: Rival): string {
@@ -532,6 +636,7 @@ export function isRival(v: unknown): v is Rival {
     isNumber(r.generation) &&
     isNumber(r.openDay) &&
     isNumber(r.closedUntil) &&
+    isNumber(r.closedDay) &&
     isNumber(r.strength) &&
     isNumber(r.undercut) &&
     isNumber(r.ourDiscount) &&

@@ -34,6 +34,7 @@ const base: TipState = {
   nazma: null,
   franchise: 'bronze',
   career: { rank: 'corner-lot' },
+  rival: { status: 'unopened' },
 }
 const sellerCar = (parked: boolean): Partial<Customer> => ({
   phase: parked ? 'waiting' : 'arriving',
@@ -97,6 +98,8 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { customers: [customer('c4', quoted(PLAYER_ID))] },
     { customers: [customer('c4', quoted(null))] },
   ],
+  rivalOpens: [{ rival: { status: 'open' } }, { rival: { status: 'announced' } }],
+  rivalBust: [{ rival: { status: 'closed' } }, { rival: { status: 'open' } }],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },

@@ -353,6 +353,16 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(v19)))).toEqual(save)
   })
 
+  it('upgrades a version 20 save with nobody beaten and no bust day', () => {
+    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [0.18] }
+    const save = createSave({ ...source(), rival }, 123)
+    const { closedDay: _, ...oldRival } = rival
+    const { rivalsBeaten: __, ...oldCareer } = save.career
+    const v20 = { ...save, version: 20, rival: oldRival, career: oldCareer }
+    expect(parseSave(JSON.parse(JSON.stringify(v20)))).toEqual(save)
+    expect(parseSave({ ...save, career: oldCareer })).toBeNull()
+  })
+
   it('keeps the rival, and rejects a malformed one', () => {
     const rival: Rival = {
       ...emptyRival(),
@@ -407,6 +417,7 @@ describe('save data', () => {
       monthGross: 30_000,
       bestMonth: 95_000,
       rank: 'main-street',
+      rivalsBeaten: 2,
     }
     const save = createSave({ ...source(), career }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.career).toEqual(career)

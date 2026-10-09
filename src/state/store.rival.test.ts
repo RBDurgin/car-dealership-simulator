@@ -13,6 +13,11 @@ import {
   openingDay,
   HIRE_STRENGTH,
   rivalPrice,
+  BUST_REPUTATION,
+  BUST_SHARE,
+  BUST_WEEKS,
+  CLOSED_DAYS,
+  RIVAL_NAMES,
   type Rival,
 } from '../sim/rival'
 import { createSave, parseSave } from '../sim/save'
@@ -282,5 +287,88 @@ describe('his moves and sabotage', () => {
     expect(game().rival.strength).toBeGreaterThan(40 + 4 * HIRE_STRENGTH - 5)
     expect(game().dayStats.nazma.joined).toEqual([{ name: 'Dana R.', role: 'sales' }])
     expect(nazmaSummary(game().dayStats.nazma)).toBe("Dana R. now sells for Nazma's Motors")
+  })
+})
+
+describe('going bust and reopening', () => {
+  // Day 29 is a Monday.
+  const monday = 29
+  const low = BUST_SHARE / 2
+  const failing = () => open({ shares: [low], weeks: Array(BUST_WEEKS - 1).fill(low) })
+
+  beforeEach(() => {
+    useGame.setState(initial, true)
+    game().newGame()
+  })
+
+  it('closes him on the Monday he goes bust, with the reward', () => {
+    useGame.setState({ rival: failing(), reputation: 60 })
+    startDay(monday)
+    expect(game().rival).toMatchObject({ status: 'closed', closedDay: monday })
+    expect(game().reputation).toBe(60 + BUST_REPUTATION)
+    expect(game().career.rivalsBeaten).toBe(1)
+    expect(game().dayStats.rival).toBeNull()
+    expect(game().notice?.text).toContain("Nazma's Motors has gone bust")
+    // Reloading the day doesn't beat him twice.
+    endDay()
+    startDay(monday + 1)
+    expect(game().career.rivalsBeaten).toBe(1)
+  })
+
+  it('sends his buyers over for the week after', () => {
+    const visitors = (rival: Rival, day: number) => {
+      useGame.setState(initial, true)
+      game().newGame()
+      useGame.setState({ rival, reputation: 60 })
+      startDay(day)
+      return game().arrivals.minutes.length
+    }
+    const closed = (closedDay: number): Rival => ({
+      ...open(),
+      status: 'closed',
+      closedDay,
+      closedUntil: closedDay + CLOSED_DAYS,
+    })
+    expect(visitors(closed(monday), monday + 2)).toBeGreaterThan(
+      visitors(closed(monday - 14), monday + 2),
+    )
+  })
+
+  it('keeps Nazma away while he’s closed', () => {
+    const closed: Rival = { ...open(), status: 'closed', closedDay: 1, closedUntil: 200 }
+    for (let day = 30; day < 60; day++) {
+      useGame.setState({ rival: closed })
+      startDay(day)
+      expect(game().nazma).toBeNull()
+      expect(game().dayStats.nazma.stolen).toEqual([])
+    }
+  })
+
+  it('stays closed for longer on Easy', () => {
+    useGame.setState(initial, true)
+    game().newGame('easy')
+    useGame.setState({ rival: failing() })
+    startDay(monday)
+    expect(game().rival.closedUntil - monday).toBe(Math.round(CLOSED_DAYS * 1.5))
+  })
+
+  it('announces his return, then reopens under his next name, stronger, with an empty lot', () => {
+    useGame.setState({ rival: { ...failing(), stolen: ['sedan'], hires: ['Dana R.'] } })
+    startDay(monday)
+    const until = game().rival.closedUntil
+    startDay(until)
+    expect(game().rival).toMatchObject({ status: 'announced', name: RIVAL_NAMES[1] })
+    expect(game().notice?.text).toContain('Nazma is back')
+    startDay(game().rival.openDay)
+    expect(game().rival).toMatchObject({
+      status: 'open',
+      generation: 2,
+      name: RIVAL_NAMES[1],
+      stolen: [],
+      hires: [],
+    })
+    expect(game().rival.strength).toBeGreaterThan(OPEN_STRENGTH)
+    expect(game().rival.undercut).toBeGreaterThan(OPEN_UNDERCUT)
+    expect(game().dayStats.rival).not.toBeNull()
   })
 })

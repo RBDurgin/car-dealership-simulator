@@ -15,7 +15,18 @@ import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
-import { BLITZ_CUT, MAX_SHARE, OPENING_RANK, PRICE_WAR_UNDERCUT, RIVAL_NAMES } from '../sim/rival'
+import {
+  BLITZ_CUT,
+  BUST_REPUTATION,
+  BUST_SHARE,
+  BUST_TRAFFIC,
+  BUST_WEEKS,
+  CLOSED_DAYS,
+  MAX_SHARE,
+  OPENING_RANK,
+  PRICE_WAR_UNDERCUT,
+  RIVAL_NAMES,
+} from '../sim/rival'
 import { QUOTE_TOLERANCE } from '../sim/negotiation'
 import { ownerBonus } from '../sim/owner'
 import {
@@ -132,7 +143,9 @@ function BasicsTab({ touch, click }: TabProps) {
           opens {percentOff(TUNING.easy.rivalStrength)} weaker and undercuts you{' '}
           {percentOff(TUNING.easy.rivalUndercut)} less on Easy, and opens{' '}
           {percentOn(TUNING.hard.rivalStrength)} stronger and undercuts{' '}
-          {percentOn(TUNING.hard.rivalUndercut)} more on Hard.
+          {percentOn(TUNING.hard.rivalUndercut)} more on Hard. After going bust he stays shut{' '}
+          {percentOn(TUNING.easy.rivalComeback)} longer on Easy and{' '}
+          {percentOff(TUNING.hard.rivalComeback)} shorter on Hard.
         </p>
       </section>
       <section>
@@ -403,6 +416,14 @@ function BusinessTab({ touch, click }: TabProps) {
           MSRP), an <b>ad blitz</b> (your ads bring in {Math.round(BLITZ_CUT * 100)}% fewer
           shoppers), a <b>sale weekend</b> (more of the town goes to him Friday to Sunday, often on
           your own sale weekends) or a quiet week.
+        </p>
+        <p>
+          Keep his weekly share under {Math.round(BUST_SHARE * 100)}% for {BUST_WEEKS} Mondays
+          running and he goes bust. His lot is boarded up, your reputation goes up {BUST_REPUTATION}
+          , his buyers come to you for a week ({Math.round(BUST_TRAFFIC * 100)}% more shoppers), and
+          Nazma leaves you alone while he&apos;s shut. About {Math.round(CLOSED_DAYS / 7)} weeks
+          later he&apos;s back with a week&apos;s notice, under a new name and a little stronger.
+          The Rival tab counts the rivals you&apos;ve beaten.
         </p>
       </section>
       <section>

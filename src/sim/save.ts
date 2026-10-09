@@ -27,7 +27,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 20
+export const SAVE_VERSION = 21
 
 export interface SaveData {
   version: number
@@ -227,7 +227,15 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   19: (raw) => ({
     ...raw,
     rival:
-      typeof raw.rival === 'object' && raw.rival !== null ? { ...raw.rival, move: null } : raw.rival,
+      typeof raw.rival === 'object' && raw.rival !== null
+        ? { ...raw.rival, move: null }
+        : raw.rival,
+  }),
+  // v21: going bust. He never had, and nobody had beaten him.
+  20: (raw) => ({
+    ...raw,
+    rival: isObject(raw.rival) ? { ...raw.rival, closedDay: 0 } : raw.rival,
+    career: isObject(raw.career) ? { ...raw.career, rivalsBeaten: 0 } : raw.career,
   }),
 }
 
@@ -303,7 +311,8 @@ function isCareer(v: unknown): boolean {
     isNumber(v.days) &&
     isNumber(v.monthGross) &&
     isNumber(v.bestMonth) &&
-    isRankId(v.rank)
+    isRankId(v.rank) &&
+    isNumber(v.rivalsBeaten)
   )
 }
 

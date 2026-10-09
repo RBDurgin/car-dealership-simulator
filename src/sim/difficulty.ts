@@ -53,6 +53,8 @@ export interface Tuning {
   rivalStrength: number
   /** × Nazma's rival lot's discount off MSRP. */
   rivalUndercut: number
+  /** × the days Nazma's rival lot stays closed after going bust. */
+  rivalComeback: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -86,6 +88,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rankScale: 0.75,
     rivalStrength: 0.75,
     rivalUndercut: 0.8,
+    rivalComeback: 1.5,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -113,6 +116,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rankScale: 1,
     rivalStrength: 1,
     rivalUndercut: 1,
+    rivalComeback: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -140,6 +144,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rankScale: 1.15,
     rivalStrength: 1.25,
     rivalUndercut: 1.2,
+    rivalComeback: 0.7,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

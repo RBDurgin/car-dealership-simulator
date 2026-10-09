@@ -8,6 +8,7 @@ import type { NazmaVisit } from './nazma'
 import { quoteFor } from './negotiation'
 import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
+import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
 import { isStale, STALE_DAYS } from './usedCars'
 
 /**
@@ -26,6 +27,8 @@ export type TipId =
   | 'seller'
   | 'tradeIn'
   | 'rivalQuote'
+  | 'rivalOpens'
+  | 'rivalBust'
   | 'staleUsed'
   | 'franchise'
   | 'expansion'
@@ -56,6 +59,9 @@ export const TIPS: Record<TipId, string> = {
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
   expansion:
     'Your new rank lets you expand. See the office computer’s Upgrades tab: what you buy there is built overnight.',
+  rivalOpens:
+    "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
+  rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -78,6 +84,7 @@ export interface TipState {
   nazma: NazmaVisit | null
   franchise: FranchiseTier
   career: { rank: RankId }
+  rival: { status: RivalStatus }
 }
 
 const missedCount = (s: TipState) =>
@@ -149,6 +156,11 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return next.franchise !== prev.franchise
     case 'expansion':
       return unlockedBy(prev.career.rank, next.career.rank).length > 0
+    case 'rivalOpens':
+    case 'rivalBust': {
+      const status = id === 'rivalOpens' ? 'open' : 'closed'
+      return next.rival.status === status && prev.rival.status !== status
+    }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

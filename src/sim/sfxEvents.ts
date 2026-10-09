@@ -100,9 +100,11 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if (prev.screen !== 'playing') return [{ cue: 'bell' }]
   const out: SfxEvent[] = []
 
-  // A sale weekend opens each of its days with a fanfare instead of the bell.
+  // A sale weekend opens each of its days with a fanfare instead of the bell,
+  // and so does the morning Nazma's lot goes bust.
   if (next.clock.day > prev.clock.day) {
-    out.push({ cue: eventOn(next.clock.day) ? 'fanfare' : 'bell' })
+    const beaten = next.career.rivalsBeaten > prev.career.rivalsBeaten
+    out.push({ cue: eventOn(next.clock.day) || beaten ? 'fanfare' : 'bell' })
   }
   if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
   // The top rank: the win screen opens over the summary.

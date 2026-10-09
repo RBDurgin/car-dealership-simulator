@@ -1,6 +1,6 @@
 # Phase 14 Plan: Nazma's Rival Dealership
 
-**Status:** planned 2026-10-08. 14a, 14b, 14c and 14d built 2026-10-09. Phase 13 comes first: the rival opens at one of 13a's ranks, and his lot sits beside 13c's wider map. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 13. 14a takes the next save version.
+**Status:** planned 2026-10-08. 14a through 14e built 2026-10-09. **Phase 14 is complete.** Phase 13 comes first: the rival opens at one of 13a's ranks, and his lot sits beside 13c's wider map. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases. This phase builds on everything through Phase 13. 14a takes the next save version.
 
 ## Context
 

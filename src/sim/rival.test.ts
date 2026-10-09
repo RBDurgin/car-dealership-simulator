@@ -38,6 +38,17 @@ import {
   STOLEN_KEPT,
   undercutOf,
   type RivalMoveId,
+  BUST_DAYS,
+  BUST_SHARE,
+  BUST_TRAFFIC,
+  BUST_WEEKS,
+  bustBoost,
+  CLOSED_DAYS,
+  GENERATION_STRENGTH,
+  GENERATION_UNDERCUT,
+  isBust,
+  rivalName,
+  OPEN_UNDERCUT,
   weekChange,
   WEEKS_KEPT,
   shouldAnnounce,
@@ -107,7 +118,11 @@ describe('announcing and opening', () => {
     const waiting = rivalMorning(announced.rival, openingDay(15) - 1, 'main-street')
     expect(waiting).toEqual({ rival: announced.rival, event: null })
 
-    const opened = rivalMorning(announced.rival, openingDay(15), 'main-street', 1.25)
+    const opened = rivalMorning(announced.rival, openingDay(15), 'main-street', {
+      strength: 1.25,
+      undercut: 1,
+      comeback: 1,
+    })
     expect(opened.event).toBe('opened')
     expect(opened.rival).toMatchObject({
       status: 'open',
@@ -153,7 +168,11 @@ describe('the weekly report', () => {
   it('has nothing to report on other days, before any share, or unless open', () => {
     expect(rivalMorning(open({ shares: [0.2] }), monday + 1, 'main-street').event).toBeNull()
     expect(rivalMorning(open(), monday, 'main-street').event).toBeNull()
-    const closed = { ...open({ shares: [0.2] }), status: 'closed' as const }
+    const closed = {
+      ...open({ shares: [0.2] }),
+      status: 'closed' as const,
+      closedUntil: monday + 7,
+    }
     expect(rivalMorning(closed, monday, 'main-street').event).toBeNull()
   })
 
@@ -346,7 +365,11 @@ describe('assignQuotes', () => {
 
   it('opens with the level’s undercut', () => {
     const announced = { ...emptyRival(), status: 'announced' as const, openDay: 22 }
-    const easy = rivalMorning(announced, 22, 'main-street', 1, 0.8).rival
+    const easy = rivalMorning(announced, 22, 'main-street', {
+      strength: 1,
+      undercut: 0.8,
+      comeback: 1,
+    }).rival
     const medium = rivalMorning(announced, 22, 'main-street').rival
     expect(easy.undercut).toBeCloseTo(medium.undercut * 0.8)
   })
@@ -470,5 +493,95 @@ describe('his stolen cars and hires', () => {
     expect(rival.hires).toEqual(['Dana K.'])
     expect(rival.strength).toBeCloseTo(40 + 4 * HIRE_STRENGTH * 1.25)
     expect(rivalHired(emptyRival(), [{ name: 'Dana K.', skill: 4 }])).toEqual(emptyRival())
+  })
+})
+
+describe('going bust and reopening', () => {
+  // Day 29 is a Monday.
+  const monday = 29
+  const low = BUST_SHARE / 2
+  const levers = { strength: 1, undercut: 1, comeback: 1 }
+
+  it('is bust after BUST_WEEKS weeks running under BUST_SHARE', () => {
+    expect(isBust(Array(BUST_WEEKS).fill(low))).toBe(true)
+    expect(isBust(Array(BUST_WEEKS - 1).fill(low))).toBe(false)
+    expect(isBust([...Array(BUST_WEEKS - 1).fill(low), BUST_SHARE])).toBe(false)
+    expect(isBust([0.2, ...Array(BUST_WEEKS).fill(low)])).toBe(true)
+  })
+
+  it('closes on the Monday his last week makes it BUST_WEEKS', () => {
+    const rival = open({ shares: [low], weeks: Array(BUST_WEEKS - 1).fill(low), move: null })
+    const { rival: next, event } = rivalMorning(rival, monday, 'main-street')
+    expect(event).toBe('bust')
+    expect(next).toMatchObject({
+      status: 'closed',
+      closedDay: monday,
+      closedUntil: monday + CLOSED_DAYS,
+      move: null,
+    })
+    expect(rivalNotice(next, 'bust')).toMatch(/^Nazma's Motors has gone bust/)
+    expect(sabotageScale(next)).toBe(0)
+    expect(marketShare(next, us)).toBe(0)
+  })
+
+  it('stays open while a week is over the floor', () => {
+    const rival = open({ shares: [BUST_SHARE + 0.01], weeks: Array(BUST_WEEKS - 1).fill(low) })
+    expect(rivalMorning(rival, monday, 'main-street').event).toBe('week')
+  })
+
+  it('stays closed longer on Easy and shorter on Hard', () => {
+    const rival = open({ shares: [low], weeks: Array(BUST_WEEKS - 1).fill(low) })
+    const easy = rivalMorning(rival, monday, 'main-street', { ...levers, comeback: 1.5 }).rival
+    const hard = rivalMorning(rival, monday, 'main-street', { ...levers, comeback: 0.7 }).rival
+    expect(easy.closedUntil - monday).toBe(Math.round(CLOSED_DAYS * 1.5))
+    expect(hard.closedUntil - monday).toBe(Math.round(CLOSED_DAYS * 0.7))
+  })
+
+  it('sends his buyers over for a week after he goes bust', () => {
+    const closed = { ...open(), status: 'closed' as const, closedDay: monday, closedUntil: 50 }
+    expect(bustBoost(closed, monday)).toBe(1 + BUST_TRAFFIC)
+    expect(bustBoost(closed, monday + BUST_DAYS - 1)).toBe(1 + BUST_TRAFFIC)
+    expect(bustBoost(closed, monday + BUST_DAYS)).toBe(1)
+    expect(bustBoost(open(), monday)).toBe(1)
+  })
+
+  it('announces again under his next name once closedUntil comes, then reopens stronger', () => {
+    const bust = rivalMorning(
+      open({
+        shares: [low],
+        weeks: Array(BUST_WEEKS - 1).fill(low),
+        stolen: ['sedan'],
+        hires: ['Dana'],
+      }),
+      monday,
+      'main-street',
+    ).rival
+    expect(rivalMorning(bust, bust.closedUntil - 1, 'main-street').event).toBeNull()
+    const back = rivalMorning(bust, bust.closedUntil, 'main-street')
+    expect(back.event).toBe('announced')
+    expect(back.rival).toMatchObject({ status: 'announced', name: RIVAL_NAMES[1], generation: 1 })
+    expect(rivalNotice(back.rival, 'announced')).toMatch(/^Nazma is back/)
+    const reopened = rivalMorning(back.rival, back.rival.openDay, 'main-street')
+    expect(reopened.event).toBe('opened')
+    expect(reopened.rival).toMatchObject({
+      status: 'open',
+      generation: 2,
+      name: RIVAL_NAMES[1],
+      closedDay: 0,
+      stolen: [],
+      hires: [],
+      shares: [],
+      weeks: [],
+    })
+    expect(reopened.rival.strength).toBe(OPEN_STRENGTH + GENERATION_STRENGTH)
+    expect(reopened.rival.undercut).toBeCloseTo(OPEN_UNDERCUT + GENERATION_UNDERCUT)
+    expect(isRival(reopened.rival)).toBe(true)
+  })
+
+  it('cycles through his names', () => {
+    for (let g = 1; g <= RIVAL_NAMES.length * 2; g++) {
+      expect(RIVAL_NAMES).toContain(rivalName(g))
+    }
+    expect(rivalName(RIVAL_NAMES.length + 1)).toBe(RIVAL_NAMES[0])
   })
 })
