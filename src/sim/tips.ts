@@ -5,6 +5,7 @@ import { unlockedBy } from './expansions'
 import type { FranchiseTier } from './franchise'
 import type { InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
+import { quoteFor } from './negotiation'
 import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
 import { isStale, STALE_DAYS } from './usedCars'
@@ -24,6 +25,7 @@ export type TipId =
   | 'lowCash'
   | 'seller'
   | 'tradeIn'
+  | 'rivalQuote'
   | 'staleUsed'
   | 'franchise'
   | 'expansion'
@@ -47,6 +49,8 @@ export const TIPS: Record<TipId, string> = {
   seller: 'A seller drove in wanting cash for their car. Appraise it before you make an offer.',
   tradeIn:
     'This buyer brought a car to trade. Appraise it, then set an allowance as you haggle. They weigh what they pay after the trade, and a lowball allowance offends them.',
+  rivalQuote:
+    "This buyer has a price from Nazma's lot across the road. Ask much more and they may go to him; Match his price makes a yes more likely.",
   staleUsed: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Buyers judge its price by what it's worth now, so take a lower offer to move it.`,
   franchise:
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
@@ -118,6 +122,21 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           (id === 'seller' ? c.selling : c.trade) &&
           c.vehicle?.parked &&
           !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
+      )
+    }
+    case 'rivalQuote': {
+      if (next.customers === prev.customers) return false
+      // Once the player is talking with them about a car his quote is on.
+      const quoted = (c: Customer) => {
+        const car = next.inventory.find((x) => x.id === c.targetCarId)
+        return !!car && quoteFor(c, car) !== null
+      }
+      return next.customers.some(
+        (c) =>
+          c.handlerId === PLAYER_ID &&
+          c.phase === 'talking' &&
+          prev.customers.find((p) => p.id === c.id)?.handlerId !== PLAYER_ID &&
+          quoted(c),
       )
     }
     case 'staleUsed': {

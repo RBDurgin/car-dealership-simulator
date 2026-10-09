@@ -179,6 +179,16 @@ export const UPDATES: readonly Update[] = [
       'The top bar shows his share of today’s buyers, and each Monday morning you hear how he did last week.',
     ],
   },
+  {
+    id: 17,
+    phase: '14',
+    title: 'Shoppers with his price',
+    items: [
+      'Some shoppers have been to Nazma’s lot first, and the customer panel shows the price he quoted them.',
+      'Ask well over his price and they may walk out to him. Match his price for a likelier yes.',
+      'Your salespeople match him too, as long as the sale still pays.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

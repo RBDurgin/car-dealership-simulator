@@ -1,5 +1,7 @@
 import { calendarOf, DAYS_PER_WEEK, longDate } from './calendar'
+import type { Customer } from './customers'
 import type { Sale } from './deal'
+import { BASE_MSRP } from './inventory'
 import type { CarModel } from './layout'
 import { PRICE_STEP } from './negotiation'
 import { RANK_IDS, type RankId } from './progression'
@@ -13,6 +15,9 @@ import type { Rng } from './rng'
  * are scaled by `1 − share`. His share rises with his strength and his price
  * cut, and falls with the player's reputation, ads and discounts. Each
  * evening his strength drifts with the share he took. The rival is saved.
+ * Some of the day's shoppers have been to his lot first and carry his price
+ * on a model they want (`assignQuotes`); the haggle weighs it (`quoteFor` in
+ * `sim/negotiation.ts`).
  */
 
 /**
@@ -60,7 +65,7 @@ export const RIVAL_NAMES = ["Nazma's Motors", 'N-Z Auto Outlet', 'Discount Dream
 
 /** His strength on opening, before the level's `rivalStrength`. */
 export const OPEN_STRENGTH = 40
-/** His discount off MSRP on opening. */
+/** His discount off MSRP on opening, before the level's `rivalUndercut`. */
 export const OPEN_UNDERCUT = 0.04
 /** Where the player's average discount starts, before any sale. */
 export const START_DISCOUNT = 0.04
@@ -138,14 +143,16 @@ export type RivalEvent = 'announced' | 'opened' | 'week'
 
 /**
  * The rival on `day`'s morning: announced once the player is at `rank` (or
- * higher), opened on his `openDay`. `strength` is the level's `rivalStrength`.
- * On a Monday while he's open, last week's average share goes on `weeks`.
+ * higher), opened on his `openDay`. `strength` and `undercut` are the level's
+ * `rivalStrength` and `rivalUndercut`. On a Monday while he's open, last
+ * week's average share goes on `weeks`.
  */
 export function rivalMorning(
   rival: Rival,
   day: number,
   rank: RankId,
   strength = 1,
+  undercut = 1,
 ): { rival: Rival; event: RivalEvent | null } {
   if (shouldAnnounce(rank, rival)) {
     return {
@@ -162,7 +169,7 @@ export function rivalMorning(
         generation,
         name: RIVAL_NAMES[(generation - 1) % RIVAL_NAMES.length],
         strength: Math.min(100, OPEN_STRENGTH * strength),
-        undercut: OPEN_UNDERCUT,
+        undercut: OPEN_UNDERCUT * undercut,
         shares: [],
         weeks: [],
       },
@@ -215,6 +222,36 @@ export function rivalNotice(rival: Rival, event: RivalEvent): string {
 /** His price on a car with this sticker: MSRP less his undercut, to the nearest `PRICE_STEP`. */
 export function rivalPrice(rival: Rival, msrp: number): number {
   return Math.round((msrp * (1 - rival.undercut)) / PRICE_STEP) * PRICE_STEP
+}
+
+/** His price on one model, quoted to a shopper who went to his lot first. */
+export interface RivalQuote {
+  model: CarModel
+  price: number
+}
+
+/** Shoppers carrying a quote, as a multiple of his share: about 1 in 5 at a 20% share. */
+export const QUOTE_RATE = 1
+
+/**
+ * Some of `arrived` have shopped at his lot first: each new-car shopper
+ * carries his quote with odds of his `share` × `QUOTE_RATE`, on one of the
+ * models they want. Used-car shoppers and sellers never do. Nothing unless
+ * he's open.
+ */
+export function assignQuotes(
+  arrived: readonly Customer[],
+  rival: Rival,
+  share: number,
+  rng: Rng,
+): Customer[] {
+  if (rival.status !== 'open' || share <= 0) return [...arrived]
+  return arrived.map((c) => {
+    if (c.selling || c.archetype === 'used-shopper' || c.preferredModels.length === 0) return c
+    if (rng.next() >= share * QUOTE_RATE) return c
+    const model = rng.pick(c.preferredModels)
+    return { ...c, rivalQuote: { model, price: rivalPrice(rival, BASE_MSRP[model]) } }
+  })
 }
 
 /** The banner on his front fence. */

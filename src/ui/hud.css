@@ -987,6 +987,18 @@ kbd {
   color: #f87171;
 }
 /* Easy's deal hint: how warm the customer is to the stepper's price. */
+/* The rival's quote a customer carries (Phase 14c). */
+.rival-quote {
+  margin: 4px 0 8px;
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.5);
+  background: rgba(251, 146, 60, 0.14);
+  color: #fdba74;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 .warmth-chip {
   margin-top: 8px;
   display: inline-block;

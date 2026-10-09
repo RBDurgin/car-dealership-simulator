@@ -52,6 +52,7 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   vehicle: null,
   selling: null,
   trade: null,
+  rivalQuote: null,
   ...extra,
 })
 

@@ -45,6 +45,7 @@ import {
   clampAllowance,
   clampAsk,
   clampBuy,
+  quoteFor,
   respondToAsk,
   respondToBuyOffer,
   roundOf,
@@ -136,6 +137,7 @@ import {
   type RepScale,
 } from '../sim/reputation'
 import {
+  assignQuotes,
   emptyRival,
   emptyRivalStats,
   marketShare,
@@ -143,6 +145,7 @@ import {
   rivalMorning,
   rivalNotice,
   type Rival,
+  type RivalStats,
 } from '../sim/rival'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
@@ -219,6 +222,7 @@ const WALK_IN_SEED = 14_000
 const DELIVERY_SEED = 16_000
 const DRIVE_SEED = 18_000
 const RIVAL_SEED = 21_000
+const QUOTE_SEED = 22_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -449,6 +453,8 @@ let staffRng: Rng = createRng(STAFF_SEED + 1)
 let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
 /** Which arrivals come by car, and what they drive. Apart, so the rest of the day plays as before. */
 let driveRng: Rng = createRng(DRIVE_SEED + 1)
+/** Which shoppers have been to the rival's lot first. Apart, so the rest of the day plays as before. */
+let quoteRng: Rng = createRng(QUOTE_SEED + 1)
 
 /**
  * Time stands still and the player can't move behind the title screen, the
@@ -538,6 +544,7 @@ function dayOne(difficulty: Difficulty) {
   staffRng = createRng(STAFF_SEED + 1)
   walkInRng = createRng(WALK_IN_SEED + 1)
   driveRng = createRng(DRIVE_SEED + 1)
+  quoteRng = createRng(QUOTE_SEED + 1)
   const tuning = TUNING[difficulty]
   return {
     difficulty,
@@ -790,6 +797,19 @@ export const useGame = create<GameState>((set, get) => {
     set({ dayStats: { ...stats, nazma: { ...stats.nazma, ...change } } })
   }
 
+  /** Counts one more of the rival's quote-holders lost to him, or matched and sold to. */
+  const tallyRival = (key: keyof Pick<RivalStats, 'lost' | 'matched'>) => {
+    const stats = get().dayStats
+    if (!stats.rival) return
+    set({ dayStats: { ...stats, rival: { ...stats.rival, [key]: stats.rival[key] + 1 } } })
+  }
+
+  /** Some of `arrived` have been to the rival's lot first and carry his price. */
+  const withQuotes = (arrived: readonly Customer[]) => {
+    const s = get()
+    return assignQuotes(arrived, s.rival, s.dayStats.rival?.share ?? 0, quoteRng)
+  }
+
   /** Stores Nazma's visit, dropping a confront aimed at him once he's no longer on the lot. */
   const setNazma = (nazma: NazmaVisit) => {
     set({ nazma })
@@ -968,6 +988,8 @@ export const useGame = create<GameState>((set, get) => {
         : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
     if (allowance !== undefined && !traded) return null
     if (!get().sellCar(car.id, price)) return null
+    const quote = quoteFor(c, car)
+    if (quote !== null && price <= quote) tallyRival('matched')
     // Who made the sale. A salesperson let go since is no longer on the roster.
     const seller =
       c.sellerId && c.sellerId !== PLAYER_ID
@@ -1061,6 +1083,7 @@ export const useGame = create<GameState>((set, get) => {
     staffRng = createRng(STAFF_SEED + day)
     walkInRng = createRng(WALK_IN_SEED + day)
     driveRng = createRng(DRIVE_SEED + day)
+    quoteRng = createRng(QUOTE_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
@@ -1068,7 +1091,13 @@ export const useGame = create<GameState>((set, get) => {
     const level = tuning()
     const guarded = isGuarded(s.roster)
     const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, level.theftChance)
-    const opening = rivalMorning(s.rival, day, s.career.rank, level.rivalStrength)
+    const opening = rivalMorning(
+      s.rival,
+      day,
+      s.career.rank,
+      level.rivalStrength,
+      level.rivalUndercut,
+    )
     const rival = isTheftNight(day, level.theftChance)
       ? { ...opening.rival, lastTheftDay: day }
       : opening.rival
@@ -1283,27 +1312,29 @@ export const useGame = create<GameState>((set, get) => {
       // Some drive in, while there's room in customer parking. Some of those
       // are sellers, and some of the rest bring a car to trade.
       const level = tuning()
-      const arrived = assignTrades(
-        assignSellers(
-          assignVehicles(
-            due.map((source) =>
-              generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-                source,
-                ...arrivalOpts(),
-              }),
+      const arrived = withQuotes(
+        assignTrades(
+          assignSellers(
+            assignVehicles(
+              due.map((source) =>
+                generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+                  source,
+                  ...arrivalOpts(),
+                }),
+              ),
+              customers,
+              driveRng,
+              step.day,
+              s.purchases.map((p) => p.spot),
             ),
-            customers,
             driveRng,
             step.day,
-            s.purchases.map((p) => p.spot),
+            { hope: level.sellerHope, noise: level.appraisalNoise },
           ),
           driveRng,
           step.day,
-          { hope: level.sellerHope, noise: level.appraisalNoise },
+          { hope: level.tradeHope, noise: level.appraisalNoise },
         ),
-        driveRng,
-        step.day,
-        { hope: level.tradeHope, noise: level.appraisalNoise },
       )
       customers = [...customers, ...arrived]
       set({
@@ -1458,12 +1489,14 @@ export const useGame = create<GameState>((set, get) => {
       const picked = pickArchetype(walkInRng, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = `customer-${nextCustomerId++}`
-      const c = generateCustomer(id, availableCars(s.inventory), walkInRng, {
-        ...opts,
-        variant,
-        archetype,
-        source: 'walk-in',
-      })
+      const [c] = withQuotes([
+        generateCustomer(id, availableCars(s.inventory), walkInRng, {
+          ...opts,
+          variant,
+          archetype,
+          source: 'walk-in',
+        }),
+      ])
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...s.customers, c])
       return id
@@ -1541,6 +1574,7 @@ export const useGame = create<GameState>((set, get) => {
       const insulted = res.answer === 'counter' && res.insulted
       const ev = { type: 'respond', id, answer: res.answer, counter, insulted } as const
       commit(reduceCustomers(s.customers, ev))
+      if (res.answer === 'walk' && res.reason === 'rival') tallyRival('lost')
       // Staff deals go on quietly; the sale itself is announced.
       if (c.handlerId !== PLAYER_ID) return
       if (res.answer === 'accept') notify(`${c.name}: "Deal! Lead the way."`)
@@ -1599,7 +1633,7 @@ export const useGame = create<GameState>((set, get) => {
       const allow = c.trade
         ? tradeAllowance(c, staffAllowance(e.skill, appraisal, c.trade.hope, roundOf(c)))
         : undefined
-      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow))
+      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow, quoteFor(c, car)))
       const ev = { type: 'offer', id: c.id, carId: car.id, price, allowance: allow } as const
       commit(reduceCustomers(s.customers, ev))
     },

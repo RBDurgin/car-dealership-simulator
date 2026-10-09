@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
+import type { Customer } from '../sim/customers'
 import { emptyStats } from '../sim/deal'
 import { isTheftNight } from '../sim/nazma'
 import { emptyCareer, RANKS } from '../sim/progression'
-import { emptyRival, OPEN_STRENGTH, openingDay, type Rival } from '../sim/rival'
+import { BASE_MSRP } from '../sim/inventory'
+import {
+  emptyRival,
+  OPEN_STRENGTH,
+  OPEN_UNDERCUT,
+  openingDay,
+  rivalPrice,
+  type Rival,
+} from '../sim/rival'
 import { createSave, parseSave } from '../sim/save'
 import { useGame } from './store'
 
@@ -92,11 +101,49 @@ describe("Nazma's rival lot", () => {
     expect(game().dayStats.rival).toEqual({ share, lost: 0, matched: 0 })
   })
 
-  it('opens stronger on Hard', () => {
+  it('opens stronger and cheaper on Hard, weaker and dearer on Easy', () => {
     game().newGame('hard')
     useGame.setState({ rival: { ...emptyRival(), status: 'announced', openDay: 22 } })
     startDay(22)
     expect(game().rival.strength).toBe(OPEN_STRENGTH * 1.25)
+    expect(game().rival.undercut).toBeCloseTo(OPEN_UNDERCUT * 1.2)
+    game().newGame('easy')
+    useGame.setState({ rival: { ...emptyRival(), status: 'announced', openDay: 22 } })
+    startDay(22)
+    expect(game().rival.undercut).toBeCloseTo(OPEN_UNDERCUT * 0.8)
+  })
+
+  /** Plays `day` through to closing with `rival`, and returns everyone who came. */
+  const shoppersWith = (rival: Rival, day = 26) => {
+    useGame.setState({ rival, reputation: 30 })
+    startDay(day)
+    const all: Customer[] = []
+    for (let minute = game().clock.minute + 1; minute < CLOSE_MINUTE; minute++) {
+      game().tickClock({ day, minute })
+      for (const c of game().customers) if (!all.some((x) => x.id === c.id)) all.push(c)
+    }
+    return all
+  }
+
+  it('sends some shoppers in with his price on a model they want', () => {
+    const rival = open({ strength: 100, undercut: 0.08 })
+    const all = shoppersWith(rival)
+    const quoted = all.filter((c) => c.rivalQuote)
+    expect(quoted.length).toBeGreaterThan(0)
+    expect(quoted.length).toBeLessThan(all.length)
+    for (const c of quoted) {
+      const { model, price } = c.rivalQuote!
+      expect(c.preferredModels).toContain(model)
+      expect(price).toBe(rivalPrice(game().rival, BASE_MSRP[model]))
+      expect(c.selling).toBeNull()
+      expect(c.archetype).not.toBe('used-shopper')
+    }
+  })
+
+  it('sends nobody in with a quote before he opens', () => {
+    const all = shoppersWith(emptyRival())
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.some((c) => c.rivalQuote)).toBe(false)
   })
 
   it('scales the day’s planned visitors by what he takes', () => {

@@ -49,6 +49,13 @@ const tradeCar = (parked: boolean): Partial<Customer> => {
   const { selling, ...rest } = sellerCar(parked)
   return { ...rest, phase: parked ? 'browsing' : 'arriving', trade: selling }
 }
+/** A buyer with the rival's quote on the first car, being talked to by `handlerId`. */
+const quoted = (handlerId: string | null): Partial<Customer> => ({
+  phase: handlerId ? 'talking' : 'waiting',
+  handlerId,
+  targetCarId: inventory[0].id,
+  rivalQuote: { model: inventory[0].model, price: 20_000 },
+})
 const usedOn = (acquiredDay: number) => ({
   year: 2020,
   miles: 70_000,
@@ -85,6 +92,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   tradeIn: [
     { customers: [customer('c3', tradeCar(true))] },
     { customers: [customer('c3', tradeCar(false))] },
+  ],
+  rivalQuote: [
+    { customers: [customer('c4', quoted(PLAYER_ID))] },
+    { customers: [customer('c4', quoted(null))] },
   ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },

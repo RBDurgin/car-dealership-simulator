@@ -74,6 +74,7 @@ const base: Customer = {
   vehicle: null,
   selling: null,
   trade: null,
+  rivalQuote: null,
 }
 
 const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({

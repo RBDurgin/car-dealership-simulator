@@ -16,7 +16,13 @@ import {
   hopePrice,
   LAST_ROUND_FACTOR,
   LOWBALL_FRACTION,
+  MATCH_BONUS,
+  matchAsk,
   netOf,
+  overQuote,
+  QUOTE_TOLERANCE,
+  QUOTE_WALK,
+  quoteFor,
   respondToAsk,
   respondToBuyOffer,
   SELLER_FIRST_RISE,
@@ -33,6 +39,7 @@ import {
   STUBBORN_WALK,
   suggestedAllowance,
   suggestedAsk,
+  walkLine,
   type AskResponse,
 } from './negotiation'
 import { createRng } from './rng'
@@ -79,6 +86,7 @@ const base: Customer = {
   vehicle: null,
   selling: null,
   trade: null,
+  rivalQuote: null,
 }
 
 /** In the middle of a haggle: they countered `counter` to `lastAsk`. */
@@ -503,5 +511,111 @@ describe('haggling over a used car', () => {
     // Their hope on day 1 is fine on day 1; two weeks on it's over what they'd pay.
     expect(at(1).counter).toBe(0)
     expect(at(15).counter).toBeGreaterThan(0.9)
+  })
+})
+
+describe("the rival's quote", () => {
+  /** A regular who's been to Nazma's and was quoted `price` on a sedan. */
+  const quoted = (price: number, extra: Partial<Customer> = {}): Customer => ({
+    ...base,
+    rivalQuote: { model: 'sedan', price },
+    ...extra,
+  })
+
+  it('applies to a new car of the quoted model only', () => {
+    expect(quoteFor(quoted(28_000), sedan)).toBe(28_000)
+    expect(quoteFor(base, sedan)).toBeNull()
+    expect(quoteFor(quoted(28_000), { ...sedan, model: 'suv' })).toBeNull()
+    const used = {
+      ...sedan,
+      used: { year: 2020, miles: 50_000, condition: 0.7, acquiredDay: 1 },
+    }
+    expect(quoteFor(quoted(28_000), used)).toBeNull()
+  })
+
+  it('counts an ask as over it only past the tolerance', () => {
+    expect(overQuote(28_000, 28_000 * (1 + QUOTE_TOLERANCE))).toBe(false)
+    expect(overQuote(28_000, 28_000 * (1 + QUOTE_TOLERANCE) + 100)).toBe(true)
+  })
+
+  it('sends some of them to the rival on an ask well over it', () => {
+    const c = quoted(28_000)
+    const r = rates((seed) => respondToAsk(c, sedan, 30_000, createRng(seed)))
+    expect(r.walk).toBeGreaterThan(QUOTE_WALK - 0.04)
+    expect(r.walk).toBeLessThan(QUOTE_WALK + 0.04)
+    expect(r.counter).toBeCloseTo(1 - r.walk)
+    const walked = Array.from({ length: 50 }, (_, seed) =>
+      respondToAsk(c, sedan, 30_000, createRng(seed)),
+    ).find((res) => res.answer === 'walk')
+    expect(walked).toEqual({ answer: 'walk', reason: 'rival' })
+    expect(walkLine('rival')).toMatch(/Nazma/)
+    // Without the quote, an opening ask at MSRP only gets a counter.
+    expect(rates((seed) => respondToAsk(base, sedan, 30_000, createRng(seed))).walk).toBe(0)
+  })
+
+  it('never sends them off within the tolerance', () => {
+    const c = quoted(28_000)
+    const r = rates((seed) => respondToAsk(c, sedan, 28_800, createRng(seed)))
+    expect(r.walk).toBeLessThan(1 - acceptChance(c, sedan, 28_800) + 0.04)
+    for (let seed = 0; seed < 200; seed++) {
+      const res = respondToAsk(c, sedan, 28_800, createRng(seed))
+      if (res.answer === 'walk') expect(res.reason).not.toBe('rival')
+    }
+  })
+
+  it('rolls with the match bonus at or under it, even over what they hoped to pay', () => {
+    const c = quoted(29_200)
+    expect(29_200).toBeGreaterThan(hopePrice(c, sedan))
+    const chance = Math.min(0.95, acceptChance(c, sedan, 29_200) + MATCH_BONUS)
+    const r = rates((seed) => respondToAsk(c, sedan, 29_200, createRng(seed)))
+    expect(r.counter).toBe(0)
+    expect(r.accept).toBeGreaterThan(chance - 0.04)
+    expect(r.accept).toBeLessThan(chance + 0.04)
+  })
+
+  it('compares the price before a trade allowance', () => {
+    const trader = quoted(28_000, {
+      trade: { hope: 10_000, estimate: { estimate: 9_000, margin: 1_000 }, appraised: true },
+    })
+    const r = rates((seed) => respondToAsk(trader, sedan, 30_000, createRng(seed), 0, 10_000))
+    expect(r.walk).toBeGreaterThan(QUOTE_WALK - 0.04)
+  })
+
+  it('warms or cools the deal hint', () => {
+    expect(dealWarmth(base, sedan, 28_800)).toBe('hot')
+    expect(dealWarmth(quoted(27_000), sedan, 28_800)).toBe('warm')
+    expect(dealWarmth(base, sedan, 29_200)).toBe('warm')
+    expect(dealWarmth(quoted(29_200), sedan, 29_200)).toBe('hot')
+  })
+
+  it('matches within what can be asked now', () => {
+    expect(matchAsk(base, sedan)).toBeNull()
+    expect(matchAsk(quoted(28_000), sedan)).toBe(28_000)
+    // Never over MSRP, nor under their own counter.
+    expect(matchAsk(quoted(31_000), sedan)).toBe(30_000)
+    expect(
+      matchAsk(quoted(27_000, { haggle: { round: 2, lastAsk: 29_000, counter: 27_500 } }), sedan),
+    ).toBe(27_500)
+  })
+
+  describe('staff', () => {
+    const h = (lastAsk: number, counter: number) => ({ round: 2, lastAsk, counter })
+
+    it('match a quote that keeps their floor, at any skill', () => {
+      for (const skill of [1, 3, 5]) expect(staffAsk(skill, sedan, null, 0, 28_000)).toBe(28_000)
+    })
+
+    it('match under the floor only when green, and never under cost', () => {
+      const low = sedan.cost + STAFF_FLOOR_MARGIN - 200
+      expect(staffAsk(1, sedan, null, 0, low)).toBe(low)
+      expect(staffAsk(2, sedan, null, 0, low)).toBe(low)
+      expect(staffAsk(3, sedan, null, 0, low)).toBe(staffAsk(3, sedan, null))
+      expect(staffAsk(1, sedan, null, 0, sedan.cost - 500)).toBe(staffAsk(1, sedan, null))
+    })
+
+    it('keep their ask when it is already under the quote, and never go under the counter', () => {
+      expect(staffAsk(3, sedan, null, 0, 31_000)).toBe(30_000)
+      expect(staffAsk(3, sedan, h(29_000, 28_500), 0, 28_000)).toBe(28_500)
+    })
   })
 })

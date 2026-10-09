@@ -2,7 +2,9 @@ import { OWNER_VARIANT } from './characters'
 import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import type { Tone } from './gibberish'
 import type { Vec2 } from './grid'
+import type { InventoryCar } from './inventory'
 import { NAZMA_ID, NAZMA_VARIANT, nextTarget, type NazmaVisit } from './nazma'
+import { overQuote, quoteFor } from './negotiation'
 import { OWNER_ID, type OwnerVisit } from './owner'
 import type { Rng } from './rng'
 import { spatialMix } from './sfxEvents'
@@ -27,6 +29,8 @@ export interface Line {
 /** The slice of the store chatter reads. */
 export interface ChatterState {
   customers: readonly Customer[]
+  /** For the car on offer, to weigh an ask against the rival's quote. */
+  inventory: readonly InventoryCar[]
   roster: readonly Employee[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
@@ -188,7 +192,14 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       } else if (from === 'arriving' && receptionist) {
         out.push([{ speaker: receptionist.id, tone: 'greeting', syllables: rng.int(2, 3) }])
       } else if (from === 'talking' && to === 'considering') {
-        out.push([{ speaker: c.id, tone: 'murmur', syllables: 1 }])
+        // Well over the rival's price, they grumble about it before thinking it over.
+        const car = c.offer && next.inventory.find((x) => x.id === c.offer!.carId)
+        const quote = car ? quoteFor(c, car) : null
+        out.push(
+          quote !== null && overQuote(quote, c.offer!.price)
+            ? [{ speaker: c.id, tone: 'grumble', syllables: rng.int(3, 4) }]
+            : [{ speaker: c.id, tone: 'murmur', syllables: 1 }],
+        )
       } else if (from === 'considering' && to === 'talking' && c.haggle) {
         out.push([{ speaker: c.id, tone: 'question', syllables: rng.int(3, 5) }])
       } else if (from === 'considering' && (to === 'following' || c.leaveReason === 'sold')) {

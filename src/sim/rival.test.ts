@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { calendarOf } from './calendar'
 import type { Sale } from './deal'
+import { generateCustomer, type Customer } from './customers'
+import { BASE_MSRP, buildInventory } from './inventory'
 import {
+  assignQuotes,
   emptyRival,
   emptyRivalStats,
   isRival,
@@ -271,5 +274,57 @@ describe('rivalDay', () => {
     expect(rivalDay(open(), day(0.2), createRng(9))).toEqual(
       rivalDay(open(), day(0.2), createRng(9)),
     )
+  })
+})
+
+describe('assignQuotes', () => {
+  const stock = buildInventory(createRng(42))
+  const shoppers = Array.from({ length: 400 }, (_, i) =>
+    generateCustomer(`c${i}`, stock, createRng(i), { archetype: 'regular' }),
+  )
+
+  it('gives about his share of shoppers his price on a model they want', () => {
+    const rival = open({ undercut: 0.05 })
+    const out = assignQuotes(shoppers, rival, 0.2, createRng(1))
+    const quoted = out.filter((c) => c.rivalQuote)
+    expect(quoted.length / out.length).toBeGreaterThan(0.14)
+    expect(quoted.length / out.length).toBeLessThan(0.26)
+    for (const c of quoted) {
+      const { model, price } = c.rivalQuote!
+      expect(c.preferredModels).toContain(model)
+      expect(price).toBe(rivalPrice(rival, BASE_MSRP[model]))
+      expect(price % 100).toBe(0)
+    }
+  })
+
+  it('never quotes used-car shoppers or sellers', () => {
+    const others: Customer[] = shoppers.map((c, i) =>
+      i % 2
+        ? { ...c, archetype: 'used-shopper' }
+        : {
+            ...c,
+            selling: {
+              hope: 9_000,
+              estimate: { estimate: 8_000, margin: 1_000 },
+              appraised: false,
+            },
+          },
+    )
+    const out = assignQuotes(others, open(), 0.35, createRng(1))
+    expect(out.some((c) => c.rivalQuote)).toBe(false)
+  })
+
+  it('quotes nobody unless he is open', () => {
+    for (const status of ['unopened', 'announced', 'closed'] as const) {
+      const out = assignQuotes(shoppers, open({ status }), 0.3, createRng(1))
+      expect(out.some((c) => c.rivalQuote)).toBe(false)
+    }
+  })
+
+  it('opens with the level’s undercut', () => {
+    const announced = { ...emptyRival(), status: 'announced' as const, openDay: 22 }
+    const easy = rivalMorning(announced, 22, 'main-street', 1, 0.8).rival
+    const medium = rivalMorning(announced, 22, 'main-street').rival
+    expect(easy.undercut).toBeCloseTo(medium.undercut * 0.8)
   })
 })

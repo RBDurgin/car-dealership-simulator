@@ -16,6 +16,7 @@ import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
 import { MAX_SHARE, OPENING_RANK, RIVAL_NAMES } from '../sim/rival'
+import { QUOTE_TOLERANCE } from '../sim/negotiation'
 import { ownerBonus } from '../sim/owner'
 import {
   HOLDBACK_FLOOR,
@@ -127,7 +128,11 @@ function BasicsTab({ touch, click }: TabProps) {
           Dealer ranks need {percentOff(TUNING.easy.rankScale)} less lifetime gross on Easy and{' '}
           {percentOn(TUNING.hard.rankScale)} more on Hard. On Easy a month has to fall under{' '}
           {Math.round((HOLDBACK_FLOOR - TUNING.easy.franchiseSlack) * 100)}% of the quota, not{' '}
-          {Math.round(HOLDBACK_FLOOR * 100)}%, to cost you a franchise tier.
+          {Math.round(HOLDBACK_FLOOR * 100)}%, to cost you a franchise tier. Nazma&apos;s rival lot
+          opens {percentOff(TUNING.easy.rivalStrength)} weaker and undercuts you{' '}
+          {percentOff(TUNING.easy.rivalUndercut)} less on Easy, and opens{' '}
+          {percentOn(TUNING.hard.rivalStrength)} stronger and undercuts{' '}
+          {percentOn(TUNING.hard.rivalUndercut)} more on Hard.
         </p>
       </section>
       <section>
@@ -270,6 +275,21 @@ function SellingTab({ click }: TabProps) {
           skill: green ones give buyers what they ask, seasoned ones start low and stay under their
           appraisal. The summary&apos;s seller table shows how far over or under value each one
           allowed.
+        </p>
+      </section>
+      <section>
+        <h3>Shoppers with his price</h3>
+        <p>
+          While Nazma&apos;s lot across the road is open, some shoppers have been there first. The
+          customer panel shows his price on the new model they want (&ldquo;{RIVAL_NAMES[0]} quoted
+          &hellip;&rdquo;). Ask more than {Math.round(QUOTE_TOLERANCE * 100)}% over it and they may
+          walk out to him; ask his price or less and they&apos;re more likely to say yes.{' '}
+          <b>Match his price</b> under the price stepper sets your ask to his quote.
+        </p>
+        <p>
+          Each one who walks out to him makes him stronger, and each one you sell to at his price
+          weakens him. Salespeople match him too: seasoned ones only while the sale still makes a
+          profit, green ones whenever his price is over the car&apos;s cost.
         </p>
       </section>
       <section>

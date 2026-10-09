@@ -7,6 +7,7 @@ import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
+import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
@@ -125,6 +126,11 @@ export interface Customer {
    * it, and what the player makes of it. Null for anyone without one.
    */
   trade: TradeIn | null
+  /**
+   * The rival's price on a model they want, from his lot across the road
+   * (`assignQuotes`). Null for anyone who hasn't been there.
+   */
+  rivalQuote: RivalQuote | null
 }
 
 const FIRST_NAMES = [
@@ -289,6 +295,7 @@ export function generateCustomer(
     vehicle: null,
     selling: null,
     trade: null,
+    rivalQuote: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.

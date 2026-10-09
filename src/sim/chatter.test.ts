@@ -32,6 +32,7 @@ const seller = employee({ id: 'e-sales', role: 'sales', status: 'atPost' })
 
 const state = (patch: Partial<ChatterState> = {}): ChatterState => ({
   customers: [],
+  inventory: [],
   roster: [],
   owner: null,
   nazma: null,
@@ -188,6 +189,24 @@ describe('reactionsFor', () => {
     expect(
       lines(state({ customers: [considering] }), state({ customers: [countered] }))[0][0].tone,
     ).toBe('question')
+  })
+
+  it("grumbles over an ask well over the rival's quote", () => {
+    const car = inventory.find((c) => !c.used)!
+    const quote = { model: car.model, price: Math.round(car.msrp * 0.9) }
+    const talking = customer('c1', { phase: 'talking', handlerId: PLAYER_ID, rivalQuote: quote })
+    const asked = (price: number) => ({
+      ...talking,
+      phase: 'considering' as const,
+      offer: { carId: car.id, price },
+    })
+    const tone = (price: number) =>
+      lines(
+        state({ customers: [talking], inventory }),
+        state({ customers: [asked(price)], inventory }),
+      )[0][0].tone
+    expect(tone(car.msrp)).toBe('grumble')
+    expect(tone(quote.price)).toBe('murmur')
   })
 
   it('is happy on a yes, the seller too, and grumbles walking out', () => {
