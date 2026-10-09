@@ -4,15 +4,16 @@ import { CLOSE_MINUTE, CLOCK_STEP_MINUTES, OPEN_MINUTE } from './clock'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { createRng, type Rng } from './rng'
-import { isPoachable, type Employee } from './staff'
+import { isPoachable, type Employee, type Role } from './staff'
 
 /**
  * Nazma, a disgruntled former employee (he/him), out to ruin the business.
  * On some days he walks onto the lot and smudges a few cars, so they need
  * washing again, or has a word with one of the staff, who then thinks of
  * quitting. The player can confront him to run him off. Some nights he
- * drives a car off the lot, unless a guard is on the payroll. His visits and
- * thefts are rebuilt from the day number, so nothing about him is saved.
+ * drives a car off the lot, unless a guard is on the payroll. His visits are
+ * rebuilt from the day number; his last theft night is saved with his rival
+ * lot (`Rival.lastTheftDay`), which also scales his odds once it's open.
  */
 
 /** Nazma's id in the world (crowd, chatter, action target). */
@@ -83,6 +84,10 @@ export interface NazmaStats {
   quit: string[]
   /** Those the player kept with a raise (a day's wage added). */
   kept: { name: string; raise: number }[]
+  /** The name of his lot while it's open: where stolen cars and quitters go. */
+  rival: string | null
+  /** Those who quit and went to work for him. */
+  joined: { name: string; role: Role }[]
 }
 
 export function emptyNazmaStats(): NazmaStats {
@@ -95,6 +100,8 @@ export function emptyNazmaStats(): NazmaStats {
     poached: [],
     quit: [],
     kept: [],
+    rival: null,
+    joined: [],
   }
 }
 
@@ -212,10 +219,19 @@ const THEFT_SEED = 19_000
 
 /**
  * Whether Nazma tries to steal a car on the night before `day`'s morning: a
- * seeded roll from `FIRST_THEFT_DAY` on, never within `THEFT_GAP_DAYS` of his
- * last try. The gap is found by replaying earlier nights, so nothing is saved;
- * they replay at the same `chance` (× `THEFT_CHANCE`), as the level never
- * changes mid-game.
+ * seeded roll against `THEFT_CHANCE` × `chance` from `FIRST_THEFT_DAY` on,
+ * never within `THEFT_GAP_DAYS` of his `last` try (0 if none).
+ */
+export function theftNightAfter(day: number, last: number, chance = 1): boolean {
+  if (day < FIRST_THEFT_DAY) return false
+  if (last > 0 && day - last < THEFT_GAP_DAYS) return false
+  return createRng(THEFT_SEED + day).next() < THEFT_CHANCE * chance
+}
+
+/**
+ * `theftNightAfter`, with his last try found by replaying earlier nights at
+ * the same `chance`. The store keeps `Rival.lastTheftDay` instead, as the
+ * chance changes with his rival lot.
  */
 export function isTheftNight(day: number, chance = 1): boolean {
   return day >= FIRST_THEFT_DAY && lastTheftNight(day, chance) === day
@@ -245,7 +261,8 @@ export type NightTheft = { outcome: 'stolen'; car: InventoryCar } | { outcome: '
  * The night before `day`: on a theft night Nazma goes for an available lot car
  * (the showroom is locked), the pricier the likelier. A guard on the payroll
  * stops him. Null on a quiet night, or with nothing on the lot to take.
- * `chance` scales the odds of a theft night (see `isTheftNight`).
+ * `chance` scales the odds of a theft night and `last` is his last try (see
+ * `theftNightAfter`; replayed at `chance` if not given).
  */
 export function planTheft(
   rng: Rng,
@@ -253,8 +270,9 @@ export function planTheft(
   inventory: readonly InventoryCar[],
   guarded: boolean,
   chance = 1,
+  last = lastTheftNight(day - 1, chance),
 ): NightTheft | null {
-  if (!isTheftNight(day, chance)) return null
+  if (!theftNightAfter(day, last, chance)) return null
   const lot = availableCars(inventory).filter((c) => c.location === 'lot')
   if (lot.length === 0) return null
   if (guarded) return { outcome: 'foiled' }
@@ -295,21 +313,32 @@ function visitSummary(stats: NazmaStats, money: (n: number) => string): string |
 
 function theftSummary(stats: NazmaStats): string | null {
   if (stats.stolen.length > 0) {
-    return `stole ${stats.stolen.map((c) => `the ${carName(c.model)}`).join(' and ')} overnight`
+    const where = stats.rival ? ` (now for sale at ${stats.rival})` : ''
+    return `stole ${stats.stolen.map((c) => `the ${carName(c.model)}`).join(' and ')} overnight${where}`
   }
   return stats.foiled ? 'tried to steal a car overnight, but your guard ran him off' : null
+}
+
+/** "Dana now sells for Nazma's Motors", one for each who went to work for him. */
+function joinedSummary(stats: NazmaStats): string[] {
+  if (!stats.rival) return []
+  return stats.joined.map(
+    (e) => `${e.name} now ${e.role === 'sales' ? 'sells' : 'works'} for ${stats.rival}`,
+  )
 }
 
 /**
  * The summary's line for Nazma: "Smudged 2 cars", "Run off by you (smudged 1
  * car first)", "Stole the Summit Ridge overnight; smudged 2 cars", "Poached
- * Dana", "Tried to poach Dana; you kept Dana (+$25/day)". Null if he left the
- * place alone.
+ * Dana", "Tried to poach Dana; you kept Dana (+$25/day)", "Poached Dana; Dana
+ * now sells for Nazma's Motors". Null if he left the place alone.
  */
 export function nazmaSummary(
   stats: NazmaStats,
   money: (n: number) => string = (n) => `$${n}`,
 ): string | null {
-  const line = [theftSummary(stats), visitSummary(stats, money)].filter(Boolean).join('; ')
+  const line = [theftSummary(stats), visitSummary(stats, money), ...joinedSummary(stats)]
+    .filter(Boolean)
+    .join('; ')
   return line ? line[0].toUpperCase() + line.slice(1) : null
 }

@@ -22,6 +22,13 @@ export const SIDEWALK_ENDS: Tile[] = [
   { tx: GRID_WIDTH - 1, tz: 25 },
   { tx: GRID_WIDTH - 1, tz: 26 },
 ]
+/**
+ * Once his rival lot is open, Nazma comes and goes across the road: between
+ * this sidewalk tile and `RIVAL_GATE`, inside his own gate, off the grid (in
+ * tile coordinates, for `grid.tileToWorld`).
+ */
+export const RIVAL_CROSSING: Tile = { tx: 18, tz: 26 }
+export const RIVAL_GATE: Tile = { tx: 18, tz: GRID_HEIGHT + 3 }
 /** Just inside the driveway gate. A customer has arrived once they reach one. */
 export const LOT_ENTRY_TILES: Tile[] = [
   { tx: 18, tz: 23 },

@@ -345,6 +345,14 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(v18)))).toEqual(save)
   })
 
+  it('upgrades a version 19 save with no move picked yet', () => {
+    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [0.18] }
+    const save = createSave({ ...source(), rival }, 123)
+    const { move: _, ...old } = rival
+    const v19 = { ...save, version: 19, rival: old }
+    expect(parseSave(JSON.parse(JSON.stringify(v19)))).toEqual(save)
+  })
+
   it('keeps the rival, and rejects a malformed one', () => {
     const rival: Rival = {
       ...emptyRival(),
@@ -358,12 +366,15 @@ describe('save data', () => {
       stolen: ['truck'],
       hires: ['Dana K.'],
       lastTheftDay: 31,
+      move: { id: 'priceWar', from: 29 },
     }
     const save = createSave({ ...source(), rival }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.rival).toEqual(rival)
     expect(parseSave({ ...save, rival: { ...rival, status: 'bust' } })).toBeNull()
     expect(parseSave({ ...save, rival: { ...rival, shares: ['a'] } })).toBeNull()
     expect(parseSave({ ...save, rival: { ...rival, weeks: undefined } })).toBeNull()
+    expect(parseSave({ ...save, rival: { ...rival, move: { id: 'riot', from: 29 } } })).toBeNull()
+    expect(parseSave({ ...save, rival: { ...rival, move: undefined } })).toBeNull()
     expect(parseSave({ ...save, rival: undefined })).toBeNull()
   })
 

@@ -18,6 +18,7 @@ import {
   stolenRecord,
   THEFT_CHANCE,
   THEFT_GAP_DAYS,
+  theftNightAfter,
   VISIT_CHANCE,
   type NazmaVisit,
 } from './nazma'
@@ -227,6 +228,28 @@ describe('isTheftNight', () => {
   })
 })
 
+describe('theftNightAfter', () => {
+  it('matches the replay when given the last night', () => {
+    for (const d of days(300)) {
+      expect(theftNightAfter(d, lastTheftNight(d - 1))).toBe(isTheftNight(d))
+    }
+  })
+
+  it('keeps the gap after the night given, at any chance', () => {
+    for (const d of days(300)) {
+      for (let gap = 1; gap < THEFT_GAP_DAYS; gap++) {
+        expect(theftNightAfter(d, d - gap, 5)).toBe(false)
+      }
+    }
+  })
+
+  it('comes up more often at a higher chance, and never at none', () => {
+    const count = (chance: number) => days(1000).filter((d) => theftNightAfter(d, 0, chance)).length
+    expect(count(2)).toBeGreaterThan(count(1))
+    expect(count(0)).toBe(0)
+  })
+})
+
 describe('lastTheftNight', () => {
   it('is the latest theft night up to the day, or 0 before the first', () => {
     const nights = days(200).filter((d) => isTheftNight(d))
@@ -298,6 +321,13 @@ describe('nazmaSummary', () => {
       /overnight; smudged 2 cars$/,
     )
     expect(nazmaSummary({ ...stats, foiled: true })).toMatch(/guard ran him off/)
+    expect(nazmaSummary({ ...stats, stolen, rival: "Nazma's Motors" })).toMatch(
+      /overnight \(now for sale at Nazma's Motors\)$/,
+    )
+    const joined = [{ name: 'Dana R.', role: 'porter' as const }]
+    expect(nazmaSummary({ ...stats, joined, rival: 'N-Z Auto Outlet' })).toBe(
+      'Dana R. now works for N-Z Auto Outlet',
+    )
     expect(nazmaSummary({ ...stats, visited: true, smudged: 2 })).toBe('Smudged 2 cars')
     expect(nazmaSummary({ ...stats, visited: true, smudged: 1, runOff: 'player' })).toBe(
       'Run off by you (smudged 1 car first)',

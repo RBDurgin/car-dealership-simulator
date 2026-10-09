@@ -24,6 +24,20 @@ import {
   rivalPrice,
   SHARE_DAYS,
   shareLine,
+  activeMove,
+  BLITZ_CUT,
+  blitzScale,
+  desperation,
+  DESPERATE_SCALE,
+  HIRE_STRENGTH,
+  planRivalWeek,
+  PRICE_WAR_UNDERCUT,
+  rivalHired,
+  rivalStole,
+  sabotageScale,
+  STOLEN_KEPT,
+  undercutOf,
+  type RivalMoveId,
   weekChange,
   WEEKS_KEPT,
   shouldAnnounce,
@@ -124,8 +138,8 @@ describe('the weekly report', () => {
     expect(event).toBe('week')
     expect(next.weeks).toHaveLength(2)
     expect(next.weeks[1]).toBeCloseTo(0.2)
-    expect(rivalNotice(next, 'week')).toBe(
-      "Nazma's Motors took 20% (↑5) of the town's buyers last week.",
+    expect(rivalNotice(next, 'week')).toMatch(
+      /^Nazma's Motors took 20% \(↑5\) of the town's buyers last week\. This week: /,
     )
   })
 
@@ -160,9 +174,18 @@ describe('his prices and banner', () => {
   })
 
   it('advertises his cut while open', () => {
-    expect(bannerText(open({ undercut: 0.04 }))).toBe('4% UNDER MSRP!')
-    expect(bannerText({ ...open(), status: 'announced' })).toBe('OPENING SOON')
-    expect(bannerText({ ...open(), status: 'closed' })).toBe('CLOSED')
+    expect(bannerText(open({ undercut: 0.04 }), 29)).toBe('4% UNDER MSRP!')
+    expect(bannerText({ ...open(), status: 'announced' }, 29)).toBe('OPENING SOON')
+    expect(bannerText({ ...open(), status: 'closed' }, 29)).toBe('CLOSED')
+  })
+
+  it('advertises the week’s move', () => {
+    const war = open({ undercut: 0.04, move: { id: 'priceWar', from: 29 } })
+    expect(bannerText(war, 29)).toBe('PRICE WAR! 7% OFF')
+    const sale = open({ move: { id: 'saleWeekend', from: 29 } })
+    expect(bannerText(sale, 29)).toBe('SALE THIS WEEKEND')
+    expect(bannerText(sale, 33)).toBe('SALE WEEKEND!')
+    expect(bannerText(open({ move: { id: 'adBlitz', from: 29 } }), 29)).toBe('AS SEEN ON TV!')
   })
 })
 
@@ -326,5 +349,126 @@ describe('assignQuotes', () => {
     const easy = rivalMorning(announced, 22, 'main-street', 1, 0.8).rival
     const medium = rivalMorning(announced, 22, 'main-street').rival
     expect(easy.undercut).toBeCloseTo(medium.undercut * 0.8)
+  })
+})
+
+describe('his weekly moves', () => {
+  // Day 29 is a Monday.
+  const monday = 29
+
+  it('picks a move on his opening day and each Monday, and keeps it through the week', () => {
+    const announced = { ...emptyRival(), status: 'announced' as const, openDay: monday }
+    const opened = rivalMorning(announced, monday, 'main-street').rival
+    expect(opened.move).toEqual({ id: expect.any(String), from: monday })
+    const tuesday = rivalMorning(opened, monday + 1, 'main-street').rival
+    expect(tuesday.move).toEqual(opened.move)
+    const next = rivalMorning({ ...opened, shares: [0.2] }, monday + 7, 'main-street').rival
+    expect(next.move?.from).toBe(monday + 7)
+  })
+
+  it('is the same week plan for the same state', () => {
+    for (let week = 0; week < 20; week++) {
+      const day = monday + week * 7
+      expect(planRivalWeek(open(), day)).toEqual(planRivalWeek(open(), day))
+    }
+  })
+
+  it('plays every move, more price wars when desperate', () => {
+    const count = (rival: Rival, id: RivalMoveId) =>
+      Array.from({ length: 400 }, (_, i) => planRivalWeek(rival, monday + i * 7)).filter(
+        (m) => m.id === id,
+      ).length
+    const calm = open({ shares: [0.25] })
+    const desperate = open({ shares: [0.03] })
+    for (const id of ['priceWar', 'adBlitz', 'saleWeekend', 'quiet'] as const) {
+      expect(count(calm, id)).toBeGreaterThan(0)
+    }
+    expect(count(desperate, 'priceWar')).toBeGreaterThan(count(calm, 'priceWar'))
+    expect(count(desperate, 'quiet')).toBeLessThan(count(calm, 'quiet'))
+  })
+
+  it('lands his sale weekend on the player’s sale weekends more often', () => {
+    // Memorial Day: May (month 4), week 4. Its Monday is 4 × 28 + 3 × 7 + 1.
+    const eventMonday = 4 * 28 + 21 + 1
+    const plainMonday = eventMonday - 7
+    const sales = (day: number) =>
+      Array.from({ length: 200 }, (_, g) => planRivalWeek(open({ generation: g }), day)).filter(
+        (m) => m.id === 'saleWeekend',
+      ).length
+    expect(sales(eventMonday)).toBeGreaterThan(sales(plainMonday) * 2)
+  })
+
+  it('deepens his undercut in a price war', () => {
+    const war = open({ undercut: 0.04, move: { id: 'priceWar', from: monday } })
+    expect(undercutOf(war)).toBeCloseTo(0.04 + PRICE_WAR_UNDERCUT)
+    expect(rivalPrice(war, 32_500)).toBeLessThan(rivalPrice(open({ undercut: 0.04 }), 32_500))
+    expect(marketShare(war, us)).toBeGreaterThan(marketShare(open({ undercut: 0.04 }), us))
+  })
+
+  it('cuts the player’s ad traffic in an ad blitz', () => {
+    expect(blitzScale(open({ move: { id: 'adBlitz', from: monday } }))).toBe(1 - BLITZ_CUT)
+    expect(blitzScale(open({ move: { id: 'quiet', from: monday } }))).toBe(1)
+  })
+
+  it('takes more of the town Friday to Sunday of his sale weekend', () => {
+    const sale = open({ move: { id: 'saleWeekend', from: monday } })
+    const share = (day: number) => marketShare(sale, { ...us, day })
+    expect(share(monday + 4)).toBeGreaterThan(share(monday + 3))
+    expect(share(monday + 6)).toBeGreaterThan(share(monday))
+    expect(share(monday)).toBeCloseTo(marketShare(open(), us))
+  })
+
+  it('makes no move unless open', () => {
+    const closed = {
+      ...open({ move: { id: 'priceWar', from: monday } }),
+      status: 'closed' as const,
+    }
+    expect(activeMove(closed)).toBeNull()
+    expect(undercutOf(closed)).toBe(closed.undercut)
+  })
+
+  it('says the move in the Monday notice', () => {
+    const rival = open({ weeks: [0.2], move: { id: 'adBlitz', from: monday } })
+    expect(rivalNotice(rival, 'week')).toMatch(/This week: an ad blitz/)
+  })
+})
+
+describe('desperation', () => {
+  it('is calm with a good share, before any share, and unless open', () => {
+    expect(desperation(open({ shares: [0.25, 0.2] }))).toBe(0)
+    expect(desperation(open())).toBe(0)
+    expect(desperation({ ...open({ shares: [0.01] }), status: 'closed' })).toBe(0)
+  })
+
+  it('rises as his share falls', () => {
+    const at = (share: number) => desperation(open({ shares: [share] }))
+    expect(at(0.15)).toBeGreaterThan(0)
+    expect(at(0.08)).toBeGreaterThan(at(0.15))
+    expect(at(0.02)).toBe(1)
+  })
+
+  it('scales Nazma’s mischief: as before until he opens, up to double, none while closed', () => {
+    expect(sabotageScale(emptyRival())).toBe(1)
+    expect(sabotageScale({ ...emptyRival(), status: 'announced' })).toBe(1)
+    expect(sabotageScale(open({ shares: [0.25] }))).toBe(1)
+    expect(sabotageScale(open({ shares: [0.02] }))).toBe(DESPERATE_SCALE)
+    expect(sabotageScale({ ...open(), status: 'closed' })).toBe(0)
+  })
+})
+
+describe('his stolen cars and hires', () => {
+  it('puts a stolen car on his lot while he’s open, keeping the latest', () => {
+    expect(rivalStole(emptyRival(), 'truck')).toEqual(emptyRival())
+    let rival = open()
+    for (let i = 0; i < STOLEN_KEPT + 2; i++) rival = rivalStole(rival, i === 0 ? 'van' : 'truck')
+    expect(rival.stolen).toHaveLength(STOLEN_KEPT)
+    expect(rival.stolen).not.toContain('van')
+  })
+
+  it('hires those who quit, and grows with their skill', () => {
+    const rival = rivalHired(open({ strength: 40 }), [{ name: 'Dana K.', skill: 4 }], 1.25)
+    expect(rival.hires).toEqual(['Dana K.'])
+    expect(rival.strength).toBeCloseTo(40 + 4 * HIRE_STRENGTH * 1.25)
+    expect(rivalHired(emptyRival(), [{ name: 'Dana K.', skill: 4 }])).toEqual(emptyRival())
   })
 })

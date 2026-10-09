@@ -4,9 +4,9 @@ import { Suspense, useRef, useState } from 'react'
 import type { Group } from 'three'
 import { isClosed } from '../sim/clock'
 import { CUSTOMER_SPEED } from '../sim/customers'
-import type { Tile } from '../sim/grid'
+import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { SIDEWALK_ENDS } from '../sim/layout'
+import { RIVAL_CROSSING, RIVAL_GATE, SIDEWALK_ENDS } from '../sim/layout'
 import { NAZMA_ID, NAZMA_VARIANT, nextTarget, POACH_SECONDS } from '../sim/nazma'
 import { createRng, hashSeed } from '../sim/rng'
 import { isPaused, useGame } from '../state/store'
@@ -48,21 +48,70 @@ interface NazmaWalker extends Walker {
   timer: number
   /** Poaching: game seconds until he looks again where his target is. */
   replan: number
+  /** Crossing the road to or from his lot: where he's walking, straight and off the grid. */
+  crossing: Vec2 | null
+  /** Done with the lot, and on his way back across the road. */
+  homeward: boolean
 }
 
 /** Nazma on the lot, if he's here, and the day he came in on. */
 const visit: { walker: NazmaWalker | null; day: number } = { walker: null, day: 0 }
 
+/** Whether his rival lot is open, so he comes and goes across the road. */
+const fromRivalLot = () => useGame.getState().rival.status === 'open'
+
+/** A point off the grid, in tile coordinates, as a world position. */
+const worldOf = (t: Tile): Vec2 => grid.tileToWorld(t.tx, t.tz)
+
+/**
+ * Nazma steps out: from his own lot across the road while it's open (and
+ * onto the lot once he's crossed), otherwise along the sidewalk from one end.
+ */
 function arrive(day: number): NazmaWalker {
-  const spawn = createRng(hashSeed(`${NAZMA_ID}-${day}`)).pick(SIDEWALK_ENDS)
+  const crossing = fromRivalLot()
+  const spawn = crossing
+    ? RIVAL_CROSSING
+    : createRng(hashSeed(`${NAZMA_ID}-${day}`)).pick(SIDEWALK_ENDS)
   const w: NazmaWalker = {
     ...createWalker(NAZMA_ID, spawn, inwardHeading(spawn)),
     task: '',
     timer: 0,
     replan: 0,
+    crossing: null,
+    homeward: false,
   }
+  if (crossing) {
+    const gate = worldOf(RIVAL_GATE)
+    w.pos.x = gate.x
+    w.pos.z = gate.z
+    w.heading = Math.PI
+    w.crossing = worldOf(RIVAL_CROSSING)
+  } else useGame.getState().nazmaArrived()
   ambientPos.set(NAZMA_ID, w.pos)
   return w
+}
+
+/**
+ * Walks him straight toward `w.crossing`, over the road where there are no
+ * tiles to path through. Returns true once he's there.
+ */
+function cross(w: NazmaWalker, speed: number, seconds: number): boolean {
+  const to = w.crossing!
+  const dx = to.x - w.pos.x
+  const dz = to.z - w.pos.z
+  const dist = Math.hypot(dx, dz)
+  const step = speed * seconds
+  if (dist <= step) {
+    w.pos.x = to.x
+    w.pos.z = to.z
+    w.crossing = null
+    return true
+  }
+  w.pos.x += (dx / dist) * step
+  w.pos.z += (dz / dist) * step
+  w.heading = Math.atan2(dx, dz)
+  w.anim.current = speed > CUSTOMER_SPEED ? 'sprint' : 'walk'
+  return false
 }
 
 function leave(): void {
@@ -71,8 +120,9 @@ function leave(): void {
   releaseWalker(NAZMA_ID)
 }
 
-/** The sidewalk end nearest to him, for a quick getaway. */
+/** Where he leaves the lot: the crossing to his own, or the sidewalk end nearest to him. */
 function nearestExit(w: Walker): Tile {
+  if (fromRivalLot()) return RIVAL_CROSSING
   let best = SIDEWALK_ENDS[0]
   let bestDist = Infinity
   for (const end of SIDEWALK_ENDS) {
@@ -128,6 +178,15 @@ function update(w: NazmaWalker, seconds: number): void {
   const game = useGame.getState()
   const nazma = game.nazma
   if (!nazma) return leave()
+  if (w.crossing) {
+    const speed = nazma.status === 'runOff' ? CUSTOMER_SPEED * RUN_FACTOR : CUSTOMER_SPEED
+    if (!cross(w, speed, seconds)) return
+    // Back across the road: gone. Over to this side: on the lot.
+    if (w.homeward) return leave()
+    w.anim.current = 'idle'
+    game.nazmaArrived()
+    return
+  }
   const target = nazma.status === 'onLot' && !isClosed(game.clock) ? nextTarget(nazma) : null
   const kind = nazma.scheme === 'poach' ? 'poach' : 'target'
   const task = nazma.status === 'runOff' ? 'flee' : target ? `${kind}:${target}` : 'leave'
@@ -158,7 +217,12 @@ function update(w: NazmaWalker, seconds: number): void {
 
   if (task === 'flee' || task === 'leave') {
     game.nazmaLeft()
-    return leave()
+    if (!fromRivalLot()) return leave()
+    // Off the lot, and back over the road to his own.
+    w.homeward = true
+    w.crossing = worldOf(RIVAL_GATE)
+    releaseWalker(NAZMA_ID)
+    return
   }
   // Sold, or out of reach: on to the next one without a smudge.
   if (!it || w.unreachable) {
@@ -171,8 +235,8 @@ function update(w: NazmaWalker, seconds: number): void {
 }
 
 /**
- * Nazma, on the days he visits (see `sim/nazma.ts`): in from the sidewalk at
- * his arrival time, round the cars he means to smudge, then off again, or
+ * Nazma, on the days he visits (see `sim/nazma.ts`): in from the sidewalk (or
+ * across the road from his own lot, once it's open) at his arrival time, round the cars he means to smudge, then off again, or
  * sprinting off once caught. His plan lives in the store; the walk is all here.
  */
 export function Nazma() {
@@ -191,7 +255,6 @@ export function Nazma() {
     if (!visit.walker && due && !isPaused(game)) {
       visit.walker = arrive(day)
       visit.day = day
-      game.nazmaArrived()
     }
     const w = visit.walker
     if (w) update(w, frameSeconds(rawDelta, game.timeScale).seconds)

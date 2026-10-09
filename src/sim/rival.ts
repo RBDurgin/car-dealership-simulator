@@ -1,12 +1,13 @@
 import { calendarOf, DAYS_PER_WEEK, longDate } from './calendar'
 import type { Customer } from './customers'
 import type { Sale } from './deal'
+import { EVENT_FIRST_WEEKDAY, eventOn } from './events'
 import { BASE_MSRP } from './inventory'
 import type { CarModel } from './layout'
 import { PRICE_STEP } from './negotiation'
 import { RANK_IDS, type RankId } from './progression'
 import { START_REPUTATION } from './reputation'
-import type { Rng } from './rng'
+import { createRng, type Rng } from './rng'
 
 /**
  * Nazma's rival dealership across the road. Once the player's dealership
@@ -17,7 +18,11 @@ import type { Rng } from './rng'
  * evening his strength drifts with the share he took. The rival is saved.
  * Some of the day's shoppers have been to his lot first and carry his price
  * on a model they want (`assignQuotes`); the haggle weighs it (`quoteFor` in
- * `sim/negotiation.ts`).
+ * `sim/negotiation.ts`). Each Monday he picks a move for the week
+ * (`planRivalWeek`), and the lower his share the more desperate he gets
+ * (`desperation`), which makes Nazma's visits, thefts and poaching likelier
+ * (`sabotageScale`). Cars he steals go on his lot (`rivalStole`) and staff he
+ * poaches go to work for him (`rivalHired`).
  */
 
 /**
@@ -54,6 +59,22 @@ export interface Rival {
   hires: string[]
   /** The last night Nazma tried to steal a car (0 if never). */
   lastTheftDay: number
+  /** This week's move, picked on Monday while he's open (null before the first). */
+  move: RivalMove | null
+}
+
+/**
+ * - priceWar: his undercut deepens by `PRICE_WAR_UNDERCUT`
+ * - adBlitz: the player's ads bring `BLITZ_CUT` fewer visitors
+ * - saleWeekend: his share rises Friday to Sunday
+ * - quiet: nothing special
+ */
+export type RivalMoveId = 'priceWar' | 'adBlitz' | 'saleWeekend' | 'quiet'
+
+export interface RivalMove {
+  id: RivalMoveId
+  /** The Monday it was picked. */
+  from: number
 }
 
 /** He announces his lot once the player reaches this rank. */
@@ -124,6 +145,7 @@ export function emptyRival(): Rival {
     stolen: [],
     hires: [],
     lastTheftDay: 0,
+    move: null,
   }
 }
 
@@ -145,7 +167,8 @@ export type RivalEvent = 'announced' | 'opened' | 'week'
  * The rival on `day`'s morning: announced once the player is at `rank` (or
  * higher), opened on his `openDay`. `strength` and `undercut` are the level's
  * `rivalStrength` and `rivalUndercut`. On a Monday while he's open, last
- * week's average share goes on `weeks`.
+ * week's average share goes on `weeks`, and he picks the week's move (on his
+ * opening day too, a Monday).
  */
 export function rivalMorning(
   rival: Rival,
@@ -162,28 +185,161 @@ export function rivalMorning(
   }
   if (rival.status === 'announced' && day >= rival.openDay) {
     const generation = rival.generation + 1
-    return {
-      rival: {
-        ...rival,
-        status: 'open',
-        generation,
-        name: RIVAL_NAMES[(generation - 1) % RIVAL_NAMES.length],
-        strength: Math.min(100, OPEN_STRENGTH * strength),
-        undercut: OPEN_UNDERCUT * undercut,
-        shares: [],
-        weeks: [],
-      },
-      event: 'opened',
+    const opened: Rival = {
+      ...rival,
+      status: 'open',
+      generation,
+      name: RIVAL_NAMES[(generation - 1) % RIVAL_NAMES.length],
+      strength: Math.min(100, OPEN_STRENGTH * strength),
+      undercut: OPEN_UNDERCUT * undercut,
+      shares: [],
+      weeks: [],
     }
+    return { rival: withMove(opened, day), event: 'opened' }
   }
-  if (rival.status === 'open' && calendarOf(day).weekday === 0 && rival.shares.length > 0) {
+  if (rival.status === 'open' && calendarOf(day).weekday === 0) {
+    if (rival.shares.length === 0) return { rival: withMove(rival, day), event: null }
     const week = rival.shares.reduce((a, b) => a + b, 0) / rival.shares.length
-    return {
-      rival: { ...rival, weeks: [...rival.weeks, week].slice(-WEEKS_KEPT) },
-      event: 'week',
-    }
+    const reported = { ...rival, weeks: [...rival.weeks, week].slice(-WEEKS_KEPT) }
+    return { rival: withMove(reported, day), event: 'week' }
   }
   return { rival, event: null }
+}
+
+/** `rival` with the week from Monday `day` planned. */
+const withMove = (rival: Rival, day: number): Rival => ({
+  ...rival,
+  move: planRivalWeek(rival, day),
+})
+
+/** His undercut deepens by this during a price war. */
+export const PRICE_WAR_UNDERCUT = 0.03
+/** During his ad blitz, the player's ads bring this much less traffic. */
+export const BLITZ_CUT = 0.5
+/** During his sale weekend, the logistic behind `marketShare` is pushed up this much Friday to Sunday. */
+export const SALE_WEEKEND_PUSH = 1
+const WEEK_SEED = 23_000
+
+/** His share at or over this, he's calm; at or under `DESPERATE_SHARE`, as desperate as he gets. */
+export const CALM_SHARE = 0.2
+export const DESPERATE_SHARE = 0.05
+/** A desperate Nazma visits, steals and poaches this many times as often as a calm one. */
+export const DESPERATE_SCALE = 2
+
+/**
+ * How desperate he is, 0 (calm) to 1: his average share over the last days
+ * he was open, from `CALM_SHARE` down to `DESPERATE_SHARE`. Calm until he
+ * has a day behind him, and unless he's open.
+ */
+export function desperation(rival: Rival): number {
+  if (rival.status !== 'open' || rival.shares.length === 0) return 0
+  const avg = rival.shares.reduce((a, b) => a + b, 0) / rival.shares.length
+  return Math.max(0, Math.min(1, (CALM_SHARE - avg) / (CALM_SHARE - DESPERATE_SHARE)))
+}
+
+/**
+ * What his business does to the odds of Nazma's visits, thefts and poaching:
+ * as in Phase 9 (1) until he opens, up to `DESPERATE_SCALE` with his
+ * `desperation` while he's open, and none while he's closed.
+ */
+export function sabotageScale(rival: Rival): number {
+  if (rival.status === 'closed') return 0
+  return 1 + desperation(rival) * (DESPERATE_SCALE - 1)
+}
+
+/**
+ * His move for the week from Monday `day`, seeded by the day and his
+ * generation. The more desperate he is, the likelier a price war and the less
+ * likely a quiet week. A week ending in one of the player's sale weekends
+ * (`EVENTS`) draws his own sale weekend onto it.
+ */
+export function planRivalWeek(rival: Rival, day: number): RivalMove {
+  const d = desperation(rival)
+  const eventWeek = !!eventOn(day + EVENT_FIRST_WEEKDAY)
+  const weights: [RivalMoveId, number][] = [
+    ['priceWar', 1 + 2 * d],
+    ['adBlitz', 1],
+    ['saleWeekend', eventWeek ? 4 : 1],
+    ['quiet', 1.5 * (1 - d) + 0.25],
+  ]
+  const rng = createRng(WEEK_SEED + day + rival.generation * 1_000)
+  let roll = rng.next() * weights.reduce((sum, [, w]) => sum + w, 0)
+  const id = weights.find(([, w]) => (roll -= w) < 0)?.[0] ?? 'quiet'
+  return { id, from: day }
+}
+
+/** His move this week, or null unless he's open. */
+export function activeMove(rival: Rival): RivalMoveId | null {
+  return rival.status === 'open' ? (rival.move?.id ?? null) : null
+}
+
+/** His discount off MSRP today, deeper during a price war. */
+export function undercutOf(rival: Rival): number {
+  return rival.undercut + (activeMove(rival) === 'priceWar' ? PRICE_WAR_UNDERCUT : 0)
+}
+
+/** What the player's ad traffic is scaled by: less during his ad blitz. */
+export function blitzScale(rival: Rival): number {
+  return activeMove(rival) === 'adBlitz' ? 1 - BLITZ_CUT : 1
+}
+
+/** Whether `day` is one of the days of his sale weekend. */
+export function onSaleWeekend(rival: Rival, day: number): boolean {
+  return activeMove(rival) === 'saleWeekend' && calendarOf(day).weekday >= EVENT_FIRST_WEEKDAY
+}
+
+export const MOVE_LABELS: Record<RivalMoveId, string> = {
+  priceWar: 'Price war',
+  adBlitz: 'Ad blitz',
+  saleWeekend: 'Sale weekend',
+  quiet: 'Quiet week',
+}
+
+/** What his move does this week, for the Rival tab and the Monday notice. */
+export function moveText(rival: Rival): string | null {
+  switch (activeMove(rival)) {
+    case 'priceWar':
+      return `a price war: he's selling at ${percent(undercutOf(rival))}% under MSRP.`
+    case 'adBlitz':
+      return `an ad blitz: your ads bring in ${percent(BLITZ_CUT)}% fewer shoppers.`
+    case 'saleWeekend':
+      return 'a sale weekend: more of the town goes to him Friday to Sunday.'
+    case 'quiet':
+      return 'a quiet one.'
+    default:
+      return null
+  }
+}
+
+/** How many of the cars he stole are kept on his lot. */
+export const STOLEN_KEPT = 4
+/** How many of his hires are remembered. */
+export const HIRES_KEPT = 6
+/** Strength he gains per skill point of each employee he poaches. */
+export const HIRE_STRENGTH = 2
+
+/** A car of `model` stolen overnight: on his lot while he's open. */
+export function rivalStole(rival: Rival, model: CarModel): Rival {
+  if (rival.status !== 'open') return rival
+  return { ...rival, stolen: [...rival.stolen, model].slice(-STOLEN_KEPT) }
+}
+
+/**
+ * Staff who quit after Nazma talked to them: while he's open they go to work
+ * for him, each adding `HIRE_STRENGTH` per skill point (× the level's `growth`).
+ */
+export function rivalHired(
+  rival: Rival,
+  staff: readonly { name: string; skill: number }[],
+  growth = 1,
+): Rival {
+  if (rival.status !== 'open' || staff.length === 0) return rival
+  const gain = staff.reduce((sum, e) => sum + e.skill * HIRE_STRENGTH, 0) * growth
+  return {
+    ...rival,
+    hires: [...rival.hires, ...staff.map((e) => e.name)].slice(-HIRES_KEPT),
+    strength: Math.min(100, rival.strength + gain),
+  }
 }
 
 const percent = (share: number) => Math.round(share * 100)
@@ -213,15 +369,21 @@ export function rivalNotice(rival: Rival, event: RivalEvent): string {
     case 'announced':
       return `Nazma has bought the lot across the road. ${rival.name} opens there on ${longDate(rival.openDay)}.`
     case 'opened':
-      return `${rival.name} opened across the road today. Expect some shoppers to go to him instead.`
+      return `${rival.name} opened across the road today. Expect some shoppers to go to him instead.${weekLine(rival)}`
     case 'week':
-      return `${rival.name} took ${shareLine(rival.weeks[rival.weeks.length - 1] ?? 0, weekChange(rival.weeks))} of the town's buyers last week.`
+      return `${rival.name} took ${shareLine(rival.weeks[rival.weeks.length - 1] ?? 0, weekChange(rival.weeks))} of the town's buyers last week.${weekLine(rival)}`
   }
+}
+
+/** " This week: a price war: …", or nothing without a move. */
+function weekLine(rival: Rival): string {
+  const text = moveText(rival)
+  return text ? ` This week: ${text}` : ''
 }
 
 /** His price on a car with this sticker: MSRP less his undercut, to the nearest `PRICE_STEP`. */
 export function rivalPrice(rival: Rival, msrp: number): number {
-  return Math.round((msrp * (1 - rival.undercut)) / PRICE_STEP) * PRICE_STEP
+  return Math.round((msrp * (1 - undercutOf(rival))) / PRICE_STEP) * PRICE_STEP
 }
 
 /** His price on one model, quoted to a shopper who went to his lot first. */
@@ -254,15 +416,23 @@ export function assignQuotes(
   })
 }
 
-/** The banner on his front fence. */
-export function bannerText(rival: Rival): string {
+/** The banner on his front fence on `day`: his status, or this week's move. */
+export function bannerText(rival: Rival, day: number): string {
   switch (rival.status) {
     case 'announced':
       return 'OPENING SOON'
     case 'closed':
       return 'CLOSED'
+  }
+  switch (activeMove(rival)) {
+    case 'priceWar':
+      return `PRICE WAR! ${percent(undercutOf(rival))}% OFF`
+    case 'adBlitz':
+      return 'AS SEEN ON TV!'
+    case 'saleWeekend':
+      return onSaleWeekend(rival, day) ? 'SALE WEEKEND!' : 'SALE THIS WEEKEND'
     default:
-      return `${percent(rival.undercut)}% UNDER MSRP!`
+      return `${percent(undercutOf(rival))}% UNDER MSRP!`
   }
 }
 
@@ -278,6 +448,8 @@ export interface OurStanding {
   reputation: number
   /** Ad campaigns running today. */
   campaigns: number
+  /** Today, for his sale weekend. */
+  day?: number
 }
 
 const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
@@ -285,15 +457,17 @@ const sigmoid = (x: number) => 1 / (1 + Math.exp(-x))
 /**
  * His share of the town's buyers, 0 to `MAX_SHARE`: a logistic that rises
  * with his strength and with his undercut over the player's average discount,
- * and falls with the player's reputation and running ads. None unless open.
+ * and falls with the player's reputation and running ads. More on the days of
+ * his sale weekend. None unless open.
  */
 export function marketShare(rival: Rival, us: OurStanding): number {
   if (rival.status !== 'open') return 0
   const x =
     (STRENGTH_WEIGHT * (rival.strength - 50)) / 50 +
-    (PRICE_WEIGHT * (rival.undercut - rival.ourDiscount)) / PRICE_UNIT -
+    (PRICE_WEIGHT * (undercutOf(rival) - rival.ourDiscount)) / PRICE_UNIT -
     (REPUTATION_WEIGHT * (us.reputation - START_REPUTATION)) / 50 -
-    AD_WEIGHT * Math.min(MAX_ADS, us.campaigns)
+    AD_WEIGHT * Math.min(MAX_ADS, us.campaigns) +
+    (us.day !== undefined && onSaleWeekend(rival, us.day) ? SALE_WEEKEND_PUSH : 0)
   return MAX_SHARE * sigmoid(x)
 }
 
@@ -342,6 +516,7 @@ export function emptyRivalStats(share: number): RivalStats {
 }
 
 const STATUSES: readonly RivalStatus[] = ['unopened', 'announced', 'open', 'closed']
+const MOVES: readonly RivalMoveId[] = ['priceWar', 'adBlitz', 'saleWeekend', 'quiet']
 
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isStrings = (v: unknown): v is string[] =>
@@ -366,6 +541,13 @@ export function isRival(v: unknown): v is Rival {
     r.weeks.every(isNumber) &&
     isStrings(r.stolen) &&
     isStrings(r.hires) &&
-    isNumber(r.lastTheftDay)
+    isNumber(r.lastTheftDay) &&
+    (r.move === null || isMove(r.move))
   )
+}
+
+function isMove(v: unknown): v is RivalMove {
+  if (typeof v !== 'object' || v === null) return false
+  const m = v as Record<string, unknown>
+  return (MOVES as readonly unknown[]).includes(m.id) && isNumber(m.from)
 }

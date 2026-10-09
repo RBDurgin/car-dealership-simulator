@@ -4,11 +4,16 @@ import { carName } from '../sim/interactables'
 import { BASE_MSRP } from '../sim/inventory'
 import { rankById } from '../sim/progression'
 import {
+  activeMove,
+  desperation,
   MAX_SHARE,
+  MOVE_LABELS,
+  moveText,
   OPENING_RANK,
   RIVAL_STATUS_LABELS,
   rivalPrice,
   shareLine,
+  undercutOf,
   weekChange,
   type Rival,
 } from '../sim/rival'
@@ -53,6 +58,8 @@ function OpenRival({ rival }: { rival: Rival }) {
   const day = useGame((s) => s.clock.day)
   const share = useGame((s) => s.dayStats.rival?.share ?? 0)
   const lastWeek = rival.weeks[rival.weeks.length - 1]
+  const move = activeMove(rival)
+  const desperate = desperation(rival) >= 0.5
   return (
     <>
       <dl className="stock-summary">
@@ -66,6 +73,16 @@ function OpenRival({ rival }: { rival: Rival }) {
             <span className="muted">No report until Monday</span>
           ) : (
             shareLine(lastWeek, weekChange(rival.weeks))
+          )}
+        </dd>
+        <dt>This week</dt>
+        <dd>
+          {move ? (
+            <>
+              <b>{MOVE_LABELS[move]}</b> <span className="muted">· {moveText(rival)}</span>
+            </>
+          ) : (
+            <span className="muted">No move until Monday</span>
           )}
         </dd>
         <dt>Strength</dt>
@@ -85,7 +102,7 @@ function OpenRival({ rival }: { rival: Rival }) {
         </>
       )}
       <h3>
-        His prices <span className="muted">· {percent(rival.undercut)} under MSRP</span>
+        His prices <span className="muted">· {percent(undercutOf(rival))} under MSRP</span>
       </h3>
       <PriceList rival={rival} />
       {rival.hires.length > 0 && (
@@ -96,10 +113,17 @@ function OpenRival({ rival }: { rival: Rival }) {
           For sale on his lot, taken from yours: {rival.stolen.map(carName).join(', ')}.
         </p>
       )}
+      {desperate && (
+        <p className="cal-intro">
+          His lot is struggling and Nazma is getting desperate: expect him to visit, steal and poach
+          more often.
+        </p>
+      )}
       <p className="muted cal-intro">
         His share grows with his strength and with how far he undercuts your prices. Your reputation
         and the ads you run pull it back down. He gets stronger while he takes more than a few of
-        the town&apos;s buyers, and weaker while he doesn&apos;t.
+        the town&apos;s buyers, and weaker while he doesn&apos;t. Each Monday he picks a move for
+        the week: a price war, an ad blitz against yours, a sale weekend or a quiet week.
       </p>
     </>
   )

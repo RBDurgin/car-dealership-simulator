@@ -189,6 +189,16 @@ export const UPDATES: readonly Update[] = [
       'Your salespeople match him too, as long as the sale still pays.',
     ],
   },
+  {
+    id: 18,
+    phase: '14',
+    title: 'Nazma’s weekly moves',
+    items: [
+      'Each Monday Nazma picks a move: a price war, an ad blitz against yours, a sale weekend or a quiet week.',
+      'The worse his lot does, the more desperate he gets, and the more often he comes over to cause trouble.',
+      'Cars he steals go up for sale on his lot, and staff he poaches go to work for him.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

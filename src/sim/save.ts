@@ -27,7 +27,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 19
+export const SAVE_VERSION = 20
 
 export interface SaveData {
   version: number
@@ -222,6 +222,12 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
     ...raw,
     rival:
       typeof raw.rival === 'object' && raw.rival !== null ? { ...raw.rival, weeks: [] } : raw.rival,
+  }),
+  // v20: his weekly move, none picked until the next Monday.
+  19: (raw) => ({
+    ...raw,
+    rival:
+      typeof raw.rival === 'object' && raw.rival !== null ? { ...raw.rival, move: null } : raw.rival,
   }),
 }
 

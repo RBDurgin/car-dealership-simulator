@@ -15,7 +15,7 @@ import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
-import { MAX_SHARE, OPENING_RANK, RIVAL_NAMES } from '../sim/rival'
+import { BLITZ_CUT, MAX_SHARE, OPENING_RANK, PRICE_WAR_UNDERCUT, RIVAL_NAMES } from '../sim/rival'
 import { QUOTE_TOLERANCE } from '../sim/negotiation'
 import { ownerBonus } from '../sim/owner'
 import {
@@ -397,6 +397,13 @@ function BusinessTab({ touch, click }: TabProps) {
           The <b>Rival</b> tab on the office computer (<OfficeKey touch={touch} keyName="K" />) has
           his share day by day, his strength and his price on every model.
         </p>
+        <p>
+          Each Monday he picks a move for the week, shown on his banner, in the Rival tab and in the
+          Monday report: a <b>price war</b> ({Math.round(PRICE_WAR_UNDERCUT * 100)}% deeper under
+          MSRP), an <b>ad blitz</b> (your ads bring in {Math.round(BLITZ_CUT * 100)}% fewer
+          shoppers), a <b>sale weekend</b> (more of the town goes to him Friday to Sunday, often on
+          your own sale weekends) or a quiet week.
+        </p>
       </section>
       <section>
         <h3>Manufacturer&apos;s quota</h3>
@@ -604,6 +611,12 @@ function PeopleTab({ touch, click }: TabProps) {
           From day {FIRST_THEFT_DAY}, some nights he drives a lot car away, pricier ones first. It
           is written off at cost, and a floored car&apos;s loan is called in the next morning. A
           security guard on the payroll stops him.
+        </p>
+        <p>
+          Once his own lot is open across the road, he crosses over from it. Cars he steals go up
+          for sale there, and anyone he poaches who quits goes to work for him, making his business
+          stronger. The worse his lot does, the more desperate he gets: up to twice as many visits,
+          thefts and poaching tries.
         </p>
       </section>
     </>

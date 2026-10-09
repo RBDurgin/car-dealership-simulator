@@ -91,12 +91,12 @@ import {
   confrontBlocker,
   emptyNazmaStats,
   isNazmaDay,
-  isTheftNight,
   NAZMA_ID,
   nextTarget,
   planTheft,
   planVisit,
   stolenRecord,
+  theftNightAfter,
   theftSeed,
   visitSeed,
   type NazmaStats,
@@ -138,12 +138,16 @@ import {
 } from '../sim/reputation'
 import {
   assignQuotes,
+  blitzScale,
   emptyRival,
   emptyRivalStats,
   marketShare,
   rivalDay,
+  rivalHired,
   rivalMorning,
   rivalNotice,
+  rivalStole,
+  sabotageScale,
   type Rival,
   type RivalStats,
 } from '../sim/rival'
@@ -505,15 +509,17 @@ export function repScale(t: Tuning): RepScale {
 }
 
 /** The level's odds of a visit from Nazma. */
-function visitOdds(t: Tuning): VisitOdds {
-  return { chance: t.nazmaChance, firstDay: t.firstNazmaDay }
+/** The level's odds of a visit, scaled by his rival lot's `sabotageScale`. */
+function visitOdds(t: Tuning, scale = 1): VisitOdds {
+  return { chance: t.nazmaChance * scale, firstDay: t.firstNazmaDay }
 }
 
 /** The morning's word on a night's theft. */
-export function theftNotice(theft: NightTheft): string {
+export function theftNotice(theft: NightTheft, rival: string | null = null): string {
   if (theft.outcome === 'foiled') return 'Your guard ran someone off the lot last night.'
   const { car } = theft
-  const stole = `Nazma stole the ${carName(car.model)} off the lot overnight.`
+  const where = rival ? ` It's for sale at ${rival} now.` : ''
+  const stole = `Nazma stole the ${carName(car.model)} off the lot overnight.${where}`
   return car.floored ? `${stole} The bank called in its ${formatMoney(car.cost)} loan.` : stole
 }
 
@@ -719,10 +725,23 @@ export const useGame = create<GameState>((set, get) => {
   const closeUp = () => {
     const before = get().roster
     setRoster(reduceStaff(before, { type: 'close' }))
-    const quit = before.filter((e) => e.quitting && !e.fired).map((e) => e.name)
-    if (quit.length === 0) return
-    tallyNazma({ quit: [...get().dayStats.nazma.quit, ...quit] })
-    notify(`${quit.join(' and ')} quit and won't be back.`)
+    const quitters = before.filter((e) => e.quitting && !e.fired)
+    if (quitters.length === 0) return
+    const quit = quitters.map((e) => e.name)
+    const s = get()
+    const rival = rivalHired(s.rival, quitters, tuning().rivalStrength)
+    const joined = rival === s.rival ? [] : quitters.map((e) => ({ name: e.name, role: e.role }))
+    set({ rival })
+    tallyNazma({
+      quit: [...s.dayStats.nazma.quit, ...quit],
+      joined: [...s.dayStats.nazma.joined, ...joined],
+      ...(joined.length > 0 && { rival: rival.name }),
+    })
+    notify(
+      joined.length > 0
+        ? `${quit.join(' and ')} quit to work for ${rival.name}.`
+        : `${quit.join(' and ')} quit and won't be back.`,
+    )
   }
 
   /** Stores a new roster, dropping hovers, menus and panels aimed at anyone who's gone. */
@@ -1071,7 +1090,9 @@ export const useGame = create<GameState>((set, get) => {
    * head in. On the 1st the manufacturer sets the month's quota, from
    * reputation. A sale weekend is announced a week ahead and on its first day.
    * Nazma announces his rival lot once the dealership is a Main Street one,
-   * and while it's open it takes its share of the day's visitors.
+   * and while it's open it takes its share of the day's visitors, makes his
+   * weekly move on Mondays, and the worse he does the more Nazma gets up to:
+   * a car he steals goes on his lot.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
@@ -1090,7 +1111,6 @@ export const useGame = create<GameState>((set, get) => {
     const kept = dropSold(s.inventory)
     const level = tuning()
     const guarded = isGuarded(s.roster)
-    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, level.theftChance)
     const opening = rivalMorning(
       s.rival,
       day,
@@ -1098,21 +1118,30 @@ export const useGame = create<GameState>((set, get) => {
       level.rivalStrength,
       level.rivalUndercut,
     )
-    const rival = isTheftNight(day, level.theftChance)
-      ? { ...opening.rival, lastTheftDay: day }
-      : opening.rival
+    // The more desperate his lot, the more Nazma gets up to.
+    const sabotage = sabotageScale(opening.rival)
+    const theftChance = level.theftChance * sabotage
+    const last = s.rival.lastTheftDay
+    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, theftChance, last)
+    const stolen = theft?.outcome === 'stolen' ? theft.car : null
+    const tried = theftNightAfter(day, last, theftChance)
+    const rival = stolen
+      ? { ...rivalStole(opening.rival, stolen.model), lastTheftDay: day }
+      : tried
+        ? { ...opening.rival, lastTheftDay: day }
+        : opening.rival
     const share = marketShare(rival, {
       reputation: s.reputation,
       campaigns: activeCampaigns(campaigns, day).length,
+      day,
     })
-    const stolen = theft?.outcome === 'stolen' ? theft.car : null
     const inventory = [
       ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
       ...delivered,
     ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    const nazma = isNazmaDay(day, guarded, visitOdds(level))
-      ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance)
+    const nazma = isNazmaDay(day, guarded, visitOdds(level, sabotage))
+      ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance * sabotage)
       : null
     const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
@@ -1132,7 +1161,7 @@ export const useGame = create<GameState>((set, get) => {
       campaigns,
       arrivals: planArrivals(
         customerRng,
-        trafficBoost(campaigns, day, campaignScale(s.reputation)),
+        trafficBoost(campaigns, day, campaignScale(s.reputation) * blitzScale(rival)),
         {
           scale:
             visitorScale(s.reputation) *
@@ -1153,6 +1182,7 @@ export const useGame = create<GameState>((set, get) => {
           ...emptyNazmaStats(),
           stolen: stolen ? [stolenRecord(stolen)] : [],
           foiled: theft?.outcome === 'foiled',
+          rival: rival.status === 'open' ? rival.name : null,
         },
         rival: rival.status === 'open' ? emptyRivalStats(share) : null,
       },
@@ -1168,7 +1198,7 @@ export const useGame = create<GameState>((set, get) => {
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
       opening.event && rivalNotice(rival, opening.event),
       eventNotice(day),
-      theft && theftNotice(theft),
+      theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
     ].filter((t): t is string => !!t)
     if (notices.length > 0) notify(notices.join(' '))
@@ -1515,7 +1545,9 @@ export const useGame = create<GameState>((set, get) => {
       notify(
         s.clock.day === tuning().firstNazmaDay
           ? "That's Nazma, who used to work here. He has it in for the place. Click him to run him off!"
-          : 'Nazma is back on the lot.',
+          : s.rival.status === 'open'
+            ? `Nazma crossed the road from ${s.rival.name}.`
+            : 'Nazma is back on the lot.',
       )
     },
     nazmaSmudge: (carId) => {

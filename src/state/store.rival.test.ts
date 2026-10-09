@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
 import { emptyStats } from '../sim/deal'
-import { isTheftNight } from '../sim/nazma'
+import { isTheftNight, nazmaSummary } from '../sim/nazma'
+import { wageFor, type Employee } from '../sim/staff'
 import { emptyCareer, RANKS } from '../sim/progression'
 import { BASE_MSRP } from '../sim/inventory'
 import {
@@ -10,6 +11,7 @@ import {
   OPEN_STRENGTH,
   OPEN_UNDERCUT,
   openingDay,
+  HIRE_STRENGTH,
   rivalPrice,
   type Rival,
 } from '../sim/rival'
@@ -198,5 +200,87 @@ describe("Nazma's rival lot", () => {
     expect(game().rival.lastTheftDay).toBe(night)
     startDay(night + 1)
     expect(game().rival.lastTheftDay).toBe(night)
+  })
+})
+
+describe('his moves and sabotage', () => {
+  beforeEach(() => {
+    useGame.setState(initial, true)
+    game().newGame()
+  })
+  const night = Array.from({ length: 100 }, (_, i) => i + 1).find((d) => isTheftNight(d))!
+
+  it('picks a move on Monday, says it in the notice and keeps it through a reload', () => {
+    useGame.setState({ rival: open({ shares: [0.2], weeks: [0.2] }) })
+    // Day 29 is a Monday.
+    startDay(29)
+    const move = game().rival.move
+    expect(move?.from).toBe(29)
+    expect(game().notice?.text).toMatch(/This week: /)
+    startDay(30)
+    expect(game().rival.move).toEqual(move)
+  })
+
+  it('puts a stolen car on his lot, and says so', () => {
+    useGame.setState({ rival: open() })
+    startDay(night)
+    const [stolen] = game().dayStats.nazma.stolen
+    expect(stolen).toBeDefined()
+    expect(game().rival.stolen).toEqual([stolen.model])
+    expect(game().rival.lastTheftDay).toBe(night)
+    expect(game().notice?.text).toMatch(/It's for sale at Nazma's Motors now\./)
+    expect(nazmaSummary(game().dayStats.nazma)).toMatch(/now for sale at Nazma's Motors/)
+  })
+
+  it('never repeats a theft on reload, however desperate he gets', () => {
+    useGame.setState({ rival: open() })
+    startDay(night)
+    const left = game().inventory.length
+    // Desperate now, so the odds are doubled; the saved last night still keeps the gap.
+    useGame.setState({ rival: { ...game().rival, shares: [0.01] } })
+    for (let i = 0; i < 3; i++) startDay(night + 1)
+    expect(game().dayStats.nazma.stolen).toEqual([])
+    expect(game().inventory.length).toBeGreaterThanOrEqual(left)
+  })
+
+  it('leaves the cars alone overnight before his lot opens, as before', () => {
+    startDay(night)
+    expect(game().dayStats.nazma.stolen).toHaveLength(1)
+    expect(game().rival.stolen).toEqual([])
+    expect(nazmaSummary(game().dayStats.nazma)).not.toMatch(/for sale/)
+  })
+
+  it('visits more often while desperate', () => {
+    const visits = (shares: number[]) => {
+      let n = 0
+      for (let day = 10; day < 90; day++) {
+        useGame.setState({ rival: open({ shares }) })
+        startDay(day)
+        if (game().nazma) n++
+      }
+      return n
+    }
+    expect(visits([0.01])).toBeGreaterThan(visits([0.25]) * 1.4)
+  })
+
+  it('hires a poached employee who quits, and grows stronger', () => {
+    const dana: Employee = {
+      id: 'staff-1-2',
+      name: 'Dana R.',
+      variant: 'female-e',
+      role: 'sales',
+      skill: 4,
+      wage: wageFor('sales', 4),
+      status: 'atPost',
+      fired: false,
+      quitting: true,
+    }
+    useGame.setState({ rival: open({ strength: 40 }), roster: [dana] })
+    endDay()
+    expect(game().rival.hires).toEqual(['Dana R.'])
+    // His strength also drifted with the day's share when it was settled.
+    expect(game().rival.strength).toBeGreaterThan(40 + 4 * HIRE_STRENGTH - 5)
+    expect(game().dayStats.nazma.joined).toEqual([{ name: 'Dana R.', role: 'sales' }])
+    expect(nazmaSummary(game().dayStats.nazma)).toBe("Dana R. now sells for Nazma's Motors")
   })
 })

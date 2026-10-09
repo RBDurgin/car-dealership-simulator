@@ -196,9 +196,10 @@ function Fence() {
   )
 }
 
-/** The offer banner over the gate, on two poles. */
+/** The offer banner over the gate, on two poles: his status, or this week's move. */
 function Banner({ rival }: { rival: Rival }) {
-  const map = useBannerTexture(bannerText(rival), rival.status === 'closed')
+  const day = useGame((s) => s.clock.day)
+  const map = useBannerTexture(bannerText(rival, day), rival.status === 'closed')
   const poleH = 3.1
   return (
     <>
