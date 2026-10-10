@@ -1,6 +1,6 @@
 # Phase 16 Plan: Client Book and Loyalty
 
-**Status:** planned 2026-10-08. 16a built 2026-10-10 (save v23). 16b built 2026-10-10: the computer's actions are folded into one **Office** action everywhere, since even the desktop ring was full at six. Phases 13, 14 and 15 come first:
+**Status:** planned 2026-10-08. 16a built 2026-10-10 (save v23). 16b built 2026-10-10: the computer's actions are folded into one **Office** action everywhere, since even the desktop ring was full at six. 16c built 2026-10-10, with no save change: a call nobody answers isn't logged, so who was tried today is kept mid-day (`callsTried`); booked clients turn up `SHOW_CHANCE` (85%) of the time; a booked prospect is kept past their expiry until their appointment; the receptionist hangs up when someone starts waiting rather than pausing. Phases 13, 14 and 15 come first:
 
 - the month's satisfaction score can hold back 13b's franchise tier;
 - unhappy clients defect to 14's rival lot;

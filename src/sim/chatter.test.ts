@@ -55,6 +55,24 @@ describe('variantOf', () => {
 })
 
 describe('conversationsOf', () => {
+  it('hears only the caller on a phone call: the player once the call is going, or the receptionist', () => {
+    const approaching = state({ activeAction: { action: 'call', phase: 'approaching' } })
+    expect(conversationsOf(approaching)).toEqual([])
+    const s = state({
+      activeAction: { action: 'call', phase: 'performing' },
+      receptionCall: { employeeId: 'e-rec' },
+    })
+    expect(conversationsOf(s)).toEqual([
+      { key: `phone:${PLAYER_ID}`, kind: 'phone', speakers: [PLAYER_ID, PLAYER_ID] },
+      { key: 'phone:e-rec', kind: 'phone', speakers: ['e-rec', 'e-rec'] },
+    ])
+    const conv = conversationsOf(s)[1]
+    const rng = createRng(4)
+    for (let turn = 0; turn < 6; turn++) {
+      expect(nextLine(conv, turn, rng).line.speaker).toBe('e-rec')
+    }
+  })
+
   it('pairs a seller with the customer they are talking to, seller first', () => {
     const s = state({ customers: [customer('c1', { phase: 'talking', handlerId: PLAYER_ID })] })
     expect(conversationsOf(s)).toEqual([

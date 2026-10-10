@@ -878,6 +878,10 @@ kbd {
   display: inline-block;
   white-space: nowrap;
 }
+/* A booked appointment, in the Clients tab and the Calendar tab. */
+.client-appointment {
+  color: #93c5fd;
+}
 .stock-badge.client-due {
   background: rgba(253, 224, 71, 0.25);
   color: #fde047;

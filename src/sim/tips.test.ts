@@ -152,6 +152,22 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0 }] },
   ],
   clientBook: [{ clients: [{ id: 'client-1-0' } as Client] }, {}],
+  followUp: [
+    { clients: [{ id: 'client-1-0', status: 'prospect' } as Client] },
+    { clients: [{ id: 'client-1-0', status: 'lapsed' } as Client] },
+  ],
+  appointment: [
+    {
+      clients: [
+        {
+          id: 'client-1-0',
+          status: 'prospect',
+          appointment: { day: 2, minute: 600, reason: 'beBack' },
+        } as Client,
+      ],
+    },
+    { clients: [{ id: 'client-1-0', status: 'prospect', appointment: null } as Client] },
+  ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },

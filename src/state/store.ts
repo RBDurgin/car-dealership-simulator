@@ -7,11 +7,28 @@ import {
   type AudioBus,
   type AudioSettings,
 } from '../sim/audioSettings'
+import {
+  appointmentMinute,
+  appointmentsNotice,
+  applyCall,
+  CALL_MINUTES,
+  callKind,
+  callLine,
+  callList,
+  callOutcome,
+  callSkill,
+  planClientVisits,
+  receptionCallTime,
+  takeDueClients,
+  type CallKind,
+  type ClientVisit,
+} from '../sim/calls'
 import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import {
   bookNames,
+  clientCarInfo,
   defaultPerks,
   emptyMonthCsi,
   isDue,
@@ -86,9 +103,9 @@ import {
   walkLine,
 } from '../sim/negotiation'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty, type Tuning } from '../sim/difficulty'
-import { assignVehicles } from '../sim/driving'
+import { assignVehicles, freeSpot } from '../sim/driving'
 import { dailyInterest, payoffOnSale } from '../sim/floorPlan'
-import { DESK_CHAIR_ID, type CarModel, type ExpansionId } from '../sim/layout'
+import { DESK_CHAIR_ID, DESK_PHONE_ID, type CarModel, type ExpansionId } from '../sim/layout'
 import {
   availableCars,
   buildInventory,
@@ -294,6 +311,15 @@ export interface Notice {
 
 export type Screen = 'title' | 'playing'
 
+/** The receptionist on the phone to someone in the client book. */
+export interface ReceptionCall {
+  employeeId: string
+  clientId: string
+  kind: CallKind
+  /** Game minutes left on the call. */
+  left: number
+}
+
 /** The office computer panel's tabs. */
 export type ComputerTab =
   'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients'
@@ -366,6 +392,14 @@ interface GameState {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores, for the manufacturer's CSI. Saved. */
   monthCsi: MonthCsi
+  /** Clients due in on an appointment today, still to come. Planned each morning, never saved. */
+  clientVisits: ClientVisit[]
+  /** Clients phoned today who didn't pick up, or did: not called again today. Never saved. */
+  callsTried: string[]
+  /** Who the player's call at the desk phone is to (while `activeAction` is a call). */
+  playerCall: string | null
+  /** The receptionist's call between customers, or null. Never saved. */
+  receptionCall: ReceptionCall | null
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
@@ -521,6 +555,13 @@ interface GameState {
   staffRecommend: (employeeId: string, jobId: string) => void
   /** From the Service tab: the player phones a client who's away about the extra work found on job `jobId`. */
   callClient: (jobId: string) => void
+  /**
+   * The player heads for the desk phone to call client `clientId`, or (with
+   * none) the top of the call list. False if there's nobody to call.
+   */
+  phoneClient: (clientId?: string) => boolean
+  /** Turns the receptionist's calls between customers on or off. */
+  setReceptionCalls: (on: boolean) => void
   /** Service client `customerId` reached their car, which is ready: they pay and get in. */
   serviceCollect: (customerId: string) => void
   /** Service client `customerId`, dropping their car off, walked off the lot until it's ready. */
@@ -731,6 +772,10 @@ function dayOne(difficulty: Difficulty) {
     clientPerks: defaultPerks(),
     appreciation: null as Appreciation | null,
     monthCsi: emptyMonthCsi(),
+    clientVisits: [] as ClientVisit[],
+    callsTried: [] as string[],
+    playerCall: null as string | null,
+    receptionCall: null as ReceptionCall | null,
     quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
@@ -1250,6 +1295,106 @@ export const useGame = create<GameState>((set, get) => {
     if (message) notify(message(deal.name))
   }
 
+  /** Clients from the book who are on the lot, being called, or were phoned today: not to call now. */
+  const notToCall = (): Set<string> => {
+    const s = get()
+    const skip = new Set(s.callsTried)
+    for (const c of s.customers) if (c.clientId) skip.add(c.clientId)
+    if (s.receptionCall) skip.add(s.receptionCall.clientId)
+    if (s.activeAction?.action === 'call' && s.playerCall) skip.add(s.playerCall)
+    return skip
+  }
+
+  /**
+   * A call to client `clientId` by `by` (the player or the receptionist, at
+   * `skill`) has ended: how it went is rolled, the book takes it in, and the
+   * day's tally counts it. The player hears every outcome; a receptionist's
+   * call is only told when it books someone.
+   */
+  const endCall = (clientId: string, by: string, skill: number) => {
+    const s = get()
+    const client = s.clients.find((c) => c.id === clientId)
+    const kind = client && callKind(client, s.clock.day)
+    if (!client || !kind) return
+    const result = callOutcome(client, kind, skill, clientRng, { scale: tuning().clientReturn })
+    const minute = result.outcome === 'booked' ? appointmentMinute(clientRng) : 0
+    const stats = s.dayStats.clients
+    set({
+      clients: applyCall(s.clients, clientId, kind, result, s.clock.day, minute),
+      callsTried: [...s.callsTried, clientId],
+      dayStats: withClientStats(s.dayStats, {
+        ...stats,
+        calls: stats.calls + 1,
+        booked: stats.booked + (result.outcome === 'booked' ? 1 : 0),
+      }),
+    })
+    if (by === PLAYER_ID) return notify(callLine(client.name, kind, result, minute))
+    if (result.outcome !== 'booked') return
+    const who = s.roster.find((e) => e.id === by)?.name ?? 'Your receptionist'
+    notify(`${who} booked ${client.name} for ${formatTime(minute)} tomorrow.`)
+  }
+
+  /**
+   * Over `minutes` of the clock: a receptionist at the desk with nobody
+   * waiting works the call list, one call at a time, slower the greener they
+   * are. Anyone waiting comes first: they hang up and see to them.
+   */
+  const receptionCalls = (minutes: number) => {
+    const s = get()
+    const e = s.roster.find((x) => x.role === 'receptionist' && x.status === 'atPost' && !x.fired)
+    const free =
+      e &&
+      s.clientPerks.receptionCalls &&
+      !isClosed(s.clock) &&
+      !s.customers.some((c) => c.phase === 'waiting')
+    if (!free) {
+      if (s.receptionCall) set({ receptionCall: null })
+      return
+    }
+    const call = s.receptionCall
+    if (!call) {
+      const next = callList(s.clients, s.clock.day, notToCall())[0]
+      if (!next) return
+      const left = CALL_MINUTES * receptionCallTime(e.skill)
+      set({ receptionCall: { employeeId: e.id, clientId: next.client.id, kind: next.kind, left } })
+      return
+    }
+    if (call.left > minutes) return set({ receptionCall: { ...call, left: call.left - minutes } })
+    set({ receptionCall: null })
+    endCall(call.clientId, e.id, callSkill(e.skill))
+  }
+
+  /**
+   * Clients due in on an appointment by `minute` turn up, as they were last
+   * time, built on the book's own rng. They come by car while a space is free,
+   * before anyone else (`present` and the purchases' spaces are taken).
+   */
+  const clientArrivals = (minute: number, present: readonly Customer[]): Customer[] => {
+    const s = get()
+    if (isClosed(s.clock)) return []
+    const { due, rest } = takeDueClients(s.clientVisits, minute)
+    if (due.length === 0) return []
+    set({ clientVisits: rest })
+    const taken = s.purchases.map((p) => p.spot)
+    const stock = availableCars(s.inventory)
+    const out: Customer[] = []
+    for (const v of due) {
+      const client = s.clients.find((c) => c.id === v.clientId)
+      if (!client || present.some((c) => c.clientId === client.id)) continue
+      const c = generateCustomer(`customer-${nextCustomerId++}`, stock, clientRng, {
+        ...arrivalOpts(),
+        client,
+        tradeUp: isDue(client, s.clock.day),
+      })
+      const spot = freeSpot([...present, ...out], taken)
+      const car = client.car
+        ? { model: client.car.model, ...clientCarInfo(client.car, s.clock.day) }
+        : rollUsedCar(clientRng, s.clock.day)
+      out.push(spot === null ? c : { ...c, vehicle: { car, spot, parked: false } })
+    }
+    return out
+  }
+
   const dispatch = (ev: ActionEvent) => {
     const prev = get().activeAction
     const { next, finished } = reduceAction(prev, ev)
@@ -1285,6 +1430,11 @@ export const useGame = create<GameState>((set, get) => {
         return handOff()
       case 'office':
         return get().toggleStockPanel(true)
+      case 'call': {
+        const id = get().playerCall
+        set({ playerCall: null })
+        return id ? endCall(id, PLAYER_ID, PLAYER_SKILL) : undefined
+      }
       case 'recondition':
         return void get().recondition(finished.targetId)
       case 'confront':
@@ -1677,6 +1827,7 @@ export const useGame = create<GameState>((set, get) => {
           announced: false,
         }
       : null
+    const clients = pruneBook(s.clients, day)
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
@@ -1707,7 +1858,11 @@ export const useGame = create<GameState>((set, get) => {
       serviceAway: [],
       serviceComebacks: [],
       serviceVisits: planServiceVisits(serviceRng, demand, recalls),
-      clients: pruneBook(s.clients, day),
+      clients,
+      clientVisits: planClientVisits(clients, day, clientRng, level.clientReturn),
+      callsTried: [],
+      playerCall: null,
+      receptionCall: null,
       rival,
       ...(bust && {
         reputation: applyChange(s.reputation, BUST_REPUTATION),
@@ -1739,6 +1894,7 @@ export const useGame = create<GameState>((set, get) => {
       recall && recallNotice(recall, s.career.soldByModel[recall.model] ?? 0),
       theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
+      appointmentsNotice(clients, day),
       shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
     ].filter((t): t is string => !!t)
     if (notices.length > 0) notify(notices.join(' '))
@@ -1798,6 +1954,7 @@ export const useGame = create<GameState>((set, get) => {
     openMenu: (targetId, x, y) => set({ menu: { targetId, x, y } }),
     closeMenu: () => set({ menu: null }),
     requestAction: (targetId, action) => {
+      if (action === 'call') return void get().phoneClient()
       const s = get()
       const blocker =
         action === 'confront'
@@ -1880,6 +2037,9 @@ export const useGame = create<GameState>((set, get) => {
         }),
       })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
+      // Clients on an appointment come first, and get first pick of the parking.
+      const booked = clientArrivals(step.minute, customers)
+      customers = [...customers, ...booked]
       const stock = availableCars(s.inventory)
       // Some drive in, while there's room in customer parking. Some of those
       // are sellers, and some of the rest bring a car to trade.
@@ -1910,6 +2070,7 @@ export const useGame = create<GameState>((set, get) => {
       )
       const service = serviceArrivals(step, customers)
       customers = [...customers, ...arrived, ...service.arrived]
+      const visitors = [...booked, ...arrived]
       // The mechanics put in the time on what's in the bays.
       const jobs = stampReady(
         workJobs(s.serviceJobs, minutes, (id) => mechanicWorking(s.roster, id)),
@@ -1918,7 +2079,7 @@ export const useGame = create<GameState>((set, get) => {
       set({
         clock: step,
         arrivals: schedule,
-        dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived),
+        dayStats: tallyMissed(recordVisitors(get().dayStats, visitors), visitors),
         serviceJobs: jobs,
         serviceVisits: service.schedule,
         serviceAway: service.away,
@@ -1929,6 +2090,7 @@ export const useGame = create<GameState>((set, get) => {
       }
       if (isClosed(step)) closeUp()
       commit(customers)
+      receptionCalls(minutes)
       settleDay()
     },
     sellCar: (id, price) => {
@@ -2279,6 +2441,28 @@ export const useGame = create<GameState>((set, get) => {
       const e = get().roster.find((x) => x.id === employeeId)
       if (e?.role !== 'advisor' || e.fired || e.status !== 'atPost') return
       offerFinding(jobId, employeeId)
+    },
+    phoneClient: (clientId) => {
+      const s = get()
+      const list = callList(s.clients, s.clock.day, notToCall())
+      const entry = clientId ? list.find((x) => x.client.id === clientId) : list[0]
+      if (!entry) {
+        set({ menu: null })
+        const named = clientId && s.clients.find((c) => c.id === clientId)
+        notify(named ? `${named.name} isn't one to call right now.` : 'Nobody to call right now.')
+        return false
+      }
+      // Like turning to anything else: the conversation ends, a buyer in tow keeps following.
+      endDeal(CONVERSATION_PHASES)
+      set({ moveOrder: null, menu: null, inspectedId: null, stockOpen: false })
+      dispatch({ type: 'request', id: nextActionId++, targetId: DESK_PHONE_ID, action: 'call' })
+      set({ playerCall: entry.client.id })
+      return true
+    },
+    setReceptionCalls: (on) => {
+      const perks = get().clientPerks
+      if (perks.receptionCalls === on) return
+      set({ clientPerks: { ...perks, receptionCalls: on }, ...(!on && { receptionCall: null }) })
     },
     callClient: (jobId) => {
       const s = get()

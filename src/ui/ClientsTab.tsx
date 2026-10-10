@@ -14,6 +14,8 @@ import {
   type Client,
   type ClientFilter,
 } from '../sim/clients'
+import { callList, type CallKind } from '../sim/calls'
+import { formatTime } from '../sim/clock'
 import { carName } from '../sim/interactables'
 import { useGame } from '../state/store'
 
@@ -37,10 +39,37 @@ function callText(c: Client, day: number): string | null {
   return ago <= 0 ? 'Called today' : ago === 1 ? 'Called yesterday' : `Called ${ago} days ago`
 }
 
+/** What a call to them would be, for the Call button's tooltip. */
+const CALL_TITLES: Record<CallKind, string> = {
+  thanks: 'Thank them for buying',
+  beBack: 'Call them back about the car',
+  checkIn: 'Check in on how they’re doing',
+}
+
+/** "Appointment today at 10:30 AM", "Appointment tomorrow at 2:00 PM". */
+function appointmentText(c: Client, day: number): string | null {
+  const a = c.appointment
+  if (!a || a.day < day) return null
+  const when = a.day === day ? 'today' : a.day === day + 1 ? 'tomorrow' : `on day ${a.day}`
+  return `Appointment ${when} at ${formatTime(a.minute)}`
+}
+
 /** One person in the book: who, how happy, their car or what they were after, and where they stand. */
-function ClientRow({ c, day, rival }: { c: Client; day: number; rival: string }) {
+function ClientRow({
+  c,
+  day,
+  rival,
+  call,
+}: {
+  c: Client
+  day: number
+  rival: string
+  /** What a call to them now would be, or null if they're not one to call. */
+  call: CallKind | null
+}) {
   const reasons = c.reasons.map(reasonText).join(', ')
   const called = callText(c, day)
+  const appointment = appointmentText(c, day)
   const due = isDue(c, day)
   return (
     <li className="stock-row">
@@ -53,6 +82,7 @@ function ClientRow({ c, day, rival }: { c: Client; day: number; rival: string })
           </span>
         </div>
         <div className="staff-meta">{clientCarText(c, day, carName)}</div>
+        {appointment && <div className="staff-meta client-appointment">{appointment}</div>}
         {(reasons || called) && (
           <div className="staff-meta muted">
             {reasons && `Last visit: ${reasons}`}
@@ -62,7 +92,12 @@ function ClientRow({ c, day, rival }: { c: Client; day: number; rival: string })
         )}
       </div>
       <div className="stock-actions">
-        <button className="btn btn-small" disabled title="Calling clients isn’t available yet">
+        <button
+          className="btn btn-small"
+          disabled={!call}
+          title={call ? CALL_TITLES[call] : 'Not one to call right now'}
+          onClick={() => useGame.getState().phoneClient(c.id)}
+        >
           Call
         </button>
       </div>
@@ -86,10 +121,20 @@ export function ClientsTab() {
   const clients = useGame((s) => s.clients)
   const day = useGame((s) => s.clock.day)
   const rival = useGame((s) => s.rival.name)
+  const customers = useGame((s) => s.customers)
+  const tried = useGame((s) => s.callsTried)
+  const receptionCalls = useGame((s) => s.clientPerks.receptionCalls)
+  const receptionist = useGame((s) => s.roster.some((e) => e.role === 'receptionist' && !e.fired))
   const [filter, setFilter] = useState<ClientFilter>('all')
   const [shown, setShown] = useState(PAGE)
   const rows = useMemo(() => filterClients(clients, filter, day), [clients, filter, day])
   const summary = useMemo(() => bookSummary(clients), [clients])
+  // Who can be called now, and what about: not anyone on the lot or tried today.
+  const calls = useMemo(() => {
+    const skip = new Set(tried)
+    for (const c of customers) if (c.clientId) skip.add(c.clientId)
+    return new Map(callList(clients, day, skip).map((e) => [e.client.id, e.kind]))
+  }, [clients, customers, tried, day])
   const pick = (f: ClientFilter) => {
     setFilter(f)
     setShown(PAGE)
@@ -115,6 +160,15 @@ export function ClientsTab() {
           )}
         </dd>
       </dl>
+      <label className="service-auto">
+        <input
+          type="checkbox"
+          checked={receptionCalls}
+          onChange={(e) => useGame.getState().setReceptionCalls(e.target.checked)}
+        />{' '}
+        Receptionist calls clients when nobody is waiting
+        {!receptionist && <span className="muted"> (hire one from the staff panel)</span>}
+      </label>
       <div className="service-rates" role="radiogroup" aria-label="Show">
         {CLIENT_FILTERS.map(([id, label]) => (
           <button
@@ -133,7 +187,7 @@ export function ClientsTab() {
       ) : (
         <ul className="staff-list">
           {rows.slice(0, shown).map((c) => (
-            <ClientRow key={c.id} c={c} day={day} rival={rival} />
+            <ClientRow key={c.id} c={c} day={day} rival={rival} call={calls.get(c.id) ?? null} />
           ))}
         </ul>
       )}
@@ -143,9 +197,11 @@ export function ClientsTab() {
         </button>
       )}
       <p className="muted">
-        Each visit is scored on the wait, the haggling, the price against what they hoped to pay,
-        how clean the car was and the trade-in, and blended into how happy they are with you. A star
-        over a waiting customer means they’re in the book.
+        Call from the desk phone in the office: thank recent buyers, call prospects back and check
+        on unhappy clients. A call can book an appointment for tomorrow. Each visit is scored on the
+        wait, the haggling, the price against what they hoped to pay, how clean the car was and the
+        trade-in, and blended into how happy they are with you. A star over a waiting customer means
+        they’re in the book.
       </p>
     </>
   )

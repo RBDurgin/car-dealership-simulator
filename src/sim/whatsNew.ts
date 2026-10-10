@@ -266,6 +266,18 @@ export const UPDATES: readonly Update[] = [
       'The office computer now has one Office action, which opens on the tab you used last.',
     ],
   },
+  {
+    id: 25,
+    phase: '16',
+    title: 'Calls and appointments',
+    items: [
+      'There’s a phone on the office desk. Call clients from it, or with Call in the Clients tab.',
+      'Thank new buyers, call prospects back and check on unhappy clients.',
+      'A call can book an appointment for tomorrow. The morning notice and the Calendar tab list them.',
+      'A prospect who comes back is ready to deal. Don’t keep an appointment waiting.',
+      'A receptionist calls clients when nobody is waiting. Turn it off in the Clients tab.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

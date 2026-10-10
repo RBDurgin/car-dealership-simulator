@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
+import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
 import { PROSPECT_DAYS } from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
@@ -346,6 +347,22 @@ function SellingTab({ touch, click }: TabProps) {
           last visit scored as it did. When someone from the book comes back, a ★ shows over them
           while they wait, and their panel says how it went last time.
         </p>
+        <p>
+          Follow up from the <b>desk phone</b> in the office: {click.toLowerCase()} it and choose{' '}
+          <b>Call a client</b> to call the top of your list, or press <b>Call</b> by someone in the
+          Clients tab. A call takes about {CALL_MINUTES} game minutes, and walking off hangs up.
+          Thank a buyer in their first {THANKS_DAYS} days and they&apos;re happier with you. Call a
+          prospect back, or check on an unhappy client, and they may book an appointment for
+          tomorrow. A prospect who comes back is ready to deal, hoping to pay about what they last
+          offered. Some don&apos;t pick up: try again tomorrow. Anyone who answered isn&apos;t
+          called again for {CALL_GAP_DAYS} days, and calling more than {MAX_CALLS} times between
+          visits annoys them.
+        </p>
+        <p>
+          The morning notice and the Calendar tab list the day&apos;s appointments. Most turn up, by
+          car if there&apos;s a space. Keep them waiting and it costs twice as much as a
+          walk-in&apos;s wait.
+        </p>
       </section>
       <section>
         <h3>Reputation</h3>
@@ -685,7 +702,9 @@ function PeopleTab({ touch, click }: TabProps) {
             customer you&apos;re walking to, and a tick marks someone they&apos;re helping.
           </li>
           <li>
-            A <b>receptionist</b> keeps waiting customers patient.
+            A <b>receptionist</b> keeps waiting customers patient. With nobody waiting, they call
+            clients from the book, slower and less persuasively than you, and tell you when someone
+            books. Turn their calls off in the Clients tab.
           </li>
           <li>
             A <b>finance manager</b> signs buyers at your office desk for {formatMoney(FINANCE_FEE)}{' '}

@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+import { appointmentsOn } from '../sim/calls'
 import {
   calendarOf,
   DAYS_PER_WEEK,
@@ -9,6 +11,8 @@ import {
   weekdayTraffic,
   weekStart,
 } from '../sim/calendar'
+import type { Client } from '../sim/clients'
+import { formatTime } from '../sim/clock'
 import { CLOSEOUT_REBATE, closeoutOn, EVENTS, eventOn, nextEvent } from '../sim/events'
 import { expansionsUp } from '../sim/expansions'
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName, type FranchiseTier } from '../sim/franchise'
@@ -264,6 +268,33 @@ function Recalls({ day }: { day: number }) {
   )
 }
 
+/** Today's and tomorrow's appointments from the client book, by time. */
+function Appointments({ day }: { day: number }) {
+  const clients = useGame((s) => s.clients)
+  const today = useMemo(() => appointmentsOn(clients, day), [clients, day])
+  const tomorrow = useMemo(() => appointmentsOn(clients, day + 1), [clients, day])
+  if (today.length === 0 && tomorrow.length === 0) return null
+  const list = (who: readonly Client[]) =>
+    who.map((c) => `${c.name} at ${formatTime(c.appointment!.minute)}`).join(', ')
+  return (
+    <>
+      <h3>Appointments</h3>
+      <p className="muted cal-intro">
+        {today.length > 0 && (
+          <>
+            Today: <span className="client-appointment">{list(today)}</span>.{' '}
+          </>
+        )}
+        {tomorrow.length > 0 && (
+          <>
+            Tomorrow: <span className="client-appointment">{list(tomorrow)}</span>.
+          </>
+        )}
+      </p>
+    </>
+  )
+}
+
 /** This week and next, with each day's weather (forecast a few days ahead) and expected traffic. */
 export function CalendarTab() {
   const day = useGame((s) => s.clock.day)
@@ -277,6 +308,7 @@ export function CalendarTab() {
       </p>
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
+      <Appointments day={day} />
       <SalesAndCloseouts day={day} />
       <Recalls day={day} />
       <MonthQuota day={day} />

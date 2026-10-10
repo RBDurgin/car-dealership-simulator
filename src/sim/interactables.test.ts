@@ -115,6 +115,13 @@ describe('dealership interactables', () => {
     ])
   })
 
+  it('approaches the desk phone from the side, leaving the desk chair free', () => {
+    // The phone sits on the desk's free end at (32, 5); the chair is at (33, 4).
+    const phone = all.get('office-phone')!
+    expect(phone).toMatchObject({ kind: 'phone', actions: ['call'] })
+    expect(phone.approachTiles).toEqual([{ tx: 31, tz: 5 }])
+  })
+
   it('approaches the coffee machine from in front of the counter', () => {
     expect(all.get('coffee-machine')!.approachTiles).toEqual([{ tx: 34, tz: 10 }])
   })

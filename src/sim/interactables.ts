@@ -1,6 +1,9 @@
 import type { Grid, Tile, Vec2 } from './grid'
+import { CALL_MINUTES } from './calls'
+import { DEFAULT_DAY_MS, CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 import {
   DESK_CHAIR_ID,
+  DESK_PHONE_ID,
   OFFICE_COMPUTER_ID,
   type CarModel,
   type Facing,
@@ -23,6 +26,7 @@ export type ActionId =
   | 'closeDeal'
   | 'handOff'
   | 'office'
+  | 'call'
   | 'recondition'
   | 'confront'
 
@@ -32,6 +36,8 @@ export const APPRAISE_SECONDS = 4
 export const CHECK_IN_SECONDS = 2
 /** Real seconds the player spends telling a service client about extra work. */
 export const RECOMMEND_SECONDS = 2
+/** Real ms a call takes the player: `CALL_MINUTES` of game time at normal speed. */
+export const CALL_MS = Math.round((CALL_MINUTES * DEFAULT_DAY_MS) / (CLOSE_MINUTE - OPEN_MINUTE))
 
 /**
  * How an action plays out once the player reaches the object:
@@ -107,6 +113,14 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
   // At the office computer: opens its panel on the tab it was last on, like the top bar's Office button.
   office: { id: 'office', label: 'Office', verb: 'At the computer', mode: 'instant' },
+  // At the desk phone: a follow-up call to someone in the client book (see `sim/calls.ts`).
+  call: {
+    id: 'call',
+    label: 'Call a client',
+    verb: 'On the phone',
+    mode: 'timed',
+    durationMs: CALL_MS,
+  },
   // A used car in stock: off to the service garage to be reconditioned.
   recondition: {
     id: 'recondition',
@@ -119,7 +133,7 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
 }
 
 export type InteractableKind =
-  'car' | 'chair' | 'coffee' | 'computer' | 'customer' | 'employee' | 'nazma'
+  'car' | 'chair' | 'coffee' | 'computer' | 'phone' | 'customer' | 'employee' | 'nazma'
 
 export interface CarInfo {
   name: string
@@ -199,6 +213,19 @@ export function screenApproachTiles(grid: Grid, r: Rect, facing: Facing): Tile[]
   return grid.isWalkable(seat.tx, seat.tz) ? [seat, ...ring] : ring
 }
 
+/**
+ * Where to stand to use something at the end of a desk: beside it, across
+ * the way it faces, so the desk's chair stays free. Any side if neither is open.
+ */
+export function sideApproachTiles(grid: Grid, r: Rect, facing: Facing): Tile[] {
+  const f = FORWARD[facing]
+  const sides = [
+    { tx: r.tx + f.z, tz: r.tz + f.x },
+    { tx: r.tx - f.z, tz: r.tz - f.x },
+  ].filter((t) => grid.isWalkable(t.tx, t.tz))
+  return sides.length > 0 ? sides : approachTilesFor(grid, r)
+}
+
 /** Path to the cheapest-to-reach approach tile, or null if none is reachable. */
 export function pathToInteractable(grid: Grid, start: Tile, it: Interactable): Tile[] | null {
   return findPathToAny(grid, start, it.approachTiles)
@@ -237,6 +264,14 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         name: 'Office computer',
         approachTiles: screenApproachTiles(grid, p.rect, p.facing),
         actions: ['office'],
+      })
+    } else if (p.id === DESK_PHONE_ID) {
+      out.set(p.id, {
+        ...base,
+        kind: 'phone',
+        name: 'Desk phone',
+        approachTiles: sideApproachTiles(grid, p.rect, p.facing),
+        actions: ['call'],
       })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })

@@ -45,7 +45,7 @@ export interface LastDeal {
   counter: number | null
 }
 
-/** Why a client is coming in on an appointment (calls arrive in 16c). */
+/** Why a client is coming in on an appointment (see `sim/calls.ts`). */
 export type AppointmentReason = 'beBack' | 'tradeUp' | 'checkIn' | 'winBack'
 
 export interface Appointment {
@@ -102,9 +102,9 @@ export interface Client {
   dueDay: number | null
   /** A prospect's last day in the book, or null. */
   expires: number | null
-  /** The day they were last called, or null (16c). */
+  /** The day they last picked up a call, or null (see `sim/calls.ts`). */
   lastCall: number | null
-  /** Calls since their last visit (16c). */
+  /** Calls they picked up since their last visit. */
   callsThisCycle: number
   appointment: Appointment | null
   /** The client who sent them, or null (16e). */
@@ -158,6 +158,8 @@ export const DIRTY_POINTS = -6
 /** An allowance at or over what they hoped for their trade, or an insulting one. */
 export const FAIR_TRADE_POINTS = 6
 export const LOW_TRADE_POINTS = -8
+/** × the wait's cost to an appointment's visit score: kept waiting after booking a time. */
+export const APPOINTMENT_WAIT_WEIGHT = 2
 /** Reasons kept per visit. */
 export const REASONS_KEPT = 3
 
@@ -173,7 +175,7 @@ export interface ScoreContext {
   day: number
   /** Added to the score (`Tuning.satisfactionShift`). */
   shift?: number
-  /** × the wait's cost: an appointment kept waiting minds more (16c). */
+  /** × the wait's cost: an appointment kept waiting minds more (`APPOINTMENT_WAIT_WEIGHT`). */
   waitWeight?: number
 }
 
@@ -395,8 +397,10 @@ export function isDue(client: Client, day: number): boolean {
 const DROP_ORDER: readonly ClientStatus[] = ['defected', 'lapsed', 'prospect', 'client']
 
 /**
- * The book on the morning of `day`: expired prospects gone, clients past
- * `dueDay + LAPSE_DAYS` lapsed (no car, not due), and at most `CLIENT_CAP`
+ * The book on the morning of `day`: expired prospects gone (unless booked
+ * to come in), clients past
+ * `dueDay + LAPSE_DAYS` lapsed (no car, not due), appointments from earlier
+ * days dropped, and at most `CLIENT_CAP`
  * entries, dropping defected clients first, then lapsed ones, then the oldest
  * prospects (and, failing that, the clients seen longest ago). Returns the
  * same array when nothing changed.
@@ -405,13 +409,21 @@ export function pruneBook(book: Client[], day: number): Client[] {
   let changed = false
   let kept: Client[] = []
   for (const c of book) {
-    if (c.status === 'prospect' && c.expires !== null && day > c.expires) {
+    // A missed appointment (they didn't show, or nobody saw them) is dropped.
+    const appointment = c.appointment && c.appointment.day < day ? null : c.appointment
+    // A prospect booked to come in is kept for it.
+    if (c.status === 'prospect' && c.expires !== null && day > c.expires && !appointment) {
       changed = true
       continue
     }
     if (c.status === 'client' && c.dueDay !== null && day > c.dueDay + LAPSE_DAYS) {
       changed = true
-      kept.push({ ...c, status: 'lapsed', car: null, dueDay: null })
+      kept.push({ ...c, status: 'lapsed', car: null, dueDay: null, appointment })
+      continue
+    }
+    if (appointment !== c.appointment) {
+      changed = true
+      kept.push({ ...c, appointment })
       continue
     }
     kept.push(c)
@@ -524,8 +536,10 @@ export function recordClients(
     if (!outcome) continue
     const carId = outcome === 'bought' ? c.offer?.carId : c.targetCarId
     const car = ctx.inventory.find((x) => x.id === carId) ?? null
-    const score = visitScore(c, outcome, { car, day: ctx.day, shift: ctx.shift })
     const before = c.clientId ? out.book.find((x) => x.id === c.clientId) : undefined
+    // Kept waiting after booking a time minds more.
+    const waitWeight = before?.appointment?.day === ctx.day ? APPOINTMENT_WAIT_WEIGHT : 1
+    const score = visitScore(c, outcome, { car, day: ctx.day, shift: ctx.shift, waitWeight })
     const bookAfter = recordVisit(out.book, { customer: c, outcome, car, score }, ctx.day, ctx.rng)
     const entry = before
       ? bookAfter.find((x) => x.id === before.id)!

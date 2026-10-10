@@ -344,7 +344,7 @@ function returningCustomer(
   const budget = opts.tradeUp
     ? Math.round((client.budget * TRADE_UP_BUDGET) / 500) * 500
     : client.budget
-  return shopper(
+  const c = shopper(
     {
       id,
       name: client.name,
@@ -360,6 +360,18 @@ function returningCustomer(
     rng,
     opts,
   )
+  // A be-back comes back ready to deal: hoping for about their last counter.
+  const deal = client.status === 'prospect' ? client.lastDeal : null
+  return deal?.counter ? { ...c, expect: beBackExpect(deal.model, deal.counter) } : c
+}
+
+/** Most a be-back hopes off the sticker, however low their last counter. */
+export const MAX_BE_BACK_EXPECT = 0.25
+
+/** The discount that puts a be-back's hope on a new `model` at their last `counter`. */
+export function beBackExpect(model: CarModel, counter: number): number {
+  const off = 1 - counter / BASE_MSRP[model]
+  return Math.round(Math.min(MAX_BE_BACK_EXPECT, Math.max(0, off)) * 1000) / 1000
 }
 
 /** Who a customer is, before their patience, browse and hopes are rolled. */

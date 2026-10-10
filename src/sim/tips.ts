@@ -43,6 +43,8 @@ export type TipId =
   | 'finding'
   | 'recall'
   | 'clientBook'
+  | 'followUp'
+  | 'appointment'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -85,6 +87,10 @@ export const TIPS: Record<TipId, string> = {
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
   clientBook:
     'Someone went in your client book: buyers become clients, and shoppers who talked to you but didn’t buy stay as prospects for two weeks. The office computer’s Clients tab shows how happy each visit left them. A star over a waiting customer means they’ve been here before.',
+  followUp:
+    'A shopper left without buying and is a prospect now. Call them back from the desk phone in the office (or the Call button in the Clients tab): a be-back who books an appointment comes in ready to deal.',
+  appointment:
+    'An appointment is booked for tomorrow. The morning notice and the Calendar tab say when they’re due. Don’t keep them waiting: a booked client minds a wait twice as much.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -112,6 +118,9 @@ export interface TipState {
   serviceJobs: readonly ServiceJob[]
   clients: readonly Client[]
 }
+
+const prospects = (s: TipState) => s.clients.filter((c) => c.status === 'prospect').length
+const booked = (s: TipState) => s.clients.filter((c) => c.appointment).length
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
@@ -229,6 +238,10 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     }
     case 'clientBook':
       return next.clients !== prev.clients && next.clients.length > prev.clients.length
+    case 'followUp':
+      return next.clients !== prev.clients && prospects(next) > prospects(prev)
+    case 'appointment':
+      return next.clients !== prev.clients && booked(next) > booked(prev)
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

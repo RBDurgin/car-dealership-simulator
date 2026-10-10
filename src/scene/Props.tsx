@@ -54,7 +54,7 @@ const furniture = (name: string, opts: { yaw?: number; fit?: boolean } = {}): Mo
   ...opts,
 })
 
-const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign'>, ModelDef> = {
+const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone'>, ModelDef> = {
   sedan: car('sedan'),
   'sedan-sports': car('sedan-sports'),
   suv: car('suv'),
@@ -377,6 +377,52 @@ function Sign({ width }: { width: number }) {
   )
 }
 
+const PHONE_BODY = new MeshStandardMaterial({ color: '#2b2f36', roughness: 0.6 })
+const PHONE_KEYS = new MeshStandardMaterial({ color: '#d7dbe0', roughness: 0.5 })
+const PHONE_SCREEN = new MeshStandardMaterial({
+  color: '#7fd1a8',
+  emissive: '#3c9c72',
+  emissiveIntensity: 0.4,
+})
+/** The keypad's buttons, in rows across the phone's front half. */
+const PHONE_KEY_SPOTS = [-0.07, 0, 0.07].flatMap((x) =>
+  [0.02, 0.09].map((z) => [x, 0.095, z] as [number, number, number]),
+)
+
+/** The office desk phone, made of a few boxes: a base, a keypad, a little screen and the handset. */
+function DeskPhone() {
+  return (
+    <group>
+      <mesh position-y={0.04} material={PHONE_BODY} castShadow>
+        <boxGeometry args={[0.36, 0.08, 0.3]} />
+      </mesh>
+      {/* Front half sloped toward whoever uses it (+z). */}
+      <mesh position={[0, 0.085, 0.05]} rotation-x={0.25} material={PHONE_BODY}>
+        <boxGeometry args={[0.3, 0.03, 0.18]} />
+      </mesh>
+      {PHONE_KEY_SPOTS.map((p, i) => (
+        <mesh key={i} position={p} material={PHONE_KEYS}>
+          <boxGeometry args={[0.045, 0.02, 0.04]} />
+        </mesh>
+      ))}
+      <mesh position={[0.1, 0.09, -0.04]} material={PHONE_SCREEN}>
+        <boxGeometry args={[0.1, 0.015, 0.05]} />
+      </mesh>
+      {/* The handset, in its cradle along the back. */}
+      <group position={[0, 0.11, -0.09]}>
+        <mesh material={PHONE_BODY} castShadow>
+          <boxGeometry args={[0.34, 0.04, 0.08]} />
+        </mesh>
+        {[-1, 1].map((side) => (
+          <mesh key={side} position={[side * 0.15, 0.02, 0]} material={PHONE_BODY}>
+            <boxGeometry args={[0.07, 0.05, 0.1]} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  )
+}
+
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
 interface PropViewProps {
@@ -410,6 +456,8 @@ function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps)
         <Sign width={turned ? b.h : b.w} />
       ) : prop.model === 'forSaleSign' ? (
         <ForSaleSign width={turned ? b.h : b.w} />
+      ) : prop.model === 'deskPhone' ? (
+        <DeskPhone />
       ) : (
         <Model
           def={MODELS[prop.model]}

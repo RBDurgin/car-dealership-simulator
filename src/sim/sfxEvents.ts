@@ -29,6 +29,7 @@ export type SfxCue =
   | 'door'
   | 'wrench'
   | 'lift'
+  | 'ring'
 
 /**
  * Where a cue happens: a customer, an employee, a car in stock, a visitor's
@@ -68,6 +69,10 @@ export interface SfxState {
   helpOpen: boolean
   audioOpen: boolean
   inspectedId: string | null
+  /** The player's action: a `call` rings once it starts. */
+  activeAction?: { id: number; action: string; phase: string } | null
+  /** The receptionist's call to a client, or null. */
+  receptionCall?: { employeeId: string; clientId: string } | null
 }
 
 /**
@@ -94,6 +99,7 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   door: 300,
   wrench: 1500,
   lift: 1500,
+  ring: 1500,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -205,6 +211,17 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
     if (next.nazma.status === 'runOff' && prev.nazma.status !== 'runOff') {
       out.push({ cue: 'shoo', subject: { kind: 'ambient', id: NAZMA_ID } })
     }
+  }
+
+  // A call going through: the phone rings at the other end.
+  const a = next.activeAction
+  const calling = (x: SfxState['activeAction']) => x?.action === 'call' && x.phase === 'performing'
+  if (calling(a) && !(calling(prev.activeAction) && prev.activeAction!.id === a!.id)) {
+    out.push({ cue: 'ring' })
+  }
+  const r = next.receptionCall
+  if (r && r.clientId !== prev.receptionCall?.clientId) {
+    out.push({ cue: 'ring', subject: { kind: 'employee', id: r.employeeId } })
   }
 
   if (next.roster !== prev.roster) {
