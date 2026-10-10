@@ -7,6 +7,9 @@ import {
   filterClients,
   HAPPY,
   isDue,
+  LAPSE_DAYS,
+  LOYALTY_DISCOUNTS,
+  LOYALTY_RETURN,
   PROSPECT_DAYS,
   reasonText,
   satisfactionFace,
@@ -43,6 +46,7 @@ function callText(c: Client, day: number): string | null {
 const CALL_TITLES: Record<CallKind, string> = {
   thanks: 'Thank them for buying',
   beBack: 'Call them back about the car',
+  tradeUp: 'Invite them in to trade up',
   checkIn: 'Check in on how they’re doing',
 }
 
@@ -124,6 +128,7 @@ export function ClientsTab() {
   const customers = useGame((s) => s.customers)
   const tried = useGame((s) => s.callsTried)
   const receptionCalls = useGame((s) => s.clientPerks.receptionCalls)
+  const loyalty = useGame((s) => s.clientPerks.loyaltyDiscount)
   const receptionist = useGame((s) => s.roster.some((e) => e.role === 'receptionist' && !e.fired))
   const [filter, setFilter] = useState<ClientFilter>('all')
   const [shown, setShown] = useState(PAGE)
@@ -169,6 +174,26 @@ export function ClientsTab() {
         Receptionist calls clients when nobody is waiting
         {!receptionist && <span className="muted"> (hire one from the staff panel)</span>}
       </label>
+      <h3>Loyalty discount</h3>
+      <div className="service-rates" role="radiogroup" aria-label="Loyalty discount">
+        {LOYALTY_DISCOUNTS.map((d) => (
+          <button
+            key={d}
+            role="radio"
+            aria-checked={loyalty === d}
+            className={loyalty === d ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            onClick={() => useGame.getState().setLoyaltyDiscount(d)}
+          >
+            {d === 0 ? 'None' : `${Math.round(d * 100)}% off`}
+          </button>
+        ))}
+      </div>
+      <p className="muted">
+        {loyalty === 0
+          ? 'Returning clients are priced at the sticker.'
+          : `Returning clients are priced ${Math.round(loyalty * 100)}% under the sticker: every sale to them earns less, but they come back to trade up ${Math.round((LOYALTY_RETURN[loyalty] - 1) * 100)}% more often and leave happier.`}
+      </p>
+      <h3>Book</h3>
       <div className="service-rates" role="radiogroup" aria-label="Show">
         {CLIENT_FILTERS.map(([id, label]) => (
           <button
@@ -197,11 +222,13 @@ export function ClientsTab() {
         </button>
       )}
       <p className="muted">
-        Call from the desk phone in the office: thank recent buyers, call prospects back and check
-        on unhappy clients. A call can book an appointment for tomorrow. Each visit is scored on the
-        wait, the haggling, the price against what they hoped to pay, how clean the car was and the
-        trade-in, and blended into how happy they are with you. A star over a waiting customer means
-        they’re in the book.
+        Call from the desk phone in the office: thank recent buyers, call prospects back, invite
+        clients due to trade up and check on unhappy ones. A call can book an appointment for
+        tomorrow. A client due to trade up may also come in on their own, the likelier the happier
+        they are, and drives in with the car you sold them to trade. Not back within {LAPSE_DAYS}{' '}
+        days of being due, they buy elsewhere. Each visit is scored on the wait, the haggling, the
+        price against what they hoped to pay, how clean the car was and the trade-in, and blended
+        into how happy they are with you. A star over a waiting customer means they’re in the book.
       </p>
     </>
   )

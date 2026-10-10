@@ -148,6 +148,11 @@ export interface Customer {
   service: ServiceVisit | null
   /** Their entry in the client book when they've been before (see `sim/clients.ts`), else null. */
   clientId: string | null
+  /**
+   * The loyalty discount a returning client is priced from: the sticker is
+   * `msrp × (1 − loyaltyCut)` (see `stickerOf`). 0 for everyone else.
+   */
+  loyaltyCut: number
 }
 
 const FIRST_NAMES = [
@@ -215,6 +220,23 @@ export const PATIENCE_MINUTES = { min: 45, max: 120 }
 export const MIN_PATIENCE = 15
 /** × the budget of a client back to trade up the car we sold them. */
 export const TRADE_UP_BUDGET = 1.15
+/** Body types a client trades up through, smallest first. */
+export const UPGRADE_PATH: readonly CarModel[] = ['hatchback-sports', 'sedan', 'suv', 'suv-luxury']
+/** Chance a client trading up looks at the next model up `UPGRADE_PATH` as well as their old one. */
+export const UPGRADE_CHANCE = 0.35
+/** Share of the discount they hope for that a client at satisfaction 100 lets go. */
+export const LOYAL_EXPECT_CUT = 0.3
+
+/** The model after `model` up `UPGRADE_PATH`, or null at the top or off it. */
+export function nextModelUp(model: CarModel): CarModel | null {
+  const i = UPGRADE_PATH.indexOf(model)
+  return i >= 0 && i < UPGRADE_PATH.length - 1 ? UPGRADE_PATH[i + 1] : null
+}
+
+/** Share of their hoped-for discount a client of `satisfaction` lets go: none at 50 or under. */
+export function loyalExpectCut(satisfaction: number): number {
+  return Math.min(1, Math.max(0, (satisfaction - 50) / 50)) * LOYAL_EXPECT_CUT
+}
 
 /** How much a customer likes a car: preferred body type first, then whether it's affordable. */
 function carScore(c: Customer, car: InventoryCar): number {
@@ -280,8 +302,14 @@ export interface CustomerOptions {
    * from the record, and they come as `'client'` unless `source` says otherwise.
    */
   client?: Client
-  /** The client is back to trade up: their budget is `TRADE_UP_BUDGET` higher. */
+  /**
+   * The client is back to trade up the car we sold them: their budget is
+   * `TRADE_UP_BUDGET` higher, and they shop that model (and, `UPGRADE_CHANCE`
+   * of the time, the next one up).
+   */
   tradeUp?: boolean
+  /** A returning client's loyalty discount (`ClientPerks.loyaltyDiscount`). */
+  loyaltyCut?: number
 }
 
 /**
@@ -333,7 +361,12 @@ export function generateCustomer(
   )
 }
 
-/** A client back from the book, as they were last time. */
+/**
+ * A client back from the book, as they were last time. Trading up the car we
+ * sold them, they shop its model (or the next one up), with the budget for
+ * it. A client (not a prospect) is priced at the loyalty discount, and the
+ * happier they are the less of a discount they hope for.
+ */
 function returningCustomer(
   id: string,
   client: Client,
@@ -341,9 +374,16 @@ function returningCustomer(
   rng: Rng,
   opts: CustomerOptions,
 ): Customer {
-  const budget = opts.tradeUp
-    ? Math.round((client.budget * TRADE_UP_BUDGET) / 500) * 500
-    : client.budget
+  const old = opts.tradeUp ? (client.car?.model ?? null) : null
+  const up = old && nextModelUp(old)
+  const models = !old
+    ? client.preferredModels
+    : up && rng.next() < UPGRADE_CHANCE
+      ? [old, up]
+      : [old]
+  const raised = opts.tradeUp ? client.budget * TRADE_UP_BUDGET : client.budget
+  // Looking a size up, they come able to afford its sticker.
+  const budget = Math.round(Math.max(raised, models.length > 1 ? BASE_MSRP[up!] : 0) / 500) * 500
   const c = shopper(
     {
       id,
@@ -353,7 +393,7 @@ function returningCustomer(
       source: opts.source ?? 'client',
       companion: client.companion,
       budget,
-      preferredModels: [...client.preferredModels],
+      preferredModels: [...models],
       clientId: client.id,
     },
     available,
@@ -362,7 +402,10 @@ function returningCustomer(
   )
   // A be-back comes back ready to deal: hoping for about their last counter.
   const deal = client.status === 'prospect' ? client.lastDeal : null
-  return deal?.counter ? { ...c, expect: beBackExpect(deal.model, deal.counter) } : c
+  if (deal?.counter) return { ...c, expect: beBackExpect(deal.model, deal.counter) }
+  if (client.status !== 'client') return c
+  const expect = Math.round(c.expect * (1 - loyalExpectCut(client.satisfaction)) * 1000) / 1000
+  return { ...c, expect, loyaltyCut: opts.loyaltyCut ?? 0 }
 }
 
 /** Most a be-back hopes off the sticker, however low their last counter. */
@@ -422,6 +465,7 @@ function shopper(
     trade: null,
     rivalQuote: null,
     service: null,
+    loyaltyCut: 0,
   }
 
   // They end their browse at the car they like best, which becomes the target.

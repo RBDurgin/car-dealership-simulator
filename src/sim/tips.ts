@@ -1,5 +1,5 @@
 import { WASH_BELOW } from './cleanliness'
-import type { Client } from './clients'
+import { dueCount, type Client } from './clients'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
 import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
@@ -45,6 +45,7 @@ export type TipId =
   | 'clientBook'
   | 'followUp'
   | 'appointment'
+  | 'tradeUpDue'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -91,6 +92,8 @@ export const TIPS: Record<TipId, string> = {
     'A shopper left without buying and is a prospect now. Call them back from the desk phone in the office (or the Call button in the Clients tab): a be-back who books an appointment comes in ready to deal.',
   appointment:
     'An appointment is booked for tomorrow. The morning notice and the Calendar tab say when they’re due. Don’t keep them waiting: a booked client minds a wait twice as much.',
+  tradeUpDue:
+    'A client is due to trade up the car you sold them. They may come in on their own, the likelier the happier they are, or call them from the desk phone to book a time. They drive in with their old car to trade. The Clients tab’s Due filter lists who’s due, and its loyalty discount brings them back more often.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -242,6 +245,11 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return next.clients !== prev.clients && prospects(next) > prospects(prev)
     case 'appointment':
       return next.clients !== prev.clients && booked(next) > booked(prev)
+    case 'tradeUpDue':
+      return (
+        (next.clients !== prev.clients || next.clock.day !== prev.clock.day) &&
+        dueCount(next.clients, next.clock.day) > dueCount(prev.clients, prev.clock.day)
+      )
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

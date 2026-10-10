@@ -65,6 +65,7 @@ export type ReasonKind =
   | 'dirtyCar'
   | 'fairTrade'
   | 'lowTrade'
+  | 'loyalty'
 
 export interface ScoreReason {
   kind: ReasonKind
@@ -158,6 +159,8 @@ export const DIRTY_POINTS = -6
 /** An allowance at or over what they hoped for their trade, or an insulting one. */
 export const FAIR_TRADE_POINTS = 6
 export const LOW_TRADE_POINTS = -8
+/** Points per share off the sticker a loyalty price adds to a buyer's score: +3 at 2%, +6 at 4%. */
+export const LOYALTY_SCORE = 150
 /** × the wait's cost to an appointment's visit score: kept waiting after booking a time. */
 export const APPOINTMENT_WAIT_WEIGHT = 2
 /** Reasons kept per visit. */
@@ -224,6 +227,10 @@ export function visitScore(c: Customer, outcome: VisitOutcome, ctx: ScoreContext
     } else if (traded && insultingAllowance(c, allowance)) {
       reasons.push({ kind: 'lowTrade', points: LOW_TRADE_POINTS, detail: 0 })
     }
+    if (c.loyaltyCut > 0) {
+      const points = Math.round(c.loyaltyCut * LOYALTY_SCORE)
+      reasons.push({ kind: 'loyalty', points, detail: Math.round(c.loyaltyCut * 100) })
+    }
   }
   const total = reasons.reduce((sum, r) => sum + r.points, BASE_SCORE[outcome] + (ctx.shift ?? 0))
   const top = reasons
@@ -254,6 +261,8 @@ export function reasonText(r: ScoreReason): string {
       return 'Fair trade-in'
     case 'lowTrade':
       return 'Low trade-in offer'
+    case 'loyalty':
+      return 'Loyalty price'
   }
 }
 
@@ -391,6 +400,53 @@ function lastDealOf(c: Customer, car: InventoryCar | null): LastDeal | null {
 /** Due to trade up on `day`. */
 export function isDue(client: Client, day: number): boolean {
   return client.status === 'client' && client.dueDay !== null && day >= client.dueDay
+}
+
+// Trade-ups and the loyalty discount (16d).
+
+/** A due client's chance a day of coming in on their own to trade up, at satisfaction 70. */
+export const RETURN_DAILY = 0.04
+/** Most a loyalty-price buyer, or a happy one, adds to the odds they say yes (at satisfaction 100). */
+export const LOYALTY_ACCEPT = 0.08
+/** × the daily return chance, by the loyalty discount. */
+export const LOYALTY_RETURN: Record<ClientPerks['loyaltyDiscount'], number> = {
+  0: 1,
+  0.02: 1.2,
+  0.04: 1.4,
+}
+
+/**
+ * × `RETURN_DAILY` for a client of `satisfaction`: 1 at 70, 0.5 at 50, up to
+ * 1.75 at 100 and never under 0.1. About 60% of clients at 75 come back
+ * within `LAPSE_DAYS` on their own, and about 20% at 40.
+ */
+export function returnFactor(satisfaction: number): number {
+  return clamp((satisfaction - 30) / 40, 0.1, 1.75)
+}
+
+/**
+ * A due client's chance today of coming in on their own, with the loyalty
+ * `discount` on, × `scale` (`Tuning.clientReturn`).
+ */
+export function returnChance(
+  c: Client,
+  discount: ClientPerks['loyaltyDiscount'] = 0,
+  scale = 1,
+): number {
+  return Math.min(1, RETURN_DAILY * returnFactor(c.satisfaction) * LOYALTY_RETURN[discount] * scale)
+}
+
+/**
+ * What a returning visitor's history adds to the odds they say yes: 0 at
+ * satisfaction 50, up to `LOYALTY_ACCEPT` at 100, and as much off at 0.
+ */
+export function loyaltyBonus(satisfaction: number): number {
+  return ((clamp(satisfaction, 0, 100) - 50) / 50) * LOYALTY_ACCEPT
+}
+
+/** How many in the book are due to trade up on `day`. */
+export function dueCount(book: readonly Client[], day: number): number {
+  return book.filter((c) => isDue(c, day)).length
 }
 
 /** Statuses dropped first when the book is over `CLIENT_CAP`, in order. */
@@ -775,13 +831,16 @@ export function buyerScore(scores: readonly ScoredVisit[]): number | null {
 
 /**
  * Someone from the book to bring back (the dev key Shift+L): a client or a
- * prospect who isn't on the lot today, picked on `rng`, or null.
+ * prospect who isn't on the lot today, picked on `rng` from those due to
+ * trade up on `day` if any are, or null.
  */
 export function pickReturning(
   book: readonly Client[],
   onLot: ReadonlySet<string>,
   rng: Rng,
+  day = 0,
 ): Client | null {
   const pool = book.filter((c) => isActive(c) && !onLot.has(c.id))
-  return pool.length > 0 ? rng.pick(pool) : null
+  const due = pool.filter((c) => isDue(c, day))
+  return due.length > 0 ? rng.pick(due) : pool.length > 0 ? rng.pick(pool) : null
 }

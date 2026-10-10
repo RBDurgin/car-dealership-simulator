@@ -32,13 +32,29 @@ import {
   recordClients,
   recordVisit,
   TRADE_UP_DAYS,
+  clientCarOf,
+  dueCount,
+  LOYALTY_ACCEPT,
+  LOYALTY_RETURN,
+  loyaltyBonus,
+  RETURN_DAILY,
+  returnChance,
+  returnFactor,
   visitScore,
   VISIT_WEIGHT,
   type Client,
   type ClientCar,
 } from './clients'
-import { generateCustomer, randomName, TRADE_UP_BUDGET, type Customer } from './customers'
-import { buildInventory, type InventoryCar } from './inventory'
+import {
+  generateCustomer,
+  LOYAL_EXPECT_CUT,
+  loyalExpectCut,
+  nextModelUp,
+  randomName,
+  TRADE_UP_BUDGET,
+  type Customer,
+} from './customers'
+import { BASE_MSRP, buildInventory, type InventoryCar } from './inventory'
 import { hopePrice } from './negotiation'
 import { createRng } from './rng'
 import { MILES_PER_YEAR, modelYear } from './usedCars'
@@ -502,5 +518,98 @@ describe('the Clients tab', () => {
   it('picks someone to bring back who isn’t on the lot', () => {
     expect(pickReturning(book, new Set(['a', 'b', 'c']), rng())?.id).toBe('p')
     expect(pickReturning(book, new Set(['a', 'b', 'c', 'p']), rng())).toBeNull()
+  })
+})
+
+describe('trade-ups and loyalty (16d)', () => {
+  const client = (extra: Partial<Client> = {}) =>
+    entry('c', { satisfaction: 70, car: clientCarOf(clean, 30_000, 1), dueDay: DAY, ...extra })
+
+  it('weighs the return odds by satisfaction and the loyalty discount', () => {
+    expect(returnFactor(70)).toBe(1)
+    expect(returnFactor(50)).toBe(0.5)
+    expect(returnFactor(0)).toBe(0.1)
+    expect(returnFactor(100)).toBe(1.75)
+    expect(returnChance(client())).toBeCloseTo(RETURN_DAILY)
+    expect(returnChance(client(), 0.04, 1.2)).toBeCloseTo(RETURN_DAILY * LOYALTY_RETURN[0.04] * 1.2)
+  })
+
+  it('makes a happy client keener and an unhappy one warier', () => {
+    expect(loyaltyBonus(50)).toBe(0)
+    expect(loyaltyBonus(100)).toBeCloseTo(LOYALTY_ACCEPT)
+    expect(loyaltyBonus(0)).toBeCloseTo(-LOYALTY_ACCEPT)
+    expect(loyaltyBonus(75)).toBeCloseTo(LOYALTY_ACCEPT / 2)
+  })
+
+  it('scores a loyalty price', () => {
+    const plain = score(buyer())
+    // Paying their hope price, which the loyalty price lowers.
+    const price = hopePrice({ ...shopper, loyaltyCut: 0.04 }, clean, DAY)
+    const loyal = score(buyer({ loyaltyCut: 0.04, offer: { carId: car.id, price } }))
+    const reason = loyal.reasons.find((r) => r.kind === 'loyalty')
+    expect(reason).toEqual({ kind: 'loyalty', points: 6, detail: 4 })
+    expect(reasonText(reason!)).toBe('Loyalty price')
+    expect(loyal.score).toBeGreaterThan(plain.score)
+    expect(score(left('refused', { loyaltyCut: 0.04 })).reasons.map((r) => r.kind)).not.toContain(
+      'loyalty',
+    )
+  })
+
+  it('counts who is due', () => {
+    expect(dueCount([client(), client({ id: 'd', dueDay: DAY + 1 })], DAY)).toBe(1)
+  })
+
+  it('brings back someone due first with the dev key', () => {
+    const later = client({ id: 'later', dueDay: DAY + 9 })
+    for (let seed = 0; seed < 10; seed++) {
+      expect(pickReturning([later, client()], new Set(), createRng(seed), DAY)!.id).toBe('c')
+    }
+    expect(pickReturning([later], new Set(), createRng(1), DAY)!.id).toBe('later')
+  })
+})
+
+describe('a returning client (16d)', () => {
+  const sold = clientCarOf({ ...clean, model: 'sedan' }, 30_000, 1)
+  const client = (extra: Partial<Client> = {}) =>
+    entry('c', { satisfaction: 70, car: sold, dueDay: DAY, budget: 30_000, ...extra })
+
+  it('shops the model they had, or the next one up', () => {
+    const models = new Set<string>()
+    for (let seed = 0; seed < 40; seed++) {
+      const c = generateCustomer('x', inventory, createRng(seed), {
+        client: client({ preferredModels: ['truck'] }),
+        tradeUp: true,
+      })
+      models.add(c.preferredModels.join('+'))
+      if (c.preferredModels.length > 1) expect(c.budget).toBeGreaterThanOrEqual(BASE_MSRP.suv)
+    }
+    expect([...models].sort()).toEqual(['sedan', 'sedan+suv'])
+    expect(nextModelUp('hatchback-sports')).toBe('sedan')
+    expect(nextModelUp('suv-luxury')).toBeNull()
+    expect(nextModelUp('truck')).toBeNull()
+  })
+
+  it('is priced at the loyalty discount and hopes for less off the happier they are', () => {
+    const opts = { archetype: 'regular' as const }
+    const happy = generateCustomer('x', inventory, createRng(3), {
+      ...opts,
+      client: client({ satisfaction: 100 }),
+      loyaltyCut: 0.02,
+    })
+    const so = generateCustomer('x', inventory, createRng(3), {
+      ...opts,
+      client: client({ satisfaction: 50 }),
+      loyaltyCut: 0.02,
+    })
+    expect(happy.loyaltyCut).toBe(0.02)
+    expect(happy.expect).toBeCloseTo(so.expect * (1 - LOYAL_EXPECT_CUT), 2)
+    expect(loyalExpectCut(40)).toBe(0)
+    // A prospect isn't a client yet: no loyalty price.
+    const p = generateCustomer('x', inventory, createRng(3), {
+      client: client({ status: 'prospect', car: null, lastDeal: null }),
+      loyaltyCut: 0.02,
+    })
+    expect(p.loyaltyCut).toBe(0)
+    expect(generateCustomer('x', inventory, createRng(3), { loyaltyCut: 0.02 }).loyaltyCut).toBe(0)
   })
 })

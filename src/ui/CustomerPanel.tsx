@@ -15,6 +15,7 @@ import {
   dealWarmth,
   matchAsk,
   quoteFor,
+  stickerOf,
   suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
@@ -98,6 +99,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
   const hint = useGame((s) => levelTuning(s).dealHint)
   const game = useGame.getState()
   const ask = (p: number) => game.ask(p, allow)
+  const sticker = stickerOf(c, car)
   const step = (d: number) => setPrice(clampAsk(c, car, price + d, allow))
   const match = matchAsk(c, car, allow)
   const stepAllowance = (d: number) => setAllowance((a) => clampAllowance(c, a + d))
@@ -149,10 +151,10 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           </>
         ) : (
           <>
-            <button className="btn btn-primary" onClick={() => ask(car.msrp)}>
-              Ask MSRP
+            <button className="btn btn-primary" onClick={() => ask(sticker)}>
+              {c.loyaltyCut > 0 ? 'Ask loyalty price' : 'Ask MSRP'}
             </button>
-            <button className="btn" onClick={() => ask(Math.round((car.msrp * 0.97) / 100) * 100)}>
+            <button className="btn" onClick={() => ask(Math.round((sticker * 0.97) / 100) * 100)}>
               Offer −3%
             </button>
           </>
@@ -452,6 +454,14 @@ export function CustomerPanel() {
         </dd>
         <dt>{car.used ? 'Used price' : 'MSRP'}</dt>
         <dd className="price">{formatMoney(car.msrp)}</dd>
+        {c.loyaltyCut > 0 && (
+          <>
+            <dt>Loyalty price</dt>
+            <dd className="price">
+              {formatMoney(stickerOf(c, car))} (−{Math.round(c.loyaltyCut * 100)}%)
+            </dd>
+          </>
+        )}
         {worth !== null && (
           <>
             <dt>Worth today</dt>

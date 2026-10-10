@@ -45,6 +45,7 @@ const shopper = (price: number): Customer => ({
   trade: null,
   rivalQuote: { model: car().model, price },
   clientId: null,
+  loyaltyCut: 0,
   service: null,
 })
 

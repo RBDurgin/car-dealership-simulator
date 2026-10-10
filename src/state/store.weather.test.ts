@@ -57,6 +57,7 @@ const waiter = (id: string, carId: string): Customer => ({
   trade: null,
   rivalQuote: null,
   clientId: null,
+  loyaltyCut: 0,
   service: null,
 })
 

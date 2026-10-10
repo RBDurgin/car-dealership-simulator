@@ -1,4 +1,11 @@
-import { UNHAPPY, type AppointmentReason, type Client } from './clients'
+import {
+  isDue,
+  returnChance,
+  UNHAPPY,
+  type AppointmentReason,
+  type Client,
+  type ClientPerks,
+} from './clients'
 import { formatTime, OPEN_MINUTE } from './clock'
 import type { Rng } from './rng'
 import { LAST_ARRIVAL_MINUTE } from './spawner'
@@ -7,12 +14,12 @@ import { MIN_SKILL } from './staff'
 /**
  * Follow-up calls from the office desk phone (16c). The player, or a
  * receptionist with nobody waiting, calls one person from the book at a time:
- * a thank-you to a recent buyer, a prospect who walked out (a be-back), or an
- * unhappy client. A call can book an appointment for the next day, which
+ * a thank-you to a recent buyer, a prospect who walked out (a be-back), a
+ * client due to trade up, or an unhappy client. A call can book an appointment for the next day, which
  * `planClientVisits` turns into a visit.
  */
 
-export type CallKind = 'thanks' | 'beBack' | 'checkIn'
+export type CallKind = 'thanks' | 'beBack' | 'tradeUp' | 'checkIn'
 
 export type CallOutcome = 'booked' | 'thanked' | 'notNow' | 'noAnswer' | 'annoyed'
 
@@ -31,7 +38,12 @@ export const THANKS_BOOST = 5
 /** Satisfaction a pestering call costs. */
 export const ANNOY_POINTS = 8
 /** The odds an answered call books, by kind, from a caller of average skill at satisfaction 50. */
-export const BOOK_ODDS: Record<CallKind, number> = { thanks: 0, beBack: 0.45, checkIn: 0.3 }
+export const BOOK_ODDS: Record<CallKind, number> = {
+  thanks: 0,
+  beBack: 0.45,
+  tradeUp: 0.6,
+  checkIn: 0.3,
+}
 /** Most an answered call books. */
 export const MAX_BOOK = 0.9
 /** × the book odds per skill level from 3. */
@@ -44,17 +56,19 @@ export const APPOINTMENT_WINDOW = { from: OPEN_MINUTE + 60, to: LAST_ARRIVAL_MIN
 const CALL_REASON: Record<CallKind, AppointmentReason | null> = {
   thanks: null,
   beBack: 'beBack',
+  tradeUp: 'tradeUp',
   checkIn: 'checkIn',
 }
 
 /**
- * Why `c` would be called on `day`, or null: a prospect is a be-back, an
- * unhappy client a check-in, and a buyer from the last `THANKS_DAYS` who
- * hasn't been called since a thank-you.
+ * Why `c` would be called on `day`, or null: a prospect is a be-back, a
+ * client due to trade up a trade-up, an unhappy client a check-in, and a
+ * buyer from the last `THANKS_DAYS` who hasn't been called since a thank-you.
  */
 export function callKind(c: Client, day: number): CallKind | null {
   if (c.status === 'prospect') return 'beBack'
   if (c.status !== 'client') return null
+  if (isDue(c, day)) return 'tradeUp'
   if (c.satisfaction < UNHAPPY) return 'checkIn'
   if (c.car && day - c.car.boughtDay <= THANKS_DAYS && c.callsThisCycle === 0) return 'thanks'
   return null
@@ -70,12 +84,12 @@ function calledLately(c: Client, day: number): boolean {
   return c.lastCall !== null && day - c.lastCall < CALL_GAP_DAYS
 }
 
-/** Kinds in the order they're worth calling: a be-back is the likeliest sale. */
-const KIND_ORDER: readonly CallKind[] = ['beBack', 'checkIn', 'thanks']
+/** Kinds in the order they're worth calling: a due client is the likeliest sale, then a be-back. */
+const KIND_ORDER: readonly CallKind[] = ['tradeUp', 'beBack', 'checkIn', 'thanks']
 
 /**
- * Who to call on `day`, likeliest to pay first: be-backs (happiest first, then
- * soonest to expire), unhappy clients (happiest first) and thank-yous. Leaves
+ * Who to call on `day`, likeliest to pay first: clients due to trade up and
+ * be-backs (happiest first, then soonest to expire), unhappy clients (happiest first) and thank-yous. Leaves
  * out anyone called lately, with an appointment, or in `skip` (on the lot,
  * already tried today or being called).
  */
@@ -178,28 +192,42 @@ export function applyCall(
   })
 }
 
-/** A client due in on an appointment today. */
+/** A client due in today, on an appointment or to trade up on their own. */
 export interface ClientVisit {
   clientId: string
   minute: number
 }
 
+/** A due client coming in on their own turns up between these minutes, on the five. */
+export const RETURN_WINDOW = { from: OPEN_MINUTE + 30, to: LAST_ARRIVAL_MINUTE - 30 }
+
 /**
- * Today's client visits: everyone with an appointment on `day` who turns up
- * (`SHOW_CHANCE` × `scale`, rolled on `rng` in the book's order), by minute.
- * An empty book rolls nothing.
+ * Today's client visits, by minute: everyone with an appointment on `day` who
+ * turns up (`SHOW_CHANCE` × `scale`), and the clients due to trade up who come
+ * in on their own (`returnChance` with the loyalty `discount`, × `scale`) at
+ * a minute in `RETURN_WINDOW`. Rolled on `rng` in the book's order; anyone
+ * with an appointment on another day waits for it. An empty book rolls
+ * nothing.
  */
 export function planClientVisits(
   book: readonly Client[],
   day: number,
   rng: Rng,
   scale = 1,
+  discount: ClientPerks['loyaltyDiscount'] = 0,
 ): ClientVisit[] {
   const show = Math.min(1, SHOW_CHANCE * scale)
   const out: ClientVisit[] = []
   for (const c of book) {
-    if (c.appointment?.day !== day) continue
-    if (rng.next() < show) out.push({ clientId: c.id, minute: c.appointment.minute })
+    if (c.appointment) {
+      if (c.appointment.day === day && rng.next() < show) {
+        out.push({ clientId: c.id, minute: c.appointment.minute })
+      }
+      continue
+    }
+    if (!isDue(c, day) || rng.next() >= returnChance(c, discount, scale)) continue
+    const { from, to } = RETURN_WINDOW
+    out.push({ clientId: c.id, minute: rng.int(from / 5, to / 5) * 5 })
   }
   return out.sort((a, b) => a.minute - b.minute)
 }
@@ -243,9 +271,9 @@ export function callLine(name: string, kind: CallKind, result: CallResult, minut
     case 'thanked':
       return `${name} was glad you called to thank them.`
     case 'notNow':
-      return kind === 'checkIn'
-        ? `${name}: "Thanks for checking. I'm fine for now."`
-        : `${name}: "Not right now, thanks."`
+      if (kind === 'checkIn') return `${name}: "Thanks for checking. I'm fine for now."`
+      if (kind === 'tradeUp') return `${name}: "I'm happy with my car for now, thanks."`
+      return `${name}: "Not right now, thanks."`
     case 'booked':
       return `${name} will come in tomorrow at ${formatTime(minute)}.`
   }

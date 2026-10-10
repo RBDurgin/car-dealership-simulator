@@ -51,6 +51,7 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   trade: null,
   rivalQuote: null,
   clientId: null,
+  loyaltyCut: 0,
   service: null,
 })
 

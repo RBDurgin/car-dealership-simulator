@@ -48,6 +48,7 @@ const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   trade: null,
   rivalQuote: null,
   clientId: null,
+  loyaltyCut: 0,
   service: null,
   ...extra,
 })

@@ -9,6 +9,7 @@ import {
   bookChance,
   CALL_GAP_DAYS,
   callKind,
+  callLine,
   callList,
   callOutcome,
   callSkill,
@@ -16,12 +17,20 @@ import {
   NO_ANSWER,
   planClientVisits,
   receptionCallTime,
+  RETURN_WINDOW,
   takeDueClients,
   THANKS_BOOST,
   THANKS_DAYS,
   type CallKind,
 } from './calls'
-import { pruneBook, recordClients, emptyClientStats, type Client } from './clients'
+import {
+  emptyClientStats,
+  LAPSE_DAYS,
+  pruneBook,
+  recordClients,
+  returnChance,
+  type Client,
+} from './clients'
 import { beBackExpect, generateCustomer, MAX_BE_BACK_EXPECT, PLAYER_SKILL } from './customers'
 import { BASE_MSRP, buildInventory } from './inventory'
 import { createRng, type Rng } from './rng'
@@ -319,5 +328,69 @@ describe('be-backs', () => {
   it('hope for no more than MAX_BE_BACK_EXPECT off, and nothing off over the sticker', () => {
     expect(beBackExpect('sedan', 1_000)).toBe(MAX_BE_BACK_EXPECT)
     expect(beBackExpect('sedan', BASE_MSRP.sedan + 1_000)).toBe(0)
+  })
+})
+
+describe('trade-ups (16d)', () => {
+  const due = (id: string, extra: Partial<Client> = {}) =>
+    person(id, { car: boughtOn(1), dueDay: DAY, ...extra })
+
+  it('calls a due client to trade up, ahead of be-backs', () => {
+    expect(callKind(due('d'), DAY)).toBe('tradeUp')
+    expect(callKind(due('d', { satisfaction: 30 }), DAY)).toBe('tradeUp')
+    expect(callKind(due('d'), DAY - 1)).toBeNull()
+    const list = callList([prospect('p', { satisfaction: 90 }), due('d')], DAY)
+    expect(list.map((e) => [e.client.id, e.kind])).toEqual([
+      ['d', 'tradeUp'],
+      ['p', 'beBack'],
+    ])
+    expect(bookChance(due('d'), 'tradeUp', 3)).toBeGreaterThan(
+      bookChance(prospect('p'), 'beBack', 3),
+    )
+  })
+
+  it('books a trade-up appointment', () => {
+    const book = applyCall([due('d')], 'd', 'tradeUp', { outcome: 'booked', change: 0 }, DAY, 660)
+    expect(book[0].appointment).toEqual({ day: DAY + 1, minute: 660, reason: 'tradeUp' })
+  })
+
+  it('brings due clients in on their own, the likelier the happier', () => {
+    const book = [due('d')]
+    const plan = planClientVisits(book, DAY, fixed(0))
+    expect(plan).toEqual([{ clientId: 'd', minute: RETURN_WINDOW.from }])
+    expect(planClientVisits(book, DAY, fixed(0.99))).toEqual([])
+    // Not yet due, or waiting on an appointment another day: nothing rolled.
+    expect(planClientVisits(book, DAY - 1, fixed(0))).toEqual([])
+    const booked = due('d', { appointment: { day: DAY + 1, minute: 600, reason: 'tradeUp' } })
+    expect(planClientVisits([booked], DAY, fixed(0))).toEqual([])
+    expect(returnChance(due('a', { satisfaction: 90 }))).toBeGreaterThan(returnChance(due('b')))
+    expect(returnChance(due('b', { satisfaction: 30 }))).toBeLessThan(returnChance(due('b')))
+  })
+
+  it('rolls returns per day, the same each time', () => {
+    const book = Array.from({ length: 40 }, (_, i) => due(`d${i}`))
+    const a = planClientVisits(book, DAY, createRng(DAY))
+    expect(a).toEqual(planClientVisits(book, DAY, createRng(DAY)))
+    for (const v of a) {
+      expect(v.minute).toBeGreaterThanOrEqual(RETURN_WINDOW.from)
+      expect(v.minute).toBeLessThanOrEqual(RETURN_WINDOW.to)
+      expect(v.minute % 5).toBe(0)
+    }
+  })
+
+  it('meets the trade-up targets over the lapse window', () => {
+    // Chance of coming back on their own before they lapse.
+    const back = (satisfaction: number, discount: 0 | 0.02 | 0.04 = 0) =>
+      1 - (1 - returnChance(due('x', { satisfaction }), discount)) ** LAPSE_DAYS
+    expect(back(75)).toBeGreaterThan(0.5)
+    expect(back(75)).toBeLessThan(0.7)
+    expect(back(40)).toBeGreaterThan(0.1)
+    expect(back(40)).toBeLessThan(0.3)
+    expect(returnChance(due('x'), 0.02)).toBeCloseTo(returnChance(due('x')) * 1.2)
+    expect(returnChance(due('x'), 0.04)).toBeCloseTo(returnChance(due('x')) * 1.4)
+  })
+
+  it('words a trade-up turned down', () => {
+    expect(callLine('Kim', 'tradeUp', { outcome: 'notNow', change: 0 }, 600)).toContain('my car')
   })
 })

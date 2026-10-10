@@ -278,6 +278,18 @@ export const UPDATES: readonly Update[] = [
       'A receptionist calls clients when nobody is waiting. Turn it off in the Clients tab.',
     ],
   },
+  {
+    id: 26,
+    phase: '16',
+    title: 'Trade-ups and the loyalty discount',
+    items: [
+      'A month or two after buying, a client is due to trade up. The happier they are, the likelier they come back.',
+      'They drive in with the car you sold them to trade, and shop the same model or the next size up.',
+      'Call a due client to invite them in. Not back within three weeks, they buy elsewhere.',
+      'Happy clients are keener to buy and haggle less.',
+      'Set a loyalty discount in the Clients tab: returning clients pay less but come back more often.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

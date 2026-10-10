@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
 import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
-import { PROSPECT_DAYS } from '../sim/clients'
+import { LAPSE_DAYS, PROSPECT_DAYS, TRADE_UP_DAYS } from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import {
@@ -363,6 +363,20 @@ function SellingTab({ touch, click }: TabProps) {
           car if there&apos;s a space. Keep them waiting and it costs twice as much as a
           walk-in&apos;s wait.
         </p>
+        <p>
+          A buyer is due to trade up {TRADE_UP_DAYS.min} to {TRADE_UP_DAYS.max} days after their
+          purchase (the Clients tab&apos;s Due filter lists them). Once due, they may come in on
+          their own any day, the likelier the happier they are, and a call invites them in with much
+          better odds than waiting. They drive in with the car you sold them, a few years older by
+          then, to trade, and shop the same model or the next size up. With no parking space free
+          they come on foot without it. Not back within {LAPSE_DAYS} days of falling due, they buy
+          elsewhere.
+        </p>
+        <p>
+          A happy client is keener to say yes and hopes for less off; an unhappy one is warier. With
+          a loyalty discount on (see the Business tab), a returning client is priced from the
+          loyalty price instead of the sticker: their panel shows it, and asks top out there.
+        </p>
       </section>
       <section>
         <h3>Reputation</h3>
@@ -393,6 +407,15 @@ function BusinessTab({ touch, click }: TabProps) {
         computer: {click.toLowerCase()} the screen on your desk and choose <b>Office</b>, or{' '}
         <OfficeKey touch={touch} keyName="I" />, and pick a tab.
       </p>
+      <section>
+        <h3>Loyalty discount</h3>
+        <p>
+          The Clients tab sets a loyalty discount for returning clients: none, 2% or 4% off the
+          sticker. Every sale to them earns that much less, but a client due to trade up comes back
+          more often (a fifth more at 2%, two fifths at 4%) and leaves a little happier. A 2%
+          discount about pays for itself; 4% needs a big book.
+        </p>
+      </section>
       <section>
         <h3>Buying stock</h3>
         <p>

@@ -259,6 +259,8 @@ export interface Sale {
   trade?: TradeRecord
   /** The car sold was a used one. */
   used?: boolean
+  /** Sold to a client from the book, back for another car. */
+  returning?: boolean
 }
 
 /** One day's results, for the end-of-day summary. */

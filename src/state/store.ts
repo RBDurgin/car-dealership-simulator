@@ -32,6 +32,7 @@ import {
   defaultPerks,
   emptyMonthCsi,
   isDue,
+  loyaltyBonus,
   pickReturning,
   pruneBook,
   recordClients,
@@ -97,6 +98,7 @@ import {
   staffAllowance,
   staffAsk,
   staffBuyOffer,
+  stickerOf,
   suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
@@ -287,7 +289,7 @@ import {
   WAIT_LIMIT,
 } from '../sim/serviceClients'
 import { recallDemand, recallNotice, recallOn, recallStarts } from '../sim/recalls'
-import { assignTrades, tradeRecord } from '../sim/tradeIns'
+import { assignTrades, toTrader, tradeRecord } from '../sim/tradeIns'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
 
@@ -562,6 +564,8 @@ interface GameState {
   phoneClient: (clientId?: string) => boolean
   /** Turns the receptionist's calls between customers on or off. */
   setReceptionCalls: (on: boolean) => void
+  /** Sets the loyalty discount returning clients are priced at, from their next visit. */
+  setLoyaltyDiscount: (discount: ClientPerks['loyaltyDiscount']) => void
   /** Service client `customerId` reached their car, which is ready: they pay and get in. */
   serviceCollect: (customerId: string) => void
   /** Service client `customerId`, dropping their car off, walked off the lot until it's ready. */
@@ -690,14 +694,17 @@ export function orderInvoice(s: Pick<GameState, 'difficulty' | 'franchise'>): nu
  * the showroom improvements up today and the level add.
  */
 export function sellerBonusFor(
-  s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster'>,
-  c: Pick<Customer, 'handlerId'>,
+  s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster' | 'clients'>,
+  c: Pick<Customer, 'handlerId' | 'clientId'>,
 ): number {
   const showroom =
     effectsOf(installed(s.improvements, s.clock.day)).acceptBonus + levelTuning(s).acceptBonus
-  if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + showroom
+  // Someone from the book is as keen as their visits left them.
+  const client = c.clientId ? s.clients.find((x) => x.id === c.clientId) : undefined
+  const extra = showroom + (client ? loyaltyBonus(client.satisfaction) : 0)
+  if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + extra
   const e = s.roster.find((x) => x.id === c.handlerId)
-  return (e ? skillBonus(e.skill) : 0) + showroom
+  return (e ? skillBonus(e.skill) : 0) + extra
 }
 
 /** The level's scale on reputation gains and losses. */
@@ -1365,9 +1372,39 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Clients due in on an appointment by `minute` turn up, as they were last
-   * time, built on the book's own rng. They come by car while a space is free,
-   * before anyone else (`present` and the purchases' spaces are taken).
+   * Client `client` back on the lot, as they were last time, built on `rng`.
+   * One due to trade up is priced at the loyalty discount and, while a space
+   * in customer parking is free (`present` and the purchases' spaces are
+   * taken), drives in with the car we sold them and brings it to trade. With
+   * no space they come on foot, without it.
+   */
+  const returningVisitor = (client: Client, present: readonly Customer[], rng: Rng): Customer => {
+    const s = get()
+    const day = s.clock.day
+    const tradeUp = isDue(client, day)
+    const c = generateCustomer(`customer-${nextCustomerId++}`, availableCars(s.inventory), rng, {
+      ...arrivalOpts(),
+      client,
+      tradeUp,
+      loyaltyCut: s.clientPerks.loyaltyDiscount,
+    })
+    const spot = freeSpot(
+      present,
+      s.purchases.map((p) => p.spot),
+    )
+    if (spot === null) return c
+    const car = client.car
+      ? { model: client.car.model, ...clientCarInfo(client.car, day) }
+      : rollUsedCar(rng, day)
+    const driven = { ...c, vehicle: { car, spot, parked: false } }
+    if (!tradeUp || !client.car) return driven
+    const level = tuning()
+    return toTrader(driven, rng, day, { hope: level.tradeHope, noise: level.appraisalNoise })
+  }
+
+  /**
+   * Clients due in by `minute`, on an appointment or to trade up, turn up on
+   * the book's own rng, before anyone else gets the parking.
    */
   const clientArrivals = (minute: number, present: readonly Customer[]): Customer[] => {
     const s = get()
@@ -1375,22 +1412,11 @@ export const useGame = create<GameState>((set, get) => {
     const { due, rest } = takeDueClients(s.clientVisits, minute)
     if (due.length === 0) return []
     set({ clientVisits: rest })
-    const taken = s.purchases.map((p) => p.spot)
-    const stock = availableCars(s.inventory)
     const out: Customer[] = []
     for (const v of due) {
       const client = s.clients.find((c) => c.id === v.clientId)
       if (!client || present.some((c) => c.clientId === client.id)) continue
-      const c = generateCustomer(`customer-${nextCustomerId++}`, stock, clientRng, {
-        ...arrivalOpts(),
-        client,
-        tradeUp: isDue(client, s.clock.day),
-      })
-      const spot = freeSpot([...present, ...out], taken)
-      const car = client.car
-        ? { model: client.car.model, ...clientCarInfo(client.car, s.clock.day) }
-        : rollUsedCar(clientRng, s.clock.day)
-      out.push(spot === null ? c : { ...c, vehicle: { car, spot, parked: false } })
+      out.push(returningVisitor(client, [...present, ...out], clientRng))
     }
     return out
   }
@@ -1664,6 +1690,7 @@ export const useGame = create<GameState>((set, get) => {
     const trade = traded && tradeRecord(c, traded.price, s.clock.day)
     if (trade) sale.trade = trade
     if (car.used) sale.used = true
+    if (s.clients.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
     const stats = get().dayStats
     set({
       dayStats: {
@@ -1859,7 +1886,13 @@ export const useGame = create<GameState>((set, get) => {
       serviceComebacks: [],
       serviceVisits: planServiceVisits(serviceRng, demand, recalls),
       clients,
-      clientVisits: planClientVisits(clients, day, clientRng, level.clientReturn),
+      clientVisits: planClientVisits(
+        clients,
+        day,
+        clientRng,
+        level.clientReturn,
+        s.clientPerks.loyaltyDiscount,
+      ),
       callsTried: [],
       playerCall: null,
       receptionCall: null,
@@ -2230,15 +2263,9 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       if (isClosed(s.clock)) return
       const onLot = new Set(s.customers.flatMap((c) => (c.clientId ? [c.clientId] : [])))
-      const client = pickReturning(s.clients, onLot, createRng(Date.now()))
+      const client = pickReturning(s.clients, onLot, createRng(Date.now()), s.clock.day)
       if (!client) return notify('Nobody in the client book to bring back.')
-      const opts = { ...arrivalOpts(), client, tradeUp: isDue(client, s.clock.day) }
-      const c = generateCustomer(
-        `customer-${nextCustomerId++}`,
-        availableCars(s.inventory),
-        customerRng,
-        opts,
-      )
+      const c = returningVisitor(client, s.customers, createRng(Date.now()))
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...get().customers, c])
     },
@@ -2402,7 +2429,8 @@ export const useGame = create<GameState>((set, get) => {
       const allow = c.trade
         ? tradeAllowance(c, staffAllowance(e.skill, appraisal, c.trade.hope, roundOf(c)))
         : undefined
-      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow, quoteFor(c, car)))
+      const ask = staffAsk(e.skill, car, c.haggle, allow, quoteFor(c, car), stickerOf(c, car))
+      const price = Math.max(allow ?? 0, ask)
       const ev = { type: 'offer', id: c.id, carId: car.id, price, allowance: allow } as const
       commit(reduceCustomers(s.customers, ev))
     },
@@ -2458,6 +2486,9 @@ export const useGame = create<GameState>((set, get) => {
       dispatch({ type: 'request', id: nextActionId++, targetId: DESK_PHONE_ID, action: 'call' })
       set({ playerCall: entry.client.id })
       return true
+    },
+    setLoyaltyDiscount: (discount) => {
+      set({ clientPerks: { ...get().clientPerks, loyaltyDiscount: discount } })
     },
     setReceptionCalls: (on) => {
       const perks = get().clientPerks

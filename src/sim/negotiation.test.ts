@@ -36,6 +36,7 @@ import {
   staffAsk,
   staffBuyOffer,
   staffConcession,
+  stickerOf,
   STUBBORN_WALK,
   suggestedAllowance,
   suggestedAsk,
@@ -88,6 +89,7 @@ const base: Customer = {
   trade: null,
   rivalQuote: null,
   clientId: null,
+  loyaltyCut: 0,
   service: null,
 }
 
@@ -631,5 +633,31 @@ describe("the rival's quote", () => {
       expect(staffAsk(3, sedan, null, 0, 31_000)).toBe(30_000)
       expect(staffAsk(3, sedan, h(29_000, 28_500), 0, 28_000)).toBe(28_500)
     })
+  })
+})
+
+describe('the loyalty price (16d)', () => {
+  const loyal = { ...base, loyaltyCut: 0.02 }
+
+  it('lowers the sticker a returning client is priced from', () => {
+    expect(stickerOf(base, sedan)).toBe(30_000)
+    expect(stickerOf(loyal, sedan)).toBe(29_400)
+    expect(hopePrice(loyal, sedan)).toBe(Math.round((29_400 * (1 - base.expect)) / 100) * 100)
+  })
+
+  it('tops asks out at the loyalty price', () => {
+    expect(askRange(loyal, sedan)).toEqual({ min: 100, max: 29_400 })
+    expect(suggestedAsk(loyal, sedan)).toBe(29_400)
+    expect(clampAsk(loyal, sedan, 30_000)).toBe(29_400)
+    const later = { ...loyal, haggle: { round: 2, lastAsk: 30_000, counter: 27_000 } }
+    expect(askRange(later, sedan).max).toBe(29_400)
+  })
+
+  it('has staff open at the loyalty price, never over it', () => {
+    expect(staffAsk(3, sedan, null, 0, null, 29_400)).toBe(29_400)
+    expect(staffAsk(1, sedan, null, 0, null, 29_400)).toBeLessThan(29_400)
+    const h = { round: 2, lastAsk: 30_000, counter: 27_000 }
+    expect(staffAsk(5, sedan, h, 0, null, 29_400)).toBeLessThanOrEqual(29_400)
+    expect(staffAsk(3, sedan, null)).toBe(30_000)
   })
 })

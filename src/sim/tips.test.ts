@@ -101,6 +101,8 @@ const finding: Finding = {
   status: 'found',
 }
 
+const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
+
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   wash: [{ inventory: withCar({ cleanliness: WASH_BELOW - 0.01 }) }, {}],
   haggle: [
@@ -167,6 +169,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
       ],
     },
     { clients: [{ id: 'client-1-0', status: 'prospect', appointment: null } as Client] },
+  ],
+  tradeUpDue: [
+    { clients: dueBook, clock: { day: 40 } },
+    { clients: dueBook, clock: { day: 39 } },
   ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },

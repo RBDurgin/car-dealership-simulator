@@ -79,6 +79,7 @@ const base: Customer = {
   trade: null,
   rivalQuote: null,
   clientId: null,
+  loyaltyCut: 0,
   service: null,
 }
 
