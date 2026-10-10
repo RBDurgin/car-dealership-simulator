@@ -168,6 +168,23 @@ describe('reactionsFor', () => {
     ])
   })
 
+  it('greets someone from the client book warmly, and they answer happily', () => {
+    const prev = state({
+      customers: [customer('c1', { phase: 'waiting', clientId: 'client-1-0' })],
+    })
+    const next = state({
+      customers: [
+        customer('c1', { phase: 'talking', handlerId: PLAYER_ID, clientId: 'client-1-0' }),
+      ],
+    })
+    expect(lines(prev, next)).toEqual([
+      [
+        expect.objectContaining({ speaker: PLAYER_ID, tone: 'happy' }),
+        expect.objectContaining({ speaker: 'c1', tone: 'happy' }),
+      ],
+    ])
+  })
+
   it('has the receptionist welcome someone reaching the lot, if there is one at their post', () => {
     const prev = state({ customers: [customer('c1', { phase: 'arriving' })] })
     const arrived = [customer('c1', { phase: 'browsing' })]

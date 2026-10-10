@@ -3,6 +3,17 @@ import {
   BASE_SCORE,
   blend,
   bookOutcome,
+  bookSummary,
+  buyerScore,
+  clientCarText,
+  clientStatusText,
+  costliestReason,
+  DUE_SOON,
+  filterClients,
+  historyLine,
+  pickReturning,
+  satisfactionFace,
+  UNHAPPY,
   CLIENT_CAP,
   CLIENT_YEAR_DAYS,
   clientCarInfo,
@@ -390,5 +401,106 @@ describe('recordClients', () => {
     )
     expect(out.book).toBe(book)
     expect(out.stats).toBe(stats)
+  })
+})
+
+describe('the Clients tab', () => {
+  const one = (extra: Partial<Client> = {}): Client => ({
+    ...record([], buyer())[0],
+    ...extra,
+  })
+  const names = (m: string) => `The ${m}`
+  const money = (n: number) => `$${n}`
+  const book: Client[] = [
+    one({ id: 'a', lastVisit: 3, dueDay: DAY + DUE_SOON + 1, satisfaction: 80 }),
+    one({ id: 'b', lastVisit: 9, dueDay: DAY, satisfaction: 40 }),
+    one({ id: 'c', lastVisit: 5, dueDay: DAY + 2, satisfaction: 60 }),
+    one({
+      id: 'p',
+      status: 'prospect',
+      car: null,
+      dueDay: null,
+      expires: DAY + 4,
+      lastVisit: 4,
+      satisfaction: 100,
+    }),
+    one({ id: 'l', status: 'lapsed', car: null, dueDay: null, satisfaction: 20, lastVisit: 1 }),
+  ]
+  const ids = (cs: Client[]) => cs.map((c) => c.id)
+
+  it('filters and orders the book', () => {
+    expect(ids(filterClients(book, 'all', DAY))).toEqual(['b', 'c', 'p', 'a', 'l'])
+    expect(ids(filterClients(book, 'due', DAY))).toEqual(['b', 'c'])
+    expect(ids(filterClients(book, 'prospects', DAY))).toEqual(['p'])
+    // A lapsed client isn't counted as unhappy: they're gone.
+    expect(ids(filterClients(book, 'unhappy', DAY))).toEqual(['b'])
+    expect(book.filter((c) => c.satisfaction < UNHAPPY)).toHaveLength(2)
+  })
+
+  it('sums up the active book', () => {
+    expect(bookSummary(book)).toEqual({ size: 5, clients: 3, prospects: 1, satisfaction: 70 })
+    expect(bookSummary([]).satisfaction).toBeNull()
+  })
+
+  it('says where each person stands', () => {
+    const [a, b, , p, l] = book
+    expect(clientStatusText(a, DAY, "Nazma's")).toBe(`Due in ${DUE_SOON + 1} days`)
+    expect(clientStatusText(b, DAY, "Nazma's")).toBe('Due now')
+    expect(clientStatusText(p, DAY, "Nazma's")).toBe('Prospect, 4 days left')
+    expect(clientStatusText(l, DAY, "Nazma's")).toBe('Lapsed')
+    expect(clientStatusText({ ...l, status: 'defected' }, DAY, "Nazma's")).toBe("At Nazma's")
+  })
+
+  it('names their car, or what they were after', () => {
+    const [a, , , p] = book
+    expect(clientCarText(a, DAY + 12, names)).toBe(`The ${car.model}, bought 12 days ago`)
+    expect(
+      clientCarText({ ...p, lastDeal: { model: 'suv', ask: null, counter: null } }, DAY, names),
+    ).toBe('After a The suv')
+  })
+
+  it('writes the history line for a returning visitor', () => {
+    const a = book[0]
+    expect(historyLine(a, DAY + 41, names, money)).toBe(
+      `Bought a The ${car.model} 41 days ago · 😊 80`,
+    )
+    const p = { ...book[3], lastDeal: { model: 'suv' as const, ask: 31_500, counter: 29_000 } }
+    expect(historyLine(p, DAY, names, money)).toBe('Back about the The suv: you asked $31500')
+    expect(satisfactionFace(UNHAPPY - 1)).toBe('😞')
+  })
+
+  it("names the reason that cost the day's scores most", () => {
+    expect(costliestReason([])).toBeNull()
+    const scores = [
+      {
+        clientId: 'a',
+        outcome: 'bought' as const,
+        score: 60,
+        reasons: [{ kind: 'wait' as const, points: -20, detail: 42 }],
+      },
+      {
+        clientId: 'b',
+        outcome: 'refused' as const,
+        score: 30,
+        reasons: [
+          { kind: 'wait' as const, points: -10, detail: 31 },
+          { kind: 'haggle' as const, points: -15, detail: 4 },
+        ],
+      },
+      {
+        clientId: 'c',
+        outcome: 'bought' as const,
+        score: 90,
+        reasons: [{ kind: 'goodPrice' as const, points: 10, detail: 5 }],
+      },
+    ]
+    expect(costliestReason(scores)).toBe('Long waits: 2 customers waited up to 42 minutes')
+    expect(buyerScore(scores)).toBe(75)
+    expect(buyerScore([scores[1]])).toBeNull()
+  })
+
+  it('picks someone to bring back who isn’t on the lot', () => {
+    expect(pickReturning(book, new Set(['a', 'b', 'c']), rng())?.id).toBe('p')
+    expect(pickReturning(book, new Set(['a', 'b', 'c', 'p']), rng())).toBeNull()
   })
 })

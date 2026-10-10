@@ -203,10 +203,18 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       const from = was.phase
       const to = c.phase
       if (to === 'talking' && (from === 'browsing' || from === 'waiting') && c.handlerId) {
-        out.push([
-          { speaker: c.handlerId, tone: 'greeting', syllables: rng.int(2, 3) },
-          { speaker: c.id, tone: 'greeting', syllables: 2 },
-        ])
+        // Someone from the client book: "good to see you again".
+        out.push(
+          c.clientId
+            ? [
+                { speaker: c.handlerId, tone: 'happy', syllables: rng.int(4, 6) },
+                { speaker: c.id, tone: 'happy', syllables: rng.int(2, 3) },
+              ]
+            : [
+                { speaker: c.handlerId, tone: 'greeting', syllables: rng.int(2, 3) },
+                { speaker: c.id, tone: 'greeting', syllables: 2 },
+              ],
+        )
       } else if (from === 'arriving' && receptionist) {
         out.push([{ speaker: receptionist.id, tone: 'greeting', syllables: rng.int(2, 3) }])
       } else if (from === 'talking' && to === 'considering') {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { ARCHETYPES } from '../sim/archetypes'
+import { historyLine } from '../sim/clients'
 import { PLAYER_ID, type Customer } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
@@ -410,6 +411,7 @@ export function CustomerPanel() {
   const touch = useMediaQuery(COARSE)
   const day = useGame((s) => s.clock.day)
   const rivalName = useGame((s) => s.rival.name)
+  const client = useGame((s) => (c?.clientId ? s.clients.find((x) => x.id === c.clientId) : null))
   if (c?.selling) return <SellerPanel c={c} />
   if (c?.service) return <ServicePanel c={c} />
   if (!c || !car) return null
@@ -421,8 +423,18 @@ export function CustomerPanel() {
   return (
     <div className={haggling ? 'panel customer-panel haggling' : 'panel customer-panel'}>
       <div className="info-kicker">Customer</div>
-      <h2>{c.name}</h2>
+      <h2>
+        {c.name}
+        {client && (
+          <span className="stock-badge client-badge">
+            {client.status === 'prospect' ? 'Prospect' : 'Client'}
+          </span>
+        )}
+      </h2>
       <div className="customer-type">{ARCHETYPES[c.archetype].hint}</div>
+      {client && (
+        <div className="customer-history">{historyLine(client, day, carName, formatMoney)}</div>
+      )}
       <p className="customer-quote">
         “I'm interested in the {carName(car.model)}. I'm hoping to spend around{' '}
         {formatMoney(budgetHint(c))}.”

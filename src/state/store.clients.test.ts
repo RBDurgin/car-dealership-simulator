@@ -164,6 +164,19 @@ describe('the client book', () => {
     expect(game().arrivals).toEqual(without.arrivals)
     expect(game().candidates).toEqual(without.candidates)
   })
+
+  it('brings someone back from the book (dev), as they were, once at a time', () => {
+    game().newGame()
+    withAlexInBook()
+    game().devReturnClient()
+    const back = game().customers.filter((c) => c.clientId === 'client-1-0')
+    expect(back).toHaveLength(1)
+    expect(back[0]).toMatchObject({ name: 'Alex B.', variant: 'male-a', source: 'client' })
+    // Already on the lot: nobody else to bring.
+    const count = game().customers.length
+    game().devReturnClient()
+    expect(game().customers).toHaveLength(count)
+  })
 })
 
 /** A book with Alex in it, written straight into the store. */

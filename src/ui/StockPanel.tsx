@@ -19,6 +19,7 @@ import { expansionsUp } from '../sim/expansions'
 import { reservedSlots } from '../sim/sellers'
 import { levelTuning, orderInvoice, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
+import { ClientsTab } from './ClientsTab'
 import { RivalTab } from './RivalTab'
 import { ServiceTab } from './ServiceTab'
 import { formatMoney } from './format'
@@ -202,9 +203,9 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
  * The office computer: buying stock from the manufacturer (the catalog,
  * today's orders and the cars in stock), ad campaigns on the marketing tab,
  * improvements on the upgrades tab, the coming weeks on the calendar tab and
- * Nazma's lot across the road on the rival tab, and the garage on the service
- * tab. Opened at the computer, from the top bar's Office button, or with I, M,
- * U, C, K and B.
+ * Nazma's lot across the road on the rival tab, the garage on the service tab
+ * and the client book on the clients tab. Opened at the computer (on the tab it
+ * was last on), from the top bar's Office button, or with I, M, U, C, K, B and L.
  * Orders are delivered the next morning.
  */
 export function StockPanel() {
@@ -246,8 +247,10 @@ export function StockPanel() {
         <CalendarTab />
       ) : tab === 'rival' ? (
         <RivalTab />
-      ) : (
+      ) : tab === 'service' ? (
         <ServiceTab />
+      ) : (
+        <ClientsTab />
       )}
       <div className="status-hint">
         {TAB_HINTS[tab].hint}
@@ -264,6 +267,7 @@ const TABS: [ComputerTab, string][] = [
   ['calendar', 'Calendar'],
   ['rival', 'Rival'],
   ['service', 'Service'],
+  ['clients', 'Clients'],
 ]
 
 const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
@@ -273,6 +277,7 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   calendar: { hint: 'Plan stock and ads for the busy days.', key: 'C' },
   rival: { hint: 'Ads, reputation and fair prices win his buyers back.', key: 'K' },
   service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
+  clients: { hint: 'Happy clients come back.', key: 'L' },
 }
 
 function StockTab() {

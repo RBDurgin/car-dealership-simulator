@@ -11,6 +11,7 @@ export const CONTROLS: [string, string][] = [
   ['C', 'Calendar (the week ahead)'],
   ['K', 'Rival (Nazma’s lot across the road)'],
   ['B', 'Service (the garage)'],
+  ['L', 'Clients (the client book)'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away'],
@@ -20,6 +21,7 @@ export const CONTROLS: [string, string][] = [
     ? ([
         ['R', 'Restock (dev)'],
         ['Shift R', 'Add a used car (dev)'],
+        ['Shift L', 'Bring back a client (dev)'],
         ['T', 'Game speed (dev)'],
       ] as [string, string][])
     : []),
@@ -31,7 +33,7 @@ export const TOUCH_CONTROLS: [string, string][] = [
   ['Pinch', 'Zoom'],
   ['Twist', 'Rotate view (two fingers)'],
   ['Staff', 'Staff'],
-  ['Office', 'Stock, marketing, upgrades, calendar, rival, service'],
+  ['Office', 'Stock, marketing, upgrades, calendar, rival, service, clients'],
   ['Walls', 'Wall mode'],
   ['✕', 'Cancel'],
   ['🔊', 'Sound settings and mute'],

@@ -3,6 +3,7 @@ import { WASH_BELOW } from './cleanliness'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
+import type { Client } from './clients'
 import { createRng } from './rng'
 import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
@@ -39,6 +40,7 @@ const base: TipState = {
   rival: { status: 'unopened' },
   expansions: [],
   serviceJobs: [],
+  clients: [],
 }
 const garage: TipState['expansions'] = [
   { id: 'east-lot', day: 1 },
@@ -149,6 +151,7 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0, finding }] },
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0 }] },
   ],
+  clientBook: [{ clients: [{ id: 'client-1-0' } as Client] }, {}],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },

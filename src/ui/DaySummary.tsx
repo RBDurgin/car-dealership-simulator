@@ -1,4 +1,5 @@
 import { calendarOf, longDate } from '../sim/calendar'
+import { buyerScore, costliestReason, type ClientStats } from '../sim/clients'
 import { difficultyLabel } from '../sim/difficulty'
 import { eventOn } from '../sim/events'
 import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
@@ -27,6 +28,7 @@ import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
 import { levelTuning, useGame } from '../state/store'
+import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
 import { rankLine } from './rankText'
 
@@ -45,6 +47,38 @@ function serviceLetDown(stats: DayStats): string {
   ]
     .filter(Boolean)
     .join(', ')
+}
+
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** The client book today: who went in it, the buyers' average score and what cost the most. */
+function ClientsBlock({ stats }: { stats: ClientStats }) {
+  if (stats.scores.length === 0) return null
+  const score = buyerScore(stats.scores)
+  const worst = costliestReason(stats.scores)
+  return (
+    <>
+      <dt>Clients</dt>
+      <dd>
+        {count(stats.added, 'new client')}, {count(stats.prospects, 'new prospect')}
+        {stats.returned > 0 && `, ${count(stats.returned, 'returning buyer')}`}
+      </dd>
+      {score !== null && (
+        <>
+          <dt className="summary-sub">· buyers&apos; score</dt>
+          <dd className="summary-sub">
+            <SatisfactionChip score={score} />
+          </dd>
+        </>
+      )}
+      {worst && (
+        <>
+          <dt className="summary-sub">· cost the most</dt>
+          <dd className="summary-sub">{worst}</dd>
+        </>
+      )}
+    </>
+  )
 }
 
 export function DaySummary() {
@@ -240,6 +274,7 @@ export function DaySummary() {
               </span>
             )}
           </dd>
+          <ClientsBlock stats={stats.clients} />
           {nazma && (
             <>
               <dt>Nazma</dt>

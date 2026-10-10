@@ -124,6 +124,10 @@ export function HUD() {
       else if (e.code === 'KeyC' && !e.repeat) game.toggleStockPanel(undefined, 'calendar')
       else if (e.code === 'KeyK' && !e.repeat) game.toggleStockPanel(undefined, 'rival')
       else if (e.code === 'KeyB' && !e.repeat) game.toggleStockPanel(undefined, 'service')
+      // Dev: Shift+L brings someone back from the client book.
+      else if (e.code === 'KeyL' && !e.repeat && e.shiftKey && import.meta.env.DEV)
+        game.devReturnClient()
+      else if (e.code === 'KeyL' && !e.repeat) game.toggleStockPanel(undefined, 'clients')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

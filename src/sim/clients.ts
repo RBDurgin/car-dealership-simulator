@@ -577,3 +577,197 @@ export interface MonthCsi {
 export function emptyMonthCsi(): MonthCsi {
   return { total: 0, count: 0 }
 }
+
+// The Clients tab and recognition (16b).
+
+/** Satisfaction under this is unhappy: the Clients tab's filter, and 16c's check-in calls. */
+export const UNHAPPY = 50
+/** Satisfaction at or over this is happy. */
+export const HAPPY = 70
+/** The Due filter shows clients due now and those due within this many days. */
+export const DUE_SOON = 7
+
+/** A face for a satisfaction score. */
+export function satisfactionFace(score: number): string {
+  return score >= HAPPY ? '😊' : score >= UNHAPPY ? '😐' : '😞'
+}
+
+export type ClientFilter = 'all' | 'due' | 'prospects' | 'unhappy'
+
+export const CLIENT_FILTERS: readonly [ClientFilter, string][] = [
+  ['all', 'All'],
+  ['due', 'Due'],
+  ['prospects', 'Prospects'],
+  ['unhappy', 'Unhappy'],
+]
+
+/** Still dealing with us: a client or a prospect, not lapsed or gone to the rival. */
+export const isActive = (c: Client) => c.status === 'client' || c.status === 'prospect'
+
+/**
+ * The book through `filter` on `day`, in the order the Clients tab lists it:
+ * everyone by their last visit, newest first; due clients by when they're due
+ * (within `DUE_SOON`); prospects by when they expire; unhappy ones (active,
+ * under `UNHAPPY`) unhappiest first.
+ */
+export function filterClients(
+  book: readonly Client[],
+  filter: ClientFilter,
+  day: number,
+): Client[] {
+  switch (filter) {
+    case 'all':
+      return [...book].sort((a, b) => b.lastVisit - a.lastVisit)
+    case 'due':
+      return book
+        .filter((c) => c.status === 'client' && c.dueDay !== null && c.dueDay - day <= DUE_SOON)
+        .sort((a, b) => a.dueDay! - b.dueDay!)
+    case 'prospects':
+      return book.filter((c) => c.status === 'prospect').sort((a, b) => a.expires! - b.expires!)
+    case 'unhappy':
+      return book
+        .filter((c) => isActive(c) && c.satisfaction < UNHAPPY)
+        .sort((a, b) => a.satisfaction - b.satisfaction)
+  }
+}
+
+/** The book at a glance: its size, clients and prospects, and their average satisfaction. */
+export interface BookSummary {
+  size: number
+  clients: number
+  prospects: number
+  /** Over clients and prospects, or null with neither. */
+  satisfaction: number | null
+}
+
+export function bookSummary(book: readonly Client[]): BookSummary {
+  const active = book.filter(isActive)
+  const total = active.reduce((sum, c) => sum + c.satisfaction, 0)
+  return {
+    size: book.length,
+    clients: active.filter((c) => c.status === 'client').length,
+    prospects: active.length - active.filter((c) => c.status === 'client').length,
+    satisfaction: active.length > 0 ? Math.round(total / active.length) : null,
+  }
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/**
+ * Where they stand: "Due in 5 days", "Due now", "Prospect, 9 days left",
+ * "Lapsed" or "At Nazma's" (`rival` is the rival lot's name).
+ */
+export function clientStatusText(c: Client, day: number, rival: string): string {
+  switch (c.status) {
+    case 'client':
+      if (c.dueDay === null) return 'Client'
+      return c.dueDay <= day ? 'Due now' : `Due in ${plural(c.dueDay - day, 'day')}`
+    case 'prospect': {
+      const left = (c.expires ?? day) - day
+      return left <= 0 ? 'Prospect, last day' : `Prospect, ${plural(left, 'day')} left`
+    }
+    case 'lapsed':
+      return 'Lapsed'
+    case 'defected':
+      return `At ${rival}`
+  }
+}
+
+/** "Bought 41 days ago", "Bought today". */
+function agoText(days: number, verb: string): string {
+  if (days <= 0) return `${verb} today`
+  if (days === 1) return `${verb} yesterday`
+  return `${verb} ${days} days ago`
+}
+
+/**
+ * Their car and how long they've had it, or what they were after:
+ * "Summit Ridge, bought 12 days ago" or "After a Summit Ridge" (`names`
+ * names a model).
+ */
+export function clientCarText(c: Client, day: number, names: (model: CarModel) => string): string {
+  if (c.car) {
+    const used = c.car.used ? ' (used)' : ''
+    return `${names(c.car.model)}${used}, ${agoText(day - c.car.boughtDay, 'bought')}`
+  }
+  if (c.lastDeal) return `After a ${names(c.lastDeal.model)}`
+  return c.bought > 0 ? `${plural(c.bought, 'car')} bought from us` : 'Just looking'
+}
+
+/**
+ * The line under a returning visitor's name in the customer panel: "Bought a
+ * Summit Cruiser 41 days ago · 😊 82" for a client, "Back about the Summit
+ * Ridge: you asked $31,500" for a prospect (`money` formats a price).
+ */
+export function historyLine(
+  c: Client,
+  day: number,
+  names: (model: CarModel) => string,
+  money: (n: number) => string,
+): string {
+  const face = `${satisfactionFace(c.satisfaction)} ${c.satisfaction}`
+  if (c.car) return `${agoText(day - c.car.boughtDay, `Bought a ${names(c.car.model)}`)} · ${face}`
+  const deal = c.lastDeal
+  if (c.status === 'prospect' && deal) {
+    const about = `Back about the ${names(deal.model)}`
+    if (deal.ask !== null) return `${about}: you asked ${money(deal.ask)}`
+    return `${about} · ${face}`
+  }
+  return `${plural(c.visits, 'visit')} before · ${face}`
+}
+
+/** Reasons that take points off, and how the summary words them. */
+const COST_WORDS: Partial<Record<ReasonKind, (n: number, detail: number) => string>> = {
+  wait: (n, d) =>
+    `Long waits: ${plural(n, 'customer')} waited ${n > 1 ? 'up to ' : ''}${d} minutes`,
+  haggle: (n, d) =>
+    `Hard haggles: ${plural(n, 'customer')} went ${n > 1 ? 'up to ' : ''}${d} rounds`,
+  highPrice: (n) => `Prices: ${plural(n, 'buyer')} paid more than they hoped`,
+  dirtyCar: (n) => `Dirty cars: ${plural(n, 'customer')} saw a dirty car`,
+  lowTrade: (n) => `Trade-ins: ${plural(n, 'buyer')} got a low offer`,
+}
+
+/**
+ * The reason that cost the day's scores the most points, worded for the
+ * summary ("Long waits: 3 customers waited up to 42 minutes"), or null when
+ * nothing cost any.
+ */
+export function costliestReason(scores: readonly ScoredVisit[]): string | null {
+  const tally = new Map<ReasonKind, { points: number; n: number; detail: number }>()
+  for (const s of scores) {
+    for (const r of s.reasons) {
+      if (r.points >= 0 || !COST_WORDS[r.kind]) continue
+      const t = tally.get(r.kind) ?? { points: 0, n: 0, detail: 0 }
+      tally.set(r.kind, {
+        points: t.points + r.points,
+        n: t.n + 1,
+        detail: Math.max(t.detail, r.detail),
+      })
+    }
+  }
+  let worst: [ReasonKind, { points: number; n: number; detail: number }] | null = null
+  for (const entry of tally) if (!worst || entry[1].points < worst[1].points) worst = entry
+  if (!worst) return null
+  const [kind, t] = worst
+  return COST_WORDS[kind]!(t.n, t.detail)
+}
+
+/** The average score of the day's buyers, or null with none. */
+export function buyerScore(scores: readonly ScoredVisit[]): number | null {
+  const bought = scores.filter((s) => s.outcome === 'bought')
+  if (bought.length === 0) return null
+  return Math.round(bought.reduce((sum, s) => sum + s.score, 0) / bought.length)
+}
+
+/**
+ * Someone from the book to bring back (the dev key Shift+L): a client or a
+ * prospect who isn't on the lot today, picked on `rng`, or null.
+ */
+export function pickReturning(
+  book: readonly Client[],
+  onLot: ReadonlySet<string>,
+  rng: Rng,
+): Client | null {
+  const pool = book.filter((c) => isActive(c) && !onLot.has(c.id))
+  return pool.length > 0 ? rng.pick(pool) : null
+}

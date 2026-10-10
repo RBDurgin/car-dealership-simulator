@@ -95,14 +95,7 @@ describe('dealership interactables', () => {
     expect(all.get('display-1')?.car?.location).toBe('Showroom display')
     expect(all.get('office-chair')?.actions).toEqual(['sit', 'closeDeal'])
     expect(all.get('coffee-machine')?.actions).toEqual(['getCoffee'])
-    expect(all.get('office-monitor')?.actions).toEqual([
-      'orderStock',
-      'advertise',
-      'improve',
-      'calendar',
-      'rival',
-      'service',
-    ])
+    expect(all.get('office-monitor')?.actions).toEqual(['office'])
     expect(all.has('office-desk')).toBe(false)
     expect(all.has('sales-monitor-1')).toBe(false)
   })

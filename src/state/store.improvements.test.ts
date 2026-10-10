@@ -80,9 +80,8 @@ describe('improvements', () => {
     )
   })
 
-  it('opens the upgrades tab from the computer and its key', () => {
-    game().requestAction('office-monitor', 'improve')
-    game().arriveAction(game().activeAction!.id)
+  it('opens the upgrades tab from its key', () => {
+    game().toggleStockPanel(undefined, 'upgrades')
     expect(game()).toMatchObject({ stockOpen: true, computerTab: 'upgrades' })
     game().toggleStockPanel(undefined, 'upgrades')
     expect(game().stockOpen).toBe(false)

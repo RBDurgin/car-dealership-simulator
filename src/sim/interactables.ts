@@ -22,12 +22,7 @@ export type ActionId =
   | 'recommend'
   | 'closeDeal'
   | 'handOff'
-  | 'orderStock'
-  | 'advertise'
-  | 'improve'
-  | 'calendar'
-  | 'rival'
-  | 'service'
+  | 'office'
   | 'recondition'
   | 'confront'
 
@@ -110,13 +105,8 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   // At the desk with a buyer in tow: the finance manager takes them from there.
   handOff: { id: 'handOff', label: 'Hand off to finance', verb: 'Handing off', mode: 'instant' },
-  // At the office computer: opens the stock panel, on its stock, marketing, upgrades, calendar, rival or service tab.
-  orderStock: { id: 'orderStock', label: 'Order stock', verb: 'Ordering stock', mode: 'instant' },
-  advertise: { id: 'advertise', label: 'Marketing', verb: 'Planning ads', mode: 'instant' },
-  improve: { id: 'improve', label: 'Upgrades', verb: 'Planning upgrades', mode: 'instant' },
-  calendar: { id: 'calendar', label: 'Calendar', verb: 'Checking the calendar', mode: 'instant' },
-  rival: { id: 'rival', label: 'Rival', verb: 'Checking on Nazma', mode: 'instant' },
-  service: { id: 'service', label: 'Service', verb: 'Checking the garage', mode: 'instant' },
+  // At the office computer: opens its panel on the tab it was last on, like the top bar's Office button.
+  office: { id: 'office', label: 'Office', verb: 'At the computer', mode: 'instant' },
   // A used car in stock: off to the service garage to be reconditioned.
   recondition: {
     id: 'recondition',
@@ -246,7 +236,7 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
         kind: 'computer',
         name: 'Office computer',
         approachTiles: screenApproachTiles(grid, p.rect, p.facing),
-        actions: ['orderStock', 'advertise', 'improve', 'calendar', 'rival', 'service'],
+        actions: ['office'],
       })
     } else if (p.model === 'kitchenCoffeeMachine') {
       out.set(p.id, { ...base, kind: 'coffee', name: 'Coffee machine', actions: ['getCoffee'] })

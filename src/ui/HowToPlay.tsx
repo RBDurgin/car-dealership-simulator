@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
+import { PROSPECT_DAYS } from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import {
@@ -224,7 +225,7 @@ function BasicsTab({ touch, click }: TabProps) {
   )
 }
 
-function SellingTab({ click }: TabProps) {
+function SellingTab({ touch, click }: TabProps) {
   return (
     <>
       <section>
@@ -327,6 +328,26 @@ function SellingTab({ click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Clients</h3>
+        <p>
+          Everyone who buys goes in your client book. So does a shopper you or your staff talked to
+          who left without buying: they stay as a prospect for {PROSPECT_DAYS} days. Sellers,
+          service clients and anyone nobody greeted aren&apos;t kept.
+        </p>
+        <p>
+          Each visit is scored out of 100. Waiting long, haggling many rounds, paying more than they
+          hoped, a dirty car or a low trade-in offer take points off; quick service, a good price, a
+          clean car and a fair trade-in add them. The score is blended into how happy they are with
+          you, so one bad visit hurts without wiping out the good ones.
+        </p>
+        <p>
+          The <b>Clients</b> tab on the office computer (<OfficeKey touch={touch} keyName="L" />)
+          lists the book: how happy each person is, their car or what they were after, and why their
+          last visit scored as it did. When someone from the book comes back, a ★ shows over them
+          while they wait, and their panel says how it went last time.
+        </p>
+      </section>
+      <section>
         <h3>Reputation</h3>
         <p>
           The ♥ meter in the top bar, 0 to 100, moves once a day at closing: each buyer adds{' '}
@@ -351,8 +372,9 @@ function BusinessTab({ touch, click }: TabProps) {
   return (
     <>
       <p className="how-lead">
-        Stock, ads, upgrades and the calendar are all on the office computer: {click.toLowerCase()}{' '}
-        the screen on your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
+        Stock, ads, upgrades, the calendar, the garage and your clients are all on the office
+        computer: {click.toLowerCase()} the screen on your desk and choose <b>Office</b>, or{' '}
+        <OfficeKey touch={touch} keyName="I" />, and pick a tab.
       </p>
       <section>
         <h3>Buying stock</h3>

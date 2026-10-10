@@ -660,6 +660,15 @@ kbd {
 .bubble-waiting::after {
   border-top-color: #fde047;
 }
+/* Someone from the client book waiting for help. */
+.bubble-client {
+  background: #fde047;
+  color: #b45309;
+  font-size: 15px;
+}
+.bubble-client::after {
+  border-top-color: #fde047;
+}
 /* A salesperson is helping them: staff blue, like the badges. */
 .bubble-helped {
   background: #1d4ed8;
@@ -845,6 +854,34 @@ kbd {
   gap: 6px;
   margin: 4px 0 8px;
 }
+/* The Clients tab: a satisfaction face and score, and a client due to trade up. */
+.client-score {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.client-score-happy {
+  color: #86efac;
+}
+.client-score-ok {
+  color: #fde047;
+}
+.client-score-unhappy {
+  color: #fca5a5;
+}
+/* Name, score and status wrap on a narrow panel, each chip whole. */
+.stock-who .client-name {
+  white-space: normal;
+}
+.client-name .stock-badge {
+  display: inline-block;
+  white-space: nowrap;
+}
+.stock-badge.client-due {
+  background: rgba(253, 224, 71, 0.25);
+  color: #fde047;
+}
 .stock-who .staff-name {
   white-space: nowrap;
 }
@@ -969,6 +1006,17 @@ kbd {
   margin: -2px 0 8px;
   font-size: 12px;
   opacity: 0.65;
+}
+/* Someone from the client book: their badge, and how it went last time. */
+.client-badge {
+  vertical-align: middle;
+  background: rgba(253, 224, 71, 0.25);
+  color: #fde047;
+}
+.customer-history {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: #fde68a;
 }
 .customer-quote {
   margin: 0 0 10px;
@@ -1505,7 +1553,14 @@ kbd {
     max-height: calc(100dvh - var(--edge-t) - var(--edge-b));
   }
   .customer-panel.haggling
-    :is(.info-kicker, .customer-quote, .customer-type, .customer-car, .haggle-last) {
+    :is(
+      .info-kicker,
+      .customer-quote,
+      .customer-type,
+      .customer-history,
+      .customer-car,
+      .haggle-last
+    ) {
     display: none;
   }
   .customer-panel.haggling .customer-actions,

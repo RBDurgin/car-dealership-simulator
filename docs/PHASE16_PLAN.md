@@ -1,6 +1,6 @@
 # Phase 16 Plan: Client Book and Loyalty
 
-**Status:** planned 2026-10-08. 16a built 2026-10-10 (save v23). Phases 13, 14 and 15 come first:
+**Status:** planned 2026-10-08. 16a built 2026-10-10 (save v23). 16b built 2026-10-10: the computer's actions are folded into one **Office** action everywhere, since even the desktop ring was full at six. Phases 13, 14 and 15 come first:
 
 - the month's satisfaction score can hold back 13b's franchise tier;
 - unhappy clients defect to 14's rival lot;

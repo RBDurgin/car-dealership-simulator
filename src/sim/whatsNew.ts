@@ -254,6 +254,18 @@ export const UPDATES: readonly Update[] = [
       'Service clients come in more often, and the service garage costs less to build.',
     ],
   },
+  {
+    id: 24,
+    phase: '16',
+    title: 'Your client book',
+    items: [
+      'Everyone who buys now goes in your client book, and so does a shopper you talked to who left without buying.',
+      'Each visit is scored on the wait, the haggling, the price, how clean the car was and the trade-in.',
+      'The new Clients tab on the office computer (L) lists them, how happy they are and why.',
+      'Someone from the book who comes back has a star over them, and their panel says how it went last time.',
+      'The office computer now has one Office action, which opens on the tab you used last.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

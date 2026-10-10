@@ -190,7 +190,7 @@ describe('the stock panel', () => {
   })
 
   it('opens from the office computer', () => {
-    game().requestAction('office-monitor', 'orderStock')
+    game().requestAction('office-monitor', 'office')
     game().arriveAction(game().activeAction!.id)
     expect(game().activeAction).toBeNull()
     expect(game().stockOpen).toBe(true)

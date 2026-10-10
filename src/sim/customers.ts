@@ -520,7 +520,7 @@ export function moodOf(c: Customer): Mood {
 
 /** The icon above a customer's head, if any. */
 export type Bubble =
-  'waiting' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
+  'waiting' | 'client' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
 
 export function bubbleOf(c: Customer): Bubble | null {
   // They've named their price and wait for the seller's answer.
@@ -529,7 +529,9 @@ export function bubbleOf(c: Customer): Bubble | null {
   if (staffHandled(c) && ['browsing', 'waiting', 'talking'].includes(c.phase)) return 'helped'
   switch (c.phase) {
     case 'waiting':
-      return moodOf(c) === 'impatient' ? 'impatient' : 'waiting'
+      if (moodOf(c) === 'impatient') return 'impatient'
+      // Someone from the client book: a star, so they can be spotted.
+      return c.clientId ? 'client' : 'waiting'
     case 'considering':
       return 'considering'
     case 'leaving':

@@ -663,6 +663,13 @@ describe('bubbleOf', () => {
     expect(bubbleOf(at('following'))).toBeNull()
   })
 
+  it('shows a star over someone from the client book while they wait, until impatient', () => {
+    const client = { clientId: 'client-1-0' }
+    expect(bubbleOf(at('waiting', client))).toBe('client')
+    expect(bubbleOf(at('waiting', { ...client, patienceLeft: 10 }))).toBe('impatient')
+    expect(bubbleOf(at('browsing', client))).toBeNull()
+  })
+
   it('shows how the visit ended', () => {
     const left = (leaveReason: Customer['leaveReason']) => bubbleOf(at('leaving', { leaveReason }))
     expect(left('bought')).toBe('bought')

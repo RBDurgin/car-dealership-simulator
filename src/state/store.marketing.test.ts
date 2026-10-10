@@ -85,13 +85,15 @@ describe('the office computer panel', () => {
     game().newGame()
   })
 
-  it('opens on the marketing tab from the computer', () => {
-    game().requestAction('office-monitor', 'advertise')
-    game().arriveAction(game().activeAction!.id)
-    expect(game()).toMatchObject({ stockOpen: true, computerTab: 'marketing' })
-    game().requestAction('office-monitor', 'orderStock')
+  it('opens from the computer on the tab it was last on', () => {
+    game().requestAction('office-monitor', 'office')
     game().arriveAction(game().activeAction!.id)
     expect(game()).toMatchObject({ stockOpen: true, computerTab: 'stock' })
+    game().toggleStockPanel(true, 'marketing')
+    game().toggleStockPanel(false)
+    game().requestAction('office-monitor', 'office')
+    game().arriveAction(game().activeAction!.id)
+    expect(game()).toMatchObject({ stockOpen: true, computerTab: 'marketing' })
   })
 
   it('switches tabs from a key instead of closing, and closes on the same tab', () => {

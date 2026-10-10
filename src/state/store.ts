@@ -14,6 +14,8 @@ import {
   bookNames,
   defaultPerks,
   emptyMonthCsi,
+  isDue,
+  pickReturning,
   pruneBook,
   recordClients,
   type Appreciation,
@@ -293,7 +295,8 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service'
+export type ComputerTab =
+  'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients'
 
 /** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
 export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash
@@ -407,7 +410,7 @@ interface GameState {
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
-  /** The office computer panel (stock, marketing, upgrades and calendar) is open. */
+  /** The office computer panel (stock, marketing, upgrades, calendar, rival, service, clients) is open. */
   stockOpen: boolean
   /** Which tab of it shows. */
   computerTab: ComputerTab
@@ -467,6 +470,8 @@ interface GameState {
   devUsedCar: (canPlace?: (car: InventoryCar) => boolean) => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
+  /** Dev cheat: someone from the client book who isn't on the lot turns up. */
+  devReturnClient: () => void
   /**
    * A passer-by who looks like `variant` turns in at the driveway. Returns the
    * new customer's id, or null if the lot isn't taking visitors any more.
@@ -1278,18 +1283,8 @@ export const useGame = create<GameState>((set, get) => {
         return closeDeal()
       case 'handOff':
         return handOff()
-      case 'orderStock':
-        return get().toggleStockPanel(true, 'stock')
-      case 'advertise':
-        return get().toggleStockPanel(true, 'marketing')
-      case 'improve':
-        return get().toggleStockPanel(true, 'upgrades')
-      case 'calendar':
-        return get().toggleStockPanel(true, 'calendar')
-      case 'rival':
-        return get().toggleStockPanel(true, 'rival')
-      case 'service':
-        return get().toggleStockPanel(true, 'service')
+      case 'office':
+        return get().toggleStockPanel(true)
       case 'recondition':
         return void get().recondition(finished.targetId)
       case 'confront':
@@ -2068,6 +2063,22 @@ export const useGame = create<GameState>((set, get) => {
       )
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived) })
       commit([...s.customers, ...arrived])
+    },
+    devReturnClient: () => {
+      const s = get()
+      if (isClosed(s.clock)) return
+      const onLot = new Set(s.customers.flatMap((c) => (c.clientId ? [c.clientId] : [])))
+      const client = pickReturning(s.clients, onLot, createRng(Date.now()))
+      if (!client) return notify('Nobody in the client book to bring back.')
+      const opts = { ...arrivalOpts(), client, tradeUp: isDue(client, s.clock.day) }
+      const c = generateCustomer(
+        `customer-${nextCustomerId++}`,
+        availableCars(s.inventory),
+        customerRng,
+        opts,
+      )
+      set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
+      commit([...get().customers, c])
     },
     walkIn: (variant) => {
       const s = get()

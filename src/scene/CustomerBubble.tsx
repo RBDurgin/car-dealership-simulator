@@ -7,6 +7,7 @@ const BUBBLE_HEIGHT = 1.55
 
 const ICONS: Record<Bubble, string> = {
   waiting: '!',
+  client: '★',
   impatient: '!',
   considering: '…',
   counter: '$?',
@@ -16,7 +17,8 @@ const ICONS: Record<Bubble, string> = {
 }
 
 /**
- * The icon over a customer's head: `!` when they want help (red once impatient),
+ * The icon over a customer's head: `!` when they want help (a star for someone
+ * from the client book, red `!` once impatient),
  * a tick while a salesperson is helping them, `…` while considering an offer, `$?`
  * after they counter, `$` after buying, a frown when they leave upset.
  * Re-renders only when the icon changes.

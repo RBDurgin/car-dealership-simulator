@@ -1,4 +1,5 @@
 import { WASH_BELOW } from './cleanliness'
+import type { Client } from './clients'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
 import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
@@ -41,6 +42,7 @@ export type TipId =
   | 'serviceClient'
   | 'finding'
   | 'recall'
+  | 'clientBook'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -81,6 +83,8 @@ export const TIPS: Record<TipId, string> = {
   rivalOpens:
     "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
+  clientBook:
+    'Someone went in your client book: buyers become clients, and shoppers who talked to you but didn’t buy stay as prospects for two weeks. The office computer’s Clients tab shows how happy each visit left them. A star over a waiting customer means they’ve been here before.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -106,6 +110,7 @@ export interface TipState {
   rival: { status: RivalStatus }
   expansions: readonly OwnedExpansion[]
   serviceJobs: readonly ServiceJob[]
+  clients: readonly Client[]
 }
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
@@ -222,6 +227,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           c.service?.kind === 'recall' && c.phase === 'waiting' && before.get(c.id) === 'arriving',
       )
     }
+    case 'clientBook':
+      return next.clients !== prev.clients && next.clients.length > prev.clients.length
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }
