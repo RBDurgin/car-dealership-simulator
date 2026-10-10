@@ -48,7 +48,9 @@ import {
   RATE_LEVELS,
   RECON_MAX,
   RECON_STEP,
+  WARRANTY_HOURLY,
 } from '../sim/service'
+import { dayOrdinal, RECALL_FIRST, RECALL_LAST, RECALL_RESPONSE } from '../sim/recalls'
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
@@ -450,6 +452,15 @@ function BusinessTab({ touch, click }: TabProps) {
           gives up waiting at the counter, like any customer. Now and then a job doesn&apos;t hold:
           the client drives back about {COMEBACK_DELAY} minutes later for a free redo, and it costs
           a point. Skilled mechanics have far fewer comebacks.
+        </p>
+        <p>
+          Some months the manufacturer <b>recalls</b> a model, from the {dayOrdinal(RECALL_FIRST)}{' '}
+          to the {dayOrdinal(RECALL_LAST)}. About {Math.round(RECALL_RESPONSE * 100)}% of the people
+          you sold one to bring it in over that time, on top of the usual clients. Check them in
+          like anyone else: they pay nothing, and the manufacturer pays for the work (
+          {formatMoney(WARRANTY_HOURLY)} an hour, and the parts at cost). Extra work found on a
+          recalled car is paid by the client as usual. The Calendar and Service tabs show the recall
+          on now.
         </p>
         <p>
           A job still in a bay at closing, or a client&apos;s car still waiting for one, is finished

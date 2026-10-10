@@ -70,6 +70,8 @@ export interface ServiceJob {
   finding: Finding | null
   /** A free redo of a job that came back (see `comebackChance`): nobody pays for it. */
   redo: boolean
+  /** What the manufacturer pays for recall work (see `warrantyPay`), on top of what the client pays. */
+  warranty: number
   /** A client's name and car, for the Service tab and the lift; null for our own. */
   client: { name: string; model: CarModel; condition: number } | null
   /** The game minute a client's car was ready, or null until it is. */
@@ -133,6 +135,22 @@ export function defaultService(): ServiceSettings {
 /** Parts are sold on at this much over cost. */
 export const PARTS_MARKUP = 0.4
 
+/** The manufacturer pays recall labor at this rate, $ an hour: below any shop rate. */
+export const WARRANTY_HOURLY = 80
+
+/**
+ * What the manufacturer pays for a recall job whose parts cost us
+ * `partsCost`: the book time at `WARRANTY_HOURLY`, and the parts at cost.
+ */
+export function warrantyPay(partsCost: number): number {
+  return Math.round((JOBS.recall.minutes / 60) * WARRANTY_HOURLY) + partsCost
+}
+
+/** A recall's quote: the client pays nothing, and the parts' cost is rolled like any quote's. */
+export function recallQuote(rng: Rng): Quote {
+  return { labor: 0, parts: 0, partsCost: quote('recall', 'standard', rng).partsCost }
+}
+
 /** Game minutes a mechanic of `skill` takes over a `kind` job: better ones are faster. */
 export function jobMinutes(kind: JobKind, skill: number): number {
   return Math.round(skillSeconds(JOBS[kind].minutes, skill))
@@ -159,9 +177,9 @@ export function quote(kind: JobKind, rate: RateLevel, rng: Rng): Quote {
 }
 
 /** Service visits a day from town, whoever sold them their car. */
-export const TOWN_SERVICE = 2
+export const TOWN_SERVICE = 3
 /** Service visits a day for each car the dealership has ever sold. */
-export const SERVICE_PER_CAR = 0.025
+export const SERVICE_PER_CAR = 0.035
 /** × the day's visits by weekday, Monday first. The shop is shut on Sundays. */
 export const SERVICE_WEEKDAY = [1.3, 1.1, 1.0, 1.0, 0.9, 0.7, 0]
 /** Jobs one bay can take in a day. */
@@ -221,16 +239,22 @@ export function emptySchedule(): ServiceSchedule {
 
 /**
  * Plans `expected` visits (the fraction rolled) between opening and
- * `LAST_SERVICE_MINUTE`, drop-offs bunched toward the morning.
+ * `LAST_SERVICE_MINUTE`, drop-offs bunched toward the morning, and on top of
+ * them `recalls` expected recall visits (see `recallDemand`). The recalls are
+ * rolled after the rest, so a day without one plans as it always did.
  */
-export function planServiceVisits(rng: Rng, expected: number): ServiceSchedule {
-  if (expected <= 0) return emptySchedule()
-  const count = Math.floor(expected) + (rng.next() < expected % 1 ? 1 : 0)
+export function planServiceVisits(rng: Rng, expected: number, recalls = 0): ServiceSchedule {
   const span = LAST_SERVICE_MINUTE - OPEN_MINUTE
-  const visits = Array.from({ length: count }, () => ({
-    minute: Math.round(OPEN_MINUTE + Math.min(rng.next(), rng.next()) * span),
-    kind: pickKind(rng),
-  }))
+  const roll = (n: number, kind: () => JobKind) => {
+    if (n <= 0) return []
+    const count = Math.floor(n) + (rng.next() < n % 1 ? 1 : 0)
+    return Array.from({ length: count }, () => ({
+      minute: Math.round(OPEN_MINUTE + Math.min(rng.next(), rng.next()) * span),
+      kind: kind(),
+    }))
+  }
+  const visits = [...roll(expected, () => pickKind(rng)), ...roll(recalls, () => 'recall')]
+  if (visits.length === 0) return emptySchedule()
   visits.sort((a, b) => a.minute - b.minute)
   return { minutes: visits.map((v) => v.minute), kinds: visits.map((v) => v.kind), spawned: 0 }
 }
@@ -410,8 +434,10 @@ export function jobMinutesFor(job: Pick<ServiceJob, 'kind' | 'redo'>, skill: num
 
 /** The day's service department, for the summary. */
 export interface ServiceStats {
-  /** Clients' jobs finished. */
+  /** Clients' jobs finished, recalls among them. */
   jobs: number
+  /** Recall jobs finished, which the manufacturer paid for. */
+  recalls: number
   /** Our own used cars reconditioned. */
   recon: number
   /** Customer-pay labor and parts billed, and what those parts cost. */
@@ -435,6 +461,7 @@ export interface ServiceStats {
 export function emptyServiceStats(): ServiceStats {
   return {
     jobs: 0,
+    recalls: 0,
     recon: 0,
     labor: 0,
     parts: 0,
@@ -554,6 +581,7 @@ export function reconJob(id: string, carId: string, partsCost: number): ServiceJ
     partsCost,
     finding: null,
     redo: false,
+    warranty: 0,
     client: null,
     readyMinute: null,
   }
@@ -623,7 +651,10 @@ export function finishedLate(job: ServiceJob): ServiceJob {
   return withWork(job, job.minutes)
 }
 
-/** A client's job, at the `quote` they took. Its time is set again by whoever starts it. */
+/**
+ * A client's job, at the `quote` they took. Its time is set again by whoever
+ * starts it. The manufacturer pays for recall work, except a redo.
+ */
 export function clientJob(
   id: string,
   kind: JobKind,
@@ -647,6 +678,7 @@ export function clientJob(
     partsCost: q.partsCost,
     finding: null,
     redo,
+    warranty: kind === 'recall' && !redo ? warrantyPay(q.partsCost) : 0,
     client,
     readyMinute: null,
   }

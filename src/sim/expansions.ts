@@ -31,7 +31,7 @@ export const EXPANSIONS: Record<ExpansionId, ExpansionInfo> = {
   },
   'service-bay': {
     label: 'Service garage',
-    cost: 90_000,
+    cost: 60_000,
     rank: 'trusted-dealer',
     requires: 'east-lot',
     blurb:

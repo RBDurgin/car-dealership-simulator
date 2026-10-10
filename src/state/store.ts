@@ -219,6 +219,7 @@ import {
   finishRecon,
   inTime,
   jobMinutesFor,
+  JOBS_PER_BAY,
   laterPromise,
   overtimeFor,
   planServiceVisits,
@@ -254,6 +255,7 @@ import {
   serviceClient,
   WAIT_LIMIT,
 } from '../sim/serviceClients'
+import { recallDemand, recallNotice, recallOn, recallStarts } from '../sim/recalls'
 import { assignTrades, tradeRecord } from '../sim/tradeIns'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
@@ -952,18 +954,20 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Client `c` pays for `job`, which is ready: labor and parts come in, the
-   * parts' cost goes out, and the job is done. Late if it was ready after the
-   * time they were promised.
+   * Client `c` pays for `job`, which is ready: labor and parts come in (and
+   * the manufacturer's pay for recall work), the parts' cost goes out, and
+   * the job is done. Late if it was ready after the time they were promised.
    */
   const collected = (job: ServiceJob, c: Customer) => {
     const s = get()
     set({
-      cash: s.cash + job.labor + job.parts - job.partsCost,
+      cash: s.cash + job.labor + job.parts - job.partsCost + job.warranty,
       serviceJobs: s.serviceJobs.map((j) => (j === job ? { ...j, status: 'done' as const } : j)),
     })
     addService({
       jobs: job.redo ? 0 : 1,
+      recalls: job.kind === 'recall' && !job.redo ? 1 : 0,
+      warranty: job.warranty,
       labor: job.labor,
       parts: job.parts,
       partsCost: job.partsCost,
@@ -1068,8 +1072,9 @@ export const useGame = create<GameState>((set, get) => {
           : `The garage can't fit ${c.name}'s car in before closing. They drove off.`,
       )
     }
-    // A redo is free: nobody turns that down.
-    if (!visit.comeback && serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
+    // A redo or recall work is free: nobody turns that down.
+    const free = visit.comeback || visit.kind === 'recall'
+    if (!free && serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
       addService({ declined: 1 })
       walk()
       if (player) notify(`${c.name}: "That's more than I want to spend. I'll go elsewhere."`)
@@ -1105,11 +1110,14 @@ export const useGame = create<GameState>((set, get) => {
     const free = freeServiceSpots(present, s.serviceAway)
     const { schedule, due } = takeDueVisits(s.serviceVisits, step.minute, free)
     const arrived: Customer[] = []
+    const recalled = recallOn(step.day, bayCount(expansionsUp(s)))?.model ?? null
     due.forEach((kind, i) => {
       const id = `service-${step.day}-${s.serviceVisits.spawned + i + 1}`
       const spot = freeServiceSpot([...present, ...arrived], s.serviceAway)!
       const rate = s.service.rate
-      arrived.push(serviceClient(id, kind, spot, serviceRng, step.day, rate, tuning().patience))
+      arrived.push(
+        serviceClient(id, kind, spot, serviceRng, step.day, rate, tuning().patience, recalled),
+      )
     })
     // Clients whose job didn't hold drive back in, while there's a space.
     const comebacks: Comeback[] = []
@@ -1609,6 +1617,17 @@ export const useGame = create<GameState>((set, get) => {
       ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance * sabotage)
       : null
     const newMonth = date.dayOfMonth === 1
+    const bays = bayCount(installedExpansions(s.expansions, day))
+    const demand = serviceDemand(day, s.career, {
+      bays,
+      rate: s.service.rate,
+      factor: level.serviceDemand,
+    })
+    // Recall visits come on top, within what the bays can take.
+    const recalls = Math.min(recallDemand(day, s.career, bays), bays * JOBS_PER_BAY - demand)
+    const recall = recallStarts(day, bays, bayCount(installedExpansions(s.expansions, day - 1)))
+      ? recallOn(day, bays)
+      : null
     const owner = isOwnerDay(day)
       ? {
           goal: generateGoal(
@@ -1616,9 +1635,7 @@ export const useGame = create<GameState>((set, get) => {
             inventory,
             salesStaff,
             !!event,
-            SERVICE_WEEKDAY[date.weekday] > 0
-              ? bayCount(installedExpansions(s.expansions, day))
-              : 0,
+            SERVICE_WEEKDAY[date.weekday] > 0 ? bays : 0,
           ),
           announced: false,
         }
@@ -1652,14 +1669,7 @@ export const useGame = create<GameState>((set, get) => {
       serviceJobs: [],
       serviceAway: [],
       serviceComebacks: [],
-      serviceVisits: planServiceVisits(
-        serviceRng,
-        serviceDemand(day, s.career, {
-          bays: bayCount(installedExpansions(s.expansions, day)),
-          rate: s.service.rate,
-          factor: level.serviceDemand,
-        }),
-      ),
+      serviceVisits: planServiceVisits(serviceRng, demand, recalls),
       rival,
       ...(bust && {
         reputation: applyChange(s.reputation, BUST_REPUTATION),
@@ -1688,6 +1698,7 @@ export const useGame = create<GameState>((set, get) => {
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
       opening.event && rivalNotice(rival, opening.event),
       eventNotice(day),
+      recall && recallNotice(recall, s.career.soldByModel[recall.model] ?? 0),
       theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
       shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
@@ -2235,8 +2246,12 @@ export const useGame = create<GameState>((set, get) => {
       if (c?.phase !== 'servicing' || job?.status !== 'ready') return
       collected(job, c)
       commit(reduceCustomers(get().customers, { type: 'collect', id: customerId }))
+      const paid = job.labor + job.parts
+      const car = carName(c.service!.car.model)
       notify(
-        `${c.name} collected their ${carName(c.service!.car.model)} and paid ${formatMoney(job.labor + job.parts)}.`,
+        job.warranty === 0
+          ? `${c.name} collected their ${car} and paid ${formatMoney(paid)}.`
+          : `${c.name} collected their ${car}${paid > 0 ? ` and paid ${formatMoney(paid)}` : ''}. The manufacturer pays ${formatMoney(job.warranty)}.`,
       )
     },
     serviceWentAway: (customerId) => {

@@ -2,7 +2,14 @@ import { ARCHETYPES, type Archetype } from './archetypes'
 import { generateCustomer, type Customer } from './customers'
 import { SERVICE_SPOTS, type CarModel } from './layout'
 import type { Rng } from './rng'
-import { quote, RATE_LEVELS, type JobKind, type Quote, type RateLevel } from './service'
+import {
+  quote,
+  RATE_LEVELS,
+  recallQuote,
+  type JobKind,
+  type Quote,
+  type RateLevel,
+} from './service'
 import { rollUsedCar, type UsedInfo } from './usedCars'
 
 /**
@@ -72,7 +79,9 @@ export function quoteAcceptChance(rate: RateLevel, archetype: Archetype): number
 
 /**
  * A service client driving in on `day` for a `kind` job, into service space
- * `spot`, quoted at the shop `rate`. They come alone (no couples) and don't shop.
+ * `spot`, quoted at the shop `rate`. They come alone (no couples) and don't
+ * shop. A recall client drives the `recalled` model and pays nothing: the
+ * manufacturer does.
  */
 export function serviceClient(
   id: string,
@@ -82,19 +91,22 @@ export function serviceClient(
   day: number,
   rate: RateLevel,
   patienceFactor = 1,
+  recalled: CarModel | null = null,
 ): Customer {
   const c = generateCustomer(id, [], rng, { patienceFactor })
   const archetype = c.archetype === 'couple' ? 'regular' : c.archetype
+  const car = rollUsedCar(rng, day)
+  const recall = kind === 'recall'
   return {
     ...c,
     archetype,
     companion: null,
     service: {
       kind,
-      car: rollUsedCar(rng, day),
+      car: recall && recalled ? { ...car, model: recalled } : car,
       spot,
       parked: false,
-      quote: quote(kind, rate, rng),
+      quote: recall ? recallQuote(rng) : quote(kind, rate, rng),
       jobId: null,
       promisedMinute: null,
       dropOff: false,

@@ -10,6 +10,7 @@ import {
   weekStart,
 } from '../sim/calendar'
 import { CLOSEOUT_REBATE, closeoutOn, EVENTS, eventOn, nextEvent } from '../sim/events'
+import { expansionsUp } from '../sim/expansions'
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName, type FranchiseTier } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
@@ -25,6 +26,15 @@ import {
   quotaLine,
   quotaStatus,
 } from '../sim/quota'
+import {
+  dayOrdinal,
+  RECALL_FIRST,
+  RECALL_LAST,
+  recallExpected,
+  recallLine,
+  recallOn,
+} from '../sim/recalls'
+import { bayCount } from '../sim/service'
 import { forecastFor, WEATHER_EFFECTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
 import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -34,8 +44,18 @@ const PEAK =
   Math.max(...Object.values(WEATHER_EFFECTS).map((e) => e.traffic)) *
   Math.max(...EVENTS.map((e) => e.traffic))
 
+/** Whether `a` and `b` fall in the same month of the same year. */
+function sameMonth(a: number, b: number): boolean {
+  const x = calendarOf(a)
+  const y = calendarOf(b)
+  return x.month === y.month && x.year === y.year
+}
+
 function DayRow({ day, today }: { day: number; today: number }) {
   const c = calendarOf(day)
+  // A recall's days, once it's been announced.
+  const bays = useGame((s) => bayCount(expansionsUp(s)))
+  const recall = !!recallOn(today, bays) && !!recallOn(day, bays) && sameMonth(day, today)
   // What happened, or what the forecast says for the next few days.
   const weather = forecastFor(day, today)
   const event = eventOn(day)
@@ -45,7 +65,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const sky = weather
     ? `${day > today ? 'Forecast: ' : ''}${WEATHER_LABELS[weather].toLowerCase()}`
     : 'No forecast yet'
-  const sale = event ? ` · ${event.label} sale` : ''
+  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}`
   return (
     <li
       className={`cal-day cal-${when}${event ? ' cal-sale' : ''}`}
@@ -63,6 +83,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
       <span className="cal-label">
         {day === today ? 'Today · ' : ''}
         {event ? 'Sale · ' : ''}
+        {recall ? 'Recall · ' : ''}
         {trafficLabel(traffic)}
       </span>
     </li>
@@ -215,6 +236,34 @@ function SalesAndCloseouts({ day }: { day: number }) {
   )
 }
 
+/** The manufacturer's recall on now, once there's a garage for it. */
+function Recalls({ day }: { day: number }) {
+  const bays = useGame((s) => bayCount(expansionsUp(s)))
+  const recall = recallOn(day, bays)
+  const sold = useGame((s) => (recall ? (s.career.soldByModel[recall.model] ?? 0) : 0))
+  if (bays === 0) return null
+  return (
+    <>
+      <h3>Recalls</h3>
+      <p className="muted cal-intro">
+        {recall ? (
+          <>
+            The manufacturer has recalled the <b>{recallLine(recall)}</b>, until the{' '}
+            {dayOrdinal(RECALL_LAST)}. Of the {sold} you&apos;ve sold, expect about{' '}
+            {recallExpected(sold)} in. The manufacturer pays for the work.
+          </>
+        ) : (
+          <>
+            No recall on now. When the manufacturer recalls a model, it runs from the{' '}
+            {dayOrdinal(RECALL_FIRST)} to the {dayOrdinal(RECALL_LAST)}: the people you sold one to
+            bring it to your garage, and the manufacturer pays for the work.
+          </>
+        )}
+      </p>
+    </>
+  )
+}
+
 /** This week and next, with each day's weather (forecast a few days ahead) and expected traffic. */
 export function CalendarTab() {
   const day = useGame((s) => s.clock.day)
@@ -229,6 +278,7 @@ export function CalendarTab() {
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
       <SalesAndCloseouts day={day} />
+      <Recalls day={day} />
       <MonthQuota day={day} />
       <Franchise />
     </>

@@ -84,6 +84,7 @@ const tip = (next: Partial<TipState>, prev: Partial<TipState> = {}, seen: TipId[
   tipFor({ ...base, ...prev }, { ...base, ...next }, seen)
 
 const visit = serviceClient('s1', 'oil', 0, createRng(1), 1, 'standard').service!
+const recallVisit = serviceClient('s2', 'recall', 1, createRng(2), 1, 'standard').service!
 const job = clientJob('client-1-1', 'oil', 's1', visit.quote, {
   name: 'Sam',
   model: 'sedan',
@@ -139,6 +140,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   serviceClient: [
     { customers: [customer('s1', { phase: 'waiting', service: visit })] },
     { customers: [customer('s1', { phase: 'arriving', service: visit })] },
+  ],
+  recall: [
+    { customers: [customer('s2', { phase: 'waiting', service: recallVisit })] },
+    { customers: [customer('s2', { phase: 'arriving', service: recallVisit })] },
   ],
   finding: [
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0, finding }] },

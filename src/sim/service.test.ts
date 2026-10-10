@@ -38,6 +38,7 @@ import {
   planServiceVisits,
   quote,
   RATE_LEVELS,
+  recallQuote,
   RECON_MAX,
   RECON_STEP,
   reconBlocker,
@@ -48,6 +49,8 @@ import {
   serviceDemand,
   takeDueVisits,
   TOWN_SERVICE,
+  WARRANTY_HOURLY,
+  warrantyPay,
   workJobs,
   type ReconBook,
   type ServiceJob,
@@ -178,6 +181,17 @@ describe('service visits', () => {
 
   it('are deterministic per seed', () => {
     expect(planServiceVisits(createRng(9), 4)).toEqual(planServiceVisits(createRng(9), 4))
+  })
+
+  it('add recall visits on top, leaving the rest as they were', () => {
+    const plain = planServiceVisits(createRng(6), 4)
+    const plan = planServiceVisits(createRng(6), 4, 3)
+    const recalls = plan.kinds.filter((k) => k === 'recall')
+    expect(recalls).toHaveLength(3)
+    expect([...plan.minutes].sort((a, b) => a - b)).toEqual(plan.minutes)
+    const rest = plan.kinds.flatMap((k, i) => (k === 'recall' ? [] : [[plan.minutes[i], k]]))
+    expect(rest).toEqual(plain.kinds.map((k, i) => [plain.minutes[i], k]))
+    expect(planServiceVisits(createRng(6), 0, 2).kinds).toEqual(['recall', 'recall'])
   })
 
   it('are released as they fall due, once each', () => {
@@ -435,5 +449,33 @@ describe('the clock in the bays', () => {
   it('puts client jobs before recalls before reconditioning', () => {
     expect(jobPriority(job({ kind: 'oil' }))).toBeLessThan(jobPriority(job({ kind: 'recall' })))
     expect(jobPriority(job({ kind: 'recall' }))).toBeLessThan(jobPriority(job()))
+  })
+})
+
+describe('recall work', () => {
+  const client = { name: 'Sam', model: 'sedan' as const, condition: 0.6 }
+
+  it('costs the client nothing; the manufacturer pays the book time and the parts at cost', () => {
+    const q = recallQuote(createRng(3))
+    expect(q.labor).toBe(0)
+    expect(q.parts).toBe(0)
+    expect(q.partsCost).toBeGreaterThanOrEqual(JOBS.recall.parts.min)
+    expect(WARRANTY_HOURLY).toBeLessThan(RATE_LEVELS.budget.hourly)
+    expect(warrantyPay(100)).toBe(Math.round((JOBS.recall.minutes / 60) * WARRANTY_HOURLY) + 100)
+    const job = clientJob('client-1-1', 'recall', 'c1', q, client)
+    expect(job.warranty).toBe(warrantyPay(q.partsCost))
+  })
+
+  it('pays nothing on a redo or on a customer-pay job', () => {
+    const q = recallQuote(createRng(3))
+    expect(clientJob('client-1-1', 'recall', 'c1', q, client, true).warranty).toBe(0)
+    expect(
+      clientJob('client-1-1', 'oil', 'c1', quote('oil', 'standard', createRng(3)), client).warranty,
+    ).toBe(0)
+  })
+
+  it('comes after clients’ jobs and before our own reconditioning', () => {
+    expect(jobPriority({ kind: 'oil' })).toBeLessThan(jobPriority({ kind: 'recall' }))
+    expect(jobPriority({ kind: 'recall' })).toBeLessThan(jobPriority({ kind: 'recon' }))
   })
 })

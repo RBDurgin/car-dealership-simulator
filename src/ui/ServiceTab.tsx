@@ -5,6 +5,7 @@ import { EXPANSIONS, expansionsUp } from '../sim/expansions'
 import { carName } from '../sim/interactables'
 import type { InventoryCar } from '../sim/inventory'
 import { rankById } from '../sim/progression'
+import { dayOrdinal, RECALL_LAST, recallExpected, recallLine, recallOn } from '../sim/recalls'
 import {
   bayCount,
   findingBlocker,
@@ -115,8 +116,19 @@ function ClientRow({ job }: { job: ServiceJob }) {
         </div>
         {finding && <div className="staff-meta">{finding}</div>}
       </div>
-      <div className="staff-wage price" title="What they pay for labor and parts">
-        {job.redo ? 'Free' : formatMoney(job.labor + job.parts)}
+      <div
+        className="staff-wage price"
+        title={
+          job.warranty > 0
+            ? `The manufacturer pays ${formatMoney(job.warranty)} for the recall work`
+            : 'What they pay for labor and parts'
+        }
+      >
+        {job.redo
+          ? 'Free'
+          : job.warranty > 0 && job.labor + job.parts === 0
+            ? 'Warranty'
+            : formatMoney(job.labor + job.parts)}
       </div>
       {found && (
         <div className="stock-actions">
@@ -209,6 +221,19 @@ function ReconRow({ car, day }: { car: InventoryCar; day: number }) {
   )
 }
 
+/** The recall on today, if any: which model, what for, and how many of its owners to expect. */
+function RecallLine({ day, bays }: { day: number; bays: number }) {
+  const recall = recallOn(day, bays)
+  const sold = useGame((s) => (recall ? (s.career.soldByModel[recall.model] ?? 0) : 0))
+  if (!recall) return null
+  return (
+    <p className="muted">
+      <b>Recall</b> until the {dayOrdinal(RECALL_LAST)}: the {recallLine(recall)}. Of the {sold}{' '}
+      you’ve sold, expect about {recallExpected(sold)} in. The manufacturer pays for the work.
+    </p>
+  )
+}
+
 /** Before the garage is up: what it takes to build one. */
 function NoGarage({ bought }: { bought: boolean }) {
   const info = EXPANSIONS[GARAGE_EXPANSION]
@@ -275,6 +300,7 @@ export function ServiceTab() {
       )}
       <RatePicker />
       <h3>Clients</h3>
+      <RecallLine day={day} bays={bays} />
       {clients.length === 0 ? (
         <p className="muted staff-empty">
           No service clients yet today. They drive in and check in at the garage’s counter.
@@ -324,6 +350,16 @@ export function ServiceTab() {
           <>
             <dt>Came back</dt>
             <dd>{stats.service.comebacks}</dd>
+          </>
+        )}
+        {stats.service.recalls > 0 && (
+          <>
+            <dt>Recall jobs</dt>
+            <dd>
+              {stats.service.recalls} ·{' '}
+              <span className="price">{formatMoney(stats.service.warranty)}</span> from the
+              manufacturer
+            </dd>
           </>
         )}
         <dt>Reconditioned</dt>

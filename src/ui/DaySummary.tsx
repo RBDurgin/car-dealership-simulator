@@ -111,8 +111,22 @@ export function DaySummary() {
                 Service ({stats.service.jobs} job{stats.service.jobs === 1 ? '' : 's'})
               </dt>
               <dd className="price">
-                {formatMoney(stats.service.labor + stats.service.parts - stats.service.partsCost)}
+                {formatMoney(
+                  stats.service.labor +
+                    stats.service.parts -
+                    stats.service.partsCost +
+                    stats.service.warranty,
+                )}
               </dd>
+            </>
+          )}
+          {stats.service.recalls > 0 && (
+            <>
+              <dt className="summary-sub">
+                · {stats.service.recalls} recall job{stats.service.recalls === 1 ? '' : 's'}, paid
+                by the manufacturer
+              </dt>
+              <dd className="price summary-sub">{formatMoney(stats.service.warranty)}</dd>
             </>
           )}
           {stats.service.offered > 0 && (

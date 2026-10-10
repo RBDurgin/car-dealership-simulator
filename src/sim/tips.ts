@@ -40,6 +40,7 @@ export type TipId =
   | 'recon'
   | 'serviceClient'
   | 'finding'
+  | 'recall'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -71,6 +72,8 @@ export const TIPS: Record<TipId, string> = {
     'Your service garage is open. Hire a mechanic for each bay from the staff panel; the Service tab on the office computer shows what they’re working on.',
   recon:
     'This used car is in rough shape. Pick Recondition on it, or use the Service tab: a mechanic raises its condition, and it goes back on sale for more.',
+  recall:
+    'A recall client drove in. Meet them at the garage’s counter and choose Check in: the manufacturer pays for the work, so they never say no. The more of the recalled model you’ve sold, the more come in.',
   serviceClient:
     'A service client drove in. Meet them at the garage’s counter and choose Check in to quote the job; they pay when they collect their car. A service advisor checks clients in for you.',
   finding:
@@ -198,13 +201,26 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       if (next.customers === prev.customers) return false
       const before = new Map(prev.customers.map((c) => [c.id, c.phase]))
       return next.customers.some(
-        (c) => c.service && c.phase === 'waiting' && before.get(c.id) === 'arriving',
+        // The recall tip covers recall clients.
+        (c) =>
+          c.service &&
+          c.service.kind !== 'recall' &&
+          c.phase === 'waiting' &&
+          before.get(c.id) === 'arriving',
       )
     }
     case 'finding': {
       if (next.serviceJobs === prev.serviceJobs) return false
       const had = new Set(prev.serviceJobs.filter((j) => j.finding).map((j) => j.id))
       return next.serviceJobs.some((j) => j.finding?.status === 'found' && !had.has(j.id))
+    }
+    case 'recall': {
+      if (next.customers === prev.customers) return false
+      const before = new Map(prev.customers.map((c) => [c.id, c.phase]))
+      return next.customers.some(
+        (c) =>
+          c.service?.kind === 'recall' && c.phase === 'waiting' && before.get(c.id) === 'arriving',
+      )
     }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH

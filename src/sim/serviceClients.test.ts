@@ -69,6 +69,16 @@ describe('a service client', () => {
     }
   })
 
+  it('drives the recalled model in for recall work, and pays nothing for it', () => {
+    const c = serviceClient('s', 'recall', 1, createRng(4), 1, 'premium', 1, 'van')
+    expect(c.service!.car.model).toBe('van')
+    expect(c.service!.quote).toMatchObject({ labor: 0, parts: 0 })
+    expect(c.service!.quote.partsCost).toBeGreaterThan(0)
+    // Any other job keeps its own car, whatever model is recalled.
+    const other = serviceClient('s', 'oil', 1, createRng(4), 1, 'premium', 1, 'van')
+    expect(other.service!.quote.labor).toBeGreaterThan(0)
+  })
+
   it('takes a quote more often at a lower shop rate', () => {
     expect(quoteAcceptChance('budget', 'regular')).toBeGreaterThan(
       quoteAcceptChance('standard', 'regular'),

@@ -243,6 +243,17 @@ export const UPDATES: readonly Update[] = [
       'The owner may now ask for a number of service jobs finished.',
     ],
   },
+  {
+    id: 23,
+    phase: '15',
+    title: 'Manufacturer recalls',
+    items: [
+      'Some months the manufacturer recalls a model, from the 8th to the 28th.',
+      'The people you sold one to bring it to your garage. The manufacturer pays for the work.',
+      'The Calendar and Service tabs show the recall on now.',
+      'Service clients come in more often, and the service garage costs less to build.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */
