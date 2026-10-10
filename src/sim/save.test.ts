@@ -11,10 +11,10 @@ import {
 import { CLOSE_MINUTE } from './clock'
 import type { OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
-import { PARKING_SPACES } from './layout'
+import { PARKING_SPACES, type CarModel } from './layout'
 import type { OwnedImprovement } from './improvements'
 import { CAR_MODELS } from './customers'
-import { buildInventory } from './inventory'
+import { BASE_MSRP, buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { emptyCareer, type Career } from './progression'
@@ -426,6 +426,14 @@ describe('save data', () => {
     const v20 = { ...save, version: 20, rival: oldRival, career: oldCareer }
     expect(parseSave(JSON.parse(JSON.stringify(v20)))).toEqual(save)
     expect(parseSave({ ...save, career: oldCareer })).toBeNull()
+  })
+
+  it('mends a client saved with a NaN (null) budget from their priciest model', () => {
+    const prospect = { ...client, preferredModels: ['truck', 'suv'] as CarModel[] }
+    const save = createSave({ ...source(), clients: [prospect] }, 123)
+    const broken = JSON.parse(JSON.stringify({ ...save, clients: [{ ...prospect, budget: NaN }] }))
+    const budget = Math.round(Math.max(BASE_MSRP.truck, BASE_MSRP.suv) / 500) * 500
+    expect(parseSave(broken)?.clients).toEqual([{ ...prospect, budget }])
   })
 
   it('upgrades a version 23 save: nobody has sent a friend or been thanked yet', () => {

@@ -402,8 +402,10 @@ function returningCustomer(
       ? [old, up]
       : [old]
   const raised = opts.tradeUp ? client.budget * TRADE_UP_BUDGET : client.budget
-  // Looking a size up, they come able to afford its sticker.
-  const budget = Math.round(Math.max(raised, models.length > 1 ? BASE_MSRP[up!] : 0) / 500) * 500
+  // Looking a size up, they come able to afford its sticker. A prospect's
+  // models are just the ones they liked, however many.
+  const lookingUp = up && models.includes(up)
+  const budget = Math.round(Math.max(raised, lookingUp ? BASE_MSRP[up] : 0) / 500) * 500
   const c = shopper(
     {
       id,

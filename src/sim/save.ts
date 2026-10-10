@@ -18,7 +18,7 @@ import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { CAR_MODELS } from './customers'
-import { COST_FRACTION, type InventoryCar } from './inventory'
+import { BASE_MSRP, COST_FRACTION, type InventoryCar } from './inventory'
 import { PARKING_SPACES, PLATFORMS, type CarModel } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import { lastTheftNight } from './nazma'
@@ -370,7 +370,9 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isRival(rival)) return null
   if (!isObject(service) || !isRateLevel(service.rate) || typeof service.autoRecon !== 'boolean')
     return null
-  if (!Array.isArray(clients) || !clients.every(isClient)) return null
+  if (!Array.isArray(clients)) return null
+  clients.forEach(mendBudget)
+  if (!clients.every(isClient)) return null
   if (!isPerks(clientPerks)) return null
   if (appreciation !== null && !isAppreciation(appreciation)) return null
   if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
@@ -445,6 +447,16 @@ function isClient(v: unknown): boolean {
     typeof v.thanked === 'boolean' &&
     isDayOrNull(v.serviceDue)
   )
+}
+
+/**
+ * A prospect back with two models in mind once came with a NaN budget, saved
+ * as null. Give them the priciest of their models' base price instead.
+ */
+function mendBudget(v: unknown): void {
+  if (!isObject(v) || isNumber(v.budget) || !Array.isArray(v.preferredModels)) return
+  const prices = v.preferredModels.filter(isModel).map((m) => BASE_MSRP[m as CarModel])
+  if (prices.length > 0) v.budget = Math.round(Math.max(...prices) / 500) * 500
 }
 
 function isClientCar(v: unknown): boolean {

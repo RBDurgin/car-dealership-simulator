@@ -62,6 +62,7 @@ import {
 } from './customers'
 import { BASE_MSRP, buildInventory, type InventoryCar } from './inventory'
 import { hopePrice } from './negotiation'
+import type { CarModel } from './layout'
 import { createRng } from './rng'
 import { MILES_PER_YEAR, modelYear } from './usedCars'
 
@@ -421,6 +422,18 @@ describe('names and returning clients', () => {
     })
     const up = generateCustomer('c9', inventory, createRng(5), { client: c, tradeUp: true })
     expect(up.budget).toBe(Math.round((c.budget * TRADE_UP_BUDGET) / 500) * 500)
+  })
+
+  it('keeps the budget of a prospect back with two models in mind', () => {
+    const [c] = record([], buyer())
+    const prospect = {
+      ...c,
+      status: 'prospect' as const,
+      car: null,
+      preferredModels: ['truck', 'suv'] as CarModel[],
+    }
+    const back = generateCustomer('c9', inventory, createRng(5), { client: prospect })
+    expect(back.budget).toBe(c.budget)
   })
 
   it('gives a stranger no client id', () => {
