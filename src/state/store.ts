@@ -236,6 +236,18 @@ import {
 } from '../sim/rival'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
+import {
+  addDay as addToLifetime,
+  amendDay,
+  dayRecord,
+  emptyLifetime,
+  emptyRecords,
+  tupleToRecord,
+  updateRecords,
+  type DayRecord,
+  type Lifetime,
+  type Records,
+} from '../sim/stats'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
 import {
   canHire,
@@ -457,6 +469,13 @@ interface GameState {
   bailoutUsed: boolean
   /** Lifetime totals and the dealer rank reached. Added to when a day is settled. Saved. */
   career: Career
+  /** A record of each day settled since `statsFrom` (see `sim/stats.ts`). Saved. */
+  log: DayRecord[]
+  /** Totals over every day settled, and personal records. Added to when a day is settled. Saved. */
+  lifetime: Lifetime
+  records: Records
+  /** The first day the log and lifetime totals cover (later than 1 for a game from before them). Saved. */
+  statsFrom: number
   /** The manufacturer's franchise tier, moved by the quota at month end. Saved. */
   franchise: FranchiseTier
   /** The win screen has been seen and play went on, so it doesn't show again. Saved. */
@@ -804,6 +823,10 @@ function dayOne(difficulty: Difficulty) {
     cash: tuning.startingCash,
     bailoutUsed: false,
     career: emptyCareer(),
+    log: [] as DayRecord[],
+    lifetime: emptyLifetime(),
+    records: emptyRecords(),
+    statsFrom: 1,
     franchise: START_TIER,
     won: false,
     rival: emptyRival(),
@@ -989,11 +1012,28 @@ export const useGame = create<GameState>((set, get) => {
       s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
     // On Easy the bank covers the first time the day ends in the red.
     const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
+    const settled: DayStats = {
+      ...s.dayStats,
+      wages,
+      commissions,
+      interest,
+      owner,
+      reputation: reputation - s.reputation,
+      quota,
+      bailout,
+      rankUp: rankUp(s.career, career)?.id ?? null,
+      settled: true,
+    }
+    const log = [...s.log, dayRecord(settled, s.clock.day, reputation, cash + bailout)]
+    const records = updateRecords(s.records, log, settled)
     set({
       cash: cash + bailout,
       bailoutUsed: s.bailoutUsed || bailout > 0,
       reputation,
       career,
+      log,
+      lifetime: addToLifetime(s.lifetime, settled),
+      records: records.records,
       franchise: quota?.tier.to ?? s.franchise,
       rival: rivalDay(
         s.rival,
@@ -1005,19 +1045,19 @@ export const useGame = create<GameState>((set, get) => {
         inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
         purchases: [],
       }),
-      dayStats: {
-        ...s.dayStats,
-        wages,
-        commissions,
-        interest,
-        owner,
-        reputation: reputation - s.reputation,
-        quota,
-        bailout,
-        rankUp: rankUp(s.career, career)?.id ?? null,
-        settled: true,
-      },
+      dayStats: { ...settled, newRecords: records.broken },
     })
+  }
+
+  /**
+   * Money spent from the day summary, after the day was settled, goes on the
+   * log's record of the day and the lifetime net.
+   */
+  const amendLog = () => {
+    const s = get()
+    if (!s.dayStats.settled) return
+    const amended = amendDay(s.log, s.lifetime, s.dayStats, s.clock.day)
+    if (amended.log !== s.log) set(amended)
   }
 
   /**
@@ -1825,6 +1865,7 @@ export const useGame = create<GameState>((set, get) => {
       cost: car.cost,
       minute: s.clock.minute,
       soldBy: seller,
+      ...(seller && { sellerId: c.sellerId as string }),
       signedBy: finance?.name ?? null,
       commission: (seller ? salesCommission(price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
       source: c.source,
@@ -2357,6 +2398,7 @@ export const useGame = create<GameState>((set, get) => {
         campaigns: result.campaigns,
         dayStats: { ...s.dayStats, marketing: s.dayStats.marketing + cost },
       })
+      amendLog()
       notify(`${label} booked for ${formatMoney(cost)}. It runs for ${days} days from tomorrow.`)
       return true
     },
@@ -2373,6 +2415,7 @@ export const useGame = create<GameState>((set, get) => {
         improvements: result.improvements,
         dayStats: { ...s.dayStats, improvements: s.dayStats.improvements + cost },
       })
+      amendLog()
       notify(`Bought the ${label.toLowerCase()} for ${formatMoney(cost)}. It goes up overnight.`)
       return true
     },
@@ -2389,6 +2432,7 @@ export const useGame = create<GameState>((set, get) => {
         expansions: result.expansions,
         dayStats: { ...s.dayStats, expansions: s.dayStats.expansions + cost },
       })
+      amendLog()
       notify(`Bought the ${label.toLowerCase()} for ${formatMoney(cost)}. It's built overnight.`)
       return true
     },
@@ -2695,6 +2739,7 @@ export const useGame = create<GameState>((set, get) => {
           appreciation: stats.appreciation + cost,
         }),
       })
+      amendLog()
       notify(
         `Client appreciation day booked for ${longDate(day)}, ${formatMoney(cost)}. Your clients are invited.`,
       )
@@ -2894,6 +2939,10 @@ export const useGame = create<GameState>((set, get) => {
         quota: save.quota,
         bailoutUsed: save.bailoutUsed,
         career: save.career,
+        log: save.log.map(tupleToRecord),
+        lifetime: save.lifetime,
+        records: save.records,
+        statsFrom: save.statsFrom,
         franchise: save.franchise,
         won: save.won,
         rival: save.rival,

@@ -54,6 +54,14 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 
 ### 17a: Day log, lifetime totals and records (pure + save)
 
+**Built 2026-10-10.** Changes from the plan:
+
+- `gross` (in `DayRecord`, `Lifetime` and the week and month records) is `totalGross` (sales and service), not `grossProfit`: since Phase 15 the career counts service too, and `net` already does.
+- A record counts as broken (`DayStats.newRecords`) only when it's taken from another day, week, month or streak. Setting the first one isn't breaking it, and a week, month or streak still going doesn't break its own record again each day.
+- Ads, improvements, expansions or an appreciation day bought from the summary after settling are brought into the day's record and the lifetime net (`amendDay`).
+- `Sale.sellerId` keeps the salesperson's id for `bySeller`.
+- Save v26.
+
 - New `sim/stats.ts` (pure, tested):
   - `DayRecord { day, sales, usedSales, gross, net, visitors, walkOuts, reputation, cash, marketing }`. These are whole numbers, and the record is built by `dayRecord(stats, day, reputation, cash)` from a settled `DayStats`. `walkOuts` is refused + impatient + closing. `gross` is `grossProfit`, `net` is `netIncome`.
   - `Lifetime`:

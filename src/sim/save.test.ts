@@ -26,6 +26,14 @@ import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
+import {
+  emptyLifetime,
+  emptyRecords,
+  tupleToRecord,
+  type DayRecord,
+  type Lifetime,
+  type Records,
+} from './stats'
 import type { TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 import type { Employee } from './staff'
@@ -77,6 +85,25 @@ const source = () => ({
   clientPerks: defaultPerks() as ClientPerks,
   appreciation: null as Appreciation | null,
   monthCsi: emptyMonthCsi() as MonthCsi,
+  // As a v25 save of day 3 upgrades, so the older upgrades compare equal.
+  log: [] as DayRecord[],
+  lifetime: emptyLifetime() as Lifetime,
+  records: emptyRecords() as Records,
+  statsFrom: 4,
+})
+
+const record = (day: number, extra: Partial<DayRecord> = {}): DayRecord => ({
+  day,
+  sales: 2,
+  usedSales: 1,
+  gross: 6_400,
+  net: 3_150,
+  visitors: 11,
+  walkOuts: 4,
+  reputation: 52,
+  cash: 31_500,
+  marketing: 900,
+  ...extra,
 })
 
 const client: Client = {
@@ -462,6 +489,60 @@ describe('save data', () => {
     expect(upgraded?.clients[0].serviceDue).toBe(client.car!.boughtDay + SERVICE_INTERVAL)
     expect(upgraded?.clients[1].serviceDue).toBeNull()
     expect(parseSave({ ...save, career })).toBeNull()
+  })
+
+  it('keeps the log as tuples, the lifetime totals and records, and rejects a malformed log', () => {
+    const lifetime: Lifetime = {
+      ...emptyLifetime(),
+      sales: 4,
+      byModel: { sedan: 3, truck: 1 },
+      bySource: { tv: 4 },
+      bySeller: { player: { sales: 1, gross: 2_000 }, 'staff-1-1': { sales: 3, gross: 7_000 } },
+    }
+    const records: Records = {
+      ...emptyRecords(),
+      bestDay: { value: 6_400, day: 3 },
+      biggestDeal: { value: 3_100, day: 2, model: 'truck' },
+      streak: 2,
+    }
+    const log = [record(2), record(3, { net: -1_200 })]
+    const save = createSave({ ...source(), log, lifetime, records, statsFrom: 2 }, 123)
+    expect(save.log).toEqual([
+      [2, 2, 1, 6_400, 3_150, 11, 4, 52, 31_500, 900],
+      [3, 2, 1, 6_400, -1_200, 11, 4, 52, 31_500, 900],
+    ])
+    expect(save.log.map(tupleToRecord)).toEqual(log)
+    const parsed = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(parsed).toEqual(save)
+    // A short tuple, days out of order, or a bad record are rejected.
+    expect(parseSave({ ...save, log: [[2, 2, 1]] })).toBeNull()
+    expect(parseSave({ ...save, log: [save.log[1], save.log[0]] })).toBeNull()
+    expect(parseSave({ ...save, log: [save.log[0], save.log[0]] })).toBeNull()
+    expect(
+      parseSave({ ...save, records: { ...records, biggestDeal: { value: 1, day: 1 } } }),
+    ).toBeNull()
+    expect(parseSave({ ...save, lifetime: { ...lifetime, byModel: { boat: 1 } } })).toBeNull()
+    expect(parseSave({ ...save, statsFrom: 0 })).toBeNull()
+  })
+
+  it('reads a 500-day log quickly', () => {
+    const log = Array.from({ length: 500 }, (_, i) => record(i + 1))
+    const json = JSON.stringify(createSave({ ...source(), log, statsFrom: 1 }, 123))
+    const start = performance.now()
+    expect(parseSave(JSON.parse(json))?.log).toHaveLength(500)
+    expect(performance.now() - start).toBeLessThan(50)
+  })
+
+  it('upgrades a version 25 save with an empty log, kept from the next day', () => {
+    const save = createSave(source(), 123)
+    const { log: _, lifetime: __, records: ___, statsFrom: ____, ...v25 } = save
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v25, version: 25 })))
+    expect(upgraded).toMatchObject({
+      log: [],
+      lifetime: emptyLifetime(),
+      records: emptyRecords(),
+      statsFrom: save.day + 1,
+    })
   })
 
   it('upgrades a version 22 save with an empty client book', () => {

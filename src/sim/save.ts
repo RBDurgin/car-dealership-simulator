@@ -29,6 +29,17 @@ import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { dressFor, ROLES, type Employee } from './staff'
+import {
+  emptyLifetime,
+  emptyRecords,
+  LOG_FIELDS,
+  RECORD_KEYS,
+  recordToTuple,
+  tupleToRecord,
+  type DayRecord,
+  type Lifetime,
+  type Records,
+} from './stats'
 import { isTipId, type TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 
@@ -42,7 +53,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 25
+export const SAVE_VERSION = 26
 
 export interface SaveData {
   version: number
@@ -93,6 +104,16 @@ export interface SaveData {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores so far, for the CSI. */
   monthCsi: MonthCsi
+  /**
+   * A record of each day settled since `statsFrom` (see `sim/stats.ts`), each
+   * a tuple in `LOG_FIELDS` order to stay small (`tupleToRecord` reads one).
+   */
+  log: number[][]
+  /** Totals over every day settled, and personal records. */
+  lifetime: Lifetime
+  records: Records
+  /** The first day the log and lifetime totals cover. */
+  statsFrom: number
 }
 
 export interface SaveSource {
@@ -119,6 +140,10 @@ export interface SaveSource {
   clientPerks: ClientPerks
   appreciation: Appreciation | null
   monthCsi: MonthCsi
+  log: DayRecord[]
+  lifetime: Lifetime
+  records: Records
+  statsFrom: number
 }
 
 /**
@@ -156,6 +181,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     clientPerks: s.clientPerks,
     appreciation: s.appreciation,
     monthCsi: s.monthCsi,
+    log: s.log.map(recordToTuple),
+    lifetime: s.lifetime,
+    records: s.records,
+    statsFrom: s.statsFrom,
   }
 }
 
@@ -313,6 +342,14 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         )
       : raw.clients,
   }),
+  // v26: the day log, lifetime totals and records, kept from the next day on.
+  25: (raw) => ({
+    ...raw,
+    log: [],
+    lifetime: emptyLifetime(),
+    records: emptyRecords(),
+    statsFrom: isNumber(raw.day) ? raw.day + 1 : 1,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -377,10 +414,55 @@ export function parseSave(input: unknown): SaveData | null {
   if (appreciation !== null && !isAppreciation(appreciation)) return null
   if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
+  if (!isLog(raw.log)) return null
+  if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
+  if (!Number.isInteger(raw.statsFrom) || (raw.statsFrom as number) < 1) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
   return { ...raw, news: Math.min(news as number, LATEST_NEWS) } as unknown as SaveData
+}
+
+/** Each of the log's records is a tuple of `LOG_FIELDS.length` numbers, its days counting up. */
+function isLog(v: unknown): boolean {
+  if (!Array.isArray(v)) return false
+  let last = -Infinity
+  for (const t of v) {
+    if (!Array.isArray(t) || t.length !== LOG_FIELDS.length || !t.every(isNumber)) return false
+    const { day } = tupleToRecord(t)
+    if (day <= last) return false
+    last = day
+  }
+  return true
+}
+
+const isCounts = (v: unknown, keys?: readonly unknown[]) =>
+  isObject(v) && Object.entries(v).every(([k, n]) => (!keys || keys.includes(k)) && isNumber(n))
+
+function isLifetime(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    ['sales', 'usedSales', 'gross', 'net', 'visitors', 'trades', 'bought'].every((k) =>
+      isNumber(v[k]),
+    ) &&
+    isNumber(v.nazmaRunOffs) &&
+    isNumber(v.theftsFoiled) &&
+    isCounts(v.byModel, CAR_MODELS) &&
+    isCounts(v.bySource) &&
+    isObject(v.bySeller) &&
+    Object.values(v.bySeller).every((t) => isObject(t) && isNumber(t.sales) && isNumber(t.gross))
+  )
+}
+
+const isBest = (v: unknown) => v === null || (isObject(v) && isNumber(v.value) && isNumber(v.day))
+
+function isRecords(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.streak) &&
+    RECORD_KEYS.every((k) => isBest(v[k])) &&
+    (v.biggestDeal === null || (isObject(v.biggestDeal) && isModel(v.biggestDeal.model)))
+  )
 }
 
 function isCar(v: unknown): boolean {

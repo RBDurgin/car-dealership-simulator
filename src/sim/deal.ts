@@ -22,6 +22,7 @@ import { emptyNazmaStats, type NazmaStats } from './nazma'
 import type { RivalStats } from './rival'
 import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
+import type { RecordKey } from './stats'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
@@ -255,6 +256,8 @@ export interface Sale {
   minute: number
   /** The salesperson who made the sale, or null when the player did. */
   soldBy: string | null
+  /** Their employee id, while `soldBy` is set. */
+  sellerId?: string
   /** The finance manager who signed it, or null when the seller did. */
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
@@ -298,6 +301,8 @@ export interface DayStats {
   missedUsed: number
   /** What the day did to reputation (set when settled; see `reputationChange`). */
   reputation: number
+  /** Records the day took from an earlier one (set when settled; see `sim/stats.ts`). */
+  newRecords: RecordKey[]
   /** Payroll has been paid for the day. */
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
@@ -341,6 +346,7 @@ export function emptyStats(): DayStats {
     missed: {},
     missedUsed: 0,
     reputation: 0,
+    newRecords: [],
     settled: false,
     owner: null,
     nazma: emptyNazmaStats(),
