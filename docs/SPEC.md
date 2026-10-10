@@ -79,3 +79,7 @@ A client book. Everyone who buys from you is kept by name, with a satisfaction s
 ## Phase 17
 
 Stats and achievements. Every day goes into a short log, and the office computer's Stats tab shows lifetime totals, personal records (best day, week and month, biggest deal, longest sales streak) and charts of sales, gross, net, visitors, reputation and cash. Achievements pop up as you earn them, such as a first sale at full sticker or running Nazma off yourself. They're a record only, with no rewards. Each save keeps its own, and a trophy case on the title screen keeps everything ever earned on the device.
+
+## Phase 20
+
+Test drives. A shopper can ask to drive the car they're looking at, or you can offer. You or a salesperson ride along: the car drives out through the gate and off the map, and comes back a while later. While the player is out they can't act on the floor, so a salesperson who takes drives is worth having. Twice on each drive you pick something to point out, and a pick that suits the buyer and the car warms them. A good drive makes a sale likelier and the haggle softer. Cars come back dirtier (more in the rain), used cars gain miles, and now and then a car comes back with a ding that the garage has to fix.
