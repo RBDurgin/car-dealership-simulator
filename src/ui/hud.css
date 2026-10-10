@@ -889,6 +889,92 @@ kbd {
 .stock-who .staff-name {
   white-space: nowrap;
 }
+/* The Stats tab: the chart's colours, then its parts. */
+.stats-chart {
+  --chart-bar: #60a5fa;
+  --chart-negative: #f87171;
+  --chart-line: #fde047;
+  --chart-axis: rgba(255, 255, 255, 0.25);
+  --chart-guide: rgba(255, 255, 255, 0.12);
+  margin: 0 0 8px;
+}
+.stats-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.stats-chart-readout {
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-chart-ends {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 12%;
+  font-size: 11px;
+}
+.chart-bar {
+  fill: var(--chart-bar);
+}
+.chart-bar-negative {
+  fill: var(--chart-negative);
+}
+.chart-line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.chart-dot {
+  fill: var(--chart-line);
+  stroke: #141820;
+  stroke-width: 2;
+}
+.chart-zero {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.chart-guide {
+  stroke: var(--chart-guide);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.chart-axis-label {
+  fill: #e8ecf2;
+  opacity: 0.55;
+  font-size: 10px;
+  text-anchor: end;
+  font-variant-numeric: tabular-nums;
+}
+.stats-negative {
+  color: #fca5a5;
+}
+.stats-since {
+  margin: -4px 0 8px;
+}
+.stats-when {
+  font-size: 11px;
+}
+.stats-pickers {
+  margin: 0 0 6px;
+}
+.stats-breakdown td:first-child {
+  white-space: normal;
+}
+.summary-records {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(96, 165, 250, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+}
+.summary-records div + div {
+  margin-top: 2px;
+}
 .stock-summary {
   display: grid;
   grid-template-columns: auto 1fr;

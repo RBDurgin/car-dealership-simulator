@@ -12,6 +12,7 @@ import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
 import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
 import { bayCount, type ServiceJob } from './service'
+import type { RecordKey } from './stats'
 import { isStale, STALE_DAYS } from './usedCars'
 
 /** A used car this worn or worse is worth reconditioning (see the `recon` tip). */
@@ -50,6 +51,7 @@ export type TipId =
   | 'referral'
   | 'appreciation'
   | 'csi'
+  | 'stats'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -103,6 +105,8 @@ export const TIPS: Record<TipId, string> = {
   appreciation:
     'Your book has 10 clients. Book a client appreciation day in the Calendar tab: a cookout on the lot that brings clients back, leaves them happier and brings in clients due to trade up.',
   csi: `This month's CSI came in under ${CSI_FLOOR}, so the manufacturer cut the holdback by a quarter. Every new-car buyer's visit counts: keep waits short, haggle less, and hand over clean cars at a fair price.`,
+  stats:
+    'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -120,7 +124,7 @@ export interface TipState {
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
-  dayStats: Pick<DayStats, 'missed' | 'quota'>
+  dayStats: Pick<DayStats, 'missed' | 'quota'> & { newRecords?: readonly RecordKey[] }
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
   franchise: FranchiseTier
@@ -277,6 +281,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       const csi = next.dayStats.quota?.csi
       return !prev.dayStats.quota && csi !== undefined && csi !== null && csi < CSI_FLOOR
     }
+    case 'stats':
+      return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

@@ -26,6 +26,38 @@ test('opens the office computer with I and closes it with Escape', async ({ page
   await expect(panel).toBeHidden()
 })
 
+test('opens the Stats tab with P and charts the day log', async ({ page }) => {
+  const errors = watchErrors(page)
+  await startGame(page)
+  // A few settled days, as the log keeps them.
+  await inStore(page, (useGame) =>
+    useGame.setState({
+      log: [1, 2, 3].map((day) => ({
+        day,
+        sales: day,
+        usedSales: 0,
+        gross: day * 1000 - 1500,
+        net: -200,
+        visitors: 8,
+        walkOuts: 2,
+        reputation: 50 + day,
+        cash: 40_000 + day * 500,
+        marketing: 0,
+      })),
+    }),
+  )
+  const panel = page.getByRole('dialog', { name: 'Office computer' })
+  await page.keyboard.press('KeyP')
+  await expect(panel.getByRole('tab', { name: 'Stats', selected: true })).toBeVisible()
+  await expect(panel.getByRole('img', { name: /Gross/ }).locator('path')).toHaveCount(3)
+  await panel.getByRole('button', { name: 'Cash' }).click()
+  await expect(panel.locator('.chart-line')).toHaveCount(1)
+  await expect(panel.locator('.stats-chart-readout')).toContainText('$41,500')
+  await page.keyboard.press('KeyP')
+  await expect(panel).toBeHidden()
+  expect(errors).toEqual([])
+})
+
 test('a visitor drives in, parks, and drives off again', async ({ page }) => {
   const errors = watchErrors(page)
   await startGame(page)

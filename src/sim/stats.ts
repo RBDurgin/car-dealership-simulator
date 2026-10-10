@@ -1,4 +1,4 @@
-import { DAYS_PER_MONTH, DAYS_PER_WEEK } from './calendar'
+import { calendarOf, DAYS_PER_MONTH, DAYS_PER_WEEK, monthLabel } from './calendar'
 import { PLAYER_ID } from './customers'
 import { netIncome, totalGross, walkOuts, type DayStats, type Sale } from './deal'
 import type { CarModel } from './layout'
@@ -299,4 +299,123 @@ export function updateRecords(
     if (prevDeal) broken.push('biggestDeal')
   }
   return { records: next, broken }
+}
+
+/** What the Stats tab can chart. */
+export type Metric = 'sales' | 'gross' | 'net' | 'visitors' | 'reputation' | 'cash'
+export const METRICS: readonly Metric[] = [
+  'sales',
+  'gross',
+  'net',
+  'visitors',
+  'reputation',
+  'cash',
+]
+/** Levels are read at a point in time (a line); the rest are amounts summed over a period (bars). */
+export const isLevel = (m: Metric) => m === 'reputation' || m === 'cash'
+
+/** The last `RECENT_DAYS` days, or the whole game. */
+export type ChartRange = 'recent' | 'all'
+export const RECENT_DAYS = 28
+/** A chart never has more bars or points than this: past it, days are summed by week, then month. */
+export const MAX_POINTS = 84
+
+export interface Point {
+  /** The last day the point covers. */
+  day: number
+  /** "Day 23", "Wk 2 Mar", "Mar" (with the year from year 2). */
+  label: string
+  value: number
+}
+
+function dayLabel(day: number): string {
+  return `Day ${day}`
+}
+
+function weekLabel(day: number): string {
+  const c = calendarOf(day)
+  return `Wk ${c.week} ${monthLabel(c.month)}${c.year > 1 ? ` Y${c.year}` : ''}`
+}
+
+function monthLabelOf(day: number): string {
+  const c = calendarOf(day)
+  return `${monthLabel(c.month)}${c.year > 1 ? ` Y${c.year}` : ''}`
+}
+
+/**
+ * The log as chart points for `metric`: one a day over the range when that
+ * fits `MAX_POINTS`, else summed by calendar week (or month, past
+ * `MAX_POINTS` weeks). A level (reputation, cash) takes its period's last day.
+ */
+export function series(log: readonly DayRecord[], metric: Metric, range: ChartRange): Point[] {
+  const days = range === 'recent' ? log.slice(-RECENT_DAYS) : log
+  if (days.length <= MAX_POINTS) {
+    return days.map((r) => ({ day: r.day, label: dayLabel(r.day), value: r[metric] }))
+  }
+  const last = days[days.length - 1].day
+  const first = days[0].day
+  const byWeek = weekIndex(last) - weekIndex(first) < MAX_POINTS
+  const by = byWeek ? weekIndex : monthIndexOf
+  const label = byWeek ? weekLabel : monthLabelOf
+  const points: Point[] = []
+  let period = -1
+  for (const r of days) {
+    const p = by(r.day)
+    const point = points[points.length - 1]
+    if (p !== period || !point) {
+      period = p
+      points.push({ day: r.day, label: label(r.day), value: r[metric] })
+    } else {
+      point.day = r.day
+      point.value = isLevel(metric) ? r[metric] : point.value + r[metric]
+    }
+  }
+  return points
+}
+
+/** Sales over visitors (0–1), or null with no visitors. */
+export function closeRate(sales: number, visitors: number): number | null {
+  return visitors > 0 ? sales / visitors : null
+}
+
+/** Gross per car sold, or null with none sold. */
+export function grossPerSale(gross: number, sales: number): number | null {
+  return sales > 0 ? gross / sales : null
+}
+
+/** One row of the by-seller breakdown. */
+export interface SellerRow {
+  /** An employee id, `PLAYER_ID`, or `FORMER_STAFF`. */
+  key: string
+  sales: number
+  gross: number
+}
+
+export const FORMER_STAFF = 'former'
+
+/**
+ * Lifetime sales by seller: the player first, then `staff` (today's
+ * salespeople by id) by sales, and everyone else together as `FORMER_STAFF`
+ * last. Sellers with no sales are left out.
+ */
+export function sellerRows(
+  bySeller: Readonly<Record<string, SellerTotal>>,
+  staff: readonly string[],
+): SellerRow[] {
+  const current = new Set(staff)
+  const rows: SellerRow[] = []
+  const former: SellerRow = { key: FORMER_STAFF, sales: 0, gross: 0 }
+  for (const [key, t] of Object.entries(bySeller)) {
+    if (t.sales === 0) continue
+    if (key === PLAYER_ID || current.has(key)) rows.push({ key, ...t })
+    else {
+      former.sales += t.sales
+      former.gross += t.gross
+    }
+  }
+  rows.sort(
+    (a, b) => Number(b.key === PLAYER_ID) - Number(a.key === PLAYER_ID) || b.sales - a.sales,
+  )
+  if (former.sales > 0) rows.push(former)
+  return rows
 }

@@ -373,7 +373,7 @@ export interface ReceptionCall {
 
 /** The office computer panel's tabs. */
 export type ComputerTab =
-  'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients'
+  'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients' | 'stats'
 
 /** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
 export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash

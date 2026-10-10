@@ -313,6 +313,18 @@ export const UPDATES: readonly Update[] = [
       'The owner may ask you to sell to returning clients.',
     ],
   },
+  {
+    id: 29,
+    phase: '17',
+    title: 'Stats and records',
+    items: [
+      'The office computer has a Stats tab (P): lifetime totals, close rate and gross per sale.',
+      'Your records: best day, week and month, biggest deal and longest selling streak.',
+      'Charts of sales, gross, net, visitors, reputation and cash, over the last 28 days or the whole game.',
+      'Lifetime sales by model, by what brought buyers in and by who sold them.',
+      'The day summary says when you break a record.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

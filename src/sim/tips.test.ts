@@ -130,6 +130,7 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  stats: [{ dayStats: { missed: {}, quota: null, newRecords: ['bestDay'] } }, {}],
   csi: [
     {
       dayStats: {

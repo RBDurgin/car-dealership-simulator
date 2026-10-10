@@ -128,6 +128,7 @@ export function HUD() {
       else if (e.code === 'KeyL' && !e.repeat && e.shiftKey && import.meta.env.DEV)
         game.devReturnClient()
       else if (e.code === 'KeyL' && !e.repeat) game.toggleStockPanel(undefined, 'clients')
+      else if (e.code === 'KeyP' && !e.repeat) game.toggleStockPanel(undefined, 'stats')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

@@ -91,6 +91,14 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 
 ### 17b: The Stats tab and charts
 
+**Built 2026-10-10.** Changes from the plan:
+
+- There's no separate `stats` action on the computer: since 16b it offers one `office` action, which opens the panel on its last tab. The tab is reached through **Office** and P.
+- Past `MAX_POINTS` weeks (588 days), the whole game is summed by month, so the cap holds.
+- `hud.css` had no colour variables, so the chart's are defined on `.stats-chart` (`--chart-bar`, `--chart-negative`, `--chart-line`).
+- Also in `sim/stats.ts`: `grossPerSale` and `sellerRows` (the player first, today's staff by sales, then "Former staff"). Record and chart wording is in `ui/statsText.ts`.
+- The `stats` tip (Easy) comes with the first record broken.
+
 - The office computer gets a **Stats** tab: `computerTab` `'stats'`, key P, the computer's `stats` action, and the top-bar **Office** button reaches it as it reaches the other tabs. If the computer's action ring is already full (Phases 14–16 add three more), the tab is still reached through **Office** and P.
 - `ui/StatsTab.tsx`:
   - **Totals**: lifetime sales (new and used), gross, net, visitors, close rate (sales ÷ visitors), and average gross per sale. "Since day N" when `statsFrom` > 1.

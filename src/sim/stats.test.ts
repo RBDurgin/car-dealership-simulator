@@ -7,13 +7,20 @@ import type { Source } from './marketing'
 import {
   addDay,
   amendDay,
+  closeRate,
   dayRecord,
   emptyLifetime,
   emptyRecords,
+  FORMER_STAFF,
+  grossPerSale,
   LOG_FIELDS,
+  MAX_POINTS,
   monthIndexOf,
   periodGross,
+  RECENT_DAYS,
   recordToTuple,
+  sellerRows,
+  series,
   tupleToRecord,
   updateRecords,
   weekIndex,
@@ -232,5 +239,84 @@ describe('records', () => {
     expect(r.broken).toContain('biggestDeal')
     const same = stats({ sales: [sale(20_000, 17_000)] })
     expect(updateRecords(start, log, same).records.biggestDeal).toBe(start.biggestDeal)
+  })
+})
+
+describe('chart series', () => {
+  const logOf = (days: number, from = 1): DayRecord[] =>
+    Array.from({ length: days }, (_, i) => ({
+      day: from + i,
+      sales: 1,
+      usedSales: 0,
+      gross: 100,
+      net: -50,
+      visitors: 10,
+      walkOuts: 2,
+      reputation: from + i,
+      cash: 1000 * (from + i),
+      marketing: 0,
+    }))
+
+  it('gives one point a day over the last 28 days', () => {
+    const points = series(logOf(40), 'gross', 'recent')
+    expect(points).toHaveLength(RECENT_DAYS)
+    expect(points[0]).toEqual({ day: 13, label: 'Day 13', value: 100 })
+    expect(points.at(-1)?.day).toBe(40)
+  })
+
+  it('keeps the whole game daily up to the cap', () => {
+    expect(series(logOf(MAX_POINTS), 'net', 'all')).toHaveLength(MAX_POINTS)
+    expect(series([], 'cash', 'all')).toEqual([])
+  })
+
+  it('sums amounts by week past the cap, and takes a level from the week’s last day', () => {
+    // Starts mid-week (day 4 is a Thursday): the first week has 4 days.
+    const log = logOf(100, 4)
+    const gross = series(log, 'gross', 'all')
+    expect(gross.length).toBeLessThanOrEqual(MAX_POINTS)
+    expect(gross[0]).toEqual({ day: 7, label: 'Wk 1 Jan', value: 400 })
+    expect(gross[1]).toEqual({ day: 14, label: 'Wk 2 Jan', value: 700 })
+    const total = gross.reduce((sum, p) => sum + p.value, 0)
+    expect(total).toBe(100 * 100)
+    const cash = series(log, 'cash', 'all')
+    expect(cash[0].value).toBe(7000)
+    expect(cash.at(-1)).toMatchObject({ day: 103, value: 103000 })
+  })
+
+  it('sums by month past the cap in weeks', () => {
+    const points = series(logOf(DAYS_PER_MONTH * 25), 'sales', 'all')
+    expect(points).toHaveLength(25)
+    expect(points[0]).toMatchObject({ label: 'Jan', value: DAYS_PER_MONTH })
+    expect(points[12].label).toBe('Jan Y2')
+  })
+
+  it('works out the close rate and gross per sale, and nothing from none', () => {
+    expect(closeRate(3, 12)).toBe(0.25)
+    expect(closeRate(0, 0)).toBeNull()
+    expect(grossPerSale(9000, 3)).toBe(3000)
+    expect(grossPerSale(0, 0)).toBeNull()
+  })
+})
+
+describe('seller rows', () => {
+  it('puts the player first, staff by sales and former staff together last', () => {
+    const rows = sellerRows(
+      {
+        e1: { sales: 2, gross: 500 },
+        [PLAYER_ID]: { sales: 1, gross: 300 },
+        e2: { sales: 5, gross: 900 },
+        gone1: { sales: 1, gross: 100 },
+        gone2: { sales: 3, gross: 200 },
+      },
+      ['e1', 'e2', 'e3'],
+    )
+    expect(rows.map((r) => r.key)).toEqual([PLAYER_ID, 'e2', 'e1', FORMER_STAFF])
+    expect(rows.at(-1)).toEqual({ key: FORMER_STAFF, sales: 4, gross: 300 })
+  })
+
+  it('leaves out a former staff row when nobody gone sold', () => {
+    expect(sellerRows({ e1: { sales: 1, gross: 10 } }, ['e1'])).toEqual([
+      { key: 'e1', sales: 1, gross: 10 },
+    ])
   })
 })

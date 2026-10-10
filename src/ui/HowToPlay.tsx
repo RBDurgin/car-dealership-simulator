@@ -76,6 +76,7 @@ import {
   roleLimits,
   SALES_COMMISSION,
 } from '../sim/staff'
+import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -433,8 +434,8 @@ function BusinessTab({ touch, click }: TabProps) {
   return (
     <>
       <p className="how-lead">
-        Stock, ads, upgrades, the calendar, the garage and your clients are all on the office
-        computer: {click.toLowerCase()} the screen on your desk and choose <b>Office</b>, or{' '}
+        Stock, ads, upgrades, the calendar, the garage, your clients and your stats are all on the
+        office computer: {click.toLowerCase()} the screen on your desk and choose <b>Office</b>, or{' '}
         <OfficeKey touch={touch} keyName="I" />, and pick a tab.
       </p>
       <section>
@@ -526,6 +527,25 @@ function BusinessTab({ touch, click }: TabProps) {
             )
           })}
         </ul>
+      </section>
+      <section>
+        <h3>Stats</h3>
+        <p>
+          The office computer&apos;s <b>Stats</b> tab{touch ? '' : ' (P)'} keeps every day you
+          close: lifetime cars sold, gross, net and visitors, your close rate (cars sold for every
+          visitor) and the gross per sale.
+        </p>
+        <p>
+          It also keeps your records: the best day, week and month for gross, the most cars sold in
+          a day, the biggest single deal and the longest run of days with a sale. The end-of-day
+          summary tells you when you break one.
+        </p>
+        <p>
+          The chart shows sales, gross, net, visitors, reputation or cash over the last{' '}
+          {RECENT_DAYS} days or the whole game. {touch ? 'Tap' : 'Point at'} a bar to read it. Past{' '}
+          {MAX_POINTS} days, the whole game is shown by week. Below it are your lifetime sales by
+          model, by what brought the buyer in, and by who sold them.
+        </p>
       </section>
       <section>
         <h3>Service garage</h3>
