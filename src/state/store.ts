@@ -11,6 +11,18 @@ import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import {
+  bookNames,
+  defaultPerks,
+  emptyMonthCsi,
+  pruneBook,
+  recordClients,
+  type Appreciation,
+  type Client,
+  type ClientPerks,
+  type ClientStats,
+  type MonthCsi,
+} from '../sim/clients'
+import {
   CLOSE_MINUTE,
   dayOver,
   formatTime,
@@ -296,6 +308,7 @@ const DRIVE_SEED = 18_000
 const RIVAL_SEED = 21_000
 const QUOTE_SEED = 22_000
 const SERVICE_SEED = 23_000
+const CLIENT_SEED = 24_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
 
@@ -342,6 +355,14 @@ interface GameState {
   serviceComebacks: Comeback[]
   /** The shop rate and whether trade-ins are reconditioned on their own. Saved. */
   service: ServiceSettings
+  /** The client book: buyers and greeted walk-outs (see `sim/clients.ts`). Saved. */
+  clients: Client[]
+  /** The loyalty discount, referral fee and the receptionist's calls. Saved. */
+  clientPerks: ClientPerks
+  /** A client appreciation day booked, or null. Saved. */
+  appreciation: Appreciation | null
+  /** The month's new-car buyers' visit scores, for the manufacturer's CSI. Saved. */
+  monthCsi: MonthCsi
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
   campaigns: Campaign[]
   /** Improvements bought, each with its day. One goes up the night after it's bought. */
@@ -564,6 +585,8 @@ let driveRng: Rng = createRng(DRIVE_SEED + 1)
 let quoteRng: Rng = createRng(QUOTE_SEED + 1)
 /** Service clients and their quotes. Apart, so a day without a garage plays as before. */
 let serviceRng: Rng = createRng(SERVICE_SEED + 1)
+/** Everything about the client book. Apart, so a game with an empty book plays as before. */
+let clientRng: Rng = createRng(CLIENT_SEED + 1)
 
 /**
  * Time stands still and the player can't move behind the title screen, the
@@ -680,6 +703,7 @@ function dayOne(difficulty: Difficulty) {
   driveRng = createRng(DRIVE_SEED + 1)
   quoteRng = createRng(QUOTE_SEED + 1)
   serviceRng = createRng(SERVICE_SEED + 1)
+  clientRng = createRng(CLIENT_SEED + 1)
   const tuning = TUNING[difficulty]
   return {
     difficulty,
@@ -698,6 +722,10 @@ function dayOne(difficulty: Difficulty) {
     serviceAway: [] as Customer[],
     serviceComebacks: [] as Comeback[],
     service: defaultService(),
+    clients: [] as Client[],
+    clientPerks: defaultPerks(),
+    appreciation: null as Appreciation | null,
+    monthCsi: emptyMonthCsi(),
     quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
       customerRng,
@@ -709,6 +737,11 @@ function dayOne(difficulty: Difficulty) {
     ),
     candidates: generateCandidates(staffRng, 1),
   }
+}
+
+/** `stats` with the book's tally, the same object when the tally hasn't changed. */
+function withClientStats(stats: DayStats, clients: ClientStats): DayStats {
+  return stats.clients === clients ? stats : { ...stats, clients }
 }
 
 export const useGame = create<GameState>((set, get) => {
@@ -733,10 +766,17 @@ export const useGame = create<GameState>((set, get) => {
       const c = customers.find((x) => x.id === id)
       return !c || customerActions(c, get().serviceJobs).length === 0
     }
+    const book = recordClients(s.clients, s.dayStats.clients, s.customers, customers, {
+      inventory: s.inventory,
+      day: s.clock.day,
+      shift: tuning().satisfactionShift,
+      rng: clientRng,
+    })
     set({
       customers,
       inventory: browseDirt(s.inventory, s.customers, customers),
-      dayStats: recordDepartures(s.dayStats, s.customers, customers),
+      clients: book.book,
+      dayStats: withClientStats(recordDepartures(s.dayStats, s.customers, customers), book.stats),
       menu: gone(s.menu?.targetId ?? null) ? null : s.menu,
       hoveredId: gone(s.hoveredId) ? null : s.hoveredId,
     })
@@ -1428,6 +1468,7 @@ export const useGame = create<GameState>((set, get) => {
     return {
       patienceFactor: level.patience,
       expectShift: level.expect,
+      taken: bookNames(get().clients),
       expectCut: upEffects().expectCut,
       ...(event && { extraDiscount: event.extraDiscount }),
       ...(Object.keys(skew).length > 0 && { skew }),
@@ -1575,6 +1616,7 @@ export const useGame = create<GameState>((set, get) => {
     driveRng = createRng(DRIVE_SEED + day)
     quoteRng = createRng(QUOTE_SEED + day)
     serviceRng = createRng(SERVICE_SEED + day)
+    clientRng = createRng(CLIENT_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
     const campaigns = unfinished(s.campaigns, day)
@@ -1670,6 +1712,7 @@ export const useGame = create<GameState>((set, get) => {
       serviceAway: [],
       serviceComebacks: [],
       serviceVisits: planServiceVisits(serviceRng, demand, recalls),
+      clients: pruneBook(s.clients, day),
       rival,
       ...(bust && {
         reputation: applyChange(s.reputation, BUST_REPUTATION),
@@ -2417,6 +2460,10 @@ export const useGame = create<GameState>((set, get) => {
         rival: save.rival,
         tipsSeen: save.tipsSeen,
         service: save.service,
+        clients: save.clients,
+        clientPerks: save.clientPerks,
+        appreciation: save.appreciation,
+        monthCsi: save.monthCsi,
       })
       beginDay(save.day + 1)
     },

@@ -1,6 +1,7 @@
 import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
+import type { Client } from './clients'
 import type { Vehicle } from './driving'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { sourceWeights, type Source } from './marketing'
@@ -145,6 +146,8 @@ export interface Customer {
    * shoppers and sellers. Their car isn't a `vehicle`: it parks in a service space.
    */
   service: ServiceVisit | null
+  /** Their entry in the client book when they've been before (see `sim/clients.ts`), else null. */
+  clientId: string | null
 }
 
 const FIRST_NAMES = [
@@ -164,12 +167,44 @@ const FIRST_NAMES = [
   'Dana',
   'Kim',
   'Pat',
+  'Reese',
+  'Rowan',
+  'Charlie',
+  'Emery',
+  'Finley',
+  'Hayden',
+  'Kai',
+  'Logan',
+  'Marley',
+  'Parker',
+  'Peyton',
+  'Remy',
+  'Sage',
+  'Shawn',
+  'Toni',
+  'Blair',
 ]
 const LAST_INITIALS = 'ABCDEFGHJKLMNPRSTW'
 
-/** A random first name and last initial, e.g. "Alex B.". */
-export function randomName(rng: Rng): string {
-  return `${rng.pick(FIRST_NAMES)} ${rng.pick([...LAST_INITIALS])}.`
+const nameAt = (i: number) =>
+  `${FIRST_NAMES[Math.floor(i / LAST_INITIALS.length)]} ${LAST_INITIALS[i % LAST_INITIALS.length]}.`
+
+/**
+ * A random first name and last initial, e.g. "Alex B.". One in `taken` (the
+ * client book's) steps on to the next free name instead of re-rolling, so the
+ * rng is drawn the same either way.
+ */
+export function randomName(rng: Rng, taken?: ReadonlySet<string>): string {
+  const first = Math.floor(rng.next() * FIRST_NAMES.length)
+  const last = Math.floor(rng.next() * LAST_INITIALS.length)
+  const rolled = first * LAST_INITIALS.length + last
+  const total = FIRST_NAMES.length * LAST_INITIALS.length
+  if (!taken) return nameAt(rolled)
+  for (let k = 0; k < total; k++) {
+    const name = nameAt((rolled + k) % total)
+    if (!taken.has(name)) return name
+  }
+  return nameAt(rolled)
 }
 
 export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
@@ -178,6 +213,8 @@ export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
 export const PATIENCE_MINUTES = { min: 45, max: 120 }
 /** Nobody waits less than this many game minutes, however impatient. */
 export const MIN_PATIENCE = 15
+/** × the budget of a client back to trade up the car we sold them. */
+export const TRADE_UP_BUDGET = 1.15
 
 /** How much a customer likes a car: preferred body type first, then whether it's affordable. */
 function carScore(c: Customer, car: InventoryCar): number {
@@ -236,6 +273,15 @@ export interface CustomerOptions {
   patienceFactor?: number
   /** Added to the discount they hope for, from the difficulty level (`Tuning.expect`). */
   expectShift?: number
+  /** Names in the client book, which a stranger's name steps past (see `randomName`). */
+  taken?: ReadonlySet<string>
+  /**
+   * A client back from the book: their name, look, archetype and taste come
+   * from the record, and they come as `'client'` unless `source` says otherwise.
+   */
+  client?: Client
+  /** The client is back to trade up: their budget is `TRADE_UP_BUDGET` higher. */
+  tradeUp?: boolean
 }
 
 /**
@@ -248,12 +294,14 @@ export function generateCustomer(
   rng: Rng,
   opts: CustomerOptions = {},
 ): Customer {
+  const client = opts.client
+  if (client) return returningCustomer(id, client, available, rng, opts)
   const source = opts.source ?? 'regular'
   const weights = sourceWeights(source)
   const archetype =
     opts.archetype ?? pickArchetype(rng, opts.skew ? skewWeights(opts.skew, weights) : weights)
   const traits = ARCHETYPES[archetype]
-  const name = randomName(rng)
+  const name = randomName(rng, opts.taken)
   const variant = opts.variant ?? rng.pick(CUSTOMER_VARIANTS)
   const companion =
     archetype === 'couple' ? rng.pick(CUSTOMER_VARIANTS.filter((v) => v !== variant)) : null
@@ -277,7 +325,65 @@ export function generateCustomer(
   const top = Math.max(...preferredModels.map((m) => BASE_MSRP[m]))
   const factor = traits.budget.min + rng.next() * (traits.budget.max - traits.budget.min)
   const budget = Math.round((top * factor) / 500) * 500
+  return shopper(
+    { id, name, variant, archetype, source, companion, budget, preferredModels, clientId: null },
+    available,
+    rng,
+    opts,
+  )
+}
 
+/** A client back from the book, as they were last time. */
+function returningCustomer(
+  id: string,
+  client: Client,
+  available: readonly InventoryCar[],
+  rng: Rng,
+  opts: CustomerOptions,
+): Customer {
+  const budget = opts.tradeUp
+    ? Math.round((client.budget * TRADE_UP_BUDGET) / 500) * 500
+    : client.budget
+  return shopper(
+    {
+      id,
+      name: client.name,
+      variant: client.variant,
+      archetype: client.archetype,
+      source: opts.source ?? 'client',
+      companion: client.companion,
+      budget,
+      preferredModels: [...client.preferredModels],
+      clientId: client.id,
+    },
+    available,
+    rng,
+    opts,
+  )
+}
+
+/** Who a customer is, before their patience, browse and hopes are rolled. */
+type Identity = Pick<
+  Customer,
+  | 'id'
+  | 'name'
+  | 'variant'
+  | 'archetype'
+  | 'source'
+  | 'companion'
+  | 'budget'
+  | 'preferredModels'
+  | 'clientId'
+>
+
+/** `who`, arriving now: their patience, the cars they'll look at and the discount they hope for. */
+function shopper(
+  who: Identity,
+  available: readonly InventoryCar[],
+  rng: Rng,
+  opts: CustomerOptions,
+): Customer {
+  const traits = ARCHETYPES[who.archetype]
   const rolled = rng.int(PATIENCE_MINUTES.min / 5, PATIENCE_MINUTES.max / 5) * 5
   const patience = Math.max(
     MIN_PATIENCE,
@@ -285,14 +391,7 @@ export function generateCustomer(
   )
 
   const customer: Customer = {
-    id,
-    name,
-    variant,
-    archetype,
-    source,
-    companion,
-    budget,
-    preferredModels,
+    ...who,
     patience,
     patienceLeft: patience,
     browseCarIds: [],

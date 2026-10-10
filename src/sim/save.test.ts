@@ -1,4 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import {
+  defaultPerks,
+  emptyMonthCsi,
+  type Appreciation,
+  type Client,
+  type ClientPerks,
+  type MonthCsi,
+} from './clients'
 import { CLOSE_MINUTE } from './clock'
 import type { OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
@@ -63,7 +71,47 @@ const source = () => ({
   rival: emptyRival() as Rival,
   // As a v21 save upgrades, so the older upgrades compare equal.
   service: defaultService() as ServiceSettings,
+  // As a v22 save upgrades, so the older upgrades compare equal.
+  clients: [] as Client[],
+  clientPerks: defaultPerks() as ClientPerks,
+  appreciation: null as Appreciation | null,
+  monthCsi: emptyMonthCsi() as MonthCsi,
 })
+
+const client: Client = {
+  id: 'client-3-0',
+  name: 'Alex B.',
+  variant: 'male-a',
+  companion: null,
+  archetype: 'regular',
+  status: 'client',
+  since: 3,
+  lastVisit: 3,
+  visits: 1,
+  bought: 1,
+  car: {
+    model: 'sedan',
+    used: false,
+    price: 28_500,
+    boughtDay: 3,
+    year: 2026,
+    miles: 0,
+    condition: 1,
+  },
+  budget: 32_000,
+  preferredModels: ['sedan'],
+  lastDeal: null,
+  satisfaction: 78,
+  reasons: [{ kind: 'wait', points: -8, detail: 25 }],
+  dueDay: 41,
+  expires: null,
+  lastCall: null,
+  callsThisCycle: 0,
+  appointment: null,
+  referredBy: null,
+  referrals: 0,
+  serviceDue: null,
+}
 
 const order: Order = {
   id: 'order-3-1',
@@ -375,6 +423,65 @@ describe('save data', () => {
     const v20 = { ...save, version: 20, rival: oldRival, career: oldCareer }
     expect(parseSave(JSON.parse(JSON.stringify(v20)))).toEqual(save)
     expect(parseSave({ ...save, career: oldCareer })).toBeNull()
+  })
+
+  it('upgrades a version 22 save with an empty client book', () => {
+    const save = createSave({ ...source(), clients: [client] }, 123)
+    const v22 = {
+      ...save,
+      version: 22,
+      clients: undefined,
+      clientPerks: undefined,
+      appreciation: undefined,
+      monthCsi: undefined,
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v22)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.clients).toEqual([])
+    expect(upgraded?.clientPerks).toEqual(defaultPerks())
+    expect(upgraded?.appreciation).toBeNull()
+    expect(upgraded?.monthCsi).toEqual(emptyMonthCsi())
+  })
+
+  it('keeps the client book and its levers, and rejects malformed ones', () => {
+    const perks: ClientPerks = { loyaltyDiscount: 0.02, referralFee: 250, receptionCalls: false }
+    const prospect: Client = {
+      ...client,
+      id: 'client-4-0',
+      name: 'Sam K.',
+      status: 'prospect',
+      car: null,
+      bought: 0,
+      dueDay: null,
+      expires: 18,
+      lastDeal: { model: 'suv', ask: 31_500, counter: 29_800 },
+      appointment: { day: 5, minute: 630, reason: 'beBack' },
+    }
+    const save = createSave(
+      {
+        ...source(),
+        clients: [client, prospect],
+        clientPerks: perks,
+        appreciation: { day: 9, month: 1 },
+        monthCsi: { total: 312, count: 4 },
+      },
+      123,
+    )
+    const back = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(back?.clients).toEqual([client, prospect])
+    expect(back?.clientPerks).toEqual(perks)
+    expect(back?.appreciation).toEqual({ day: 9, month: 1 })
+    expect(back?.monthCsi).toEqual({ total: 312, count: 4 })
+    const bad = (c: Partial<Record<keyof Client, unknown>>) =>
+      parseSave({ ...save, clients: [{ ...client, ...c }] })
+    expect(bad({ status: 'friend' })).toBeNull()
+    expect(bad({ satisfaction: 120 })).toBeNull()
+    expect(bad({ archetype: 'alien' })).toBeNull()
+    expect(bad({ car: { ...client.car, model: 'hovercar' } })).toBeNull()
+    expect(bad({ dueDay: undefined })).toBeNull()
+    expect(parseSave({ ...save, clientPerks: { ...perks, loyaltyDiscount: 0.5 } })).toBeNull()
+    expect(parseSave({ ...save, appreciation: { day: 9 } })).toBeNull()
+    expect(parseSave({ ...save, monthCsi: undefined })).toBeNull()
   })
 
   it('upgrades a version 21 save: the shop at its defaults, its sales spread over the models', () => {

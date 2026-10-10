@@ -18,6 +18,7 @@ describe('difficulty levels', () => {
       expect: shift,
       acceptBonus,
       franchiseSlack,
+      satisfactionShift,
       ...rest
     } = TUNING.medium
     expect(startingCash).toBe(25_000)
@@ -25,6 +26,7 @@ describe('difficulty levels', () => {
     expect(firstNazmaDay).toBe(FIRST_NAZMA_DAY)
     expect(shift).toBe(0)
     expect(acceptBonus).toBe(0)
+    expect(satisfactionShift).toBe(0)
     for (const [lever, value] of Object.entries(rest)) {
       expect([lever, value]).toEqual([lever, typeof value === 'boolean' ? false : 1])
     }
@@ -47,6 +49,13 @@ describe('difficulty levels', () => {
     expect(TUNING.hard.invoice).toBeGreaterThan(1)
     expect(TUNING.easy.interest).toBeLessThan(1)
     expect(TUNING.hard.interest).toBeGreaterThan(1)
+  })
+
+  it('makes clients more forgiving and loyal on Easy, less on Hard', () => {
+    expect(TUNING.easy.clientReturn).toBeGreaterThan(1)
+    expect(TUNING.hard.clientReturn).toBeLessThan(1)
+    expect(TUNING.easy.satisfactionShift).toBeGreaterThan(0)
+    expect(TUNING.hard.satisfactionShift).toBeLessThan(0)
   })
 
   it('lets Easy keep its franchise tier through a near miss', () => {

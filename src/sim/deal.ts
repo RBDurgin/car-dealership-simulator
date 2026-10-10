@@ -6,6 +6,7 @@ import {
   type CustomerPhase,
 } from './customers'
 import { washBlocker } from './cleanliness'
+import { emptyClientStats, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
 import {
   approachTilesFor,
@@ -310,6 +311,8 @@ export interface DayStats {
   rival: RivalStats | null
   /** The service department's day (see `sim/service.ts`). */
   service: ServiceStats
+  /** What the client book did today (see `sim/clients.ts`). */
+  clients: ClientStats
 }
 
 export function emptyStats(): DayStats {
@@ -339,6 +342,7 @@ export function emptyStats(): DayStats {
     rankUp: null,
     rival: null,
     service: emptyServiceStats(),
+    clients: emptyClientStats(),
   }
 }
 

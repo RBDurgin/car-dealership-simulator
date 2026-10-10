@@ -1,4 +1,16 @@
+import { ARCHETYPES } from './archetypes'
 import { calendarOf } from './calendar'
+import { CUSTOMER_VARIANTS } from './characters'
+import {
+  defaultPerks,
+  emptyMonthCsi,
+  LOYALTY_DISCOUNTS,
+  REFERRAL_FEES,
+  type Appreciation,
+  type Client,
+  type ClientPerks,
+  type MonthCsi,
+} from './clients'
 import type { GameTime } from './clock'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
@@ -29,7 +41,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 22
+export const SAVE_VERSION = 23
 
 export interface SaveData {
   version: number
@@ -72,6 +84,14 @@ export interface SaveData {
   rival: Rival
   /** The service department's settings (see `sim/service.ts`). */
   service: ServiceSettings
+  /** The client book (see `sim/clients.ts`). */
+  clients: Client[]
+  /** The loyalty levers set in the Clients tab. */
+  clientPerks: ClientPerks
+  /** A client appreciation day booked, or null. */
+  appreciation: Appreciation | null
+  /** The month's new-car buyers' visit scores so far, for the CSI. */
+  monthCsi: MonthCsi
 }
 
 export interface SaveSource {
@@ -94,6 +114,10 @@ export interface SaveSource {
   won: boolean
   rival: Rival
   service: ServiceSettings
+  clients: Client[]
+  clientPerks: ClientPerks
+  appreciation: Appreciation | null
+  monthCsi: MonthCsi
 }
 
 /**
@@ -127,6 +151,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     news: LATEST_NEWS,
     rival: s.rival,
     service: s.service,
+    clients: s.clients,
+    clientPerks: s.clientPerks,
+    appreciation: s.appreciation,
+    monthCsi: s.monthCsi,
   }
 }
 
@@ -256,6 +284,14 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         }
       : raw.career,
   }),
+  // v23: the client book. No sale history was saved, so it starts empty.
+  22: (raw) => ({
+    ...raw,
+    clients: [],
+    clientPerks: defaultPerks(),
+    appreciation: null,
+    monthCsi: emptyMonthCsi(),
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -292,7 +328,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions, won, rival, service } = raw
+  const { expansions, won, rival, service, clients, clientPerks, appreciation, monthCsi } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -313,6 +349,10 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isRival(rival)) return null
   if (!isObject(service) || !isRateLevel(service.rate) || typeof service.autoRecon !== 'boolean')
     return null
+  if (!Array.isArray(clients) || !clients.every(isClient)) return null
+  if (!isPerks(clientPerks)) return null
+  if (appreciation !== null && !isAppreciation(appreciation)) return null
+  if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
@@ -333,6 +373,80 @@ function isCar(v: unknown): boolean {
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold' || v.status === 'recon') &&
     (v.used === null || isUsedInfo(v.used))
+  )
+}
+
+const CLIENT_STATUSES: readonly unknown[] = ['prospect', 'client', 'lapsed', 'defected']
+const isModel = (v: unknown) => (CAR_MODELS as readonly unknown[]).includes(v)
+const isVariant = (v: unknown) => (CUSTOMER_VARIANTS as readonly unknown[]).includes(v)
+const isDayOrNull = (v: unknown) => v === null || isNumber(v)
+
+function isClient(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    isVariant(v.variant) &&
+    (v.companion === null || isVariant(v.companion)) &&
+    typeof v.archetype === 'string' &&
+    v.archetype in ARCHETYPES &&
+    CLIENT_STATUSES.includes(v.status) &&
+    isNumber(v.since) &&
+    isNumber(v.lastVisit) &&
+    isNumber(v.visits) &&
+    isNumber(v.bought) &&
+    (v.car === null || isClientCar(v.car)) &&
+    isNumber(v.budget) &&
+    Array.isArray(v.preferredModels) &&
+    v.preferredModels.every(isModel) &&
+    (v.lastDeal === null ||
+      (isObject(v.lastDeal) &&
+        isModel(v.lastDeal.model) &&
+        isDayOrNull(v.lastDeal.ask) &&
+        isDayOrNull(v.lastDeal.counter))) &&
+    isNumber(v.satisfaction) &&
+    v.satisfaction >= 0 &&
+    v.satisfaction <= 100 &&
+    Array.isArray(v.reasons) &&
+    v.reasons.every((r) => isObject(r) && typeof r.kind === 'string' && isNumber(r.points)) &&
+    isDayOrNull(v.dueDay) &&
+    isDayOrNull(v.expires) &&
+    isDayOrNull(v.lastCall) &&
+    isNumber(v.callsThisCycle) &&
+    (v.appointment === null ||
+      (isObject(v.appointment) &&
+        isNumber(v.appointment.day) &&
+        isNumber(v.appointment.minute) &&
+        typeof v.appointment.reason === 'string')) &&
+    (v.referredBy === null || typeof v.referredBy === 'string') &&
+    isNumber(v.referrals) &&
+    isDayOrNull(v.serviceDue)
+  )
+}
+
+function isClientCar(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isModel(v.model) &&
+    typeof v.used === 'boolean' &&
+    isNumber(v.price) &&
+    isNumber(v.boughtDay) &&
+    isNumber(v.year) &&
+    isNumber(v.miles) &&
+    isNumber(v.condition)
+  )
+}
+
+function isAppreciation(v: unknown): boolean {
+  return isObject(v) && isNumber(v.day) && isNumber(v.month)
+}
+
+function isPerks(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    (LOYALTY_DISCOUNTS as readonly unknown[]).includes(v.loyaltyDiscount) &&
+    (REFERRAL_FEES as readonly unknown[]).includes(v.referralFee) &&
+    typeof v.receptionCalls === 'boolean'
   )
 }
 

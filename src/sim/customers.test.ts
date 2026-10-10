@@ -56,6 +56,7 @@ const base: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  clientId: null,
   service: null,
 }
 
@@ -729,6 +730,7 @@ describe('salespeople', () => {
       selling: null,
       trade: null,
       rivalQuote: null,
+      clientId: null,
       service: null,
     })
   })
