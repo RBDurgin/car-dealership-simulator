@@ -584,10 +584,13 @@ export const SERVICE_SPOTS: ParkingSpace[] = spaceRow(
 /** The service counter, where clients check in. */
 export const SERVICE_COUNTER_ID = 'service-counter'
 
+/** The clients' door into the garage, by the counter. */
+export const GARAGE_CLIENT_DOOR: Rect = { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 }
+
 /** The roll-up doors, the clients' door by the counter and the service drive's gate. */
 const GARAGE_OPENINGS: Rect[] = [
   ...SERVICE_BAYS.map((b) => b.door),
-  { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 },
+  GARAGE_CLIENT_DOOR,
   SERVICE_GATE,
 ]
 
