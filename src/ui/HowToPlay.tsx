@@ -56,7 +56,9 @@ import { dayOrdinal, RECALL_FIRST, RECALL_LAST, RECALL_RESPONSE } from '../sim/r
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
-import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
+import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from '../sim/reputation'
+import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
+import { APPRECIATION_COST, BOOK_AHEAD, COST_PER_GUEST } from '../sim/appreciation'
 import {
   FINANCE_FEE,
   MIN_COMMISSION,
@@ -377,6 +379,12 @@ function SellingTab({ touch, click }: TabProps) {
           a loyalty discount on (see the Business tab), a returning client is priced from the
           loyalty price instead of the sticker: their panel shows it, and asks top out there.
         </p>
+        <p>
+          Happy clients (satisfaction {REFER_MIN} or more) send friends in for {REFER_WINDOW} days
+          after they buy, up to {MAX_FRIENDS} each: more of them with a good reputation, a referral
+          fee (see the Business tab) or after a thank-you call. A friend&apos;s panel says who sent
+          them. If they buy, the client is happier with you and the friend joins the book too.
+        </p>
       </section>
       <section>
         <h3>Reputation</h3>
@@ -389,9 +397,9 @@ function SellingTab({ touch, click }: TabProps) {
           {MAX_DAILY_CHANGE} either way.
         </p>
         <p>
-          A good name brings more visitors, sends friends of past buyers your way (up to{' '}
-          {MAX_REFERRALS} referrals a day at the top, mostly ready to buy) and makes every ad bring
-          more. A poor one means fewer visitors and weaker ads.
+          A good name brings more visitors, has happy clients send more friends your way (half as
+          many at 0, half as many again at 100) and makes every ad bring more. A poor one means
+          fewer visitors and weaker ads.
         </p>
       </section>
     </>
@@ -414,6 +422,28 @@ function BusinessTab({ touch, click }: TabProps) {
           sticker. Every sale to them earns that much less, but a client due to trade up comes back
           more often (a fifth more at 2%, two fifths at 4%) and leaves a little happier. A 2%
           discount about pays for itself; 4% needs a big book.
+        </p>
+      </section>
+      <section>
+        <h3>Referral fee</h3>
+        <p>
+          The Clients tab also sets a referral fee: none, $100 or $250, paid to a client when a
+          friend they sent buys. It comes off the day&apos;s net, and clients send{' '}
+          {Math.round((FEE_REFER[100] - 1) * 100)}% more friends at $100 and{' '}
+          {Math.round((FEE_REFER[250] - 1) * 100)}% more at $250.
+        </p>
+      </section>
+      <section>
+        <h3>Client appreciation day</h3>
+        <p>
+          Book a cookout for your clients in the Calendar tab, {BOOK_AHEAD.min} to {BOOK_AHEAD.max}{' '}
+          days ahead and once a month. It costs {formatMoney(APPRECIATION_COST)} plus{' '}
+          {formatMoney(COST_PER_GUEST)} for each client invited, paid when you book. Every client
+          who isn&apos;t unhappy is invited; the happier they are the likelier they come, and rain
+          keeps some away. Guests turn up over lunch, each a little happier for being asked, and
+          those due to trade up within a week come ready to. Some bring a friend, and a few more
+          passers-by wander in. A guest nobody gets to just eats and goes home: it doesn&apos;t
+          count as a walk-out.
         </p>
       </section>
       <section>

@@ -12,6 +12,7 @@ import {
   LOYALTY_RETURN,
   PROSPECT_DAYS,
   reasonText,
+  REFERRAL_FEES,
   satisfactionFace,
   UNHAPPY,
   type Client,
@@ -20,7 +21,9 @@ import {
 import { callList, type CallKind } from '../sim/calls'
 import { formatTime } from '../sim/clock'
 import { carName } from '../sim/interactables'
+import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
 import { useGame } from '../state/store'
+import { formatMoney } from './format'
 
 /** Rows shown before **More**: a full book is 200. */
 const PAGE = 50
@@ -86,6 +89,11 @@ function ClientRow({
           </span>
         </div>
         <div className="staff-meta">{clientCarText(c, day, carName)}</div>
+        {c.referrals > 0 && (
+          <div className="staff-meta">
+            Sent {c.referrals} friend{c.referrals === 1 ? '' : 's'} who bought
+          </div>
+        )}
         {appointment && <div className="staff-meta client-appointment">{appointment}</div>}
         {(reasons || called) && (
           <div className="staff-meta muted">
@@ -129,6 +137,7 @@ export function ClientsTab() {
   const tried = useGame((s) => s.callsTried)
   const receptionCalls = useGame((s) => s.clientPerks.receptionCalls)
   const loyalty = useGame((s) => s.clientPerks.loyaltyDiscount)
+  const fee = useGame((s) => s.clientPerks.referralFee)
   const receptionist = useGame((s) => s.roster.some((e) => e.role === 'receptionist' && !e.fired))
   const [filter, setFilter] = useState<ClientFilter>('all')
   const [shown, setShown] = useState(PAGE)
@@ -192,6 +201,28 @@ export function ClientsTab() {
         {loyalty === 0
           ? 'Returning clients are priced at the sticker.'
           : `Returning clients are priced ${Math.round(loyalty * 100)}% under the sticker: every sale to them earns less, but they come back to trade up ${Math.round((LOYALTY_RETURN[loyalty] - 1) * 100)}% more often and leave happier.`}
+      </p>
+      <h3>Referral fee</h3>
+      <div className="service-rates" role="radiogroup" aria-label="Referral fee">
+        {REFERRAL_FEES.map((f) => (
+          <button
+            key={f}
+            role="radio"
+            aria-checked={fee === f}
+            className={fee === f ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            onClick={() => useGame.getState().setReferralFee(f)}
+          >
+            {f === 0 ? 'None' : formatMoney(f)}
+          </button>
+        ))}
+      </div>
+      <p className="muted">
+        Happy clients (satisfaction {REFER_MIN} or more) send friends in for {REFER_WINDOW} days
+        after they buy, up to {MAX_FRIENDS} each, more often the better your reputation and after a
+        thank-you call.{' '}
+        {fee === 0
+          ? 'Pay a fee when a friend buys and they send more.'
+          : `You pay them ${formatMoney(fee)} when a friend buys, and they send ${Math.round((FEE_REFER[fee] - 1) * 100)}% more.`}
       </p>
       <h3>Book</h3>
       <div className="service-rates" role="radiogroup" aria-label="Show">

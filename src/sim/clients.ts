@@ -5,6 +5,7 @@ import type { Customer } from './customers'
 import type { InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { hopePrice } from './negotiation'
+import { creditReferral } from './referrals'
 import type { Rng } from './rng'
 import { insultingAllowance } from './tradeIns'
 import { MILES_PER_YEAR, modelYear, type UsedInfo } from './usedCars'
@@ -108,10 +109,14 @@ export interface Client {
   /** Calls they picked up since their last visit. */
   callsThisCycle: number
   appointment: Appointment | null
-  /** The client who sent them, or null (16e). */
+  /** The client who sent them, or null (see `sim/referrals.ts`). */
   referredBy: string | null
-  /** Friends they've sent who bought (16e). */
+  /** Friends they've sent who bought. */
   referrals: number
+  /** Friends sent in since their last purchase (at most `MAX_FRIENDS`). */
+  friendsSent: number
+  /** Thanked by phone since their last purchase: they refer more. */
+  thanked: boolean
   /** The day their car is due for service, or null (16f). */
   serviceDue: number | null
 }
@@ -352,8 +357,10 @@ export function recordVisit(
     lastCall: null,
     callsThisCycle: 0,
     appointment: null,
-    referredBy: null,
+    referredBy: c.referredBy,
     referrals: 0,
+    friendsSent: 0,
+    thanked: false,
     serviceDue: null,
   }
   const seen: Client = {
@@ -377,6 +384,9 @@ export function recordVisit(
       lastDeal: null,
       expires: null,
       dueDay: day + rng.int(TRADE_UP_DAYS.min, TRADE_UP_DAYS.max),
+      // A new purchase: they'll send friends (and be thanked) afresh.
+      friendsSent: 0,
+      thanked: false,
     }
   } else if (seen.status === 'client') {
     next = seen
@@ -537,10 +547,11 @@ export interface ClientStats {
   returned: number
   calls: number
   booked: number
+  /** Friends sent by clients who bought. */
   referrals: number
-  /** Paid to clients whose friends bought (16e). */
+  /** Paid to clients whose friends bought. */
   referralFees: number
-  /** Spent on a client appreciation day (16e). */
+  /** Spent booking a client appreciation day. */
   appreciation: number
   /** Clients lost to Nazma's lot (16f). */
   defected: number
@@ -596,7 +607,11 @@ export function recordClients(
     // Kept waiting after booking a time minds more.
     const waitWeight = before?.appointment?.day === ctx.day ? APPOINTMENT_WAIT_WEIGHT : 1
     const score = visitScore(c, outcome, { car, day: ctx.day, shift: ctx.shift, waitWeight })
-    const bookAfter = recordVisit(out.book, { customer: c, outcome, car, score }, ctx.day, ctx.rng)
+    let bookAfter = recordVisit(out.book, { customer: c, outcome, car, score }, ctx.day, ctx.rng)
+    // A friend who buys pleases whoever sent them.
+    const referred =
+      outcome === 'bought' && !!c.referredBy && bookAfter.some((x) => x.id === c.referredBy)
+    if (referred) bookAfter = creditReferral(bookAfter, c.referredBy!)
     const entry = before
       ? bookAfter.find((x) => x.id === before.id)!
       : bookAfter[bookAfter.length - 1]
@@ -608,6 +623,7 @@ export function recordClients(
         added: s.added + (entry.status === 'client' && before?.status !== 'client' ? 1 : 0),
         prospects: s.prospects + (!before && entry.status === 'prospect' ? 1 : 0),
         returned: s.returned + (before && outcome === 'bought' ? 1 : 0),
+        referrals: s.referrals + (referred ? 1 : 0),
         scores: [...s.scores, { clientId: entry.id, outcome, ...score }],
       },
     }
@@ -615,7 +631,7 @@ export function recordClients(
   return out
 }
 
-/** What the player spends on loyalty, set in the Clients tab (read from 16c on). */
+/** What the player spends on loyalty, set in the Clients tab. */
 export interface ClientPerks {
   /** Off the sticker for a returning client: none, 2% or 4%. */
   loyaltyDiscount: 0 | 0.02 | 0.04
@@ -632,7 +648,7 @@ export function defaultPerks(): ClientPerks {
   return { loyaltyDiscount: 0, referralFee: 0, receptionCalls: true }
 }
 
-/** A client appreciation day booked (16e): its day and the month it was booked in. */
+/** A client appreciation day booked (see `sim/appreciation.ts`): its day and its `monthIndex`. */
 export interface Appreciation {
   day: number
   month: number

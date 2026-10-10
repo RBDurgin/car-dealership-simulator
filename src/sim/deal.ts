@@ -390,8 +390,9 @@ export function theftLoss(stats: DayStats): number {
 
 /**
  * Gross profit on sales and service less the day's staff costs, floor plan
- * interest, ad spend, improvements, expansions and stolen stock, plus any
- * bonus from the owner and the month-end holdback.
+ * interest, ad spend, improvements, expansions, referral fees, a client
+ * appreciation day and stolen stock, plus any bonus from the owner and the
+ * month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
   return (
@@ -402,6 +403,8 @@ export function netIncome(stats: DayStats): number {
     stats.marketing -
     stats.improvements -
     stats.expansions -
+    stats.clients.referralFees -
+    stats.clients.appreciation -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

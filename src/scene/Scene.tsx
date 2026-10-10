@@ -18,6 +18,7 @@ import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
 import { Props } from './Props'
 import { RivalLot } from './RivalLot'
+import { Appreciation } from './Appreciation'
 import { TubeMan } from './TubeMan'
 import { Staff } from './Staff'
 import { Walls } from './Walls'
@@ -48,6 +49,7 @@ export function Scene() {
         <RivalLot />
       </Suspense>
       <TubeMan />
+      <Appreciation />
       <DebugGrid />
       <ClickMarker />
       <Player />

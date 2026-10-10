@@ -290,6 +290,17 @@ export const UPDATES: readonly Update[] = [
       'Set a loyalty discount in the Clients tab: returning clients pay less but come back more often.',
     ],
   },
+  {
+    id: 27,
+    phase: '16',
+    title: 'Referrals and client appreciation day',
+    items: [
+      'Happy clients send friends in by name for a few weeks after buying. Their panel says who sent them.',
+      'Referrals now come only from your clients: a good reputation and a thank-you call make them send more.',
+      'Set a referral fee in the Clients tab, paid when a friend buys, to get more of them.',
+      'Book a client appreciation day in the Calendar tab: a cookout on the lot that brings your clients back.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

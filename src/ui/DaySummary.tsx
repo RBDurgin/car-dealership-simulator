@@ -62,6 +62,7 @@ function ClientsBlock({ stats }: { stats: ClientStats }) {
       <dd>
         {count(stats.added, 'new client')}, {count(stats.prospects, 'new prospect')}
         {stats.returned > 0 && `, ${count(stats.returned, 'returning buyer')}`}
+        {stats.referrals > 0 && `, ${count(stats.referrals, 'friend')} of clients bought`}
       </dd>
       {score !== null && (
         <>
@@ -221,6 +222,18 @@ export function DaySummary() {
             <>
               <dt>Expansion</dt>
               <dd className="price">{formatMoney(-stats.expansions)}</dd>
+            </>
+          )}
+          {stats.clients.referralFees > 0 && (
+            <>
+              <dt>Referral fees</dt>
+              <dd className="price">{formatMoney(-stats.clients.referralFees)}</dd>
+            </>
+          )}
+          {stats.clients.appreciation > 0 && (
+            <>
+              <dt>Appreciation day</dt>
+              <dd className="price">{formatMoney(-stats.clients.appreciation)}</dd>
             </>
           )}
           {theftLoss(stats) > 0 && (

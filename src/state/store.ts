@@ -23,7 +23,18 @@ import {
   type CallKind,
   type ClientVisit,
 } from '../sim/calls'
-import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
+import {
+  appreciationBlocker,
+  appreciationCost,
+  appreciationNotice,
+  isAppreciationDay,
+  monthIndex,
+  nearlyDue,
+  planGuests,
+  welcomeGuest,
+} from '../sim/appreciation'
+import { countFriends, planReferrals } from '../sim/referrals'
+import { calendarOf, DAYS_PER_MONTH, longDate, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
 import {
@@ -177,7 +188,6 @@ import { nextTier, START_TIER, TIER_PERKS, tierNotice, type FranchiseTier } from
 import {
   applyChange,
   campaignScale,
-  referralVisitors,
   reputationChange,
   START_REPUTATION,
   visitorScale,
@@ -566,6 +576,10 @@ interface GameState {
   setReceptionCalls: (on: boolean) => void
   /** Sets the loyalty discount returning clients are priced at, from their next visit. */
   setLoyaltyDiscount: (discount: ClientPerks['loyaltyDiscount']) => void
+  /** Sets the fee paid to a client whose friend buys, from now on. */
+  setReferralFee: (fee: ClientPerks['referralFee']) => void
+  /** Books (and pays for) a client appreciation day on `day`. False if it can't be. */
+  bookAppreciation: (day: number) => boolean
   /** Service client `customerId` reached their car, which is ready: they pay and get in. */
   serviceCollect: (customerId: string) => void
   /** Service client `customerId`, dropping their car off, walked off the lot until it's ready. */
@@ -789,7 +803,6 @@ function dayOne(difficulty: Difficulty) {
       {},
       {
         scale: weekdayTraffic(1) * WEATHER_EFFECTS[weatherOn(1)].traffic * tuning.traffic,
-        referrals: 0,
       },
     ),
     candidates: generateCandidates(staffRng, 1),
@@ -1373,19 +1386,26 @@ export const useGame = create<GameState>((set, get) => {
 
   /**
    * Client `client` back on the lot, as they were last time, built on `rng`.
-   * One due to trade up is priced at the loyalty discount and, while a space
+   * One due to trade up (or a `guest` on appreciation day due soon) is priced
+   * at the loyalty discount and, while a space
    * in customer parking is free (`present` and the purchases' spaces are
    * taken), drives in with the car we sold them and brings it to trade. With
    * no space they come on foot, without it.
    */
-  const returningVisitor = (client: Client, present: readonly Customer[], rng: Rng): Customer => {
+  const returningVisitor = (
+    client: Client,
+    present: readonly Customer[],
+    rng: Rng,
+    guest = false,
+  ): Customer => {
     const s = get()
     const day = s.clock.day
-    const tradeUp = isDue(client, day)
+    const tradeUp = guest ? nearlyDue(client, day) : isDue(client, day)
     const c = generateCustomer(`customer-${nextCustomerId++}`, availableCars(s.inventory), rng, {
       ...arrivalOpts(),
       client,
       tradeUp,
+      guest,
       loyaltyCut: s.clientPerks.loyaltyDiscount,
     })
     const spot = freeSpot(
@@ -1403,8 +1423,10 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Clients due in by `minute`, on an appointment or to trade up, turn up on
-   * the book's own rng, before anyone else gets the parking.
+   * Clients due in by `minute` (on an appointment, to trade up or as guests
+   * on appreciation day) and the friends clients sent turn up on the book's
+   * own rng, before anyone else gets the parking. A guest is
+   * `APPRECIATION_BOOST` happier for being asked.
    */
   const clientArrivals = (minute: number, present: readonly Customer[]): Customer[] => {
     const s = get()
@@ -1413,13 +1435,30 @@ export const useGame = create<GameState>((set, get) => {
     if (due.length === 0) return []
     set({ clientVisits: rest })
     const out: Customer[] = []
+    let book = s.clients
     for (const v of due) {
-      const client = s.clients.find((c) => c.id === v.clientId)
-      if (!client || present.some((c) => c.clientId === client.id)) continue
-      out.push(returningVisitor(client, [...present, ...out], clientRng))
+      const client = book.find((c) => c.id === v.clientId)
+      if (!client) continue
+      if (v.reason === 'friend') {
+        out.push(friendOf(client))
+        continue
+      }
+      if (present.some((c) => c.clientId === client.id)) continue
+      const guest = v.reason === 'appreciation'
+      out.push(returningVisitor(client, [...present, ...out], clientRng, guest))
+      if (guest) book = welcomeGuest(book, client.id)
     }
+    if (book !== s.clients) set({ clients: book })
     return out
   }
+
+  /** A friend `referrer` sent in: a stranger, ready to buy, who says who sent them. */
+  const friendOf = (referrer: Client): Customer =>
+    generateCustomer(`customer-${nextCustomerId++}`, availableCars(get().inventory), clientRng, {
+      ...arrivalOpts(),
+      source: 'referral',
+      referredBy: referrer.id,
+    })
 
   const dispatch = (ev: ActionEvent) => {
     const prev = get().activeAction
@@ -1691,17 +1730,24 @@ export const useGame = create<GameState>((set, get) => {
     if (trade) sale.trade = trade
     if (car.used) sale.used = true
     if (s.clients.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
+    // The client who sent them gets the referral fee.
+    const fee = s.clients.some((x) => x.id === c.referredBy) ? s.clientPerks.referralFee : 0
     const stats = get().dayStats
     set({
       dayStats: {
         ...stats,
         sales: [...stats.sales, sale],
         bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
+        clients: { ...stats.clients, referralFees: stats.clients.referralFees + fee },
       },
+      ...(fee > 0 && { cash: get().cash - fee }),
       // Only new cars count toward the manufacturer's quota.
       monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
       // We pay for their car out of the price; it goes on the lot tonight.
-      ...(traded && { cash: get().cash - traded.price, purchases: [...get().purchases, traded] }),
+      ...(traded && {
+        cash: get().cash - fee - traded.price,
+        purchases: [...get().purchases, traded],
+      }),
     })
     commit(reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
     return sale
@@ -1854,7 +1900,30 @@ export const useGame = create<GameState>((set, get) => {
           announced: false,
         }
       : null
-    const clients = pruneBook(s.clients, day)
+    // The book's day, all on its own rng: appointments and due clients, the
+    // friends happy clients send in, and on appreciation day the guests.
+    const pruned = pruneBook(s.clients, day)
+    const coming = planClientVisits(
+      pruned,
+      day,
+      clientRng,
+      level.clientReturn,
+      s.clientPerks.loyaltyDiscount,
+    )
+    const friends = planReferrals(pruned, day, clientRng, {
+      fee: s.clientPerks.referralFee,
+      reputation: s.reputation,
+      scale: level.clientReturn,
+    })
+    const guests = isAppreciationDay(s.appreciation, day)
+      ? planGuests(pruned, clientRng, {
+          scale: level.clientReturn,
+          weather: effects.traffic,
+          skip: new Set(coming.map((v) => v.clientId)),
+        })
+      : []
+    const clientVisits = [...coming, ...friends, ...guests].sort((a, b) => a.minute - b.minute)
+    const clients = countFriends(pruned, clientVisits)
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
@@ -1876,7 +1945,6 @@ export const useGame = create<GameState>((set, get) => {
             level.traffic *
             (1 - share) *
             bustBoost(rival, day),
-          referrals: referralVisitors(s.reputation),
         },
       ),
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
@@ -1886,13 +1954,7 @@ export const useGame = create<GameState>((set, get) => {
       serviceComebacks: [],
       serviceVisits: planServiceVisits(serviceRng, demand, recalls),
       clients,
-      clientVisits: planClientVisits(
-        clients,
-        day,
-        clientRng,
-        level.clientReturn,
-        s.clientPerks.loyaltyDiscount,
-      ),
+      clientVisits,
       callsTried: [],
       playerCall: null,
       receptionCall: null,
@@ -1928,6 +1990,7 @@ export const useGame = create<GameState>((set, get) => {
       theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
       appointmentsNotice(clients, day),
+      appreciationNotice(s.appreciation, day),
       shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
     ].filter((t): t is string => !!t)
     if (notices.length > 0) notify(notices.join(' '))
@@ -2485,6 +2548,35 @@ export const useGame = create<GameState>((set, get) => {
       set({ moveOrder: null, menu: null, inspectedId: null, stockOpen: false })
       dispatch({ type: 'request', id: nextActionId++, targetId: DESK_PHONE_ID, action: 'call' })
       set({ playerCall: entry.client.id })
+      return true
+    },
+    setReferralFee: (fee) => {
+      set({ clientPerks: { ...get().clientPerks, referralFee: fee } })
+    },
+    bookAppreciation: (day) => {
+      const s = get()
+      const today = s.clock.day
+      const blocker = appreciationBlocker(
+        { appreciation: s.appreciation, book: s.clients, cash: s.cash, today },
+        day,
+      )
+      if (blocker) {
+        notify(blocker)
+        return false
+      }
+      const cost = appreciationCost(s.clients)
+      const stats = s.dayStats.clients
+      set({
+        cash: s.cash - cost,
+        appreciation: { day, month: monthIndex(day) },
+        dayStats: withClientStats(s.dayStats, {
+          ...stats,
+          appreciation: stats.appreciation + cost,
+        }),
+      })
+      notify(
+        `Client appreciation day booked for ${longDate(day)}, ${formatMoney(cost)}. Your clients are invited.`,
+      )
       return true
     },
     setLoyaltyDiscount: (discount) => {

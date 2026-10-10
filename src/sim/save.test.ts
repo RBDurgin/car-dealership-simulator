@@ -110,6 +110,8 @@ const client: Client = {
   appointment: null,
   referredBy: null,
   referrals: 0,
+  friendsSent: 0,
+  thanked: false,
   serviceDue: null,
 }
 
@@ -423,6 +425,15 @@ describe('save data', () => {
     const v20 = { ...save, version: 20, rival: oldRival, career: oldCareer }
     expect(parseSave(JSON.parse(JSON.stringify(v20)))).toEqual(save)
     expect(parseSave({ ...save, career: oldCareer })).toBeNull()
+  })
+
+  it('upgrades a version 23 save: nobody has sent a friend or been thanked yet', () => {
+    const save = createSave({ ...source(), clients: [{ ...client, thanked: true }] }, 123)
+    const { friendsSent: _, thanked: __, ...old } = save.clients[0]
+    const v23 = { ...save, version: 23, clients: [old] }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v23)))
+    expect(upgraded?.clients).toEqual([{ ...client, friendsSent: 0, thanked: false }])
+    expect(parseSave({ ...save, clients: [old] })).toBeNull()
   })
 
   it('upgrades a version 22 save with an empty client book', () => {

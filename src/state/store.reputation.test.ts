@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { emptyStats, type DayStats, type Sale } from '../sim/deal'
 import { CHANNELS } from '../sim/marketing'
-import { MAX_REFERRALS, REPUTATION_POINTS, START_REPUTATION } from '../sim/reputation'
+import { REPUTATION_POINTS, START_REPUTATION } from '../sim/reputation'
 import { createSave, parseSave } from '../sim/save'
 import { useGame } from './store'
 
@@ -68,11 +68,11 @@ describe('reputation', () => {
     expect(game().dayStats.reputation).toBe(1)
   })
 
-  it('brings referrals and more visitors with a good name', () => {
+  it('brings more visitors with a good name, and no strangers as referrals', () => {
     endDay()
     useGame.setState({ reputation: 100 })
     game().startNextDay()
-    expect(count('referral')).toBe(MAX_REFERRALS)
+    expect(count('referral')).toBe(0)
     const good = count('regular')
     useGame.setState(initial, true)
     game().newGame()

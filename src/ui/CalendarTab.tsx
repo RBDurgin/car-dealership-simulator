@@ -1,4 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import {
+  appreciationBlocker,
+  appreciationCost,
+  APPRECIATION_COST,
+  bookableDays,
+  BOOK_AHEAD,
+  COST_PER_GUEST,
+  invitedCount,
+  upcoming,
+} from '../sim/appreciation'
 import { appointmentsOn } from '../sim/calls'
 import {
   calendarOf,
@@ -60,6 +70,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   // A recall's days, once it's been announced.
   const bays = useGame((s) => bayCount(expansionsUp(s)))
   const recall = !!recallOn(today, bays) && !!recallOn(day, bays) && sameMonth(day, today)
+  const party = useGame((s) => s.appreciation?.day === day)
   // What happened, or what the forecast says for the next few days.
   const weather = forecastFor(day, today)
   const event = eventOn(day)
@@ -69,7 +80,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const sky = weather
     ? `${day > today ? 'Forecast: ' : ''}${WEATHER_LABELS[weather].toLowerCase()}`
     : 'No forecast yet'
-  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}`
+  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}${party ? ' · client appreciation day' : ''}`
   return (
     <li
       className={`cal-day cal-${when}${event ? ' cal-sale' : ''}`}
@@ -88,6 +99,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
         {day === today ? 'Today · ' : ''}
         {event ? 'Sale · ' : ''}
         {recall ? 'Recall · ' : ''}
+        {party ? 'Cookout · ' : ''}
         {trafficLabel(traffic)}
       </span>
     </li>
@@ -295,6 +307,71 @@ function Appointments({ day }: { day: number }) {
   )
 }
 
+/**
+ * Client appreciation day: what's booked, or a day to book (`BOOK_AHEAD` days
+ * out, once a month) and what it costs with the book as it is.
+ */
+function AppreciationDay({ day }: { day: number }) {
+  const appreciation = useGame((s) => s.appreciation)
+  const clients = useGame((s) => s.clients)
+  const cash = useGame((s) => s.cash)
+  const days = useMemo(() => bookableDays(appreciation, day), [appreciation, day])
+  const [picked, setPicked] = useState<number | null>(null)
+  const when = picked !== null && days.includes(picked) ? picked : (days[0] ?? null)
+  const invited = useMemo(() => invitedCount(clients), [clients])
+  const cost = appreciationCost(clients)
+  const blocker =
+    when === null
+      ? null
+      : appreciationBlocker({ appreciation, book: clients, cash, today: day }, when)
+  return (
+    <>
+      <h3>Client appreciation day</h3>
+      {upcoming(appreciation, day) ? (
+        <p className="muted cal-intro">
+          Booked for <b>{appreciation!.day === day ? 'today' : longDate(appreciation!.day)}</b>.
+          Your clients are invited to a cookout on the lot: some come ready to trade up, and some
+          bring a friend.
+        </p>
+      ) : (
+        <>
+          <p className="muted cal-intro">
+            Invite your {invited} client{invited === 1 ? '' : 's'} in good standing to a cookout on
+            the lot, {BOOK_AHEAD.min}–{BOOK_AHEAD.max} days ahead, once a month. It costs{' '}
+            {formatMoney(APPRECIATION_COST)} plus {formatMoney(COST_PER_GUEST)} a client, paid now.
+            Every guest leaves happier, those due to trade up come ready to, rain keeps some away,
+            and a guest nobody gets to just enjoys lunch.
+          </p>
+          {when !== null && (
+            <div className="cal-book">
+              <select
+                aria-label="Day"
+                value={when}
+                onChange={(e) => setPicked(Number(e.target.value))}
+              >
+                {days.map((d) => (
+                  <option key={d} value={d}>
+                    {longDate(d)}
+                  </option>
+                ))}
+              </select>{' '}
+              <button
+                className="btn btn-small btn-primary"
+                disabled={!!blocker}
+                title={blocker ?? undefined}
+                onClick={() => useGame.getState().bookAppreciation(when)}
+              >
+                Book for {formatMoney(cost)}
+              </button>
+              {blocker && <span className="muted"> {blocker}</span>}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
 /** This week and next, with each day's weather (forecast a few days ahead) and expected traffic. */
 export function CalendarTab() {
   const day = useGame((s) => s.clock.day)
@@ -309,6 +386,7 @@ export function CalendarTab() {
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />
       <Appointments day={day} />
+      <AppreciationDay day={day} />
       <SalesAndCloseouts day={day} />
       <Recalls day={day} />
       <MonthQuota day={day} />

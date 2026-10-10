@@ -8,7 +8,16 @@ import { createRng } from './rng'
 import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
 import { STALE_DAYS } from './usedCars'
-import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
+import {
+  APPRECIATION_TIP_CLIENTS,
+  LOW_CASH,
+  TIP_IDS,
+  tipFor,
+  tipText,
+  TIPS,
+  type TipId,
+  type TipState,
+} from './tips'
 
 const inventory = buildInventory(createRng(42)).map((c) => ({ ...c, cleanliness: 1 }))
 const customer = (id: string, patch: Partial<Customer> = {}): Customer => ({
@@ -101,6 +110,9 @@ const finding: Finding = {
   status: 'found',
 }
 
+const clientsOf = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `client-1-${i}`, status: 'client' }) as Client)
+
 const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
 
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
@@ -177,6 +189,16 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
+  ],
+  referral: [{ customers: [customer('f1', { referredBy: 'client-1-0' })] }, {}],
+  appreciation: [
+    { clients: clientsOf(APPRECIATION_TIP_CLIENTS) },
+    // The tenth was a prospect yesterday.
+    {
+      clients: clientsOf(APPRECIATION_TIP_CLIENTS).map((c, i) =>
+        i === 0 ? { ...c, status: 'prospect' as const } : c,
+      ),
+    },
   ],
 }
 

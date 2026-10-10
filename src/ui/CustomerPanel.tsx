@@ -414,6 +414,10 @@ export function CustomerPanel() {
   const day = useGame((s) => s.clock.day)
   const rivalName = useGame((s) => s.rival.name)
   const client = useGame((s) => (c?.clientId ? s.clients.find((x) => x.id === c.clientId) : null))
+  // A friend sent in by someone from the book.
+  const referrer = useGame((s) =>
+    c?.referredBy ? (s.clients.find((x) => x.id === c.referredBy)?.name ?? null) : null,
+  )
   if (c?.selling) return <SellerPanel c={c} />
   if (c?.service) return <ServicePanel c={c} />
   if (!c || !car) return null
@@ -437,6 +441,8 @@ export function CustomerPanel() {
       {client && (
         <div className="customer-history">{historyLine(client, day, carName, formatMoney)}</div>
       )}
+      {referrer && <div className="customer-history">Sent by {referrer}</div>}
+      {c.guest && <div className="customer-history">Here for client appreciation day</div>}
       <p className="customer-quote">
         “I'm interested in the {carName(car.model)}. I'm hoping to spend around{' '}
         {formatMoney(budgetHint(c))}.”

@@ -186,16 +186,25 @@ export function applyCall(
       lastCall: day,
       callsThisCycle: c.callsThisCycle + 1,
       satisfaction: Math.min(100, Math.max(0, c.satisfaction + result.change)),
+      ...(result.outcome === 'thanked' && { thanked: true }),
       ...(result.outcome === 'booked' &&
         reason && { appointment: { day: day + 1, minute, reason } }),
     }
   })
 }
 
-/** A client due in today, on an appointment or to trade up on their own. */
+/**
+ * Why someone from the book comes in: an appointment, a due client trading
+ * up on their own, a friend a client sent (`clientId` is the referrer; see
+ * `sim/referrals.ts`) or a guest on client appreciation day.
+ */
+export type VisitReason = 'appointment' | 'return' | 'friend' | 'appreciation'
+
+/** Someone due in today from the book, or sent by someone in it. */
 export interface ClientVisit {
   clientId: string
   minute: number
+  reason: VisitReason
 }
 
 /** A due client coming in on their own turns up between these minutes, on the five. */
@@ -221,13 +230,13 @@ export function planClientVisits(
   for (const c of book) {
     if (c.appointment) {
       if (c.appointment.day === day && rng.next() < show) {
-        out.push({ clientId: c.id, minute: c.appointment.minute })
+        out.push({ clientId: c.id, minute: c.appointment.minute, reason: 'appointment' })
       }
       continue
     }
     if (!isDue(c, day) || rng.next() >= returnChance(c, discount, scale)) continue
     const { from, to } = RETURN_WINDOW
-    out.push({ clientId: c.id, minute: rng.int(from / 5, to / 5) * 5 })
+    out.push({ clientId: c.id, minute: rng.int(from / 5, to / 5) * 5, reason: 'return' })
   }
   return out.sort((a, b) => a.minute - b.minute)
 }

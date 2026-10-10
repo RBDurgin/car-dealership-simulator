@@ -90,6 +90,8 @@ const base: Customer = {
   rivalQuote: null,
   clientId: null,
   loyaltyCut: 0,
+  referredBy: null,
+  guest: false,
   service: null,
 }
 

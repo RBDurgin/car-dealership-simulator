@@ -62,6 +62,8 @@ const person = (id: string, extra: Partial<Client> = {}): Client => ({
   appointment: null,
   referredBy: null,
   referrals: 0,
+  friendsSent: 0,
+  thanked: false,
   serviceDue: null,
   ...extra,
 })
@@ -251,8 +253,8 @@ describe('appointments', () => {
   it('plans the day by minute, the same each time, and nothing from an empty book', () => {
     const plan = planClientVisits(book, DAY, createRng(DAY), 2)
     expect(plan).toEqual([
-      { clientId: 'early', minute: 630 },
-      { clientId: 'late', minute: 840 },
+      { clientId: 'early', minute: 630, reason: 'appointment' },
+      { clientId: 'late', minute: 840, reason: 'appointment' },
     ])
     expect(planClientVisits(book, DAY, createRng(DAY))).toEqual(
       planClientVisits(book, DAY, createRng(DAY)),
@@ -357,7 +359,7 @@ describe('trade-ups (16d)', () => {
   it('brings due clients in on their own, the likelier the happier', () => {
     const book = [due('d')]
     const plan = planClientVisits(book, DAY, fixed(0))
-    expect(plan).toEqual([{ clientId: 'd', minute: RETURN_WINDOW.from }])
+    expect(plan).toEqual([{ clientId: 'd', minute: RETURN_WINDOW.from, reason: 'return' }])
     expect(planClientVisits(book, DAY, fixed(0.99))).toEqual([])
     // Not yet due, or waiting on an appointment another day: nothing rolled.
     expect(planClientVisits(book, DAY - 1, fixed(0))).toEqual([])

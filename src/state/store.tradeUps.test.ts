@@ -49,6 +49,8 @@ const due = (id: string, extra: Partial<Client> = {}): Client => ({
   appointment: null,
   referredBy: null,
   referrals: 0,
+  friendsSent: 0,
+  thanked: false,
   serviceDue: null,
   ...extra,
 })
@@ -78,7 +80,11 @@ function dayTwo(book: Client[], ids: string[], discount: 0 | 0.02 | 0.04 = 0) {
   useGame.setState({
     customers: [],
     arrivals: { minutes: [], sources: [], spawned: 0 },
-    clientVisits: ids.map((clientId) => ({ clientId, minute: OPEN_MINUTE + 30 })),
+    clientVisits: ids.map((clientId) => ({
+      clientId,
+      minute: OPEN_MINUTE + 30,
+      reason: 'appointment' as const,
+    })),
   })
   game().tickClock({ day: 2, minute: OPEN_MINUTE + 30 })
 }
@@ -150,6 +156,8 @@ describe('trade-ups', () => {
       rivalQuote: null,
       clientId: 'a',
       loyaltyCut: 0.02,
+      referredBy: null,
+      guest: false,
       service: null,
     }
     useGame.setState({ customers: [kim] })

@@ -1,3 +1,4 @@
+import { COOKOUT, isAppreciationDay } from '../sim/appreciation'
 import { Reservations, type Agent } from '../sim/crowd'
 import { PLAYER_ID } from '../sim/customers'
 import { spotsInUse } from '../sim/driving'
@@ -60,12 +61,16 @@ let parkedSpots = new Set<number>()
 /**
  * Starts the grid again from the layout, with the parked cars back on it.
  * Runs each morning, before `syncWorld` puts the stock and improvements back,
- * so ground that changed overnight is walkable (or not) from the start of the day.
+ * so ground that changed overnight is walkable (or not) from the start of the
+ * day. On client appreciation day the cookout blocks its ground.
  */
 function resetGrid(): void {
   grid.copyFrom(createGrid(layout))
   for (const n of parkedSpots) grid.setRectBlocked(parkedCarRect(CUSTOMER_PARKING[n]), true)
   for (const n of serviceSpotsTaken) grid.setRectBlocked(parkedCarRect(SERVICE_SPOTS[n]), true)
+  // The cookout stands on the forecourt all of client appreciation day.
+  const s = useGame.getState()
+  if (isAppreciationDay(s.appreciation, s.clock.day)) grid.setRectBlocked(COOKOUT, true)
 }
 
 /**

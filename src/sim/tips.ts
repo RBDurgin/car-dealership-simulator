@@ -46,6 +46,8 @@ export type TipId =
   | 'followUp'
   | 'appointment'
   | 'tradeUpDue'
+  | 'referral'
+  | 'appreciation'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -94,6 +96,10 @@ export const TIPS: Record<TipId, string> = {
     'An appointment is booked for tomorrow. The morning notice and the Calendar tab say when they’re due. Don’t keep them waiting: a booked client minds a wait twice as much.',
   tradeUpDue:
     'A client is due to trade up the car you sold them. They may come in on their own, the likelier the happier they are, or call them from the desk phone to book a time. They drive in with their old car to trade. The Clients tab’s Due filter lists who’s due, and its loyalty discount brings them back more often.',
+  referral:
+    'A friend of one of your clients is here: their panel says who sent them. Happy clients send friends for a few weeks after buying. A referral fee in the Clients tab, and a thank-you call, make them send more.',
+  appreciation:
+    'Your book has 10 clients. Book a client appreciation day in the Calendar tab: a cookout on the lot that brings clients back, leaves them happier and brings in clients due to trade up.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -124,6 +130,9 @@ export interface TipState {
 
 const prospects = (s: TipState) => s.clients.filter((c) => c.status === 'prospect').length
 const booked = (s: TipState) => s.clients.filter((c) => c.appointment).length
+const clientCount = (s: TipState) => s.clients.filter((c) => c.status === 'client').length
+/** Clients in the book that make an appreciation day worth booking. */
+export const APPRECIATION_TIP_CLIENTS = 10
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
@@ -249,6 +258,17 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return (
         (next.clients !== prev.clients || next.clock.day !== prev.clock.day) &&
         dueCount(next.clients, next.clock.day) > dueCount(prev.clients, prev.clock.day)
+      )
+    case 'referral': {
+      if (next.customers === prev.customers) return false
+      const known = new Set(prev.customers.map((c) => c.id))
+      return next.customers.some((c) => c.referredBy && !known.has(c.id))
+    }
+    case 'appreciation':
+      return (
+        next.clients !== prev.clients &&
+        clientCount(next) >= APPRECIATION_TIP_CLIENTS &&
+        clientCount(prev) < APPRECIATION_TIP_CLIENTS
       )
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH

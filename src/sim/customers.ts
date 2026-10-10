@@ -60,10 +60,11 @@ export const PLAYER_ID = 'player'
 /**
  * `sold`: a seller who sold us their car, leaving on foot. `serviced`: a
  * service client who collected their car; `declined`: one who turned the
- * quote down (or couldn't be fitted in).
+ * quote down (or couldn't be fitted in). `visited`: a guest on client
+ * appreciation day nobody got to, who ate, looked around and went home.
  */
 export type LeaveReason =
-  'bought' | 'sold' | 'refused' | 'impatient' | 'closing' | 'serviced' | 'declined'
+  'bought' | 'sold' | 'refused' | 'impatient' | 'closing' | 'serviced' | 'declined' | 'visited'
 
 export type { CustomerVariant }
 
@@ -153,6 +154,10 @@ export interface Customer {
    * `msrp × (1 − loyaltyCut)` (see `stickerOf`). 0 for everyone else.
    */
   loyaltyCut: number
+  /** The client from the book who sent them (see `sim/referrals.ts`), else null. */
+  referredBy: string | null
+  /** A guest on client appreciation day: one nobody greets leaves as `visited`. */
+  guest: boolean
 }
 
 const FIRST_NAMES = [
@@ -310,6 +315,10 @@ export interface CustomerOptions {
   tradeUp?: boolean
   /** A returning client's loyalty discount (`ClientPerks.loyaltyDiscount`). */
   loyaltyCut?: number
+  /** The client who sent this stranger in. */
+  referredBy?: string
+  /** A client back as a guest on client appreciation day. */
+  guest?: boolean
 }
 
 /**
@@ -354,7 +363,18 @@ export function generateCustomer(
   const factor = traits.budget.min + rng.next() * (traits.budget.max - traits.budget.min)
   const budget = Math.round((top * factor) / 500) * 500
   return shopper(
-    { id, name, variant, archetype, source, companion, budget, preferredModels, clientId: null },
+    {
+      id,
+      name,
+      variant,
+      archetype,
+      source,
+      companion,
+      budget,
+      preferredModels,
+      clientId: null,
+      referredBy: opts.referredBy ?? null,
+    },
     available,
     rng,
     opts,
@@ -395,6 +415,7 @@ function returningCustomer(
       budget,
       preferredModels: [...models],
       clientId: client.id,
+      referredBy: null,
     },
     available,
     rng,
@@ -429,6 +450,7 @@ type Identity = Pick<
   | 'budget'
   | 'preferredModels'
   | 'clientId'
+  | 'referredBy'
 >
 
 /** `who`, arriving now: their patience, the cars they'll look at and the discount they hope for. */
@@ -466,6 +488,7 @@ function shopper(
     rivalQuote: null,
     service: null,
     loyaltyCut: 0,
+    guest: !!opts.guest,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -564,7 +587,7 @@ export function moodOf(c: Customer): Mood {
       return 'happy'
     case 'leaving':
       if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'happy'
-      if (c.leaveReason === 'serviced') return 'happy'
+      if (c.leaveReason === 'serviced' || c.leaveReason === 'visited') return 'happy'
       if (c.leaveReason === 'closing' || c.leaveReason === 'declined') return 'neutral'
       return 'unhappy'
     case 'waiting':
@@ -832,9 +855,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.handlerId !== null) return c
       const factor = ev.outside?.has(c.id) ? (ev.outsideFactor ?? 1) : 1
       const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes * factor)
-      return patienceLeft === 0
-        ? leave({ ...c, patienceLeft }, 'impatient')
-        : { ...c, patienceLeft }
+      if (patienceLeft > 0) return { ...c, patienceLeft }
+      // A guest nobody got to has still had lunch.
+      return leave({ ...c, patienceLeft }, c.guest && !c.sellerId ? 'visited' : 'impatient')
     }
     case 'close':
       // Let a signature in progress finish, staff finish the buyers they have

@@ -4,8 +4,6 @@ import {
   applyChange,
   campaignScale,
   MAX_DAILY_CHANGE,
-  MAX_REFERRALS,
-  referralVisitors,
   REPUTATION_POINTS,
   reputationChange,
   reputationLabel,
@@ -91,17 +89,13 @@ describe('what reputation does', () => {
   it('leaves traffic as it is at the start', () => {
     expect(visitorScale(START_REPUTATION)).toBe(1)
     expect(campaignScale(START_REPUTATION)).toBe(1)
-    expect(referralVisitors(START_REPUTATION)).toBe(0)
   })
 
-  it('brings more visitors, referrals and ad traffic as it rises', () => {
+  it('brings more visitors and ad traffic as it rises', () => {
     expect(visitorScale(100)).toBeCloseTo(1.3)
     expect(visitorScale(0)).toBeCloseTo(0.7)
     expect(campaignScale(100)).toBeCloseTo(1.5)
     expect(campaignScale(0)).toBeCloseTo(0.5)
-    expect(referralVisitors(75)).toBeCloseTo(MAX_REFERRALS / 2)
-    expect(referralVisitors(100)).toBe(MAX_REFERRALS)
-    expect(referralVisitors(20)).toBe(0)
   })
 
   it('names each band', () => {

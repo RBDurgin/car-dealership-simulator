@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { memo, Suspense, useState } from 'react'
 import type { Group } from 'three'
+import { APPRECIATION_WALK_IN, isAppreciationDay } from '../sim/appreciation'
 import { weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { effectsOf, installed } from '../sim/improvements'
@@ -122,13 +123,15 @@ export function Pedestrians() {
       Object.assign(today, {
         day,
         // Improvements bought today go up tonight, so today's crowd is set now. Busier on
-        // weekends; rain keeps people indoors, and fewer of those out turn in.
+        // weekends; rain keeps people indoors, and fewer of those out turn in. The
+        // cookout on client appreciation day draws a few more.
         plan: planPedestrians(
           createRng(PEDESTRIAN_SEED + day),
           day,
           effectsOf(installed(game.improvements, day)),
           weekdayTraffic(day) * WEATHER_EFFECTS[game.weather].traffic,
-          WEATHER_EFFECTS[game.weather].walkIn,
+          WEATHER_EFFECTS[game.weather].walkIn *
+            (isAppreciationDay(game.appreciation, day) ? APPRECIATION_WALK_IN : 1),
         ),
         next: 0,
       })

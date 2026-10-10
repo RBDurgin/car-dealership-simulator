@@ -48,6 +48,8 @@ const prospect = (id: string, extra: Partial<Client> = {}): Client => ({
   appointment: null,
   referredBy: null,
   referrals: 0,
+  friendsSent: 0,
+  thanked: false,
   serviceDue: null,
   ...extra,
 })
@@ -131,7 +133,7 @@ describe('calls and appointments', () => {
     endDay()
     game().startNextDay()
     expect(game().notice?.text).toContain(`1 appointment today: Kim a at`)
-    expect(game().clientVisits).toEqual([{ clientId: 'a', minute }])
+    expect(game().clientVisits).toEqual([{ clientId: 'a', minute, reason: 'appointment' }])
     game().tickClock({ day: 2, minute: minute - 10 })
     expect(game().customers.some((c) => c.clientId === 'a')).toBe(false)
     game().tickClock({ day: 2, minute })
