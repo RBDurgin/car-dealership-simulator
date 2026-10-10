@@ -1,344 +1,143 @@
-import type { StaffVariant } from './characters'
-import { carName } from './interactables'
-import { CLOSE_MINUTE, CLOCK_STEP_MINUTES, OPEN_MINUTE } from './clock'
-import { availableCars, type InventoryCar } from './inventory'
-import type { CarModel } from './layout'
+import type { CharacterVariant } from './characters'
+import { CLOCK_STEP_MINUTES, CLOSE_MINUTE, OPEN_MINUTE } from './clock'
+import { PLAYER_ID } from './customers'
 import { createRng, type Rng } from './rng'
-import { isPoachable, type Employee, type Role } from './staff'
+import type { Employee } from './staff'
 
 /**
- * Nazma, a disgruntled former employee (he/him), out to ruin the business.
- * On some days he walks onto the lot and smudges a few cars, so they need
- * washing again, or has a word with one of the staff, who then thinks of
- * quitting. The player can confront him to run him off. Some nights he
- * drives a car off the lot, unless a guard is on the payroll. His visits are
- * rebuilt from the day number; his last theft night is saved with his rival
- * lot (`Rival.lastTheftDay`), which also scales his odds once it's open.
+ * Nazma (he/him), who runs the cupcake shop across the road. A friendly
+ * neighbour: now and then he pops over, says hello to the player or one of
+ * the staff, maybe helps himself to a coffee, and heads home. He changes no
+ * money, patience or stats, and nobody can confront him. His visits are
+ * rebuilt from the day number and never saved; `scene/Nazma` walks him.
  */
 
-/** Nazma's id in the world (crowd, chatter, action target). */
+/** Nazma's id in the world (chatter, `runtime.ambientPos`). */
 export const NAZMA_ID = 'nazma'
-/** A staff model, as he used to work here, in a dark hoodie (see scene/Nazma). */
-export const NAZMA_VARIANT: StaffVariant = 'male-e'
+/** His model (in an apron tint, see scene/Nazma). */
+export const NAZMA_VARIANT: CharacterVariant = 'male-e'
 
-/** His first visit, always: the day he's introduced. */
-export const FIRST_NAZMA_DAY = 4
-/** Chance of a visit on any later day, without a guard. */
-export const VISIT_CHANCE = 0.35
-/** A guard on the payroll scales the visit chance by this. */
-export const GUARD_DETERRENCE = 0.4
-const NAZMA_SEED = 18_000
+/** His first visit, always: the day after the shop shows up in the tip. */
+export const FIRST_NAZMA_DAY = 2
+/** Chance of a visit on any later day Jaguar isn't coming. */
+export const NAZMA_VISIT_CHANCE = 0.3
+const NAZMA_SEED = 23_000
 
-/** Cars he means to smudge on a visit, if there are that many. */
-export const SMUDGE_TARGETS = { min: 2, max: 3 }
-/** Chance a visit is to poach one of the staff, when there's anyone he could. */
-export const POACH_CHANCE = 0.4
-/** Game seconds of chat it takes him to talk someone into quitting. */
-export const POACH_SECONDS = 6
-/** He turns up between 10:00 and 15:00, so there's time to deal with him. */
-export const ARRIVAL_WINDOW = { from: OPEN_MINUTE + 60, to: CLOSE_MINUTE - 3 * 60 }
-
-export type NazmaScheme = 'smudge' | 'poach'
+/** He comes over between 9:30 and 16:00. */
+export const NAZMA_WINDOW = { from: OPEN_MINUTE + 30, to: CLOSE_MINUTE - 2 * 60 }
+/** The coffee machine in the lounge, one of the stops he might make. */
+export const COFFEE_STOP = 'coffee-machine'
+/** Stops he makes on a visit. */
+export const NAZMA_STOPS = { min: 1, max: 2 }
+/** Game seconds he spends at a stop, chatting (or over the coffee). */
+export const STOP_SECONDS = 8
 
 /**
- * - coming: not on the lot yet
- * - onLot: walking from target to target
- * - done: left of his own accord
- * - runOff: chased off (and on his way out, or gone)
+ * - coming: not over the road yet
+ * - onLot: making his stops
+ * - done: gone home
  */
-export type NazmaStatus = 'coming' | 'onLot' | 'done' | 'runOff'
+export type NazmaStatus = 'coming' | 'onLot' | 'done'
 
 export interface NazmaVisit {
-  scheme: NazmaScheme
-  /** Car ids to smudge, in order, or the one employee id he's come to poach. */
-  targets: string[]
+  /** Who he stops by, in order: `PLAYER_ID`, an employee id or `COFFEE_STOP`. */
+  stops: string[]
   /** Game minute he steps onto the lot. */
   arrivalMinute: number
   status: NazmaStatus
-  /** How many of `targets` he has dealt with so far. */
+  /** How many of `stops` he has made so far. */
   progress: number
-  /** Poaching: he's reached his target and is talking them round. */
+  /** He's reached a person at his stop and is chatting with them. */
   chatting: boolean
 }
 
-export type RunOffBy = 'player' | 'guard'
-
-/** A car Nazma drove off with overnight. */
-export interface StolenCar {
-  model: CarModel
-  cost: number
-  floored: boolean
+/**
+ * Whether Nazma pops over on `day`: always on `FIRST_NAZMA_DAY`, then a
+ * seeded roll against `NAZMA_VISIT_CHANCE`. Never on a day Jaguar visits
+ * (`jaguarDay`), so a click on someone strange is always Jaguar.
+ */
+export function isNazmaVisitDay(day: number, jaguarDay = false): boolean {
+  if (jaguarDay || day < FIRST_NAZMA_DAY) return false
+  if (day === FIRST_NAZMA_DAY) return true
+  return createRng(NAZMA_SEED + day).next() < NAZMA_VISIT_CHANCE
 }
 
-/** What Nazma got up to today, for the summary. */
-export interface NazmaStats {
-  visited: boolean
-  smudged: number
-  runOff: RunOffBy | null
-  stolen: StolenCar[]
-  /** A guard on the payroll stopped a theft last night. */
-  foiled: boolean
-  /** Names of the employees he talked into thinking of quitting. */
-  poached: string[]
-  /** Names of those who quit at closing. */
-  quit: string[]
-  /** Those the player kept with a raise (a day's wage added). */
-  kept: { name: string; raise: number }[]
-  /** The name of his lot while it's open: where stolen cars and quitters go. */
-  rival: string | null
-  /** Those who quit and went to work for him. */
-  joined: { name: string; role: Role }[]
-}
+/** The seed for the day's visit plan, apart from the roll in `isNazmaVisitDay`. */
+export const nazmaSeed = (day: number) => NAZMA_SEED + 500 + day
 
-export function emptyNazmaStats(): NazmaStats {
-  return {
-    visited: false,
-    smudged: 0,
-    runOff: null,
-    stolen: [],
-    foiled: false,
-    poached: [],
-    quit: [],
-    kept: [],
-    rival: null,
-    joined: [],
+/**
+ * The day's visit: when he comes over, and one or two stops: the player,
+ * someone on the payroll (who he'll find at their post) or the coffee
+ * machine, never the same one twice.
+ */
+export function planNazmaVisit(rng: Rng, roster: readonly Employee[]): NazmaVisit {
+  const steps = (NAZMA_WINDOW.to - NAZMA_WINDOW.from) / CLOCK_STEP_MINUTES
+  const arrivalMinute = NAZMA_WINDOW.from + rng.int(0, steps) * CLOCK_STEP_MINUTES
+  const pool = [PLAYER_ID, COFFEE_STOP, ...roster.filter((e) => !e.fired).map((e) => e.id)]
+  const count = rng.int(NAZMA_STOPS.min, NAZMA_STOPS.max)
+  const stops: string[] = []
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    stops.push(pool.splice(Math.floor(rng.next() * pool.length), 1)[0])
   }
+  return { stops, arrivalMinute, status: 'coming', progress: 0, chatting: false }
 }
 
-/** The difficulty level's say in his visits: `chance` × `VISIT_CHANCE`, from `firstDay`. */
-export interface VisitOdds {
-  chance: number
-  firstDay: number
+/** The stop he's heading for next, or null once he's made them all. */
+export function nextStop(visit: NazmaVisit): string | null {
+  return visit.stops[visit.progress] ?? null
 }
 
-const MEDIUM_ODDS: VisitOdds = { chance: 1, firstDay: FIRST_NAZMA_DAY }
+/** Whom he's chatting with right now (a person, never the coffee machine), or null. */
+export function chattingWith(visit: NazmaVisit | null): string | null {
+  if (visit?.status !== 'onLot' || !visit.chatting) return null
+  const stop = nextStop(visit)
+  return stop && stop !== COFFEE_STOP ? stop : null
+}
+
+/** The shop's hours, for the Nazma's tab (it opens before you do and closes after). */
+export const SHOP_HOURS = { open: OPEN_MINUTE - 2 * 60, close: CLOSE_MINUTE + 60 }
+
+export interface CupcakeFlavour {
+  name: string
+  /** A line about it, as Nazma would put it. */
+  note: string
+}
+
+/** The cupcakes Nazma bakes as the day's special, one a day. */
+export const CUPCAKE_FLAVOURS: readonly CupcakeFlavour[] = [
+  { name: 'Salted caramel', note: 'A pinch of sea salt on top. Trust him.' },
+  { name: 'Red velvet', note: 'Cream cheese frosting, piled high.' },
+  { name: 'Lemon meringue', note: 'Toasted meringue with a sharp lemon curd middle.' },
+  { name: 'Double chocolate', note: 'Chocolate sponge, chocolate frosting, chocolate chips.' },
+  { name: 'Strawberry shortcake', note: 'Fresh strawberries and whipped cream.' },
+  { name: 'Espresso', note: 'Made with the same beans as your coffee machine. Probably.' },
+  { name: 'Carrot cake', note: 'Walnuts, cinnamon and a cream cheese swirl.' },
+  { name: 'Pistachio rose', note: 'Pale green, a little fancy, gone by noon.' },
+  { name: 'Cookies and cream', note: 'Crushed biscuits in the sponge and on top.' },
+  { name: 'Blueberry crumble', note: 'Buttery crumble over a blueberry centre.' },
+  { name: 'Peanut butter', note: 'With a spoonful of jam hidden inside.' },
+  { name: 'Vanilla sprinkle', note: 'The classic, for anyone who just wants a cupcake.' },
+]
+
+const SPECIAL_SEED = NAZMA_SEED + 900
+const specials: number[] = []
 
 /**
- * Whether Nazma visits on `day`: never before `odds.firstDay`, always on it,
- * then a seeded roll against `VISIT_CHANCE` (times `odds.chance`), less with a
- * guard on the payroll.
+ * Index into `CUPCAKE_FLAVOURS` of `day`'s special: a seeded pick, never the
+ * same as the day before's. Each day depends on the one before, so the chain
+ * is replayed from day 1 and memoised.
  */
-export function isNazmaDay(day: number, guarded: boolean, odds: VisitOdds = MEDIUM_ODDS): boolean {
-  if (day < odds.firstDay) return false
-  if (day === odds.firstDay) return true
-  const chance = VISIT_CHANCE * odds.chance * (guarded ? GUARD_DETERRENCE : 1)
-  return createRng(NAZMA_SEED + day).next() < chance
-}
-
-/** The seed for the day's visit plan, apart from the roll in `isNazmaDay`. */
-export const visitSeed = (day: number) => NAZMA_SEED + 500 + day
-
-/** `items` in a random order. */
-function shuffled<T>(rng: Rng, items: readonly T[]): T[] {
-  const out = [...items]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng.next() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
+function specialIndex(day: number): number {
+  const n = CUPCAKE_FLAVOURS.length
+  for (let d = specials.length + 1; d <= day; d++) {
+    const rng = createRng(SPECIAL_SEED + d)
+    const prev = specials[d - 2]
+    specials.push(prev === undefined ? rng.int(0, n - 1) : (prev + 1 + rng.int(0, n - 2)) % n)
   }
-  return out
+  return specials[day - 1]
 }
 
-/** When he turns up: a whole clock step in `ARRIVAL_WINDOW`. */
-function arrivalMinute(rng: Rng): number {
-  const steps = (ARRIVAL_WINDOW.to - ARRIVAL_WINDOW.from) / CLOCK_STEP_MINUTES
-  return ARRIVAL_WINDOW.from + rng.int(0, steps) * CLOCK_STEP_MINUTES
-}
-
-/** Someone from `staff` to poach, the more skilled the likelier (skill squared). */
-function pickPoachTarget(rng: Rng, staff: readonly Employee[]): Employee {
-  let roll = rng.next() * staff.reduce((sum, e) => sum + e.skill ** 2, 0)
-  return staff.find((e) => (roll -= e.skill ** 2) < 0) ?? staff[staff.length - 1]
-}
-
-/**
- * The day's visit. With anyone on the payroll he could poach (see
- * `isPoachable`), it's sometimes (`POACH_CHANCE`) to talk one of them into
- * quitting, the seasoned ones most of all (`POACH_CHANCE` × `poachChance`). Otherwise it's two or three cars to
- * smudge, out on the lot first (they're nearer the street). Either way, when he
- * turns up. Null when there's nothing in stock for him to spoil and nobody to
- * poach.
- */
-export function planVisit(
-  rng: Rng,
-  inventory: readonly InventoryCar[],
-  roster: readonly Employee[] = [],
-  poachChance = 1,
-): NazmaVisit | null {
-  const staff = roster.filter(isPoachable)
-  if (staff.length > 0 && rng.next() < POACH_CHANCE * poachChance) {
-    return {
-      scheme: 'poach',
-      targets: [pickPoachTarget(rng, staff).id],
-      arrivalMinute: arrivalMinute(rng),
-      status: 'coming',
-      progress: 0,
-      chatting: false,
-    }
-  }
-  const cars = availableCars(inventory)
-  if (cars.length === 0) return null
-  const lot = shuffled(
-    rng,
-    cars.filter((c) => c.location === 'lot'),
-  )
-  const showroom = shuffled(
-    rng,
-    cars.filter((c) => c.location === 'showroom'),
-  )
-  const count = rng.int(SMUDGE_TARGETS.min, SMUDGE_TARGETS.max)
-  return {
-    scheme: 'smudge',
-    targets: [...lot, ...showroom].slice(0, count).map((c) => c.id),
-    arrivalMinute: arrivalMinute(rng),
-    status: 'coming',
-    progress: 0,
-    chatting: false,
-  }
-}
-
-/** The car (or employee) he's heading for next, or null once he's been round them all. */
-export function nextTarget(visit: NazmaVisit): string | null {
-  return visit.targets[visit.progress] ?? null
-}
-
-/** Why the player can't confront Nazma right now, or null if they can. */
-export function confrontBlocker(visit: NazmaVisit | null): string | null {
-  if (visit?.status === 'onLot') return null
-  return visit?.status === 'runOff' || visit?.status === 'done'
-    ? 'Nazma is already leaving.'
-    : "Nazma isn't here."
-}
-
-/** The first morning a car can be gone. */
-export const FIRST_THEFT_DAY = 6
-/** Chance he tries his luck on any night, once he can. */
-export const THEFT_CHANCE = 0.15
-/** He lies low for this many nights after a try, caught or not. */
-export const THEFT_GAP_DAYS = 3
-const THEFT_SEED = 19_000
-
-/**
- * Whether Nazma tries to steal a car on the night before `day`'s morning: a
- * seeded roll against `THEFT_CHANCE` × `chance` from `FIRST_THEFT_DAY` on,
- * never within `THEFT_GAP_DAYS` of his `last` try (0 if none).
- */
-export function theftNightAfter(day: number, last: number, chance = 1): boolean {
-  if (day < FIRST_THEFT_DAY) return false
-  if (last > 0 && day - last < THEFT_GAP_DAYS) return false
-  return createRng(THEFT_SEED + day).next() < THEFT_CHANCE * chance
-}
-
-/**
- * `theftNightAfter`, with his last try found by replaying earlier nights at
- * the same `chance`. The store keeps `Rival.lastTheftDay` instead, as the
- * chance changes with his rival lot.
- */
-export function isTheftNight(day: number, chance = 1): boolean {
-  return day >= FIRST_THEFT_DAY && lastTheftNight(day, chance) === day
-}
-
-/**
- * The last night up to and including the one before `day`'s morning that
- * Nazma tried to steal a car, replayed as in `isTheftNight`, or 0 if he never
- * has.
- */
-export function lastTheftNight(day: number, chance = 1): number {
-  let last = 0
-  for (let d = FIRST_THEFT_DAY; d <= day; d++) {
-    if (last > 0 && d - last < THEFT_GAP_DAYS) continue
-    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE * chance) last = d
-  }
-  return last
-}
-
-/** The seed for picking which car goes, apart from the roll in `isTheftNight`. */
-export const theftSeed = (day: number) => THEFT_SEED + 500 + day
-
-/** How a night's theft went: a car gone, or a guard ran him off. */
-export type NightTheft = { outcome: 'stolen'; car: InventoryCar } | { outcome: 'foiled' }
-
-/**
- * The night before `day`: on a theft night Nazma goes for an available lot car
- * (the showroom is locked), the pricier the likelier. A guard on the payroll
- * stops him. Null on a quiet night, or with nothing on the lot to take.
- * `chance` scales the odds of a theft night and `last` is his last try (see
- * `theftNightAfter`; replayed at `chance` if not given).
- */
-export function planTheft(
-  rng: Rng,
-  day: number,
-  inventory: readonly InventoryCar[],
-  guarded: boolean,
-  chance = 1,
-  last = lastTheftNight(day - 1, chance),
-): NightTheft | null {
-  if (!theftNightAfter(day, last, chance)) return null
-  const lot = availableCars(inventory).filter((c) => c.location === 'lot')
-  if (lot.length === 0) return null
-  if (guarded) return { outcome: 'foiled' }
-  let roll = rng.next() * lot.reduce((sum, c) => sum + c.msrp, 0)
-  const car = lot.find((c) => (roll -= c.msrp) < 0) ?? lot[lot.length - 1]
-  return { outcome: 'stolen', car }
-}
-
-/** What goes in the day's tally for a stolen `car`. */
-export function stolenRecord(car: InventoryCar): StolenCar {
-  return { model: car.model, cost: car.cost, floored: car.floored }
-}
-
-const cars = (n: number) => `${n} car${n === 1 ? '' : 's'}`
-
-const names = (list: readonly string[]) => list.join(' and ')
-
-function visitSummary(stats: NazmaStats, money: (n: number) => string): string | null {
-  if (!stats.visited) return null
-  const keptNames = stats.kept.map((k) => k.name)
-  const lost = stats.poached.filter((n) => !keptNames.includes(n))
-  const kept = stats.poached.filter((n) => keptNames.includes(n))
-  const harm = [
-    stats.smudged > 0 && `smudged ${cars(stats.smudged)}`,
-    lost.length > 0 && `poached ${names(lost)}`,
-    kept.length > 0 && `tried to poach ${names(kept)}`,
-  ]
-    .filter(Boolean)
-    .join(', ')
-  let line: string
-  if (stats.runOff) {
-    const by = stats.runOff === 'player' ? 'you' : 'your guard'
-    line = harm ? `run off by ${by} (${harm} first)` : `run off by ${by} before he did harm`
-  } else line = harm || 'came and went'
-  const raises = stats.kept.map((k) => `you kept ${k.name} (+${money(k.raise)}/day)`)
-  return [line, ...raises].join('; ')
-}
-
-function theftSummary(stats: NazmaStats): string | null {
-  if (stats.stolen.length > 0) {
-    const where = stats.rival ? ` (now for sale at ${stats.rival})` : ''
-    return `stole ${stats.stolen.map((c) => `the ${carName(c.model)}`).join(' and ')} overnight${where}`
-  }
-  return stats.foiled ? 'tried to steal a car overnight, but your guard ran him off' : null
-}
-
-/** "Dana now sells for Nazma's Motors", one for each who went to work for him. */
-function joinedSummary(stats: NazmaStats): string[] {
-  if (!stats.rival) return []
-  return stats.joined.map(
-    (e) => `${e.name} now ${e.role === 'sales' ? 'sells' : 'works'} for ${stats.rival}`,
-  )
-}
-
-/**
- * The summary's line for Nazma: "Smudged 2 cars", "Run off by you (smudged 1
- * car first)", "Stole the Summit Ridge overnight; smudged 2 cars", "Poached
- * Dana", "Tried to poach Dana; you kept Dana (+$25/day)", "Poached Dana; Dana
- * now sells for Nazma's Motors". Null if he left the place alone.
- */
-export function nazmaSummary(
-  stats: NazmaStats,
-  money: (n: number) => string = (n) => `$${n}`,
-): string | null {
-  const line = [theftSummary(stats), visitSummary(stats, money), ...joinedSummary(stats)]
-    .filter(Boolean)
-    .join('; ')
-  return line ? line[0].toUpperCase() + line.slice(1) : null
+/** `day`'s cupcake special at Nazma's (derived from the day, never saved). */
+export function specialOf(day: number): CupcakeFlavour {
+  return CUPCAKE_FLAVOURS[specialIndex(Math.max(1, Math.floor(day)))]
 }

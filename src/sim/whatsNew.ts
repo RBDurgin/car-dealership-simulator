@@ -220,6 +220,42 @@ export const UPDATES: readonly Update[] = [
       'The Service tab can also send the used cars you take in to the shop on its own.',
     ],
   },
+  {
+    id: 21,
+    phase: 'C',
+    title: 'The lot across the road has closed',
+    items: [
+      "Nazma's lot across the road has closed. Shoppers no longer go to him, and nobody brings his prices.",
+    ],
+  },
+  {
+    id: 22,
+    phase: 'C',
+    title: 'Meet Jaguar',
+    items: [
+      'Meet Jaguar: he smudges cars, steals one overnight now and then and poaches staff. Confront him or hire a guard.',
+    ],
+  },
+  {
+    id: 23,
+    phase: 'C',
+    title: "Nazma's cupcake shop",
+    items: ["Nazma's is now a cupcake shop across the road, and Nazma drops by to say hello."],
+  },
+  {
+    id: 24,
+    phase: 'C',
+    title: 'Motorcycles',
+    items: ["Nazma and Jaguar ride motorcycles. Listen for Jaguar's bike."],
+  },
+  {
+    id: 25,
+    phase: 'C',
+    title: "The Nazma's tab",
+    items: [
+      "The office computer has a Nazma's tab (K): today's cupcake special and Jaguar's track record.",
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

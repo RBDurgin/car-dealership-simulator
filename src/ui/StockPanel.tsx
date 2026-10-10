@@ -19,8 +19,8 @@ import { expansionsUp } from '../sim/expansions'
 import { reservedSlots } from '../sim/sellers'
 import { levelTuning, orderInvoice, useGame, type ComputerTab } from '../state/store'
 import { CalendarTab } from './CalendarTab'
-import { RivalTab } from './RivalTab'
 import { ServiceTab } from './ServiceTab'
+import { NazmasTab } from './NazmasTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
 import { UpgradesTab } from './UpgradesTab'
@@ -202,9 +202,8 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
  * The office computer: buying stock from the manufacturer (the catalog,
  * today's orders and the cars in stock), ad campaigns on the marketing tab,
  * improvements on the upgrades tab, the coming weeks on the calendar tab and
- * Nazma's lot across the road on the rival tab, and the garage on the service
- * tab. Opened at the computer, from the top bar's Office button, or with I, M,
- * U, C, K and B.
+ * the garage on the service tab. Opened at the computer, from the top bar's
+ * Office button, or with I, M, U, C and B.
  * Orders are delivered the next morning.
  */
 export function StockPanel() {
@@ -244,10 +243,10 @@ export function StockPanel() {
         <UpgradesTab />
       ) : tab === 'calendar' ? (
         <CalendarTab />
-      ) : tab === 'rival' ? (
-        <RivalTab />
-      ) : (
+      ) : tab === 'service' ? (
         <ServiceTab />
+      ) : (
+        <NazmasTab />
       )}
       <div className="status-hint">
         {TAB_HINTS[tab].hint}
@@ -262,8 +261,8 @@ const TABS: [ComputerTab, string][] = [
   ['marketing', 'Marketing'],
   ['upgrades', 'Upgrades'],
   ['calendar', 'Calendar'],
-  ['rival', 'Rival'],
   ['service', 'Service'],
+  ['nazmas', "Nazma's"],
 ]
 
 const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
@@ -271,8 +270,8 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   marketing: { hint: 'Campaigns start tomorrow morning.', key: 'M' },
   upgrades: { hint: 'Upgrades go up overnight.', key: 'U' },
   calendar: { hint: 'Plan stock and ads for the busy days.', key: 'C' },
-  rival: { hint: 'Ads, reputation and fair prices win his buyers back.', key: 'K' },
   service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
+  nazmas: { hint: 'A new special every day.', key: 'K' },
 }
 
 function StockTab() {

@@ -12,8 +12,6 @@ import {
   clampAsk,
   clampBuy,
   dealWarmth,
-  matchAsk,
-  quoteFor,
   suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
@@ -82,8 +80,7 @@ function TradeMargin({ c, allowance }: { c: Customer; allowance: number }) {
  * allowance, and the haggle is over what they pay after it: their counter
  * and our last ask are nets, and the buttons keep the allowance as set.
  * Remounted each round (`key`), so the steppers start at the suggestions.
- * On Easy a chip shows how warm they are to the steppers' numbers. With the
- * rival's quote on this car, **Match his price** sets the stepper to it.
+ * On Easy a chip shows how warm they are to the steppers' numbers.
  */
 function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
   const room = useGame((s) => !!lotSlotFor(s))
@@ -96,7 +93,6 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
   const game = useGame.getState()
   const ask = (p: number) => game.ask(p, allow)
   const step = (d: number) => setPrice(clampAsk(c, car, price + d, allow))
-  const match = matchAsk(c, car, allow)
   const stepAllowance = (d: number) => setAllowance((a) => clampAllowance(c, a + d))
   const h = c.haggle
   // The haggle's numbers are nets with a trade: add the allowance back for a price.
@@ -167,13 +163,6 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           +
         </button>
       </div>
-      {match !== null && (
-        <div className="customer-actions">
-          <button className="btn btn-small" onClick={() => setPrice(match)}>
-            Match his price
-          </button>
-        </div>
-      )}
       {trading && (
         <div className="haggle-stepper">
           <button
@@ -380,14 +369,12 @@ export function CustomerPanel() {
   const car = useGame((s) => s.inventory.find((x) => x.id === (c?.offer?.carId ?? c?.targetCarId)))
   const touch = useMediaQuery(COARSE)
   const day = useGame((s) => s.clock.day)
-  const rivalName = useGame((s) => s.rival.name)
   if (c?.selling) return <SellerPanel c={c} />
   if (!c || !car) return null
 
   const game = useGame.getState()
   const haggling = c.phase === 'talking' || c.phase === 'considering'
   const worth = stockValue(car, day)
-  const quote = quoteFor(c, car)
   return (
     <div className={haggling ? 'panel customer-panel haggling' : 'panel customer-panel'}>
       <div className="info-kicker">Customer</div>
@@ -397,11 +384,6 @@ export function CustomerPanel() {
         “I'm interested in the {carName(car.model)}. I'm hoping to spend around{' '}
         {formatMoney(budgetHint(c))}.”
       </p>
-      {quote !== null && (
-        <div className="rival-quote" role="note">
-          {rivalName} quoted {formatMoney(quote)}
-        </div>
-      )}
       <dl>
         <dt className="customer-car">Car</dt>
         <dd className="customer-car">

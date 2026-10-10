@@ -14,20 +14,7 @@ import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
-import { FIRST_THEFT_DAY } from '../sim/nazma'
-import {
-  BLITZ_CUT,
-  BUST_REPUTATION,
-  BUST_SHARE,
-  BUST_TRAFFIC,
-  BUST_WEEKS,
-  CLOSED_DAYS,
-  MAX_SHARE,
-  OPENING_RANK,
-  PRICE_WAR_UNDERCUT,
-  RIVAL_NAMES,
-} from '../sim/rival'
-import { QUOTE_TOLERANCE } from '../sim/negotiation'
+import { FIRST_THEFT_DAY } from '../sim/jaguar'
 import { ownerBonus } from '../sim/owner'
 import {
   HOLDBACK_FLOOR,
@@ -118,8 +105,8 @@ function BasicsTab({ touch, click }: TabProps) {
           <b>Easy</b> starts with {formatMoney(TUNING.easy.startingCash)}, cars cost{' '}
           {percentOff(TUNING.easy.invoice)} less to order and floor plan interest is{' '}
           {percentOff(TUNING.easy.interest)} lower. About {percentOn(TUNING.easy.traffic)} more
-          customers come in, they wait longer and are readier to buy. Nazma turns up less often and
-          not before day {TUNING.easy.firstNazmaDay}, the quota is {percentOff(TUNING.easy.quota)}{' '}
+          customers come in, they wait longer and are readier to buy. Jaguar turns up less often and
+          not before day {TUNING.easy.firstJaguarDay}, the quota is {percentOff(TUNING.easy.quota)}{' '}
           lower, the owner pays {formatMoney(ownerBonus(TUNING.easy.ownerBonus))} for a goal met and
           unhappy customers cost less reputation. Sellers hope for a little less, buyers expect a
           little less for their trade-ins, and your estimates of a used car&apos;s value are closer.
@@ -130,14 +117,14 @@ function BasicsTab({ touch, click }: TabProps) {
           it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day
           ends in the red, the bank tops your cash back up to $0; it only does this once. And tips
           pop up the first time things happen, such as a counter-offer, a dirty car or a visit from
-          Nazma.
+          Jaguar.
         </p>
         <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
           {percentOn(TUNING.hard.invoice)} more and interest is {percentOn(TUNING.hard.interest)}{' '}
           higher. About {percentOff(TUNING.hard.traffic)} fewer customers come in, they run out of
-          patience sooner, want a bigger discount and are slower to say yes. Nazma comes more often
-          from day {TUNING.hard.firstNazmaDay} and steals and poaches more, the quota is{' '}
+          patience sooner, want a bigger discount and are slower to say yes. Jaguar comes more often
+          from day {TUNING.hard.firstJaguarDay} and steals and poaches more, the quota is{' '}
           {percentOn(TUNING.hard.quota)} higher, the owner pays only{' '}
           {formatMoney(ownerBonus(TUNING.hard.ownerBonus))} and reputation is harder to win and
           easier to lose. Sellers want more for their cars, buyers want more for their trade-ins,
@@ -147,13 +134,7 @@ function BasicsTab({ touch, click }: TabProps) {
           Dealer ranks need {percentOff(TUNING.easy.rankScale)} less lifetime gross on Easy and{' '}
           {percentOn(TUNING.hard.rankScale)} more on Hard. On Easy a month has to fall under{' '}
           {Math.round((HOLDBACK_FLOOR - TUNING.easy.franchiseSlack) * 100)}% of the quota, not{' '}
-          {Math.round(HOLDBACK_FLOOR * 100)}%, to cost you a franchise tier. Nazma&apos;s rival lot
-          opens {percentOff(TUNING.easy.rivalStrength)} weaker and undercuts you{' '}
-          {percentOff(TUNING.easy.rivalUndercut)} less on Easy, and opens{' '}
-          {percentOn(TUNING.hard.rivalStrength)} stronger and undercuts{' '}
-          {percentOn(TUNING.hard.rivalUndercut)} more on Hard. After going bust he stays shut{' '}
-          {percentOn(TUNING.easy.rivalComeback)} longer on Easy and{' '}
-          {percentOff(TUNING.hard.rivalComeback)} shorter on Hard.
+          {Math.round(HOLDBACK_FLOOR * 100)}%, to cost you a franchise tier.
         </p>
       </section>
       <section>
@@ -188,6 +169,21 @@ function BasicsTab({ touch, click }: TabProps) {
           out on the lot lose patience faster; heat wears them down too. Cars in the showroom stay
           dry, and a lot porter pays off in a wet spell. The Calendar tab forecasts the next three
           days, and it&apos;s usually right.
+        </p>
+      </section>
+      <section>
+        <h3>Neighbours</h3>
+        <p>
+          Across the road is <b>Nazma&apos;s</b>, a cupcake shop. Nazma (pink badge) is friendly:
+          now and then he rides his motorcycle over, parks on the sidewalk and says hello to you or
+          your staff, or helps himself to a coffee in the lounge, then rides home. He doesn&apos;t
+          change anything, so let him be. His coworker Jaguar is another story (see <b>People</b>).
+        </p>
+        <p>
+          The <b>Nazma&apos;s</b> tab on the office computer (
+          <OfficeKey touch={touch} keyName="K" />) shows the shop&apos;s hours, today&apos;s cupcake
+          special and Jaguar&apos;s track record: his visits, how often you or your guard ran him
+          off, and the cars and staff he cost you.
         </p>
       </section>
       <section>
@@ -307,21 +303,6 @@ function SellingTab({ click }: TabProps) {
         </p>
       </section>
       <section>
-        <h3>Shoppers with his price</h3>
-        <p>
-          While Nazma&apos;s lot across the road is open, some shoppers have been there first. The
-          customer panel shows his price on the new model they want (&ldquo;{RIVAL_NAMES[0]} quoted
-          &hellip;&rdquo;). Ask more than {Math.round(QUOTE_TOLERANCE * 100)}% over it and they may
-          walk out to him; ask his price or less and they&apos;re more likely to say yes.{' '}
-          <b>Match his price</b> under the price stepper sets your ask to his quote.
-        </p>
-        <p>
-          Each one who walks out to him makes him stronger, and each one you sell to at his price
-          weakens him. Salespeople match him too: seasoned ones only while the sale still makes a
-          profit, green ones whenever his price is over the car&apos;s cost.
-        </p>
-      </section>
-      <section>
         <h3>Reputation</h3>
         <p>
           The ♥ meter in the top bar, 0 to 100, moves once a day at closing: each buyer adds{' '}
@@ -346,8 +327,9 @@ function BusinessTab({ touch, click }: TabProps) {
   return (
     <>
       <p className="how-lead">
-        Stock, ads, upgrades and the calendar are all on the office computer: {click.toLowerCase()}{' '}
-        the screen on your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
+        Stock, ads, upgrades, the calendar and the garage are all on the office computer:{' '}
+        {click.toLowerCase()} the screen on your desk, or <OfficeKey touch={touch} keyName="I" />{' '}
+        and pick a tab.
       </p>
       <section>
         <h3>Buying stock</h3>
@@ -422,40 +404,6 @@ function BusinessTab({ touch, click }: TabProps) {
           A job still in a bay at closing is finished in overtime, at {formatMoney(OVERTIME_HOURLY)}{' '}
           an hour, taken off the day&apos;s net. Cars still waiting for a bay go back on sale and
           the parts money comes back.
-        </p>
-      </section>
-      <section>
-        <h3>The rival across the road</h3>
-        <p>
-          Once you reach {rankById(OPENING_RANK).name}, Nazma buys the lot across the road. A week
-          or so later {RIVAL_NAMES[0]} opens there, a little under your prices, and some of the
-          town&apos;s shoppers go to him instead of you: up to {Math.round(MAX_SHARE * 100)}% of
-          them.
-        </p>
-        <p>
-          A better reputation and ads running keep more of them coming to you, and so does pricing
-          close to his. He grows stronger while he does well and weaker while he doesn&apos;t.
-        </p>
-        <p>
-          You can see his lot from the sidewalk. While it&apos;s open, the top bar shows the share
-          of today&apos;s buyers he takes, and every Monday morning you hear how he did last week.
-          The <b>Rival</b> tab on the office computer (<OfficeKey touch={touch} keyName="K" />) has
-          his share day by day, his strength and his price on every model.
-        </p>
-        <p>
-          Each Monday he picks a move for the week, shown on his banner, in the Rival tab and in the
-          Monday report: a <b>price war</b> ({Math.round(PRICE_WAR_UNDERCUT * 100)}% deeper under
-          MSRP), an <b>ad blitz</b> (your ads bring in {Math.round(BLITZ_CUT * 100)}% fewer
-          shoppers), a <b>sale weekend</b> (more of the town goes to him Friday to Sunday, often on
-          your own sale weekends) or a quiet week.
-        </p>
-        <p>
-          Keep his weekly share under {Math.round(BUST_SHARE * 100)}% for {BUST_WEEKS} Mondays
-          running and he goes bust. His lot is boarded up, your reputation goes up {BUST_REPUTATION}
-          , his buyers come to you for a week ({Math.round(BUST_TRAFFIC * 100)}% more shoppers), and
-          Nazma leaves you alone while he&apos;s shut. About {Math.round(CLOSED_DAYS / 7)} weeks
-          later he&apos;s back with a week&apos;s notice, under a new name and a little stronger.
-          The Rival tab counts the rivals you&apos;ve beaten.
         </p>
       </section>
       <section>
@@ -630,7 +578,7 @@ function PeopleTab({ touch, click }: TabProps) {
             A <b>lot porter</b> washes the dirtiest cars all day.
           </li>
           <li>
-            A <b>security guard</b> patrols the lot and deals with Nazma (below); the more skilled,
+            A <b>security guard</b> patrols the lot and deals with Jaguar (below); the more skilled,
             the further they see.
           </li>
           <li>
@@ -650,16 +598,18 @@ function PeopleTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
-        <h3>Nazma</h3>
+        <h3>Jaguar</h3>
         <p>
-          A former employee with it in for the place, in a dark hoodie and a red badge. From day{' '}
-          {level.firstNazmaDay}, every few days he smears grime over two or three cars (lot first),
-          or has a quiet word with one of your staff, the more skilled the likelier, and offers them
-          a job.
+          He works at Nazma's cupcake shop across the road, but has it in for your dealership all on
+          his own account. He wears a leather jacket and a red badge, and rides in on a red
+          motorcycle, parks across the road and walks over. From day {level.firstJaguarDay}, every
+          few days he smears grime over two or three cars (lot first), or has a quiet word with one
+          of your staff, the more skilled the likelier, and offers them a job.
         </p>
         <p>
-          {click} him and choose <b>Confront</b> to run him off before he does it. A security guard
-          makes his visits rarer and chases him off on sight; the porter cleans up after him.
+          {click} him and choose <b>Confront</b> to run him off before he does it: he sprints back
+          to his bike and roars off. A security guard makes his visits rarer and chases him off on
+          sight; the porter cleans up after him.
         </p>
         <p>
           Someone he talks round is <i>thinking of quitting</i> (a ? on their badge). Press{' '}
@@ -671,12 +621,6 @@ function PeopleTab({ touch, click }: TabProps) {
           From day {FIRST_THEFT_DAY}, some nights he drives a lot car away, pricier ones first. It
           is written off at cost, and a floored car&apos;s loan is called in the next morning. A
           security guard on the payroll stops him.
-        </p>
-        <p>
-          Once his own lot is open across the road, he crosses over from it. Cars he steals go up
-          for sale there, and anyone he poaches who quits goes to work for him, making his business
-          stronger. The worse his lot does, the more desperate he gets: up to twice as many visits,
-          thefts and poaching tries.
         </p>
       </section>
     </>
@@ -715,8 +659,9 @@ function ControlsTab({ touch }: TabProps) {
         </p>
         <p>
           Listen for the lot: a chime when a customer walks in, a jingle on a sale, a slammed door
-          from someone leaving unhappy, the hiss of a wash and the scuff of Nazma smudging a car.
-          The music follows the day and goes muffled while this guide is open.
+          from someone leaving unhappy, the hiss of a wash, the scuff of Jaguar smudging a car and
+          his motorcycle on the road. The music follows the day and goes muffled while this guide is
+          open.
         </p>
         <p>
           Everyone talks in gibberish, each in their own voice: hellos, back and forth over a car, a

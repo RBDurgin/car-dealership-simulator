@@ -14,7 +14,8 @@ import {
 import { OWNER_VARIANT } from './characters'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory } from './inventory'
-import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
+import { JAGUAR_ID, JAGUAR_VARIANT, type JaguarVisit } from './jaguar'
+import { COFFEE_STOP, NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID } from './owner'
 import { createRng } from './rng'
 import { generateCandidates, type Employee } from './staff'
@@ -32,9 +33,9 @@ const seller = employee({ id: 'e-sales', role: 'sales', status: 'atPost' })
 
 const state = (patch: Partial<ChatterState> = {}): ChatterState => ({
   customers: [],
-  inventory: [],
   roster: [],
   owner: null,
+  jaguar: null,
   nazma: null,
   ...patch,
 })
@@ -49,7 +50,7 @@ describe('variantOf', () => {
     expect(variantOf(s, 'e-sales')).toBe(seller.variant)
     expect(variantOf(s, PLAYER_ID)).toBe('salesperson')
     expect(variantOf(s, OWNER_ID)).toBe(OWNER_VARIANT)
-    expect(variantOf(s, NAZMA_ID)).toBe(NAZMA_VARIANT)
+    expect(variantOf(s, JAGUAR_ID)).toBe(JAGUAR_VARIANT)
     expect(variantOf(s, 'nobody')).toBeNull()
   })
 })
@@ -86,7 +87,7 @@ describe('conversationsOf', () => {
 })
 
 describe('poaching chat', () => {
-  const poach: NazmaVisit = {
+  const poach: JaguarVisit = {
     scheme: 'poach',
     targets: ['e-sales'],
     arrivalMinute: 600,
@@ -95,22 +96,22 @@ describe('poaching chat', () => {
     chatting: false,
   }
 
-  it('has Nazma talk his target round only once he has reached them', () => {
-    expect(conversationsOf(state({ nazma: poach }))).toEqual([])
+  it('has Jaguar talk his target round only once he has reached them', () => {
+    expect(conversationsOf(state({ jaguar: poach }))).toEqual([])
     const chatting = { ...poach, chatting: true }
-    expect(conversationsOf(state({ nazma: chatting }))).toEqual([
-      { key: 'poach:e-sales', kind: 'poach', speakers: [NAZMA_ID, 'e-sales'] },
+    expect(conversationsOf(state({ jaguar: chatting }))).toEqual([
+      { key: 'poach:e-sales', kind: 'poach', speakers: [JAGUAR_ID, 'e-sales'] },
     ])
-    expect(conversationsOf(state({ nazma: { ...chatting, status: 'runOff' } }))).toEqual([])
-    expect(conversationsOf(state({ nazma: { ...chatting, progress: 1 } }))).toEqual([])
+    expect(conversationsOf(state({ jaguar: { ...chatting, status: 'runOff' } }))).toEqual([])
+    expect(conversationsOf(state({ jaguar: { ...chatting, progress: 1 } }))).toEqual([])
   })
 
-  it('takes turns: Nazma low and persuasive, the employee asking', () => {
-    const conv = conversationsOf(state({ nazma: { ...poach, chatting: true } }))[0]
+  it('takes turns: Jaguar low and persuasive, the employee asking', () => {
+    const conv = conversationsOf(state({ jaguar: { ...poach, chatting: true } }))[0]
     const rng = createRng(3)
     for (let turn = 0; turn < 20; turn++) {
       const { line } = nextLine(conv, turn, rng)
-      expect(line.speaker).toBe(turn % 2 === 0 ? NAZMA_ID : 'e-sales')
+      expect(line.speaker).toBe(turn % 2 === 0 ? JAGUAR_ID : 'e-sales')
       expect(['murmur', 'neutral', 'question']).toContain(line.tone)
     }
   })
@@ -191,24 +192,6 @@ describe('reactionsFor', () => {
     ).toBe('question')
   })
 
-  it("grumbles over an ask well over the rival's quote", () => {
-    const car = inventory.find((c) => !c.used)!
-    const quote = { model: car.model, price: Math.round(car.msrp * 0.9) }
-    const talking = customer('c1', { phase: 'talking', handlerId: PLAYER_ID, rivalQuote: quote })
-    const asked = (price: number) => ({
-      ...talking,
-      phase: 'considering' as const,
-      offer: { carId: car.id, price },
-    })
-    const tone = (price: number) =>
-      lines(
-        state({ customers: [talking], inventory }),
-        state({ customers: [asked(price)], inventory }),
-      )[0][0].tone
-    expect(tone(car.msrp)).toBe('grumble')
-    expect(tone(quote.price)).toBe('murmur')
-  })
-
   it('is happy on a yes, the seller too, and grumbles walking out', () => {
     const considering = customer('c1', { phase: 'considering', handlerId: 'e-sales' })
     const following = { ...considering, phase: 'following' as const }
@@ -247,8 +230,8 @@ describe('reactionsFor', () => {
     ).toEqual([])
   })
 
-  it('has Nazma grumble when he is run off, not when he leaves on his own', () => {
-    const visit: NazmaVisit = {
+  it('has Jaguar grumble when he is run off, not when he leaves on his own', () => {
+    const visit: JaguarVisit = {
       scheme: 'smudge',
       targets: [],
       arrivalMinute: 600,
@@ -256,10 +239,22 @@ describe('reactionsFor', () => {
       progress: 0,
       chatting: false,
     }
-    const prev = state({ nazma: visit })
-    const said = lines(prev, state({ nazma: { ...visit, status: 'runOff' } }))
-    expect(said).toEqual([[expect.objectContaining({ speaker: NAZMA_ID, tone: 'grumble' })]])
-    expect(lines(prev, state({ nazma: { ...visit, status: 'done' } }))).toEqual([])
+    const prev = state({ jaguar: visit })
+    const said = lines(prev, state({ jaguar: { ...visit, status: 'runOff' } }))
+    expect(said).toEqual([[expect.objectContaining({ speaker: JAGUAR_ID, tone: 'grumble' })]])
+    expect(lines(prev, state({ jaguar: { ...visit, status: 'done' } }))).toEqual([])
+  })
+
+  it('has Nazma say hello as he steps onto the lot', () => {
+    const visit: NazmaVisit = {
+      stops: [PLAYER_ID],
+      arrivalMinute: 600,
+      status: 'coming',
+      progress: 0,
+      chatting: false,
+    }
+    const said = lines(state({ nazma: visit }), state({ nazma: { ...visit, status: 'onLot' } }))
+    expect(said).toEqual([[expect.objectContaining({ speaker: NAZMA_ID, tone: 'greeting' })]])
   })
 
   it('is quiet when nothing changed', () => {
@@ -286,5 +281,40 @@ describe('voiceMix', () => {
 
   it('keeps the crowd small', () => {
     expect(MAX_VOICES).toBe(3)
+  })
+})
+
+describe('Nazma chatting', () => {
+  const visit: NazmaVisit = {
+    stops: [COFFEE_STOP, 'e-sales'],
+    arrivalMinute: 600,
+    status: 'onLot',
+    progress: 1,
+    chatting: false,
+  }
+
+  it('speaks in his own voice', () => {
+    expect(variantOf(state(), NAZMA_ID)).toBe(NAZMA_VARIANT)
+  })
+
+  it('chats with the person at his stop once he has reached them, never the coffee machine', () => {
+    expect(conversationsOf(state({ nazma: visit }))).toEqual([])
+    expect(conversationsOf(state({ nazma: { ...visit, chatting: true } }))).toEqual([
+      { key: 'chat:e-sales', kind: 'chat', speakers: [NAZMA_ID, 'e-sales'] },
+    ])
+    expect(conversationsOf(state({ nazma: { ...visit, progress: 0, chatting: true } }))).toEqual([])
+    expect(conversationsOf(state({ nazma: { ...visit, status: 'done', chatting: true } }))).toEqual(
+      [],
+    )
+  })
+
+  it('takes turns in happy and greeting tones', () => {
+    const conv = conversationsOf(state({ nazma: { ...visit, chatting: true } }))[0]
+    const rng = createRng(5)
+    for (let turn = 0; turn < 20; turn++) {
+      const { line } = nextLine(conv, turn, rng)
+      expect(line.speaker).toBe(turn % 2 === 0 ? NAZMA_ID : 'e-sales')
+      expect(['happy', 'greeting', 'neutral']).toContain(line.tone)
+    }
   })
 })

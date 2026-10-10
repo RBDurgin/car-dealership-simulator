@@ -17,8 +17,7 @@ import {
 import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
-import { emptyNazmaStats, type NazmaStats } from './nazma'
-import type { RivalStats } from './rival'
+import { emptyJaguarStats, type JaguarStats } from './jaguar'
 import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
 import type { QuotaResult } from './quota'
@@ -271,8 +270,8 @@ export interface DayStats {
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
   owner: OwnerVerdict | null
-  /** What Nazma got up to today. */
-  nazma: NazmaStats
+  /** What Jaguar got up to today. */
+  jaguar: JaguarStats
   /** On the month's last day, the quota and the holdback it paid (set when settled). */
   quota: QuotaResult | null
   /**
@@ -284,8 +283,6 @@ export interface DayStats {
   bought: BoughtCar[]
   /** The rank reached when the day was settled, or null if it didn't change. */
   rankUp: RankId | null
-  /** How Nazma's lot across the road stood today, or null while it isn't open. */
-  rival: RivalStats | null
   /** The service department's day (see `sim/service.ts`). */
   service: ServiceStats
 }
@@ -310,12 +307,11 @@ export function emptyStats(): DayStats {
     reputation: 0,
     settled: false,
     owner: null,
-    nazma: emptyNazmaStats(),
+    jaguar: emptyJaguarStats(),
     quota: null,
     bailout: 0,
     bought: [],
     rankUp: null,
-    rival: null,
     service: emptyServiceStats(),
   }
 }
@@ -355,9 +351,9 @@ export function grossSplit(stats: DayStats): { new: number; used: number } {
   return split
 }
 
-/** The cost of the stock Nazma stole overnight, written off. */
+/** The cost of the stock Jaguar stole overnight, written off. */
 export function theftLoss(stats: DayStats): number {
-  return stats.nazma.stolen.reduce((sum, c) => sum + c.cost, 0)
+  return stats.jaguar.stolen.reduce((sum, c) => sum + c.cost, 0)
 }
 
 /**

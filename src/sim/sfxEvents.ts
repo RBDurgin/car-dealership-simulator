@@ -3,7 +3,7 @@ import type { Customer } from './customers'
 import { eventOn } from './events'
 import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
-import { NAZMA_ID, type NazmaVisit } from './nazma'
+import { JAGUAR_ID, type JaguarVisit } from './jaguar'
 import { atTopRank, type Career } from './progression'
 import type { Employee } from './staff'
 
@@ -26,11 +26,12 @@ export type SfxCue =
   | 'fanfare'
   | 'engine'
   | 'door'
+  | 'motorbike'
 
 /**
  * Where a cue happens: a customer, an employee, a car in stock, a visitor's
  * car (by its customer's id, with the space it parks in) or someone the store
- * doesn't place (Nazma). UI cues have none.
+ * doesn't place (Jaguar, or a motorcycle by its `bikeId`). UI cues have none.
  */
 export type SfxSubject =
   | { kind: 'customer'; id: string }
@@ -55,7 +56,7 @@ export interface SfxState {
   campaigns: readonly unknown[]
   improvements: readonly unknown[]
   career: Career
-  nazma: NazmaVisit | null
+  jaguar: JaguarVisit | null
   notice: { id: number } | null
   staffOpen: boolean
   stockOpen: boolean
@@ -86,6 +87,7 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   fanfare: 2000,
   engine: 800,
   door: 300,
+  motorbike: 600,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -100,11 +102,9 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if (prev.screen !== 'playing') return [{ cue: 'bell' }]
   const out: SfxEvent[] = []
 
-  // A sale weekend opens each of its days with a fanfare instead of the bell,
-  // and so does the morning Nazma's lot goes bust.
+  // A sale weekend opens each of its days with a fanfare instead of the bell.
   if (next.clock.day > prev.clock.day) {
-    const beaten = next.career.rivalsBeaten > prev.career.rivalsBeaten
-    out.push({ cue: eventOn(next.clock.day) || beaten ? 'fanfare' : 'bell' })
+    out.push({ cue: eventOn(next.clock.day) ? 'fanfare' : 'bell' })
   }
   if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
   // The top rank: the win screen opens over the summary.
@@ -152,9 +152,9 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
     }
   }
 
-  if (next.nazma && prev.nazma && next.nazma !== prev.nazma) {
-    if (next.nazma.progress > prev.nazma.progress) {
-      const id = next.nazma.targets[next.nazma.progress - 1]
+  if (next.jaguar && prev.jaguar && next.jaguar !== prev.jaguar) {
+    if (next.jaguar.progress > prev.jaguar.progress) {
+      const id = next.jaguar.targets[next.jaguar.progress - 1]
       // Only a car he actually dirtied: a sold one he gives up on.
       const car = next.inventory.find((c) => c.id === id)
       const was = prev.inventory.find((c) => c.id === id)
@@ -162,8 +162,8 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
         out.push({ cue: 'scuff', subject: { kind: 'car', id } })
       }
     }
-    if (next.nazma.status === 'runOff' && prev.nazma.status !== 'runOff') {
-      out.push({ cue: 'shoo', subject: { kind: 'ambient', id: NAZMA_ID } })
+    if (next.jaguar.status === 'runOff' && prev.jaguar.status !== 'runOff') {
+      out.push({ cue: 'shoo', subject: { kind: 'ambient', id: JAGUAR_ID } })
     }
   }
 

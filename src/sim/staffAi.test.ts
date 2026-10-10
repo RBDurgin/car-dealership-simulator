@@ -44,7 +44,6 @@ const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   vehicle: null,
   selling: null,
   trade: null,
-  rivalQuote: null,
   ...extra,
 })
 
@@ -295,46 +294,46 @@ describe('nextGuardTask', () => {
   const patrol = (leg: number) => ({ kind: 'patrol', tile: GUARD_PATROL_TILES[leg] })
 
   it('walks the patrol stop by stop, and round again', () => {
-    expect(nextGuardTask(guard, { nazma: null, at, leg: 0 })).toEqual(patrol(0))
-    expect(nextGuardTask(guard, { nazma: null, at, leg: 2 })).toEqual(patrol(2))
+    expect(nextGuardTask(guard, { jaguar: null, at, leg: 0 })).toEqual(patrol(0))
+    expect(nextGuardTask(guard, { jaguar: null, at, leg: 2 })).toEqual(patrol(2))
     const n = GUARD_PATROL_TILES.length
-    expect(nextGuardTask(guard, { nazma: null, at, leg: n + 1 })).toEqual(patrol(1))
+    expect(nextGuardTask(guard, { jaguar: null, at, leg: n + 1 })).toEqual(patrol(1))
   })
 
   it('adds the east lot to the rounds once it’s up', () => {
     const stops = patrolTiles(['east-lot'])
     expect(stops).toHaveLength(GUARD_PATROL_TILES.length + 1)
     const last = stops.length - 1
-    expect(nextGuardTask(guard, { nazma: null, at, leg: last, patrol: stops })).toEqual({
+    expect(nextGuardTask(guard, { jaguar: null, at, leg: last, patrol: stops })).toEqual({
       kind: 'patrol',
       tile: stops[last],
     })
     expect(patrolTiles([])).toEqual(GUARD_PATROL_TILES)
   })
 
-  it('chases Nazma once he comes within sight', () => {
+  it('chases Jaguar once he comes within sight', () => {
     const sight = guardSight(guard.skill)
     const near = { tx: at.tx + sight, tz: at.tz }
     const far = { tx: at.tx + sight + 1, tz: at.tz }
-    expect(nextGuardTask(guard, { nazma: near, at, leg: 0 })).toEqual({ kind: 'chase' })
-    expect(nextGuardTask(guard, { nazma: far, at, leg: 0 })).toEqual(patrol(0))
+    expect(nextGuardTask(guard, { jaguar: near, at, leg: 0 })).toEqual({ kind: 'chase' })
+    expect(nextGuardTask(guard, { jaguar: far, at, leg: 0 })).toEqual(patrol(0))
   })
 
   it('sees further with more skill', () => {
     expect(guardSight(5)).toBeGreaterThan(guardSight(1))
-    const nazma = { tx: at.tx + guardSight(1) + 1, tz: at.tz }
-    expect(nextGuardTask({ ...guard, skill: 1 }, { nazma, at, leg: 0 }).kind).toBe('patrol')
-    expect(nextGuardTask({ ...guard, skill: 5 }, { nazma, at, leg: 0 }).kind).toBe('chase')
+    const jaguar = { tx: at.tx + guardSight(1) + 1, tz: at.tz }
+    expect(nextGuardTask({ ...guard, skill: 1 }, { jaguar, at, leg: 0 }).kind).toBe('patrol')
+    expect(nextGuardTask({ ...guard, skill: 5 }, { jaguar, at, leg: 0 }).kind).toBe('chase')
   })
 
   it("keeps after him once chasing, until he's off the lot", () => {
-    const nazma = { tx: 0, tz: 0 }
-    expect(nextGuardTask(guard, { nazma, at, leg: 0, chasing: true })).toEqual({ kind: 'chase' })
-    expect(nextGuardTask(guard, { nazma: null, at, leg: 0, chasing: true })).toEqual(patrol(0))
+    const jaguar = { tx: 0, tz: 0 }
+    expect(nextGuardTask(guard, { jaguar, at, leg: 0, chasing: true })).toEqual({ kind: 'chase' })
+    expect(nextGuardTask(guard, { jaguar: null, at, leg: 0, chasing: true })).toEqual(patrol(0))
   })
 
   it('only works while at work', () => {
-    const ctx = { nazma: at, at, leg: 0 }
+    const ctx = { jaguar: at, at, leg: 0 }
     for (const status of ['arriving', 'leaving', 'off'] as const) {
       expect(nextGuardTask({ ...guard, status }, ctx)).toEqual({ kind: 'idle' })
     }

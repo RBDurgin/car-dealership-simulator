@@ -77,7 +77,6 @@ const base: Customer = {
   vehicle: null,
   selling: null,
   trade: null,
-  rivalQuote: null,
 }
 
 const at = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer => ({
@@ -335,8 +334,8 @@ describe('day stats', () => {
     const stats = {
       ...emptyStats(),
       sales: [sale(30_000, 27_000)],
-      nazma: {
-        ...emptyStats().nazma,
+      jaguar: {
+        ...emptyStats().jaguar,
         stolen: [
           { model: 'suv' as const, cost: 36_000, floored: true },
           { model: 'sedan' as const, cost: 22_000, floored: false },

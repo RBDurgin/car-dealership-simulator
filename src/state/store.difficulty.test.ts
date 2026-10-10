@@ -3,7 +3,7 @@ import { CLOSE_MINUTE } from '../sim/clock'
 import { emptyStats } from '../sim/deal'
 import { TUNING } from '../sim/difficulty'
 import { FLOOR_PLAN_DAILY_RATE } from '../sim/floorPlan'
-import { FIRST_NAZMA_DAY } from '../sim/nazma'
+import { FIRST_JAGUAR_DAY } from '../sim/jaguar'
 import { BASE_SLOTS, orderCost } from '../sim/ordering'
 import { OWNER_BONUS } from '../sim/owner'
 import { monthlyQuota } from '../sim/quota'
@@ -104,16 +104,16 @@ describe('difficulty levels', () => {
     expect(hard.expect).toBeGreaterThan(medium.expect)
   })
 
-  it('brings Nazma at the level’s first day', () => {
-    const nazmaOn = (d: 'easy' | 'hard', day: number) => {
+  it('brings Jaguar at the level’s first day', () => {
+    const jaguarOn = (d: 'easy' | 'hard', day: number) => {
       useGame.setState(initial, true)
       game().newGame(d)
       game().loadGame({ ...createSave(game(), 0), day: day - 1 })
-      return game().nazma
+      return game().jaguar
     }
-    expect(nazmaOn('easy', FIRST_NAZMA_DAY)).toBeNull()
-    expect(nazmaOn('easy', TUNING.easy.firstNazmaDay)).not.toBeNull()
-    expect(nazmaOn('hard', TUNING.hard.firstNazmaDay)).not.toBeNull()
+    expect(jaguarOn('easy', FIRST_JAGUAR_DAY)).toBeNull()
+    expect(jaguarOn('easy', TUNING.easy.firstJaguarDay)).not.toBeNull()
+    expect(jaguarOn('hard', TUNING.hard.firstJaguarDay)).not.toBeNull()
   })
 
   it('pays the level’s owner bonus and scales reputation at closing', () => {

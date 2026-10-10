@@ -10,7 +10,7 @@ import { dealCustomer, inConversation } from '../sim/deal'
 import type { Vec2 } from '../sim/grid'
 import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
-import { NAZMA_ID } from '../sim/nazma'
+import { JAGUAR_ID } from '../sim/jaguar'
 import { findPath } from '../sim/pathfinding'
 import { isPaused, useGame, type MoveOrder } from '../state/store'
 import { Character } from './Character'
@@ -20,9 +20,9 @@ const TURN_RATE = 14
 /** How closely the player must face an object before the action starts. */
 const FACE_TOLERANCE = 0.15
 const ARRIVE_EPSILON = 0.05
-/** Chasing Nazma: how often the path is planned again to where he is now (s). */
+/** Chasing Jaguar: how often the path is planned again to where he is now (s). */
 const CHASE_REPLAN_S = 0.4
-/** Close enough to Nazma to confront him, wherever the path had got to. */
+/** Close enough to Jaguar to confront him, wherever the path had got to. */
 const CONFRONT_REACH = 1.3
 
 interface Approach {
@@ -149,11 +149,11 @@ export function Player() {
       heading.current = dampAngle(heading.current, Math.atan2(dx, dz), TURN_RATE, dt)
     }
 
-    // Nazma doesn't stand still to be caught: keep heading for where he is now,
+    // Jaguar doesn't stand still to be caught: keep heading for where he is now,
     // and confront him as soon as he's within reach.
     const chasing = game.activeAction
     if (chasing?.action === 'confront' && chasing.phase === 'approaching' && approach.current) {
-      const at = ambientPos.get(NAZMA_ID)
+      const at = ambientPos.get(JAGUAR_ID)
       if (at && Math.hypot(at.x - playerPos.x, at.z - playerPos.z) < CONFRONT_REACH) {
         waypoints.current = []
         approach.current = null

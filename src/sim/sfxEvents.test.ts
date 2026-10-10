@@ -3,7 +3,7 @@ import { CLOSE_MINUTE, startOfDay } from './clock'
 import { generateCustomer, type Customer } from './customers'
 import { nextEvent } from './events'
 import { buildInventory } from './inventory'
-import { NAZMA_ID, type NazmaVisit } from './nazma'
+import { JAGUAR_ID, type JaguarVisit } from './jaguar'
 import { emptyCareer, TOP_RANK } from './progression'
 import { createRng } from './rng'
 import {
@@ -44,7 +44,7 @@ const base: SfxState = {
   helpOpen: false,
   audioOpen: false,
   inspectedId: null,
-  nazma: null,
+  jaguar: null,
 }
 const cues = (next: Partial<SfxState>, prev: Partial<SfxState> = {}) =>
   sfxFor({ ...base, ...prev }, { ...base, ...next }).map((e) => e.cue)
@@ -112,11 +112,6 @@ describe('sfxFor', () => {
     expect(cues({ clock: startOfDay(day) }, { clock: startOfDay(day - 1) })).toEqual(['fanfare'])
   })
 
-  it('opens the morning Nazma goes bust with a fanfare instead', () => {
-    const beaten = { ...emptyCareer(), rivalsBeaten: 1 }
-    expect(cues({ clock: startOfDay(2), career: beaten })).toEqual(['fanfare'])
-  })
-
   it('plays a fanfare on reaching the top rank, once', () => {
     const top = { ...emptyCareer(), rank: TOP_RANK.id }
     const before = { ...emptyCareer(), rank: 'regional-name' as const }
@@ -168,9 +163,9 @@ describe('sfxFor', () => {
     expect(events).toEqual([{ cue: 'spray', subject: { kind: 'car', id: a.id } }])
   })
 
-  it('scuffs the car Nazma dirtied, and shoos him when he is run off', () => {
+  it('scuffs the car Jaguar dirtied, and shoos him when he is run off', () => {
     const [a, b] = inventory
-    const visit: NazmaVisit = {
+    const visit: JaguarVisit = {
       scheme: 'smudge',
       targets: [a.id, b.id],
       arrivalMinute: 600,
@@ -180,16 +175,16 @@ describe('sfxFor', () => {
     }
     const dirtied = inventory.map((c) => (c.id === a.id ? { ...c, cleanliness: 0.4 } : c))
     const smudged = sfxFor(
-      { ...base, nazma: visit },
-      { ...base, nazma: { ...visit, progress: 1 }, inventory: dirtied },
+      { ...base, jaguar: visit },
+      { ...base, jaguar: { ...visit, progress: 1 }, inventory: dirtied },
     )
     expect(smudged).toEqual([{ cue: 'scuff', subject: { kind: 'car', id: a.id } }])
     // A car he skipped (sold, or out of reach) makes no sound.
-    expect(cues({ nazma: { ...visit, progress: 1 } }, { nazma: visit })).toEqual([])
+    expect(cues({ jaguar: { ...visit, progress: 1 } }, { jaguar: visit })).toEqual([])
     expect(
-      sfxFor({ ...base, nazma: visit }, { ...base, nazma: { ...visit, status: 'runOff' } }),
-    ).toEqual([{ cue: 'shoo', subject: { kind: 'ambient', id: NAZMA_ID } }])
-    expect(cues({ nazma: { ...visit, status: 'done' } }, { nazma: visit })).toEqual([])
+      sfxFor({ ...base, jaguar: visit }, { ...base, jaguar: { ...visit, status: 'runOff' } }),
+    ).toEqual([{ cue: 'shoo', subject: { kind: 'ambient', id: JAGUAR_ID } }])
+    expect(cues({ jaguar: { ...visit, status: 'done' } }, { jaguar: visit })).toEqual([])
   })
 
   it('stamps a hire and a firing, but not a shift change', () => {

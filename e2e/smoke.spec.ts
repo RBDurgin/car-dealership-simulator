@@ -98,7 +98,7 @@ test('an old save shows what’s new once, then continues', async ({ page }) => 
 
   const dialog = page.getByRole('dialog', { name: "What's new" })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('Used cars')).toBeVisible()
+  await expect(dialog.getByText('Phase 12 · Used cars')).toBeVisible()
   await dialog.getByRole('button', { name: 'Got it' }).click()
   await expect(dialog).toBeHidden()
 

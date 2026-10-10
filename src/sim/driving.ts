@@ -99,10 +99,10 @@ export type RoadEnd = 'west' | 'east'
 
 /** How far past the map's edge a car starts and ends, in tiles. */
 const OFF_MAP = 4
-const ROAD_WEST = -OFF_MAP
-const ROAD_EAST = GRID_WIDTH - 1 + OFF_MAP
+export const ROAD_WEST = -OFF_MAP
+export const ROAD_EAST = GRID_WIDTH - 1 + OFF_MAP
 /** Eastbound cars keep to the far lane, westbound to the near one. */
-const LANE: Record<'eastbound' | 'westbound', number> = { eastbound: 28.5, westbound: 27.5 }
+export const LANE: Record<'eastbound' | 'westbound', number> = { eastbound: 28.5, westbound: 27.5 }
 /** Through the driveway gate: in on its east side, out on its west. */
 const GATE_IN_X = 19
 const GATE_OUT_X = 17.6
@@ -205,6 +205,9 @@ export function routeLength(points: readonly Vec2[]): number {
   }
   return total
 }
+
+/** Half a car's width, in tiles: how far either side of its lane it reaches. */
+export const CAR_HALF_WIDTH = 1
 
 /** How far ahead of its centre a car looks for someone in the way, and how wide. */
 export const YIELD_AHEAD = 3

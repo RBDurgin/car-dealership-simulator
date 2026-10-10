@@ -25,10 +25,10 @@ export interface Tuning {
   expect: number
   /** Added to the odds a customer takes a deal. */
   acceptBonus: number
-  /** × the odds Nazma visits on a given day. */
-  nazmaChance: number
-  /** The day Nazma first turns up. */
-  firstNazmaDay: number
+  /** × the odds Jaguar visits on a given day. */
+  jaguarChance: number
+  /** The day Jaguar first turns up. */
+  firstJaguarDay: number
   /** × the odds of a theft night. */
   theftChance: number
   /** × the odds a visit is a poaching one. */
@@ -49,12 +49,6 @@ export interface Tuning {
   tradeHope: number
   /** × the lifetime gross each dealer rank needs. */
   rankScale: number
-  /** × Nazma's rival lot's opening strength and how fast it grows. */
-  rivalStrength: number
-  /** × Nazma's rival lot's discount off MSRP. */
-  rivalUndercut: number
-  /** × the days Nazma's rival lot stays closed after going bust. */
-  rivalComeback: number
   /** × the service department's daily visits. */
   serviceDemand: number
   /** × the odds a serviced car comes back for a redo. */
@@ -78,8 +72,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     patience: 1.25,
     expect: -0.01,
     acceptBonus: 0.05,
-    nazmaChance: 0.5,
-    firstNazmaDay: 7,
+    jaguarChance: 0.5,
+    firstJaguarDay: 7,
     theftChance: 0.5,
     poachChance: 0.5,
     quota: 0.8,
@@ -90,9 +84,6 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 0.7,
     tradeHope: 0.95,
     rankScale: 0.75,
-    rivalStrength: 0.75,
-    rivalUndercut: 0.8,
-    rivalComeback: 1.5,
     serviceDemand: 1.2,
     comebackScale: 0.5,
     franchiseSlack: 0.1,
@@ -108,8 +99,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     patience: 1,
     expect: 0,
     acceptBonus: 0,
-    nazmaChance: 1,
-    firstNazmaDay: 4,
+    jaguarChance: 1,
+    firstJaguarDay: 4,
     theftChance: 1,
     poachChance: 1,
     quota: 1,
@@ -120,9 +111,6 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 1,
     tradeHope: 1,
     rankScale: 1,
-    rivalStrength: 1,
-    rivalUndercut: 1,
-    rivalComeback: 1,
     serviceDemand: 1,
     comebackScale: 1,
     franchiseSlack: 0,
@@ -138,8 +126,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     patience: 0.8,
     expect: 0.015,
     acceptBonus: -0.04,
-    nazmaChance: 1.4,
-    firstNazmaDay: 3,
+    jaguarChance: 1.4,
+    firstJaguarDay: 3,
     theftChance: 1.5,
     poachChance: 1.3,
     quota: 1.15,
@@ -150,9 +138,6 @@ export const TUNING: Record<Difficulty, Tuning> = {
     appraisalNoise: 1.2,
     tradeHope: 1.05,
     rankScale: 1.15,
-    rivalStrength: 1.25,
-    rivalUndercut: 1.2,
-    rivalComeback: 0.7,
     serviceDemand: 0.8,
     comebackScale: 1.5,
     franchiseSlack: 0,
@@ -167,7 +152,7 @@ const LABELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', har
 const BLURBS: Record<Difficulty, string> = {
   easy: 'More cash, friendlier customers, help along the way',
   medium: 'The dealership as it comes',
-  hard: 'Tight cash, tough customers, Nazma on your case',
+  hard: 'Tight cash, tough customers, Jaguar on your case',
 }
 
 /** "Easy". */

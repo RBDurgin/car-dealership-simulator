@@ -26,12 +26,6 @@ import { fairPrice } from './usedCars'
  * from what it's worth that day (`fairPrice`), not its sticker, so a used car
  * that sits gets harder to sell at the same price. `day` defaults to the day
  * the car came in.
- *
- * A shopper who's been to Nazma's lot across the road carries his price on
- * one model (`Customer.rivalQuote`). On a new car of that model, an ask well
- * over it (`QUOTE_TOLERANCE`) may send them to him, and an ask at or under it
- * is one they're happy with, a little more likely to get a yes. With a trade
- * in the deal, the price before the allowance is what's compared.
  */
 
 /** Prices are named in round hundreds. */
@@ -59,29 +53,7 @@ export interface Haggle {
   allowance?: number
 }
 
-export type WalkReason =
-  'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball' | 'rival' | 'think'
-
-/** An ask more than this share over the rival's quote risks a walk to him. */
-export const QUOTE_TOLERANCE = 0.03
-/** Odds that an ask over the quote's tolerance sends them to the rival. */
-export const QUOTE_WALK = 0.35
-/** Added to the odds of a yes on an ask at or under the rival's quote. */
-export const MATCH_BONUS = 0.1
-
-/** The rival's quote that `car` is weighed against: their quote's model, new. Null otherwise. */
-export function quoteFor(
-  c: Pick<Customer, 'rivalQuote'>,
-  car: Pick<InventoryCar, 'model' | 'used'>,
-): number | null {
-  const q = c.rivalQuote
-  return q && !car.used && car.model === q.model ? q.price : null
-}
-
-/** Whether `price` is far enough over `quote` that they think of going to the rival. */
-export function overQuote(quote: number, price: number): boolean {
-  return price > quote * (1 + QUOTE_TOLERANCE)
-}
+export type WalkReason = 'pass' | 'stubborn' | 'budget' | 'gone' | 'keep' | 'insulted' | 'lowball'
 
 export type AskResponse =
   | { answer: 'accept' }
@@ -143,10 +115,8 @@ export function counterPrice(
  * Their answer to `ask` for `car`, with `allowance` for their trade-in if it's
  * part of the deal. `bonus` is the seller's skill bonus (see `skillBonus`).
  * An allowance far under what they hoped for (`TRADE_INSULT`) gets a counter
- * that costs them a round, or on their last round sends them off. An ask well
- * over the rival's quote may send them to him; one at or under it gets the
- * yes/no roll with `MATCH_BONUS`. Otherwise the net is weighed like a price.
- * Deterministic for a given rng state.
+ * that costs them a round, or on their last round sends them off. Otherwise
+ * the net is weighed like a price. Deterministic for a given rng state.
  */
 export function respondToAsk(
   c: Customer,
@@ -159,15 +129,11 @@ export function respondToAsk(
 ): AskResponse {
   const { offset, hope, budget } = termsOf(c, car, allowance, day)
   const net = netOf(c, ask, allowance)
-  const quote = quoteFor(c, car)
-  const matched = quote !== null && ask <= quote
-  const extra = tradeBonus(c, allowance) + (matched ? MATCH_BONUS : 0)
-  const chance = acceptChance(c, car, net + offset, bonus + extra, day)
-  // Turning down a match of the rival's price, they leave to think, not to go to him.
+  const chance = acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance), day)
   const roll = (factor: number): AskResponse =>
     rng.next() < chance * factor
       ? { answer: 'accept' }
-      : { answer: 'walk', reason: net > budget ? 'budget' : matched ? 'think' : 'pass' }
+      : { answer: 'walk', reason: net > budget ? 'budget' : 'pass' }
   const rounds = ARCHETYPES[c.archetype].haggle.rounds
 
   if (insultingAllowance(c, allowance)) {
@@ -180,10 +146,7 @@ export function respondToAsk(
     }
     return { answer: 'walk', reason: 'insulted' }
   }
-  if (quote !== null && overQuote(quote, ask) && rng.next() < QUOTE_WALK) {
-    return { answer: 'walk', reason: 'rival' }
-  }
-  if (matched || net <= hope || (c.haggle && net <= c.haggle.counter)) return roll(1)
+  if (net <= hope || (c.haggle && net <= c.haggle.counter)) return roll(1)
   if (c.haggle && net >= c.haggle.lastAsk && rng.next() < STUBBORN_WALK) {
     return { answer: 'walk', reason: 'stubborn' }
   }
@@ -206,8 +169,7 @@ export const WARM_CHANCE = 0.3
  * the same numbers `respondToAsk` uses, without rolling: hot when they'd
  * likely say yes, warm when they'd maybe say yes or will counter, cold when
  * they'd likely walk. Over budget, holding at the last ask (they may walk off
- * in a huff) or an allowance that offends them is cold. Well over the rival's
- * quote is a step cooler; at or under it counts like their hoped-for price.
+ * in a huff) or an allowance that offends them is cold.
  */
 export function dealWarmth(
   c: Customer,
@@ -219,24 +181,17 @@ export function dealWarmth(
 ): Warmth {
   const { offset, hope, budget } = termsOf(c, car, allowance, day)
   const net = netOf(c, ask, allowance)
-  const quote = quoteFor(c, car)
-  const matched = quote !== null && ask <= quote
-  const extra = tradeBonus(c, allowance) + (matched ? MATCH_BONUS : 0)
   const odds = (factor: number): Warmth => {
-    const chance = acceptChance(c, car, net + offset, bonus + extra, day) * factor
+    const chance =
+      acceptChance(c, car, net + offset, bonus + tradeBonus(c, allowance), day) * factor
     return chance >= HOT_CHANCE ? 'hot' : chance >= WARM_CHANCE ? 'warm' : 'cold'
   }
-  const warmth = (): Warmth => {
-    if (insultingAllowance(c, allowance)) return 'cold'
-    if (matched || net <= hope || (c.haggle && net <= c.haggle.counter)) return odds(1)
-    if (net > budget) return 'cold'
-    if (c.haggle && net >= c.haggle.lastAsk) return 'cold'
-    if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) return 'warm'
-    return odds(LAST_ROUND_FACTOR)
-  }
-  const w = warmth()
-  if (quote === null || !overQuote(quote, ask)) return w
-  return w === 'hot' ? 'warm' : 'cold'
+  if (insultingAllowance(c, allowance)) return 'cold'
+  if (net <= hope || (c.haggle && net <= c.haggle.counter)) return odds(1)
+  if (net > budget) return 'cold'
+  if (c.haggle && net >= c.haggle.lastAsk) return 'cold'
+  if (roundOf(c) < ARCHETYPES[c.archetype].haggle.rounds) return 'warm'
+  return odds(LAST_ROUND_FACTOR)
 }
 
 /**
@@ -258,12 +213,6 @@ export function askRange(
 export function clampAsk(c: Customer, car: InventoryCar, price: number, allowance?: number) {
   const { min, max } = askRange(c, car, allowance)
   return Math.min(max, Math.max(min, Math.round(price)))
-}
-
-/** The ask that matches the rival's quote on `car`, within `askRange`, or null without one. */
-export function matchAsk(c: Customer, car: InventoryCar, allowance?: number): number | null {
-  const quote = quoteFor(c, car)
-  return quote === null ? null : clampAsk(c, car, quote, allowance)
 }
 
 /**
@@ -313,39 +262,28 @@ export function staffConcession(skill: number): number {
  * keeps a healthy gross, green ones (2 or less) whatever it is. Never under
  * cost + `STAFF_FLOOR_MARGIN`. With a trade in the deal, `allowance` is what
  * they allow for it this round (see `staffAllowance`).
- *
- * Against the rival's `quote` (see `quoteFor`) they come down to it when they
- * would ask more: average and better ones (3+) only when it keeps cost +
- * `STAFF_FLOOR_MARGIN`, green ones whenever it's over cost.
  */
 export function staffAsk(
   skill: number,
   car: InventoryCar,
   haggle: Haggle | null,
   allowance = 0,
-  quote: number | null = null,
 ): number {
   const floor = car.cost + STAFF_FLOOR_MARGIN
+  if (!haggle) {
+    const open = skill >= 3 ? car.msrp : roundPrice(car.msrp * (1 - STAFF_OPEN_DISCOUNT))
+    return Math.min(car.msrp, Math.max(floor, open))
+  }
   // With a trade, the haggle's nets are prices once this round's allowance is added back.
-  const lastAsk = haggle ? Math.min(car.msrp, haggle.lastAsk + allowance) : car.msrp
-  const counter = haggle ? Math.min(lastAsk, haggle.counter + allowance) : 0
-  const ask = (() => {
-    if (!haggle) {
-      const open = skill >= 3 ? car.msrp : roundPrice(car.msrp * (1 - STAFF_OPEN_DISCOUNT))
-      return Math.min(car.msrp, Math.max(floor, open))
-    }
-    const takes =
-      counter >= floor &&
-      (skill <= 2 || (skill >= 4 && counter - car.cost >= STAFF_ACCEPT_GROSS * car.msrp))
-    if (takes) return counter
-    const ask = roundPrice(lastAsk - staffConcession(skill) * (lastAsk - counter))
-    // Within what can be asked now: their counter up to the last ask.
-    return Math.min(lastAsk, Math.max(counter, floor, ask))
-  })()
-  if (quote === null || ask <= quote) return ask
-  const matches = skill <= 2 ? quote > car.cost : quote >= floor
-  // Never under their own counter, which is a better price than the quote.
-  return matches ? Math.max(counter, quote) : ask
+  const lastAsk = Math.min(car.msrp, haggle.lastAsk + allowance)
+  const counter = Math.min(lastAsk, haggle.counter + allowance)
+  const takes =
+    counter >= floor &&
+    (skill <= 2 || (skill >= 4 && counter - car.cost >= STAFF_ACCEPT_GROSS * car.msrp))
+  if (takes) return counter
+  const ask = roundPrice(lastAsk - staffConcession(skill) * (lastAsk - counter))
+  // Within what can be asked now: their counter up to the last ask.
+  return Math.min(lastAsk, Math.max(counter, floor, ask))
 }
 
 /** A seasoned salesperson opens this share under their appraisal of a trade, per skill over 2. */
@@ -510,9 +448,5 @@ export function walkLine(reason: WalkReason): string {
       return "Is that a joke? I'm out."
     case 'lowball':
       return 'I can get more than that elsewhere.'
-    case 'rival':
-      return "Nazma's across the road is cheaper. I'll go there."
-    case 'think':
-      return "That's a fair price. I'll think about it."
   }
 }
