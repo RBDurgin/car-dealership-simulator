@@ -34,7 +34,7 @@ function ActionStatus() {
 
   const def = ACTIONS[action.action]
   const performing = action.phase === 'performing'
-  const person = it.kind === 'customer' || it.kind === 'employee' || it.kind === 'nazma'
+  const person = it.kind === 'customer' || it.kind === 'employee' || it.kind === 'jaguar'
   let label: string
   if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
@@ -122,8 +122,8 @@ export function HUD() {
       else if (e.code === 'KeyM' && !e.repeat) game.toggleStockPanel(undefined, 'marketing')
       else if (e.code === 'KeyU' && !e.repeat) game.toggleStockPanel(undefined, 'upgrades')
       else if (e.code === 'KeyC' && !e.repeat) game.toggleStockPanel(undefined, 'calendar')
-      else if (e.code === 'KeyK' && !e.repeat) game.toggleStockPanel(undefined, 'rival')
       else if (e.code === 'KeyB' && !e.repeat) game.toggleStockPanel(undefined, 'service')
+      else if (e.code === 'KeyK' && !e.repeat) game.toggleStockPanel(undefined, 'nazmas')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

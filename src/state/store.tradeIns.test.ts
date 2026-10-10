@@ -65,7 +65,6 @@ const buyer = (extra: Partial<Customer> = {}): Customer => ({
   vehicle: { car: OLD_CAR, spot: 0, parked: true },
   selling: null,
   trade: { hope: 12_000, estimate: { estimate: 10_000, margin: 2_500 }, appraised: false },
-  rivalQuote: null,
   ...extra,
 })
 
@@ -259,7 +258,6 @@ describe('salespeople with trade-ins and sellers', () => {
       browseCarIds: [],
       targetCarId: null,
       trade: null,
-      rivalQuote: null,
       selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
     })
     useGame.setState({ customers: [seller] })
@@ -283,7 +281,6 @@ describe('salespeople with trade-ins and sellers', () => {
         buyer({
           id: 'seller-b',
           trade: null,
-          rivalQuote: null,
           selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
         }),
       ],

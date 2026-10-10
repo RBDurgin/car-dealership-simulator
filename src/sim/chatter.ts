@@ -2,9 +2,8 @@ import { OWNER_VARIANT } from './characters'
 import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import type { Tone } from './gibberish'
 import type { Vec2 } from './grid'
-import type { InventoryCar } from './inventory'
-import { NAZMA_ID, NAZMA_VARIANT, nextTarget, type NazmaVisit } from './nazma'
-import { overQuote, quoteFor } from './negotiation'
+import { JAGUAR_ID, JAGUAR_VARIANT, nextTarget, type JaguarVisit } from './jaguar'
+import { chattingWith, NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID, type OwnerVisit } from './owner'
 import type { Rng } from './rng'
 import { spatialMix } from './sfxEvents'
@@ -20,7 +19,7 @@ import type { Employee } from './staff'
 
 /** One line of gibberish: who says it, how, and how many syllables. */
 export interface Line {
-  /** A customer or employee id, `PLAYER_ID`, `OWNER_ID`, `NAZMA_ID` or a companion's id. */
+  /** A customer or employee id, `PLAYER_ID`, `OWNER_ID`, `JAGUAR_ID`, `NAZMA_ID` or a companion's id. */
   speaker: string
   tone: Tone
   syllables: number
@@ -29,10 +28,9 @@ export interface Line {
 /** The slice of the store chatter reads. */
 export interface ChatterState {
   customers: readonly Customer[]
-  /** For the car on offer, to weigh an ask against the rival's quote. */
-  inventory: readonly InventoryCar[]
   roster: readonly Employee[]
   owner: OwnerVisit | null
+  jaguar: JaguarVisit | null
   nazma: NazmaVisit | null
 }
 
@@ -43,6 +41,7 @@ export const companionId = (customerId: string) => `${customerId}:companion`
 export function variantOf(s: ChatterState, speaker: string): string | null {
   if (speaker === PLAYER_ID) return 'salesperson'
   if (speaker === OWNER_ID) return OWNER_VARIANT
+  if (speaker === JAGUAR_ID) return JAGUAR_VARIANT
   if (speaker === NAZMA_ID) return NAZMA_VARIANT
   const companionOf = speaker.endsWith(':companion') ? speaker.slice(0, -':companion'.length) : null
   if (companionOf) return s.customers.find((c) => c.id === companionOf)?.companion ?? null
@@ -51,7 +50,7 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
   return s.roster.find((e) => e.id === speaker)?.variant ?? null
 }
 
-export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach'
+export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach' | 'chat'
 
 /** Two people talking back and forth; `speakers[0]` opens. */
 export interface Conversation {
@@ -75,11 +74,13 @@ export function conversationsOf(s: ChatterState): Conversation[] {
       out.push({ key: `couple:${c.id}`, kind: 'couple', speakers: [c.id, companionId(c.id)] })
     }
   }
-  const n = s.nazma
+  const n = s.jaguar
   const poached = n?.scheme === 'poach' && n.status === 'onLot' && n.chatting && nextTarget(n)
   if (poached) {
-    out.push({ key: `poach:${poached}`, kind: 'poach', speakers: [NAZMA_ID, poached] })
+    out.push({ key: `poach:${poached}`, kind: 'poach', speakers: [JAGUAR_ID, poached] })
   }
+  const friend = chattingWith(s.nazma)
+  if (friend) out.push({ key: `chat:${friend}`, kind: 'chat', speakers: [NAZMA_ID, friend] })
   return out
 }
 
@@ -92,6 +93,7 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   signing: [800, 2000],
   couple: [2000, 9000],
   poach: [300, 800],
+  chat: [400, 900],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -105,8 +107,8 @@ export const COUPLE_PAUSE_MS: readonly [number, number] = [7000, 16000]
  * Line number `turn` (from 0) of `conv`, and the silence after it in ms. The
  * two sides take turns: in a pitch the seller talks up the car and the
  * customer chimes in, at the desk it's a murmur over the paperwork, a
- * couple trade a remark now and then, and Nazma talks someone round in a low
- * voice while they ask questions.
+ * couple trade a remark now and then, Jaguar talks someone round in a low
+ * voice while they ask questions, and Nazma swaps cheerful news with a friend.
  */
 export function nextLine(
   conv: Conversation,
@@ -157,6 +159,14 @@ export function nextLine(
       const syllables = first ? rng.int(4, 8) : rng.int(2, 4)
       return { line: { speaker, tone, syllables }, gapMs: between(rng, [400, 1200]) }
     }
+    case 'chat': {
+      const roll = rng.next()
+      const tone: Tone = roll < 0.45 ? 'happy' : roll < 0.6 ? 'greeting' : 'neutral'
+      return {
+        line: { speaker, tone, syllables: rng.int(2, 6) },
+        gapMs: between(rng, [400, 1200]),
+      }
+    }
   }
 }
 
@@ -170,7 +180,8 @@ export const REACTION_GAP_MS = 250
  * - a "hmm" while a customer considers an offer, a question when they counter;
  * - a happy yes (and a happy seller) on accepting, a grumble on walking out;
  * - the owner's hello and goal when they reach the office;
- * - Nazma's grumble as he's run off.
+ * - Jaguar's grumble as he's run off;
+ * - Nazma's hello as he steps onto the lot.
  */
 export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): Line[][] {
   const out: Line[][] = []
@@ -192,14 +203,7 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       } else if (from === 'arriving' && receptionist) {
         out.push([{ speaker: receptionist.id, tone: 'greeting', syllables: rng.int(2, 3) }])
       } else if (from === 'talking' && to === 'considering') {
-        // Well over the rival's price, they grumble about it before thinking it over.
-        const car = c.offer && next.inventory.find((x) => x.id === c.offer!.carId)
-        const quote = car ? quoteFor(c, car) : null
-        out.push(
-          quote !== null && overQuote(quote, c.offer!.price)
-            ? [{ speaker: c.id, tone: 'grumble', syllables: rng.int(3, 4) }]
-            : [{ speaker: c.id, tone: 'murmur', syllables: 1 }],
-        )
+        out.push([{ speaker: c.id, tone: 'murmur', syllables: 1 }])
       } else if (from === 'considering' && to === 'talking' && c.haggle) {
         out.push([{ speaker: c.id, tone: 'question', syllables: rng.int(3, 5) }])
       } else if (from === 'considering' && (to === 'following' || c.leaveReason === 'sold')) {
@@ -220,8 +224,11 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       { speaker: OWNER_ID, tone: 'neutral', syllables: rng.int(6, 9) },
     ])
   }
-  if (next.nazma?.status === 'runOff' && prev.nazma?.status === 'onLot') {
-    out.push([{ speaker: NAZMA_ID, tone: 'grumble', syllables: rng.int(4, 6) }])
+  if (next.jaguar?.status === 'runOff' && prev.jaguar?.status === 'onLot') {
+    out.push([{ speaker: JAGUAR_ID, tone: 'grumble', syllables: rng.int(4, 6) }])
+  }
+  if (next.nazma?.status === 'onLot' && prev.nazma?.status !== 'onLot') {
+    out.push([{ speaker: NAZMA_ID, tone: 'greeting', syllables: rng.int(2, 3) }])
   }
   return out
 }

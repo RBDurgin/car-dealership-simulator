@@ -4,6 +4,7 @@ import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
 import { CameraRig } from './CameraRig'
 import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
+import { CupcakeShop } from './CupcakeShop'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
 import { DrawCalls } from './DrawCalls'
@@ -12,12 +13,12 @@ import { Floors } from './Floors'
 import { Garage } from './Garage'
 import { GameClock } from './GameClock'
 import { Ground } from './Ground'
+import { Jaguar } from './Jaguar'
 import { Nazma } from './Nazma'
 import { Owner } from './Owner'
 import { Pedestrians } from './Pedestrians'
 import { Player } from './Player'
 import { Props } from './Props'
-import { RivalLot } from './RivalLot'
 import { TubeMan } from './TubeMan'
 import { Staff } from './Staff'
 import { Walls } from './Walls'
@@ -45,8 +46,8 @@ export function Scene() {
       <Suspense fallback={null}>
         <Props />
         <Garage />
-        <RivalLot />
       </Suspense>
+      <CupcakeShop />
       <TubeMan />
       <DebugGrid />
       <ClickMarker />
@@ -56,6 +57,7 @@ export function Scene() {
       <Staff />
       <Pedestrians />
       <Owner />
+      <Jaguar />
       <Nazma />
       <Chatter />
       <WeatherEffects />

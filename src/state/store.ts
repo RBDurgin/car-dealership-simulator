@@ -51,7 +51,6 @@ import {
   clampAllowance,
   clampAsk,
   clampBuy,
-  quoteFor,
   respondToAsk,
   respondToBuyOffer,
   roundOf,
@@ -85,7 +84,6 @@ import {
   type OwnedImprovement,
 } from '../sim/improvements'
 import {
-  activeCampaigns,
   CHANNELS,
   launchCampaign,
   trafficBoost,
@@ -95,9 +93,9 @@ import {
 } from '../sim/marketing'
 import {
   confrontBlocker,
-  emptyNazmaStats,
-  isNazmaDay,
-  NAZMA_ID,
+  emptyJaguarStats,
+  isJaguarDay,
+  JAGUAR_ID,
   nextTarget,
   planTheft,
   planVisit,
@@ -105,11 +103,19 @@ import {
   theftNightAfter,
   theftSeed,
   visitSeed,
-  type NazmaStats,
+  type JaguarStats,
   type NightTheft,
-  type NazmaVisit,
+  type JaguarVisit,
   type RunOffBy,
   type VisitOdds,
+} from '../sim/jaguar'
+import {
+  FIRST_NAZMA_DAY,
+  isNazmaVisitDay,
+  nazmaSeed,
+  nextStop,
+  planNazmaVisit,
+  type NazmaVisit,
 } from '../sim/nazma'
 import { generateGoal, goalLabel, isOwnerDay, judgeDay, type OwnerVisit } from '../sim/owner'
 import {
@@ -142,23 +148,7 @@ import {
   visitorScale,
   type RepScale,
 } from '../sim/reputation'
-import {
-  assignQuotes,
-  blitzScale,
-  BUST_REPUTATION,
-  bustBoost,
-  emptyRival,
-  emptyRivalStats,
-  marketShare,
-  rivalDay,
-  rivalHired,
-  rivalMorning,
-  rivalNotice,
-  rivalStole,
-  sabotageScale,
-  type Rival,
-  type RivalStats,
-} from '../sim/rival'
+import { addSabotageDay, emptySabotage, type SabotageRecord } from '../sim/sabotage'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
 import { LAST_ARRIVAL_MINUTE, planArrivals, takeDue, type ArrivalSchedule } from '../sim/spawner'
@@ -242,7 +232,7 @@ export interface Notice {
 export type Screen = 'title' | 'playing'
 
 /** The office computer panel's tabs. */
-export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service'
+export type ComputerTab = 'stock' | 'marketing' | 'upgrades' | 'calendar' | 'service' | 'nazmas'
 
 /** Medium's starting cash; each level's is `TUNING[level].startingCash`. */
 export const STARTING_CASH = TUNING[DEFAULT_DIFFICULTY].startingCash
@@ -254,8 +244,6 @@ const OWNER_SEED = 12_000
 const WALK_IN_SEED = 14_000
 const DELIVERY_SEED = 16_000
 const DRIVE_SEED = 18_000
-const RIVAL_SEED = 21_000
-const QUOTE_SEED = 22_000
 const SERVICE_SEED = 23_000
 /** Dev-only game speeds, cycled with a key. 1 is normal. */
 export const DEV_TIME_SCALES = [1, 4, 16] as const
@@ -320,8 +308,8 @@ interface GameState {
   won: boolean
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
-  /** Nazma's lot across the road. Moves each morning (opening) and when the day is settled. Saved. */
-  rival: Rival
+  /** Jaguar's last theft night and lifetime tallies, added to when the day is settled. Saved. */
+  sabotage: SabotageRecord
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
   customers: Customer[]
   /** Today's arrival times and how many have shown up. */
@@ -334,7 +322,9 @@ interface GameState {
   candidates: Employee[]
   /** On an owner's day, their goal for it. Null on other days. */
   owner: OwnerVisit | null
-  /** On a day Nazma visits, his plan and how far he's got. Null on other days. */
+  /** On a day Jaguar visits, his plan and how far he's got. Null on other days. */
+  jaguar: JaguarVisit | null
+  /** On a day Nazma pops over from the cupcake shop, his stops and how far he's got. Null on other days. */
   nazma: NazmaVisit | null
   /** Yesterday's customers who found none of the body types they wanted (empty on a resumed game). */
   missedYesterday: DayStats['missed']
@@ -407,20 +397,28 @@ interface GameState {
   walkIn: (variant: CustomerVariant) => string | null
   /** The owner reached the office and tells the player today's goal. */
   ownerArrived: () => void
-  /** Nazma stepped onto the lot. */
-  nazmaArrived: () => void
-  /** Nazma finished smudging car `carId`, the next of his targets. */
-  nazmaSmudge: (carId: string) => void
-  /** Nazma reached the employee he came to poach and starts talking them round. */
-  nazmaChat: () => void
+  /** Jaguar stepped onto the lot. */
+  jaguarArrived: () => void
+  /** Jaguar finished smudging car `carId`, the next of his targets. */
+  jaguarSmudge: (carId: string) => void
+  /** Jaguar reached the employee he came to poach and starts talking them round. */
+  jaguarChat: () => void
   /**
-   * Nazma finished talking to employee `employeeId`, his target: they're
+   * Jaguar finished talking to employee `employeeId`, his target: they're
    * thinking of quitting (if they still work here and could be poached).
    */
-  nazmaPoach: (employeeId: string) => void
-  /** Nazma was caught on the lot and runs for the street. */
-  nazmaRunOff: (by: RunOffBy) => void
-  /** Nazma walked off the map. */
+  jaguarPoach: (employeeId: string) => void
+  /** Jaguar was caught on the lot and runs for the street. */
+  jaguarRunOff: (by: RunOffBy) => void
+  /** Jaguar walked off the map. */
+  jaguarLeft: () => void
+  /** Nazma crossed the road onto the lot. */
+  nazmaArrived: () => void
+  /** Nazma reached the person at his next stop and starts chatting. */
+  nazmaChat: () => void
+  /** Nazma is done at stop `id` (or it's no use: they're not around), on to the next. */
+  nazmaStop: (id: string) => void
+  /** Nazma is back across the road. */
   nazmaLeft: () => void
   /** Progress reported by the world (or the player) for one customer. */
   dispatchCustomer: (ev: CustomerEvent) => void
@@ -502,8 +500,6 @@ let staffRng: Rng = createRng(STAFF_SEED + 1)
 let walkInRng: Rng = createRng(WALK_IN_SEED + 1)
 /** Which arrivals come by car, and what they drive. Apart, so the rest of the day plays as before. */
 let driveRng: Rng = createRng(DRIVE_SEED + 1)
-/** Which shoppers have been to the rival's lot first. Apart, so the rest of the day plays as before. */
-let quoteRng: Rng = createRng(QUOTE_SEED + 1)
 /** Service clients and their quotes. Apart, so a day without a garage plays as before. */
 let serviceRng: Rng = createRng(SERVICE_SEED + 1)
 
@@ -568,18 +564,16 @@ export function repScale(t: Tuning): RepScale {
   return { gain: t.repGain, loss: t.repLoss }
 }
 
-/** The level's odds of a visit from Nazma. */
-/** The level's odds of a visit, scaled by his rival lot's `sabotageScale`. */
-function visitOdds(t: Tuning, scale = 1): VisitOdds {
-  return { chance: t.nazmaChance * scale, firstDay: t.firstNazmaDay }
+/** The level's odds of a visit from Jaguar. */
+function visitOdds(t: Tuning): VisitOdds {
+  return { chance: t.jaguarChance, firstDay: t.firstJaguarDay }
 }
 
 /** The morning's word on a night's theft. */
-export function theftNotice(theft: NightTheft, rival: string | null = null): string {
+export function theftNotice(theft: NightTheft): string {
   if (theft.outcome === 'foiled') return 'Your guard ran someone off the lot last night.'
   const { car } = theft
-  const where = rival ? ` It's for sale at ${rival} now.` : ''
-  const stole = `Nazma stole the ${carName(car.model)} off the lot overnight.${where}`
+  const stole = `Jaguar stole the ${carName(car.model)} off the lot overnight.`
   return car.floored ? `${stole} The bank called in its ${formatMoney(car.cost)} loan.` : stole
 }
 
@@ -610,7 +604,6 @@ function dayOne(difficulty: Difficulty) {
   staffRng = createRng(STAFF_SEED + 1)
   walkInRng = createRng(WALK_IN_SEED + 1)
   driveRng = createRng(DRIVE_SEED + 1)
-  quoteRng = createRng(QUOTE_SEED + 1)
   serviceRng = createRng(SERVICE_SEED + 1)
   const tuning = TUNING[difficulty]
   return {
@@ -620,7 +613,7 @@ function dayOne(difficulty: Difficulty) {
     career: emptyCareer(),
     franchise: START_TIER,
     won: false,
-    rival: emptyRival(),
+    sabotage: emptySabotage(),
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     purchases: [] as Purchase[],
@@ -714,9 +707,9 @@ export const useGame = create<GameState>((set, get) => {
    * day's customers move reputation. On the month's last day the manufacturer
    * pays the holdback on the month's sales (scaled by the franchise tier), and
    * the month's result moves the tier. The day's gross goes on the
-   * career, which may earn a new rank. Nazma's lot across the road takes in
-   * the day (see `rivalDay`). Used cars bought today go into stock, in the lot
-   * spaces held for them, so the save keeps them.
+   * career, which may earn a new rank, and Jaguar's doings on his record. Used
+   * cars bought today go into stock, in the lot spaces held for them, so the
+   * save keeps them.
    */
   const settleDay = () => {
     const s = get()
@@ -761,12 +754,7 @@ export const useGame = create<GameState>((set, get) => {
       reputation,
       career,
       franchise: quota?.tier.to ?? s.franchise,
-      rival: rivalDay(
-        s.rival,
-        s.dayStats,
-        createRng(RIVAL_SEED + s.clock.day),
-        level.rivalStrength,
-      ),
+      sabotage: addSabotageDay(s.sabotage, s.dayStats.jaguar),
       ...(s.purchases.length > 0 && {
         inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
         purchases: [],
@@ -796,23 +784,10 @@ export const useGame = create<GameState>((set, get) => {
     closeShop()
     const before = get().roster
     setRoster(reduceStaff(before, { type: 'close' }))
-    const quitters = before.filter((e) => e.quitting && !e.fired)
-    if (quitters.length === 0) return
-    const quit = quitters.map((e) => e.name)
-    const s = get()
-    const rival = rivalHired(s.rival, quitters, tuning().rivalStrength)
-    const joined = rival === s.rival ? [] : quitters.map((e) => ({ name: e.name, role: e.role }))
-    set({ rival })
-    tallyNazma({
-      quit: [...s.dayStats.nazma.quit, ...quit],
-      joined: [...s.dayStats.nazma.joined, ...joined],
-      ...(joined.length > 0 && { rival: rival.name }),
-    })
-    notify(
-      joined.length > 0
-        ? `${quit.join(' and ')} quit to work for ${rival.name}.`
-        : `${quit.join(' and ')} quit and won't be back.`,
-    )
+    const quit = before.filter((e) => e.quitting && !e.fired).map((e) => e.name)
+    if (quit.length === 0) return
+    tallyJaguar({ quit: [...get().dayStats.jaguar.quit, ...quit] })
+    notify(`${quit.join(' and ')} quit and won't be back.`)
   }
 
   /** At closing: jobs in the bays are finished in overtime, and waiting cars come back. */
@@ -941,46 +916,33 @@ export const useGame = create<GameState>((set, get) => {
         return get().toggleStockPanel(true, 'upgrades')
       case 'calendar':
         return get().toggleStockPanel(true, 'calendar')
-      case 'rival':
-        return get().toggleStockPanel(true, 'rival')
       case 'service':
         return get().toggleStockPanel(true, 'service')
+      case 'nazmas':
+        return get().toggleStockPanel(true, 'nazmas')
       case 'recondition':
         return void get().recondition(finished.targetId)
       case 'confront':
-        return get().nazmaRunOff('player')
+        return get().jaguarRunOff('player')
     }
   }
 
-  /** Updates today's Nazma tally. */
-  const tallyNazma = (change: Partial<NazmaStats>) => {
+  /** Updates today's Jaguar tally. */
+  const tallyJaguar = (change: Partial<JaguarStats>) => {
     const stats = get().dayStats
-    set({ dayStats: { ...stats, nazma: { ...stats.nazma, ...change } } })
+    set({ dayStats: { ...stats, jaguar: { ...stats.jaguar, ...change } } })
   }
 
-  /** Counts one more of the rival's quote-holders lost to him, or matched and sold to. */
-  const tallyRival = (key: keyof Pick<RivalStats, 'lost' | 'matched'>) => {
-    const stats = get().dayStats
-    if (!stats.rival) return
-    set({ dayStats: { ...stats, rival: { ...stats.rival, [key]: stats.rival[key] + 1 } } })
-  }
-
-  /** Some of `arrived` have been to the rival's lot first and carry his price. */
-  const withQuotes = (arrived: readonly Customer[]) => {
+  /** Stores Jaguar's visit, dropping a confront aimed at him once he's no longer on the lot. */
+  const setJaguar = (jaguar: JaguarVisit) => {
+    set({ jaguar })
+    if (jaguar.status === 'onLot') return
     const s = get()
-    return assignQuotes(arrived, s.rival, s.dayStats.rival?.share ?? 0, quoteRng)
-  }
-
-  /** Stores Nazma's visit, dropping a confront aimed at him once he's no longer on the lot. */
-  const setNazma = (nazma: NazmaVisit) => {
-    set({ nazma })
-    if (nazma.status === 'onLot') return
-    const s = get()
-    if (s.activeAction?.targetId === NAZMA_ID) dispatch({ type: 'cancel' })
-    if (s.menu?.targetId === NAZMA_ID || s.hoveredId === NAZMA_ID) {
+    if (s.activeAction?.targetId === JAGUAR_ID) dispatch({ type: 'cancel' })
+    if (s.menu?.targetId === JAGUAR_ID || s.hoveredId === JAGUAR_ID) {
       set({
-        menu: s.menu?.targetId === NAZMA_ID ? null : s.menu,
-        hoveredId: s.hoveredId === NAZMA_ID ? null : s.hoveredId,
+        menu: s.menu?.targetId === JAGUAR_ID ? null : s.menu,
+        hoveredId: s.hoveredId === JAGUAR_ID ? null : s.hoveredId,
       })
     }
   }
@@ -1149,8 +1111,6 @@ export const useGame = create<GameState>((set, get) => {
         : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
     if (allowance !== undefined && !traded) return null
     if (!get().sellCar(car.id, price)) return null
-    const quote = quoteFor(c, car)
-    if (quote !== null && price <= quote) tallyRival('matched')
     // Who made the sale. A salesperson let go since is no longer on the roster.
     const seller =
       c.sellerId && c.sellerId !== PLAYER_ID
@@ -1243,7 +1203,7 @@ export const useGame = create<GameState>((set, get) => {
   }
 
   /**
-   * Opens the doors on `day`: sold cars are gone, Nazma may have stolen one
+   * Opens the doors on `day`: sold cars are gone, Jaguar may have stolen one
    * off the lot (the bank calls in its loan if it was floored), the rest have
    * gathered a night's dust (more out on the lot after rain), yesterday's
    * orders are parked in their slots, finished ad campaigns end, there are new
@@ -1251,12 +1211,6 @@ export const useGame = create<GameState>((set, get) => {
    * weekday, the weather and any sale weekend) and applicants, and the staff
    * head in. On the 1st the manufacturer sets the month's quota, from
    * reputation. A sale weekend is announced a week ahead and on its first day.
-   * Nazma announces his rival lot once the dealership is a Main Street one,
-   * and while it's open it takes its share of the day's visitors, makes his
-   * weekly move on Mondays, and the worse he does the more Nazma gets up to:
-   * a car he steals goes on his lot. Kept under his bust floor for weeks, he
-   * closes: the player's reputation goes up, his buyers come over for a week,
-   * and Nazma stays away until he reopens.
    */
   const beginDay = (day: number) => {
     const weather = weatherOn(day)
@@ -1268,7 +1222,6 @@ export const useGame = create<GameState>((set, get) => {
     staffRng = createRng(STAFF_SEED + day)
     walkInRng = createRng(WALK_IN_SEED + day)
     driveRng = createRng(DRIVE_SEED + day)
-    quoteRng = createRng(QUOTE_SEED + day)
     serviceRng = createRng(SERVICE_SEED + day)
     const s = get()
     const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
@@ -1279,37 +1232,21 @@ export const useGame = create<GameState>((set, get) => {
     )
     const level = tuning()
     const guarded = isGuarded(s.roster)
-    const opening = rivalMorning(s.rival, day, s.career.rank, {
-      strength: level.rivalStrength,
-      undercut: level.rivalUndercut,
-      comeback: level.rivalComeback,
-    })
-    // Driving him bust is worth reputation, and a mark on the career.
-    const bust = opening.event === 'bust'
-    // The more desperate his lot, the more Nazma gets up to.
-    const sabotage = sabotageScale(opening.rival)
-    const theftChance = level.theftChance * sabotage
-    const last = s.rival.lastTheftDay
-    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, theftChance, last)
+    // The gap after his last try is kept in the save, so a reload never repeats a theft.
+    const last = s.sabotage.lastTheftDay
+    const theft = planTheft(createRng(theftSeed(day)), day, kept, guarded, level.theftChance, last)
     const stolen = theft?.outcome === 'stolen' ? theft.car : null
-    const tried = theftNightAfter(day, last, theftChance)
-    const rival = stolen
-      ? { ...rivalStole(opening.rival, stolen.model), lastTheftDay: day }
-      : tried
-        ? { ...opening.rival, lastTheftDay: day }
-        : opening.rival
-    const share = marketShare(rival, {
-      reputation: s.reputation,
-      campaigns: activeCampaigns(campaigns, day).length,
-      day,
-    })
+    const tried = theftNightAfter(day, last, level.theftChance)
     const inventory = [
       ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
       ...delivered,
     ]
     const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-    const nazma = isNazmaDay(day, guarded, visitOdds(level, sabotage))
-      ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance * sabotage)
+    const jaguar = isJaguarDay(day, guarded, visitOdds(level))
+      ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance)
+      : null
+    const nazma = isNazmaVisitDay(day, !!jaguar)
+      ? planNazmaVisit(createRng(nazmaSeed(day)), s.roster)
       : null
     const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
@@ -1329,16 +1266,14 @@ export const useGame = create<GameState>((set, get) => {
       campaigns,
       arrivals: planArrivals(
         customerRng,
-        trafficBoost(campaigns, day, campaignScale(s.reputation) * blitzScale(rival)),
+        trafficBoost(campaigns, day, campaignScale(s.reputation)),
         {
           scale:
             visitorScale(s.reputation) *
             weekdayTraffic(day) *
             effects.traffic *
             (event?.traffic ?? 1) *
-            level.traffic *
-            (1 - share) *
-            bustBoost(rival, day),
+            level.traffic,
           referrals: referralVisitors(s.reputation),
         },
       ),
@@ -1353,24 +1288,19 @@ export const useGame = create<GameState>((set, get) => {
           factor: level.serviceDemand,
         }),
       ),
-      rival,
-      ...(bust && {
-        reputation: applyChange(s.reputation, BUST_REPUTATION),
-        career: { ...s.career, rivalsBeaten: s.career.rivalsBeaten + 1 },
-      }),
+      sabotage: tried ? { ...s.sabotage, lastTheftDay: day } : s.sabotage,
       dayStats: {
         ...emptyStats(),
-        nazma: {
-          ...emptyNazmaStats(),
+        jaguar: {
+          ...emptyJaguarStats(),
           stolen: stolen ? [stolenRecord(stolen)] : [],
           foiled: theft?.outcome === 'foiled',
-          rival: rival.status === 'open' ? rival.name : null,
         },
-        rival: rival.status === 'open' ? emptyRivalStats(share) : null,
       },
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day, installedExpansions(s.expansions, day)),
       owner,
+      jaguar,
       nazma,
     })
     setRoster(reduceStaff(get().roster, { type: 'open' }))
@@ -1379,9 +1309,8 @@ export const useGame = create<GameState>((set, get) => {
       s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
       s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
-      opening.event && rivalNotice(rival, opening.event),
       eventNotice(day),
-      theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
+      theft && theftNotice(theft),
       delivered.length > 0 && deliveryNotice(delivered),
       shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
     ].filter((t): t is string => !!t)
@@ -1412,6 +1341,7 @@ export const useGame = create<GameState>((set, get) => {
     dayStats: emptyStats(),
     roster: [],
     owner: null,
+    jaguar: null,
     nazma: null,
     missedYesterday: {},
     staffOpen: false,
@@ -1445,7 +1375,7 @@ export const useGame = create<GameState>((set, get) => {
       const s = get()
       const blocker =
         action === 'confront'
-          ? confrontBlocker(s.nazma)
+          ? confrontBlocker(s.jaguar)
           : action === 'recondition'
             ? reconBlocker(reconBook(s), targetId)
             : actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
@@ -1528,29 +1458,27 @@ export const useGame = create<GameState>((set, get) => {
       // Some drive in, while there's room in customer parking. Some of those
       // are sellers, and some of the rest bring a car to trade.
       const level = tuning()
-      const arrived = withQuotes(
-        assignTrades(
-          assignSellers(
-            assignVehicles(
-              due.map((source) =>
-                generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
-                  source,
-                  ...arrivalOpts(),
-                }),
-              ),
-              customers,
-              driveRng,
-              step.day,
-              s.purchases.map((p) => p.spot),
+      const arrived = assignTrades(
+        assignSellers(
+          assignVehicles(
+            due.map((source) =>
+              generateCustomer(`customer-${nextCustomerId++}`, stock, customerRng, {
+                source,
+                ...arrivalOpts(),
+              }),
             ),
+            customers,
             driveRng,
             step.day,
-            { hope: level.sellerHope, noise: level.appraisalNoise },
+            s.purchases.map((p) => p.spot),
           ),
           driveRng,
           step.day,
-          { hope: level.tradeHope, noise: level.appraisalNoise },
+          { hope: level.sellerHope, noise: level.appraisalNoise },
         ),
+        driveRng,
+        step.day,
+        { hope: level.tradeHope, noise: level.appraisalNoise },
       )
       customers = [...customers, ...arrived]
       // The mechanics put in the time on what's in the bays.
@@ -1711,14 +1639,12 @@ export const useGame = create<GameState>((set, get) => {
       const picked = pickArchetype(walkInRng, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = `customer-${nextCustomerId++}`
-      const [c] = withQuotes([
-        generateCustomer(id, availableCars(s.inventory), walkInRng, {
-          ...opts,
-          variant,
-          archetype,
-          source: 'walk-in',
-        }),
-      ])
+      const c = generateCustomer(id, availableCars(s.inventory), walkInRng, {
+        ...opts,
+        variant,
+        archetype,
+        source: 'walk-in',
+      })
       set({ dayStats: tallyMissed(recordVisitors(s.dayStats, [c]), [c]) })
       commit([...s.customers, c])
       return id
@@ -1729,58 +1655,80 @@ export const useGame = create<GameState>((set, get) => {
       set({ owner: { ...owner, announced: true } })
       notify(`The owner wants: ${goalLabel(owner.goal, formatMoney)}.`)
     },
-    nazmaArrived: () => {
+    jaguarArrived: () => {
       const s = get()
-      if (s.nazma?.status !== 'coming') return
-      setNazma({ ...s.nazma, status: 'onLot' })
-      tallyNazma({ visited: true })
+      if (s.jaguar?.status !== 'coming') return
+      setJaguar({ ...s.jaguar, status: 'onLot' })
+      tallyJaguar({ visited: true })
       notify(
-        s.clock.day === tuning().firstNazmaDay
-          ? "That's Nazma, who used to work here. He has it in for the place. Click him to run him off!"
-          : s.rival.status === 'open'
-            ? `Nazma crossed the road from ${s.rival.name}.`
-            : 'Nazma is back on the lot.',
+        s.clock.day === tuning().firstJaguarDay
+          ? "That's Jaguar. He works at Nazma's cupcake shop across the road, but this is all his own idea: he has it in for the place. Click him to run him off!"
+          : 'Jaguar is back on the lot.',
       )
     },
-    nazmaSmudge: (carId) => {
+    jaguarSmudge: (carId) => {
       const s = get()
-      if (s.nazma?.status !== 'onLot' || nextTarget(s.nazma) !== carId) return
-      setNazma({ ...s.nazma, progress: s.nazma.progress + 1 })
+      if (s.jaguar?.status !== 'onLot' || nextTarget(s.jaguar) !== carId) return
+      setJaguar({ ...s.jaguar, progress: s.jaguar.progress + 1 })
       const inventory = smudgeCar(s.inventory, carId)
       if (inventory === s.inventory) return
       set({ inventory })
-      tallyNazma({ smudged: get().dayStats.nazma.smudged + 1 })
+      tallyJaguar({ smudged: get().dayStats.jaguar.smudged + 1 })
       const car = inventory.find((c) => c.id === carId)
-      if (car) notify(`Nazma smeared grime all over the ${carName(car.model)}.`)
+      if (car) notify(`Jaguar smeared grime all over the ${carName(car.model)}.`)
     },
-    nazmaChat: () => {
+    jaguarChat: () => {
       const s = get()
-      if (s.nazma?.status !== 'onLot' || s.nazma.scheme !== 'poach' || s.nazma.chatting) return
-      setNazma({ ...s.nazma, chatting: true })
+      if (s.jaguar?.status !== 'onLot' || s.jaguar.scheme !== 'poach' || s.jaguar.chatting) return
+      setJaguar({ ...s.jaguar, chatting: true })
     },
-    nazmaPoach: (employeeId) => {
+    jaguarPoach: (employeeId) => {
       const s = get()
-      if (s.nazma?.status !== 'onLot' || nextTarget(s.nazma) !== employeeId) return
-      setNazma({ ...s.nazma, progress: s.nazma.progress + 1, chatting: false })
+      if (s.jaguar?.status !== 'onLot' || nextTarget(s.jaguar) !== employeeId) return
+      setJaguar({ ...s.jaguar, progress: s.jaguar.progress + 1, chatting: false })
       const roster = reduceStaff(s.roster, { type: 'poached', id: employeeId })
       if (roster === s.roster) return
       setRoster(roster)
       const e = roster.find((x) => x.id === employeeId)!
-      tallyNazma({ poached: [...get().dayStats.nazma.poached, e.name] })
+      tallyJaguar({ poached: [...get().dayStats.jaguar.poached, e.name] })
       notify(
-        `${e.name} is thinking of quitting. Nazma made them an offer. Keep them from the staff panel before closing.`,
+        `${e.name} is thinking of quitting. Jaguar made them an offer. Keep them from the staff panel before closing.`,
       )
     },
-    nazmaRunOff: (by) => {
+    jaguarRunOff: (by) => {
       const s = get()
-      if (s.nazma?.status !== 'onLot') return
-      setNazma({ ...s.nazma, status: 'runOff', chatting: false })
-      tallyNazma({ runOff: by })
-      notify(by === 'player' ? 'You ran Nazma off the lot.' : 'Your guard ran Nazma off the lot.')
+      if (s.jaguar?.status !== 'onLot') return
+      setJaguar({ ...s.jaguar, status: 'runOff', chatting: false })
+      tallyJaguar({ runOff: by })
+      notify(by === 'player' ? 'You ran Jaguar off the lot.' : 'Your guard ran Jaguar off the lot.')
+    },
+    jaguarLeft: () => {
+      const s = get()
+      if (s.jaguar?.status === 'onLot') setJaguar({ ...s.jaguar, status: 'done' })
+    },
+    nazmaArrived: () => {
+      const s = get()
+      if (s.nazma?.status !== 'coming') return
+      set({ nazma: { ...s.nazma, status: 'onLot' } })
+      if (s.clock.day === FIRST_NAZMA_DAY) {
+        notify('Nazma from the cupcake shop across the road popped over to say hi.')
+      }
+    },
+    nazmaChat: () => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot' || s.nazma.chatting) return
+      set({ nazma: { ...s.nazma, chatting: true } })
+    },
+    nazmaStop: (id) => {
+      const s = get()
+      if (s.nazma?.status !== 'onLot' || nextStop(s.nazma) !== id) return
+      set({ nazma: { ...s.nazma, progress: s.nazma.progress + 1, chatting: false } })
     },
     nazmaLeft: () => {
       const s = get()
-      if (s.nazma?.status === 'onLot') setNazma({ ...s.nazma, status: 'done' })
+      if (s.nazma && s.nazma.status !== 'done') {
+        set({ nazma: { ...s.nazma, status: 'done', chatting: false } })
+      }
     },
     dispatchCustomer: (ev) => commit(reduceCustomers(get().customers, ev)),
     answerOffer: (id) => {
@@ -1798,7 +1746,6 @@ export const useGame = create<GameState>((set, get) => {
       const insulted = res.answer === 'counter' && res.insulted
       const ev = { type: 'respond', id, answer: res.answer, counter, insulted } as const
       commit(reduceCustomers(s.customers, ev))
-      if (res.answer === 'walk' && res.reason === 'rival') tallyRival('lost')
       // Staff deals go on quietly; the sale itself is announced.
       if (c.handlerId !== PLAYER_ID) return
       if (res.answer === 'accept') notify(`${c.name}: "Deal! Lead the way."`)
@@ -1857,7 +1804,7 @@ export const useGame = create<GameState>((set, get) => {
       const allow = c.trade
         ? tradeAllowance(c, staffAllowance(e.skill, appraisal, c.trade.hope, roundOf(c)))
         : undefined
-      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow, quoteFor(c, car)))
+      const price = Math.max(allow ?? 0, staffAsk(e.skill, car, c.haggle, allow))
       const ev = { type: 'offer', id: c.id, carId: car.id, price, allowance: allow } as const
       commit(reduceCustomers(s.customers, ev))
     },
@@ -1978,7 +1925,7 @@ export const useGame = create<GameState>((set, get) => {
       if (!e?.quitting || e.fired) return
       const raise = retentionRaise(e.wage)
       setRoster(reduceStaff(get().roster, { type: 'keep', id, wage: e.wage + raise }))
-      tallyNazma({ kept: [...get().dayStats.nazma.kept, { name: e.name, raise }] })
+      tallyJaguar({ kept: [...get().dayStats.jaguar.kept, { name: e.name, raise }] })
       notify(`${e.name} is staying, for ${formatMoney(raise)} a day more.`)
     },
     dispatchStaff: (ev) => setRoster(reduceStaff(get().roster, ev)),
@@ -2032,7 +1979,7 @@ export const useGame = create<GameState>((set, get) => {
         career: save.career,
         franchise: save.franchise,
         won: save.won,
-        rival: save.rival,
+        sabotage: save.sabotage,
         tipsSeen: save.tipsSeen,
         service: save.service,
       })

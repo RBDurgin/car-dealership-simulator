@@ -10,10 +10,10 @@ import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { emptyCareer, type Career } from './progression'
 import { START_REPUTATION } from './reputation'
-import { emptyRival, type Rival } from './rival'
+import { emptySabotage, type SabotageRecord } from './sabotage'
 import { BASE_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
-import { lastTheftNight } from './nazma'
+import { lastTheftNight } from './jaguar'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
@@ -59,8 +59,8 @@ const source = () => ({
   expansions: [] as OwnedExpansion[],
   // As a v16 save upgrades, so the older upgrades compare equal.
   won: false,
-  // As a v17 save of day 3 upgrades (no theft yet), so the older upgrades compare equal.
-  rival: emptyRival() as Rival,
+  // As a v22 save of day 3 upgrades (no theft yet), so the older upgrades compare equal.
+  sabotage: emptySabotage() as SabotageRecord,
   // As a v21 save upgrades, so the older upgrades compare equal.
   service: defaultService() as ServiceSettings,
 })
@@ -336,52 +336,26 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(v16)))).toEqual(save)
   })
 
-  it('upgrades a version 17 save with the rival unopened, and his last theft replayed', () => {
+  it('upgrades a version 17 save, replaying his last theft night', () => {
     const save = createSave(source(), 123)
-    const v17 = { ...save, version: 17, rival: undefined }
+    const v17 = { ...save, version: 17, sabotage: undefined }
     expect(parseSave(JSON.parse(JSON.stringify(v17)))).toEqual(save)
     const late = createSave({ ...source(), clock: { day: 40, minute: CLOSE_MINUTE } }, 123)
     const lastTheftDay = lastTheftNight(40)
     expect(lastTheftDay).toBeGreaterThan(0)
-    expect(parseSave({ ...late, version: 17, rival: undefined })?.rival).toEqual({
-      ...emptyRival(),
+    expect(parseSave({ ...late, version: 17, sabotage: undefined })?.sabotage).toEqual({
+      ...emptySabotage(),
       lastTheftDay,
     })
-    const hard = { ...late, version: 17, rival: undefined, difficulty: 'hard' }
-    expect(parseSave(hard)?.rival.lastTheftDay).toBe(lastTheftNight(40, 1.5))
-  })
-
-  it('upgrades a version 18 save with no weekly shares yet', () => {
-    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [] }
-    const save = createSave({ ...source(), rival }, 123)
-    const { weeks: _, ...old } = rival
-    const v18 = { ...save, version: 18, rival: old }
-    expect(parseSave(JSON.parse(JSON.stringify(v18)))).toEqual(save)
-  })
-
-  it('upgrades a version 19 save with no move picked yet', () => {
-    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [0.18] }
-    const save = createSave({ ...source(), rival }, 123)
-    const { move: _, ...old } = rival
-    const v19 = { ...save, version: 19, rival: old }
-    expect(parseSave(JSON.parse(JSON.stringify(v19)))).toEqual(save)
-  })
-
-  it('upgrades a version 20 save with nobody beaten and no bust day', () => {
-    const rival: Rival = { ...emptyRival(), status: 'open', shares: [0.2], weeks: [0.18] }
-    const save = createSave({ ...source(), rival }, 123)
-    const { closedDay: _, ...oldRival } = rival
-    const { rivalsBeaten: __, ...oldCareer } = save.career
-    const v20 = { ...save, version: 20, rival: oldRival, career: oldCareer }
-    expect(parseSave(JSON.parse(JSON.stringify(v20)))).toEqual(save)
-    expect(parseSave({ ...save, career: oldCareer })).toBeNull()
+    const hard = { ...late, version: 17, sabotage: undefined, difficulty: 'hard' }
+    expect(parseSave(hard)?.sabotage.lastTheftDay).toBe(lastTheftNight(40, 1.5))
   })
 
   it('upgrades a version 21 save: the shop at its defaults, its sales spread over the models', () => {
     const career: Career = { ...emptyCareer(), sales: 2 * CAR_MODELS.length + 1 }
     const save = createSave({ ...source(), career }, 123)
     const { soldByModel: _, ...oldCareer } = career
-    const v21 = { ...save, version: 21, career: oldCareer, service: undefined }
+    const v21 = { ...save, version: 21, career: oldCareer, service: undefined, sabotage: undefined }
     const upgraded = parseSave(JSON.parse(JSON.stringify(v21)))
     expect(upgraded?.service).toEqual(defaultService())
     const spread = upgraded?.career.soldByModel ?? {}
@@ -390,7 +364,8 @@ describe('save data', () => {
     expect(spread[CAR_MODELS[1]]).toBe(2)
     const none = createSave(source(), 123)
     const { soldByModel: __, ...empty } = none.career
-    expect(parseSave({ ...none, version: 21, career: empty, service: undefined })).toEqual(none)
+    const v21none = { ...none, version: 21, career: empty, service: undefined, sabotage: undefined }
+    expect(parseSave(v21none)).toEqual(none)
   })
 
   it('keeps the service settings, and rejects a rate it doesn’t know', () => {
@@ -402,29 +377,67 @@ describe('save data', () => {
     expect(parseSave({ ...save, service: undefined })).toBeNull()
   })
 
-  it('keeps the rival, and rejects a malformed one', () => {
-    const rival: Rival = {
-      ...emptyRival(),
+  it('upgrades a version 22 save with the rival open: no lot, his last theft carried over', () => {
+    const career = { ...emptyCareer(), rank: 'main-street' as const, rivalsBeaten: 1 }
+    const rival = {
       status: 'open',
-      generation: 1,
-      openDay: 22,
-      strength: 47.5,
-      undercut: 0.04,
-      shares: [0.15, 0.17],
-      weeks: [0.16],
+      name: "Nazma's Motors",
+      generation: 2,
+      openDay: 15,
+      closedUntil: 0,
+      closedDay: 0,
+      strength: 52,
+      undercut: 0.045,
+      ourDiscount: 0.04,
+      shares: [0.2, 0.18],
+      weeks: [0.19],
       stolen: ['truck'],
       hires: ['Dana K.'],
-      lastTheftDay: 31,
-      move: { id: 'priceWar', from: 29 },
+      lastTheftDay: 38,
+      move: { id: 'priceWar', from: 36 },
     }
-    const save = createSave({ ...source(), rival }, 123)
-    expect(parseSave(JSON.parse(JSON.stringify(save)))?.rival).toEqual(rival)
-    expect(parseSave({ ...save, rival: { ...rival, status: 'bust' } })).toBeNull()
-    expect(parseSave({ ...save, rival: { ...rival, shares: ['a'] } })).toBeNull()
-    expect(parseSave({ ...save, rival: { ...rival, weeks: undefined } })).toBeNull()
-    expect(parseSave({ ...save, rival: { ...rival, move: { id: 'riot', from: 29 } } })).toBeNull()
-    expect(parseSave({ ...save, rival: { ...rival, move: undefined } })).toBeNull()
-    expect(parseSave({ ...save, rival: undefined })).toBeNull()
+    const save = createSave({ ...source(), clock: { day: 40, minute: CLOSE_MINUTE } }, 123)
+    const { sabotage: _, ...rest } = save
+    const v22 = {
+      ...rest,
+      version: 22,
+      rival,
+      career,
+      tipsSeen: ['wash', 'nazma', 'rivalQuote', 'rivalOpens', 'rivalBust'],
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v22)))
+    expect(upgraded).not.toBeNull()
+    expect(upgraded).not.toHaveProperty('rival')
+    expect(upgraded?.sabotage).toEqual({ ...emptySabotage(), lastTheftDay: 38 })
+    expect(upgraded?.career).not.toHaveProperty('rivalsBeaten')
+    expect(upgraded?.career.rank).toBe('main-street')
+    expect(upgraded?.tipsSeen).toEqual(['wash', 'jaguar'])
+    // Without his last theft night, it's replayed.
+    const { lastTheftDay: __, ...noTheft } = rival
+    expect(parseSave({ ...v22, rival: noTheft })?.sabotage.lastTheftDay).toBe(lastTheftNight(40))
+  })
+
+  it('upgrades a version 23 save: Nazma’s tip is now Jaguar’s', () => {
+    const save = createSave({ ...source(), tipsSeen: ['wash'] }, 123)
+    const v23 = { ...save, version: 23, tipsSeen: ['wash', 'nazma'] }
+    expect(parseSave(JSON.parse(JSON.stringify(v23)))?.tipsSeen).toEqual(['wash', 'jaguar'])
+  })
+
+  it('keeps the sabotage record, and rejects a malformed one', () => {
+    const sabotage: SabotageRecord = {
+      lastTheftDay: 31,
+      visits: 6,
+      runOffByYou: 2,
+      runOffByGuard: 1,
+      smudged: 9,
+      stolen: 1,
+      poached: 1,
+      kept: 2,
+    }
+    const save = createSave({ ...source(), sabotage }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.sabotage).toEqual(sabotage)
+    expect(parseSave({ ...save, sabotage: { ...sabotage, visits: 'a' } })).toBeNull()
+    expect(parseSave({ ...save, sabotage: undefined })).toBeNull()
   })
 
   it('keeps the win, and rejects a save without one', () => {
@@ -456,7 +469,6 @@ describe('save data', () => {
       monthGross: 30_000,
       bestMonth: 95_000,
       rank: 'main-street',
-      rivalsBeaten: 2,
       soldByModel: { sedan: 30, truck: 11 },
     }
     const save = createSave({ ...source(), career }, 123)
@@ -478,10 +490,10 @@ describe('save data', () => {
   })
 
   it('keeps the safety net and tips seen, and rejects a tip it doesn’t know', () => {
-    const save = createSave({ ...source(), bailoutUsed: true, tipsSeen: ['wash', 'nazma'] }, 123)
+    const save = createSave({ ...source(), bailoutUsed: true, tipsSeen: ['wash', 'jaguar'] }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))).toMatchObject({
       bailoutUsed: true,
-      tipsSeen: ['wash', 'nazma'],
+      tipsSeen: ['wash', 'jaguar'],
     })
     expect(parseSave({ ...save, tipsSeen: ['juggle'] })).toBeNull()
     expect(parseSave({ ...save, bailoutUsed: 'yes' })).toBeNull()

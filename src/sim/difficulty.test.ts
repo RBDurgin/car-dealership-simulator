@@ -7,14 +7,14 @@ import {
   isDifficulty,
   TUNING,
 } from './difficulty'
-import { FIRST_NAZMA_DAY } from './nazma'
+import { FIRST_JAGUAR_DAY } from './jaguar'
 
 describe('difficulty levels', () => {
   it('defaults to Medium, whose levers are all neutral', () => {
     expect(DEFAULT_DIFFICULTY).toBe('medium')
     const {
       startingCash,
-      firstNazmaDay,
+      firstJaguarDay,
       expect: shift,
       acceptBonus,
       franchiseSlack,
@@ -22,7 +22,7 @@ describe('difficulty levels', () => {
     } = TUNING.medium
     expect(startingCash).toBe(25_000)
     expect(franchiseSlack).toBe(0)
-    expect(firstNazmaDay).toBe(FIRST_NAZMA_DAY)
+    expect(firstJaguarDay).toBe(FIRST_JAGUAR_DAY)
     expect(shift).toBe(0)
     expect(acceptBonus).toBe(0)
     for (const [lever, value] of Object.entries(rest)) {

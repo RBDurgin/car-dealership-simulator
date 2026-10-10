@@ -8,12 +8,12 @@ import { CAR_MODELS } from './customers'
 import { COST_FRACTION, type InventoryCar } from './inventory'
 import { PARKING_SPACES, PLATFORMS, type CarModel } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
-import { lastTheftNight } from './nazma'
+import { lastTheftNight } from './jaguar'
 import { BASE_SLOTS, type Order } from './ordering'
 import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
-import { emptyRival, isRival, type Rival } from './rival'
+import { emptySabotage, isSabotageRecord, type SabotageRecord } from './sabotage'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { dressFor, ROLES, type Employee } from './staff'
 import { isTipId, type TipId } from './tips'
@@ -29,7 +29,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 22
+export const SAVE_VERSION = 24
 
 export interface SaveData {
   version: number
@@ -68,8 +68,8 @@ export interface SaveData {
   won: boolean
   /** The latest update (see `sim/whatsNew.ts`) this game's player has been shown. */
   news: number
-  /** Nazma's lot across the road (see `sim/rival.ts`). */
-  rival: Rival
+  /** The saboteur's last theft night and lifetime tallies (see `sim/sabotage.ts`). */
+  sabotage: SabotageRecord
   /** The service department's settings (see `sim/service.ts`). */
   service: ServiceSettings
 }
@@ -92,7 +92,7 @@ export interface SaveSource {
   career: Career
   franchise: FranchiseTier
   won: boolean
-  rival: Rival
+  sabotage: SabotageRecord
   service: ServiceSettings
 }
 
@@ -125,7 +125,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     franchise: s.franchise,
     won: s.won,
     news: LATEST_NEWS,
-    rival: s.rival,
+    sabotage: s.sabotage,
     service: s.service,
   }
 }
@@ -210,40 +210,13 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   15: (raw) => ({ ...raw, expansions: [] }),
   // v17: the win. Nobody had seen the win screen before it.
   16: (raw) => ({ ...raw, won: false }),
-  // v18: Nazma's rival lot, not yet announced. His last theft night is replayed
-  // at the save's level, so the gap after it holds.
-  17: (raw) => ({
-    ...raw,
-    rival: {
-      ...emptyRival(),
-      lastTheftDay: isNumber(raw.day)
-        ? lastTheftNight(
-            raw.day,
-            isDifficulty(raw.difficulty) ? TUNING[raw.difficulty].theftChance : 1,
-          )
-        : 0,
-    },
-  }),
-  // v19: his weekly shares, none reported yet.
-  18: (raw) => ({
-    ...raw,
-    rival:
-      typeof raw.rival === 'object' && raw.rival !== null ? { ...raw.rival, weeks: [] } : raw.rival,
-  }),
-  // v20: his weekly move, none picked until the next Monday.
-  19: (raw) => ({
-    ...raw,
-    rival:
-      typeof raw.rival === 'object' && raw.rival !== null
-        ? { ...raw.rival, move: null }
-        : raw.rival,
-  }),
-  // v21: going bust. He never had, and nobody had beaten him.
-  20: (raw) => ({
-    ...raw,
-    rival: isObject(raw.rival) ? { ...raw.rival, closedDay: 0 } : raw.rival,
-    career: isObject(raw.career) ? { ...raw.career, rivalsBeaten: 0 } : raw.career,
-  }),
+  // v18–v21 were Nazma's rival lot across the road, since retired (v23). Of
+  // it only his last theft night is still read, so v18 keeps just that,
+  // replayed at the save's level so the gap after it holds.
+  17: (raw) => ({ ...raw, rival: { lastTheftDay: replayedTheftDay(raw) } }),
+  18: (raw) => raw,
+  19: (raw) => raw,
+  20: (raw) => raw,
   // v22: the service department at its defaults, and cars sold by model, the
   // career's sales spread evenly over the models so recalls have buyers to call.
   21: (raw) => ({
@@ -256,6 +229,48 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         }
       : raw.career,
   }),
+  // v23: the rival lot is gone. His last theft night carries over (or is
+  // replayed if it's missing), the tallies start at 0, and his tips and the
+  // career's rivals beaten go with him.
+  22: (raw) => {
+    const { rival, ...rest } = raw
+    const last = isObject(rival) && isNumber(rival.lastTheftDay) ? rival.lastTheftDay : null
+    return {
+      ...rest,
+      sabotage: { ...emptySabotage(), lastTheftDay: last ?? replayedTheftDay(raw) },
+      career: isObject(raw.career) ? withoutKey(raw.career, 'rivalsBeaten') : raw.career,
+      tipsSeen: Array.isArray(raw.tipsSeen)
+        ? raw.tipsSeen.filter((t: unknown) => !RETIRED_TIPS.includes(t))
+        : raw.tipsSeen,
+    }
+  },
+  // v24: Jaguar took over the sabotage from Nazma, and his tip with it.
+  23: (raw) => ({
+    ...raw,
+    tipsSeen: Array.isArray(raw.tipsSeen)
+      ? raw.tipsSeen.map((t: unknown) => (t === 'nazma' ? 'jaguar' : t))
+      : raw.tipsSeen,
+  }),
+}
+
+/** Tips that went with the rival lot (v23). */
+const RETIRED_TIPS: readonly unknown[] = ['rivalQuote', 'rivalOpens', 'rivalBust']
+
+const withoutKey = (o: Record<string, unknown>, key: string) => {
+  const { [key]: _, ...rest } = o
+  return rest
+}
+
+/**
+ * The last night up to the save's day that the saboteur tried to steal a car,
+ * replayed at the save's level (see `lastTheftNight`).
+ */
+function replayedTheftDay(raw: RawSave): number {
+  if (!isNumber(raw.day)) return 0
+  return lastTheftNight(
+    raw.day,
+    isDifficulty(raw.difficulty) ? TUNING[raw.difficulty].theftChance : 1,
+  )
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -292,7 +307,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions, won, rival, service } = raw
+  const { expansions, won, sabotage, service } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -310,7 +325,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isCareer(career)) return null
   if (!isFranchiseTier(franchise)) return null
   if (typeof won !== 'boolean') return null
-  if (!isRival(rival)) return null
+  if (!isSabotageRecord(sabotage)) return null
   if (!isObject(service) || !isRateLevel(service.rate) || typeof service.autoRecon !== 'boolean')
     return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
@@ -345,7 +360,6 @@ function isCareer(v: unknown): boolean {
     isNumber(v.monthGross) &&
     isNumber(v.bestMonth) &&
     isRankId(v.rank) &&
-    isNumber(v.rivalsBeaten) &&
     isObject(v.soldByModel) &&
     Object.entries(v.soldByModel).every(
       ([model, n]) => (CAR_MODELS as readonly string[]).includes(model) && isNumber(n),

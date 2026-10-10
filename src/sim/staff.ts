@@ -21,7 +21,7 @@ import type { Rng } from './rng'
  *
  * `open` also sends anyone still walking out back to work (a new day started
  * before they reached the sidewalk). Firing an idle employee sends them home
- * now; a fired employee is removed once they've left. Someone Nazma poached is
+ * now; a fired employee is removed once they've left. Someone Jaguar poached is
  * `quitting` until kept with a raise; at `close` they walk out for good.
  */
 export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic'
@@ -57,7 +57,7 @@ export const ROLE_BLURBS: Record<Role, string> = {
   receptionist: 'Keeps waiting customers patient.',
   finance: 'Signs buyers at your office desk, so you can sell to the next one.',
   porter: 'Washes the dirtiest cars on the lot.',
-  security: 'Patrols the lot, chases off Nazma and makes his visits rarer.',
+  security: 'Patrols the lot, chases off Jaguar and makes his visits rarer.',
   mechanic: 'Works a bay in the service garage. Skill sets how fast.',
 }
 /** Short label for the badge over their head. */
@@ -122,7 +122,7 @@ export interface Employee {
   /** Let go: walks out and is removed once off the lot. Not paid for the day. */
   fired: boolean
   /**
-   * Nazma talked them into leaving: they quit at closing unless kept with a
+   * Jaguar talked them into leaving: they quit at closing unless kept with a
    * raise. A quitter stays `quitting` once gone, so they're still paid for the day.
    */
   quitting: boolean
@@ -164,7 +164,7 @@ const SKILL_TIME_STEP = 0.15
 
 /** Walking speed in the world, units per second: a touch brisker than customers. */
 export const STAFF_SPEED = 1.8
-/** A security guard running after Nazma: quicker than he can run off. */
+/** A security guard running after Jaguar: quicker than he can run off. */
 export const GUARD_CHASE_SPEED = 3
 
 /** Share of their wage a raise to keep someone from quitting adds. */
@@ -321,13 +321,13 @@ export function financeOnDuty(roster: readonly Employee[]): Employee | null {
   )
 }
 
-/** Whether a security guard is on the payroll (not let go), which keeps Nazma away more often. */
+/** Whether a security guard is on the payroll (not let go), which keeps Jaguar away more often. */
 export function isGuarded(roster: readonly Employee[]): boolean {
   return roster.some((e) => e.role === 'security' && !e.fired)
 }
 
 /**
- * Whether Nazma could talk `e` into quitting: on the payroll, not a guard (who
+ * Whether Jaguar could talk `e` into quitting: on the payroll, not a guard (who
  * would rather run him off) and not already thinking of it.
  */
 export function isPoachable(e: Employee): boolean {
@@ -351,7 +351,7 @@ export type StaffEvent =
   | { type: 'atPost'; id: string }
   /** Closing time: everyone heads home, and anyone still quitting leaves for good. */
   | { type: 'close' }
-  /** Nazma talked them round: they're thinking of quitting. */
+  /** Jaguar talked them round: they're thinking of quitting. */
   | { type: 'poached'; id: string }
   /** Kept from quitting with a raise to `wage`. */
   | { type: 'keep'; id: string; wage: number }

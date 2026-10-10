@@ -2,27 +2,26 @@ import { useFrame } from '@react-three/fiber'
 import { Suspense, useState } from 'react'
 import type { Group } from 'three'
 import { useShallow } from 'zustand/react/shallow'
-import { dampAngle } from '../sim/agent'
 import type { Customer } from '../sim/customers'
 import {
-  blockedAhead,
   drivenCleanliness,
   inboundRoute,
   outboundRoute,
   parkedPose,
-  routeLength,
   type Leg,
   type RoadEnd,
 } from '../sim/driving'
 import type { Vec2 } from '../sim/grid'
 import type { CarModel } from '../sim/layout'
 import { createRng, hashSeed } from '../sim/rng'
+import { isBikeId } from '../sim/riding'
 import { vehicleTargetId } from '../sim/sellers'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
 import { Interactable } from './Interactable'
+import { followRoute, startRoute, type Handling, type RouteMover } from './route'
 import { crowdAgents, grid, vehiclePos } from './runtime'
-import { frameSeconds, MAX_STEP_S } from './walker'
+import { frameSeconds } from './walker'
 
 /** Top speed on the road and on the lot, in tiles per game second. */
 const ROAD_SPEED = 5
@@ -34,17 +33,11 @@ const ACCEL = 3
 const BRAKE = 4
 /** Tile row of the fence: south of it is the sidewalk and the road. */
 const FENCE_Z = 24
-/** How quickly the car turns to face where it's going. */
-const STEER_RATE = 8
-/** Game seconds a car waits for someone in the way before edging through anyway. */
-const GIVE_UP_SECONDS = 4
-/** And how long it then ignores who's in front, to get clear. */
-const PUSH_ON_SECONDS = 1.5
 
 type Stage = 'in' | 'parked' | 'out'
 
 /** A visitor's car in the world. Lives here, never in the store. */
-interface DrivenCar {
+interface DrivenCar extends RouteMover {
   /** Its customer's id. */
   id: string
   model: CarModel
@@ -54,16 +47,6 @@ interface DrivenCar {
   /** The road end it came from, and leaves by. */
   end: RoadEnd
   stage: Stage
-  /** The route being driven, in world space, and how far along it the car is. */
-  legs: Leg[]
-  leg: number
-  next: number
-  /** Shared with `vehiclePos`. */
-  at: { pos: Vec2; heading: number; moving: boolean }
-  speed: number
-  /** Game seconds held up by someone in the way, and left to push on regardless. */
-  waited: number
-  pushOn: number
   /** We bought it: it stays in its space until it goes into stock at closing. */
   bought: boolean
 }
@@ -118,82 +101,33 @@ function createCar(c: Customer): DrivenCar {
 /** Pulls out of its space and heads back the way it came. */
 function driveOff(car: DrivenCar): void {
   car.stage = 'out'
-  car.legs = toWorld(outboundRoute(car.spot, car.end))
-  car.leg = 0
-  car.next = 1
-  car.speed = 0
-  car.at.moving = true
+  startRoute(car, toWorld(outboundRoute(car.spot, car.end)))
 }
 
-/** Distance left to the end of the current leg, where the car stops (or turns about). */
-function legLeft(car: DrivenCar): number {
-  const { points } = car.legs[car.leg]
-  return routeLength([car.at.pos, ...points.slice(car.next)])
-}
-
-/** Anyone a car should stop for: people standing about, and the other cars. */
+/**
+ * Anyone a car should stop for: people standing about, the other cars and
+ * Nazma's or Jaguar's bike on the move.
+ */
 function obstacles(self: string): Vec2[] {
   const own = `${self}:car`
   const people = crowdAgents()
     .filter((a) => !a.id.startsWith(own))
     .map((a) => a.pos)
   const others = [...cars.values()].filter((c) => c.id !== self && c.stage !== 'parked')
-  return [...people, ...others.map((c) => c.at.pos)]
+  const bikes = [...vehiclePos].filter(([id, v]) => isBikeId(id) && v.moving)
+  return [...people, ...others.map((c) => c.at.pos), ...bikes.map(([, v]) => v.pos)]
 }
 
-/**
- * Drives along the route for `seconds`: speeds up to the limit, brakes to stop
- * at each leg's end, waits for anyone in front (pushing on after a while so it
- * can't be stuck for good), and steers to face the way it's going (away from
- * it, backing out). Returns true once the route is done.
- */
-function drive(car: DrivenCar, seconds: number): boolean {
-  if (car.leg >= car.legs.length) return true
-  const leg = car.legs[car.leg]
-  const target = leg.points[car.next]
-  const dir = { x: target.x - car.at.pos.x, z: target.z - car.at.pos.z }
-  if (car.pushOn > 0) car.pushOn -= seconds
-  else if (blockedAhead(car.at.pos, dir, obstacles(car.id))) {
-    car.speed = 0
-    car.waited += seconds
-    if (car.waited >= GIVE_UP_SECONDS) car.pushOn = PUSH_ON_SECONDS
-    return false
-  }
-  car.waited = 0
-
-  const offRoad = grid.worldToTile(car.at.pos.x, car.at.pos.z).tz < FENCE_Z
-  const limit = leg.reverse ? REVERSE_SPEED : offRoad ? LOT_SPEED : ROAD_SPEED
-  const brakeTo = Math.sqrt(2 * BRAKE * legLeft(car))
-  car.speed = Math.min(car.speed + ACCEL * seconds, limit, Math.max(0.3, brakeTo))
-
-  let left = car.speed * seconds
-  while (left > 1e-9 && car.next < leg.points.length) {
-    const p = leg.points[car.next]
-    const dx = p.x - car.at.pos.x
-    const dz = p.z - car.at.pos.z
-    const d = Math.hypot(dx, dz)
-    if (d > 1e-6) {
-      const facing = leg.reverse ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz)
-      car.at.heading = dampAngle(car.at.heading, facing, STEER_RATE, Math.min(seconds, MAX_STEP_S))
-    }
-    if (d <= left) {
-      car.at.pos.x = p.x
-      car.at.pos.z = p.z
-      left -= d
-      car.next++
-    } else {
-      car.at.pos.x += (dx / d) * left
-      car.at.pos.z += (dz / d) * left
-      left = 0
-    }
-  }
-  if (car.next >= leg.points.length) {
-    car.leg++
-    car.next = 1
-    car.speed = 0
-  }
-  return car.leg >= car.legs.length
-}
+/** On the lot it keeps to `LOT_SPEED`, backing out to `REVERSE_SPEED`. */
+const handling = (car: DrivenCar): Handling => ({
+  limit: (leg, pos) => {
+    const offRoad = grid.worldToTile(pos.x, pos.z).tz < FENCE_Z
+    return leg.reverse ? REVERSE_SPEED : offRoad ? LOT_SPEED : ROAD_SPEED
+  },
+  accel: ACCEL,
+  brake: BRAKE,
+  obstacles: () => obstacles(car.id),
+})
 
 /**
  * One car's frame. Returns false once it has driven off the map, or (one we
@@ -212,7 +146,7 @@ function update(
   // Their customer got back in (or is gone): pull out.
   if (car.stage === 'parked' && !c) driveOff(car)
   if (car.stage === 'parked') return true
-  if (!drive(car, seconds)) return true
+  if (!followRoute(car, seconds, handling(car))) return true
   if (car.stage === 'out') return false
   // In its space.
   const parked = parkedPose(car.spot)

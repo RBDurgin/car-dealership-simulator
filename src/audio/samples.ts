@@ -5,7 +5,7 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare' | 'engine' | 'door'
+type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'motorbike'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -24,7 +24,14 @@ const FILES: Record<Exclude<SfxId, Synth>, string> = {
   shoo: 'sfx/shoo.ogg',
 }
 
-const ALL_IDS = [...Object.keys(FILES), 'spray', 'fanfare', 'engine', 'door'] as SfxId[]
+const ALL_IDS = [
+  ...Object.keys(FILES),
+  'spray',
+  'fanfare',
+  'engine',
+  'door',
+  'motorbike',
+] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
 
@@ -130,15 +137,43 @@ function doorBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+const MOTORBIKE_SECONDS = 2.2
+
+/**
+ * A motorcycle setting off: higher and buzzier than a car's `engine`, a
+ * twin's uneven firing note that blips up through a gear change and fades as
+ * it rides away. Made here because the packs have no bikes in them.
+ */
+function motorbikeBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(MOTORBIKE_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  let phase = 0
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate
+    // Revs up to about 150 Hz, drops a little at the gear change, then pulls again.
+    const hz = t < 0.6 ? 70 + (t / 0.6) * 80 : 115 + Math.min(1, (t - 0.6) / 0.8) * 30
+    phase += (2 * Math.PI * hz) / rate
+    // A sawtooth-ish stack of harmonics for the buzz, gated by a lumpy twin's beat.
+    let tone = 0
+    for (let k = 1; k <= 10; k++) tone += Math.sin(k * phase) / k
+    const beat = 0.55 + 0.45 * Math.max(0, Math.sin(phase * 0.5))
+    const envelope = Math.min(1, t / 0.04) * Math.min(1, (MOTORBIKE_SECONDS - t) / 1.2)
+    data[i] = (tone * beat * 0.4 + (Math.random() * 2 - 1) * 0.1) * envelope
+  }
+  return buffer
+}
+
 const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   spray: sprayBuffer,
   fanfare: fanfareBuffer,
   engine: engineBuffer,
   door: doorBuffer,
+  motorbike: motorbikeBuffer,
 }
 
 /** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */
-const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500 }
+const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500, motorbike: 2200 }
 
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)

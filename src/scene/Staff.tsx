@@ -16,7 +16,7 @@ import {
   SERVICE_BAYS,
   SIDEWALK_ENDS,
 } from '../sim/layout'
-import { NAZMA_ID } from '../sim/nazma'
+import { JAGUAR_ID } from '../sim/jaguar'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
 import {
@@ -84,9 +84,9 @@ const LOT_CENTER = grid.tileToWorld(20, 18)
 const GARAGE_CENTER = grid.tileToWorld(GARAGE.tx + GARAGE.w / 2, GARAGE.tz + GARAGE.h / 2)
 /** Game seconds the guard stands at each patrol stop, looking over the lot. */
 const PATROL_PAUSE_SECONDS = 5
-/** Close enough to Nazma for the guard to run him off. */
+/** Close enough to Jaguar for the guard to run him off. */
 const CATCH_REACH = 1.2
-/** Chasing Nazma: game seconds between new paths to where he is now. */
+/** Chasing Jaguar: game seconds between new paths to where he is now. */
 const CHASE_REPLAN_SECONDS = 0.4
 
 /** Where staff without a chair wait, and what they face. */
@@ -417,14 +417,14 @@ function updateMechanic(e: Employee, w: StaffWalker, seconds: number): void {
 
 /**
  * The security guard's rounds: stop by stop round the patrol, pausing at each
- * to look over the lot. Once Nazma comes within sight they run after him and,
+ * to look over the lot. Once Jaguar comes within sight they run after him and,
  * on reaching him, run him off.
  */
 function updateGuard(e: Employee, w: StaffWalker, seconds: number): void {
   const game = useGame.getState()
-  const nazma = game.nazma?.status === 'onLot' ? ambientPos.get(NAZMA_ID) : undefined
+  const jaguar = game.jaguar?.status === 'onLot' ? ambientPos.get(JAGUAR_ID) : undefined
   const task = nextGuardTask(e, {
-    nazma: nazma ? grid.worldToTile(nazma.x, nazma.z) : null,
+    jaguar: jaguar ? grid.worldToTile(jaguar.x, jaguar.z) : null,
     at: grid.worldToTile(w.pos.x, w.pos.z),
     leg: w.leg,
     chasing: w.task === 'chase',
@@ -434,25 +434,25 @@ function updateGuard(e: Employee, w: StaffWalker, seconds: number): void {
     if (w.task !== 'post') plan(e, w, 'post')
     return updatePost(e, w, seconds)
   }
-  if (task.kind === 'chase' && nazma) {
+  if (task.kind === 'chase' && jaguar) {
     if (w.task !== 'chase') {
       w.task = 'chase'
       w.timer = 0
       w.faceTo = null
       standUp(w)
     }
-    if (Math.hypot(nazma.x - w.pos.x, nazma.z - w.pos.z) < CATCH_REACH) {
+    if (Math.hypot(jaguar.x - w.pos.x, jaguar.z - w.pos.z) < CATCH_REACH) {
       w.waypoints = []
-      game.nazmaRunOff('guard')
+      game.jaguarRunOff('guard')
       return
     }
     // He keeps moving: head for where he is now.
     if ((w.timer -= seconds) <= 0) {
       w.timer = CHASE_REPLAN_SECONDS
-      const tile = grid.worldToTile(nazma.x, nazma.z)
+      const tile = grid.worldToTile(jaguar.x, jaguar.z)
       pathTo(w, approachTilesFor(grid, { ...tile, w: 1, h: 1 }))
     }
-    const moving = walk(w, GUARD_CHASE_SPEED, seconds, nazma)
+    const moving = walk(w, GUARD_CHASE_SPEED, seconds, jaguar)
     w.anim.current = moving ? 'sprint' : 'idle'
     return
   }
@@ -543,7 +543,7 @@ const onLot = (e: Employee) => e.status !== 'off'
  * Every employee in the world, moved by one `useFrame` (like Customers): they
  * walk in from the sidewalk at opening (or when hired), work from their post
  * (the finance manager signs buyers' paperwork at the office desk, the porter
- * washes the dirtiest cars, the guard patrols the lot and chases off Nazma,
+ * washes the dirtiest cars, the guard patrols the lot and chases off Jaguar,
  * mechanics work the garage's bays), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.

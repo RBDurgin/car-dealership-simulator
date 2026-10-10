@@ -55,7 +55,6 @@ const waiter = (id: string, carId: string): Customer => ({
   vehicle: null,
   selling: null,
   trade: null,
-  rivalQuote: null,
 })
 
 describe('weather', () => {

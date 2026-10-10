@@ -19,7 +19,7 @@ import {
 import { TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
-import { nazmaSummary } from '../sim/nazma'
+import { jaguarSummary } from '../sim/jaguar'
 import { goalLabel } from '../sim/owner'
 import { rankById, rankProgress } from '../sim/progression'
 import { daysLeft, quotaLine } from '../sim/quota'
@@ -51,7 +51,7 @@ export function DaySummary() {
   const progress = rankProgress(career, reputation, rankScale)
   const event = eventOn(day)
   const missed = missedSummary(stats.missed)
-  const nazma = nazmaSummary(stats.nazma, formatMoney)
+  const jaguar = jaguarSummary(stats.jaguar, formatMoney)
   const sources = salesBySource(stats)
   // Worth a table once anyone came from an ad or a referral (walk-ins alone are in the visitor line).
   const advertised = sources.some((t) => t.source !== 'regular' && t.source !== 'walk-in')
@@ -184,10 +184,10 @@ export function DaySummary() {
               </span>
             )}
           </dd>
-          {nazma && (
+          {jaguar && (
             <>
-              <dt>Nazma</dt>
-              <dd>{nazma}</dd>
+              <dt>Jaguar</dt>
+              <dd>{jaguar}</dd>
             </>
           )}
           {(missed || stats.missedUsed > 0) && (

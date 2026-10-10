@@ -2,10 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { WASH_BELOW } from './cleanliness'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
-import type { NazmaVisit } from './nazma'
+import type { JaguarVisit } from './jaguar'
 import { createRng } from './rng'
 import { STALE_DAYS } from './usedCars'
-import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
+import {
+  CUPCAKES_TIP_MINUTE,
+  LOW_CASH,
+  TIP_IDS,
+  tipFor,
+  tipText,
+  TIPS,
+  type TipId,
+  type TipState,
+} from './tips'
 
 const inventory = buildInventory(createRng(42)).map((c) => ({ ...c, cleanliness: 1 }))
 const customer = (id: string, patch: Partial<Customer> = {}): Customer => ({
@@ -14,7 +23,7 @@ const customer = (id: string, patch: Partial<Customer> = {}): Customer => ({
   phase: 'talking',
   ...patch,
 })
-const nazma = (status: NazmaVisit['status']): NazmaVisit => ({
+const jaguar = (status: JaguarVisit['status']): JaguarVisit => ({
   scheme: 'smudge',
   status,
   targets: [],
@@ -25,16 +34,15 @@ const nazma = (status: NazmaVisit['status']): NazmaVisit => ({
 
 const base: TipState = {
   screen: 'playing',
-  clock: { day: 1 },
+  clock: { day: 1, minute: 540 },
   cash: 20_000,
   inventory,
   customers: [customer('c1')],
   dayStats: { missed: {} },
   owner: null,
-  nazma: null,
+  jaguar: null,
   franchise: 'bronze',
   career: { rank: 'corner-lot' },
-  rival: { status: 'unopened' },
   expansions: [],
 }
 const garage: TipState['expansions'] = [
@@ -60,13 +68,6 @@ const tradeCar = (parked: boolean): Partial<Customer> => {
   const { selling, ...rest } = sellerCar(parked)
   return { ...rest, phase: parked ? 'browsing' : 'arriving', trade: selling }
 }
-/** A buyer with the rival's quote on the first car, being talked to by `handlerId`. */
-const quoted = (handlerId: string | null): Partial<Customer> => ({
-  phase: handlerId ? 'talking' : 'waiting',
-  handlerId,
-  targetCarId: inventory[0].id,
-  rivalQuote: { model: inventory[0].model, price: 20_000 },
-})
 const usedOn = (acquiredDay: number) => ({
   year: 2020,
   miles: 70_000,
@@ -88,12 +89,16 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   ],
   restock: [{ inventory: withCar({ status: 'sold' }) }, {}],
   missed: [{ dayStats: { missed: { sedan: 1 } } }, {}],
-  nazma: [{ nazma: nazma('onLot') }, { nazma: nazma('coming') }],
+  jaguar: [{ jaguar: jaguar('onLot') }, { jaguar: jaguar('coming') }],
   owner: [
     { owner: { goal: { kind: 'noImpatient' }, announced: true } },
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  cupcakes: [
+    { clock: { day: 1, minute: CUPCAKES_TIP_MINUTE } },
+    { clock: { day: 1, minute: CUPCAKES_TIP_MINUTE - 10 } },
+  ],
   franchise: [{ franchise: 'silver' }, { franchise: 'bronze' }],
   expansion: [{ career: { rank: 'main-street' } }, { career: { rank: 'corner-lot' } }],
   seller: [
@@ -104,23 +109,17 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { customers: [customer('c3', tradeCar(true))] },
     { customers: [customer('c3', tradeCar(false))] },
   ],
-  rivalQuote: [
-    { customers: [customer('c4', quoted(PLAYER_ID))] },
-    { customers: [customer('c4', quoted(null))] },
-  ],
-  rivalOpens: [{ rival: { status: 'open' } }, { rival: { status: 'announced' } }],
-  rivalBust: [{ rival: { status: 'closed' } }, { rival: { status: 'open' } }],
   serviceBay: [
-    { expansions: garage, clock: { day: 2 } },
-    { expansions: garage, clock: { day: 1 } },
+    { expansions: garage, clock: { day: 2, minute: 540 } },
+    { expansions: garage, clock: { day: 1, minute: 540 } },
   ],
   recon: [
-    { inventory: [...inventory, roughUsed], expansions: garage, clock: { day: 3 } },
-    { expansions: garage, clock: { day: 3 } },
+    { inventory: [...inventory, roughUsed], expansions: garage, clock: { day: 3, minute: 540 } },
+    { expansions: garage, clock: { day: 3, minute: 540 } },
   ],
   staleUsed: [
-    { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
-    { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
+    { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS, minute: 540 } },
+    { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS, minute: 540 } },
   ],
 }
 
@@ -140,6 +139,15 @@ describe('tipFor', () => {
     expect(tip({ ...next, expansions: [] }, { ...prev, expansions: [] })).toBeNull()
     const fair = { ...roughUsed, used: { ...roughUsed.used, condition: 0.7 } }
     expect(tip({ ...next, inventory: [...inventory, fair] }, prev)).toBeNull()
+  })
+
+  it('points at the cupcake shop on day 1 only', () => {
+    const [next, prev] = triggers.cupcakes
+    expect(
+      tip({ clock: { day: 2, minute: CUPCAKES_TIP_MINUTE } }, { clock: { day: 2, minute: 540 } }),
+    ).toBeNull()
+    expect(tip(next, next)).toBeNull()
+    expect(tip(next, prev)).toBe('cupcakes')
   })
 
   it('gives nothing when nothing changed', () => {
@@ -170,8 +178,8 @@ describe('tipFor', () => {
   })
 
   it('gives the first unseen tip when several apply', () => {
-    const next = { cash: LOW_CASH - 1, nazma: nazma('onLot') }
-    expect(tip(next)).toBe('nazma')
-    expect(tip(next, {}, ['nazma'])).toBe('lowCash')
+    const next = { cash: LOW_CASH - 1, jaguar: jaguar('onLot') }
+    expect(tip(next)).toBe('jaguar')
+    expect(tip(next, {}, ['jaguar'])).toBe('lowCash')
   })
 })

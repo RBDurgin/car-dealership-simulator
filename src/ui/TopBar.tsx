@@ -80,33 +80,6 @@ function QuotaMeter({ day }: { day: number }) {
   )
 }
 
-/** Nazma's share of today's buyers while his lot is open; compact screens show it on the Office button. */
-function RivalChip() {
-  const name = useGame((s) => s.rival.name)
-  const share = useGame((s) => s.dayStats.rival?.share)
-  if (share === undefined) return null
-  const text = `${name} takes ${Math.round(share * 100)}% of today's buyers. See the Rival tab (K).`
-  return (
-    <span className="rival-chip" title={text} aria-label={text}>
-      <span className="rival-icon" aria-hidden>
-        ⚔
-      </span>
-      <span aria-hidden>{Math.round(share * 100)}%</span>
-    </span>
-  )
-}
-
-/** His share as a badge on the Office button, for compact screens (hidden elsewhere by `hud.css`). */
-function OfficeBadge() {
-  const share = useGame((s) => s.dayStats.rival?.share)
-  if (share === undefined) return null
-  return (
-    <span className="office-badge" aria-hidden>
-      {Math.round(share * 100)}%
-    </span>
-  )
-}
-
 /** "Sat · Wk 2 · Mar"; compact screens keep only the weekday. */
 function TopBarDate({ day }: { day: number }) {
   const [weekday, ...rest] = formatDate(day).split(' · ')
@@ -162,9 +135,8 @@ function SoundButton() {
 }
 
 /**
- * Date, weather, any sale, time, cash, reputation, the dealer rank, the month's quota, Nazma's share
- * (while his lot is open), the owner's goal (on their days) and the office (stock, marketing, upgrades,
- * calendar and rival), staff and sound buttons.
+ * Date, weather, any sale, time, cash, reputation, the dealer rank, the month's quota, the owner's goal (on their days) and the office (stock,
+ * marketing, upgrades and calendar), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {
@@ -187,7 +159,6 @@ export function TopBar() {
       <ReputationMeter />
       <RankChip />
       <QuotaMeter day={clock.day} />
-      <RivalChip />
       <GoalBanner />
       <button
         className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
@@ -195,7 +166,6 @@ export function TopBar() {
         onClick={() => useGame.getState().toggleStockPanel()}
       >
         Office
-        <OfficeBadge />
       </button>
       <button
         className={staffOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}

@@ -13,7 +13,7 @@ import type { CarLocation, InventoryCar } from './inventory'
 export const NIGHTLY_DIRT: Record<CarLocation, number> = { lot: 0.2, showroom: 0.1 }
 /** Fingerprints and footprints from one customer looking a car over. */
 export const BROWSE_DIRT = 0.03
-/** Grime Nazma rubs onto a car he smudges (see `sim/nazma`). */
+/** Grime Jaguar rubs onto a car he smudges (see `sim/jaguar`). */
 export const SMUDGE_DIRT = 0.5
 /** Accept-chance bonus for a spotless car; a filthy one loses as much. */
 export const MAX_CLEAN_BONUS = 0.08
@@ -71,7 +71,7 @@ export function washCar(inventory: InventoryCar[], id: string): InventoryCar[] {
 }
 
 /**
- * Car `id` smudged by Nazma: `SMUDGE_DIRT` dirtier. Returns the same array if
+ * Car `id` smudged by Jaguar: `SMUDGE_DIRT` dirtier. Returns the same array if
  * it's unknown, sold or already filthy.
  */
 export function smudgeCar(inventory: InventoryCar[], id: string): InventoryCar[] {

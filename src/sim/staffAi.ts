@@ -191,12 +191,12 @@ const IDLE_PORTER: PorterTask = { kind: 'idle' }
 /**
  * A security guard's next step:
  * - patrol: walk to the next stop on the patrol (`leg` counts the stops so far)
- * - chase: run after Nazma, who's been spotted on the lot
+ * - chase: run after Jaguar, who's been spotted on the lot
  * - idle: not at work
  */
 export type GuardTask = { kind: 'idle' } | { kind: 'patrol'; tile: Tile } | { kind: 'chase' }
 
-/** How far (in tiles) a guard of `skill` spots Nazma from. */
+/** How far (in tiles) a guard of `skill` spots Jaguar from. */
 export function guardSight(skill: number): number {
   return GUARD_SIGHT_BASE + skill
 }
@@ -204,8 +204,8 @@ const GUARD_SIGHT_BASE = 4
 
 /** What the guard needs to know beyond themselves. */
 export interface GuardContext {
-  /** Nazma's tile while he's on the lot and can be run off, else null. */
-  nazma: Tile | null
+  /** Jaguar's tile while he's on the lot and can be run off, else null. */
+  jaguar: Tile | null
   /** The guard's own tile. */
   at: Tile
   /** Patrol stops reached so far today. */
@@ -217,14 +217,14 @@ export interface GuardContext {
 }
 
 /**
- * Guard `e`'s next task while at work: chase Nazma once he's within sight (and
+ * Guard `e`'s next task while at work: chase Jaguar once he's within sight (and
  * keep at it), otherwise walk the patrol.
  */
 export function nextGuardTask(e: Employee, ctx: GuardContext): GuardTask {
   if (e.status !== 'atPost' || e.fired) return { kind: 'idle' }
-  const { nazma, at } = ctx
-  if (nazma) {
-    const seen = Math.hypot(nazma.tx - at.tx, nazma.tz - at.tz) <= guardSight(e.skill)
+  const { jaguar, at } = ctx
+  if (jaguar) {
+    const seen = Math.hypot(jaguar.tx - at.tx, jaguar.tz - at.tz) <= guardSight(e.skill)
     if (seen || ctx.chasing) return { kind: 'chase' }
   }
   const stops = ctx.patrol ?? GUARD_PATROL_TILES

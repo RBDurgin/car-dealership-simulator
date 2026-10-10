@@ -10,7 +10,7 @@ import {
 } from './expansions'
 import { buildInventory } from './inventory'
 import { PARKING_SPACES } from './layout'
-import { FIRST_THEFT_DAY, isTheftNight, planTheft, planVisit } from './nazma'
+import { FIRST_THEFT_DAY, isTheftNight, planTheft, planVisit } from './jaguar'
 import { deliver, type Order } from './ordering'
 import { createRng } from './rng'
 
@@ -85,7 +85,7 @@ describe('expansions', () => {
   })
 })
 
-describe('the east lot and Nazma', () => {
+describe('the east lot and Jaguar', () => {
   // Only one car on the lot, in the east lot's first space.
   const index = PARKING_SPACES.findIndex((sp) => sp.requires === 'east-lot')
   const order: Order = {

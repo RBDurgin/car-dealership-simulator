@@ -49,8 +49,6 @@ export interface Career {
   bestMonth: number
   /** The highest rank reached. */
   rank: RankId
-  /** Times Nazma's rival lot has gone bust. */
-  rivalsBeaten: number
 }
 
 export function emptyCareer(): Career {
@@ -62,7 +60,6 @@ export function emptyCareer(): Career {
     monthGross: 0,
     bestMonth: 0,
     rank: RANKS[0].id,
-    rivalsBeaten: 0,
   }
 }
 
@@ -139,7 +136,6 @@ export function addDay(
     monthGross: monthEnd ? 0 : monthGross,
     bestMonth: monthEnd ? Math.max(career.bestMonth, monthGross) : career.bestMonth,
     rank: career.rank,
-    rivalsBeaten: career.rivalsBeaten,
   }
   return { ...next, rank: rankOf(next, reputation, scale).id }
 }

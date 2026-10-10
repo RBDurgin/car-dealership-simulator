@@ -1,14 +1,13 @@
 import { WASH_BELOW } from './cleanliness'
+import { OPEN_MINUTE } from './clock'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
 import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
 import type { InventoryCar } from './inventory'
-import type { NazmaVisit } from './nazma'
-import { quoteFor } from './negotiation'
+import type { JaguarVisit } from './jaguar'
 import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
-import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
 import { bayCount } from './service'
 import { isStale, STALE_DAYS } from './usedCars'
 
@@ -25,27 +24,28 @@ export type TipId =
   | 'haggle'
   | 'restock'
   | 'missed'
-  | 'nazma'
+  | 'jaguar'
   | 'owner'
   | 'lowCash'
   | 'seller'
   | 'tradeIn'
-  | 'rivalQuote'
-  | 'rivalOpens'
-  | 'rivalBust'
   | 'staleUsed'
   | 'franchise'
   | 'expansion'
   | 'serviceBay'
   | 'recon'
+  | 'cupcakes'
+
+/** On day 1, the `cupcakes` tip comes up once the clock passes this minute. */
+export const CUPCAKES_TIP_MINUTE = OPEN_MINUTE + 30
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
 
 /** Each tip's text, in the order `tipFor` checks them. */
 export const TIPS: Record<TipId, string> = {
-  nazma:
-    'Nazma smudges your cars. Go up to him and choose Confront to run him off, or hire a security guard to keep him away.',
+  jaguar:
+    'Jaguar smudges your cars. Go up to him and choose Confront to run him off, or hire a security guard to keep him away.',
   owner:
     "Meet the owner's goal by closing time for a cash bonus. The banner up top shows how you're doing.",
   haggle:
@@ -58,8 +58,6 @@ export const TIPS: Record<TipId, string> = {
   seller: 'A seller drove in wanting cash for their car. Appraise it before you make an offer.',
   tradeIn:
     'This buyer brought a car to trade. Appraise it, then set an allowance as you haggle. They weigh what they pay after the trade, and a lowball allowance offends them.',
-  rivalQuote:
-    "This buyer has a price from Nazma's lot across the road. Ask much more and they may go to him; Match his price makes a yes more likely.",
   staleUsed: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Buyers judge its price by what it's worth now, so take a lower offer to move it.`,
   franchise:
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
@@ -69,9 +67,8 @@ export const TIPS: Record<TipId, string> = {
     'Your service garage is open. Hire a mechanic for each bay from the staff panel; the Service tab on the office computer shows what they’re working on.',
   recon:
     'This used car is in rough shape. Pick Recondition on it, or use the Service tab: a mechanic raises its condition, and it goes back on sale for more.',
-  rivalOpens:
-    "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
-  rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
+  cupcakes:
+    "Across the road is Nazma's, a cupcake shop. Nazma is friendly and pops over now and then to say hello. His coworker Jaguar is another story.",
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -85,16 +82,15 @@ export function isTipId(v: unknown): v is TipId {
 /** The slice of the store `tipFor` compares. */
 export interface TipState {
   screen: 'title' | 'playing'
-  clock: { day: number }
+  clock: { day: number; minute: number }
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
   dayStats: Pick<DayStats, 'missed'>
   owner: OwnerVisit | null
-  nazma: NazmaVisit | null
+  jaguar: JaguarVisit | null
   franchise: FranchiseTier
   career: { rank: RankId }
-  rival: { status: RivalStatus }
   expansions: readonly OwnedExpansion[]
 }
 
@@ -106,8 +102,8 @@ const missedCount = (s: TipState) =>
 /** Whether tip `id` applies to the change from `prev` to `next`. */
 function applies(id: TipId, prev: TipState, next: TipState): boolean {
   switch (id) {
-    case 'nazma':
-      return next.nazma?.status === 'onLot' && prev.nazma?.status !== 'onLot'
+    case 'jaguar':
+      return next.jaguar?.status === 'onLot' && prev.jaguar?.status !== 'onLot'
     case 'owner':
       return !!next.owner?.announced && !prev.owner?.announced
     case 'haggle': {
@@ -144,21 +140,6 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
       )
     }
-    case 'rivalQuote': {
-      if (next.customers === prev.customers) return false
-      // Once the player is talking with them about a car his quote is on.
-      const quoted = (c: Customer) => {
-        const car = next.inventory.find((x) => x.id === c.targetCarId)
-        return !!car && quoteFor(c, car) !== null
-      }
-      return next.customers.some(
-        (c) =>
-          c.handlerId === PLAYER_ID &&
-          c.phase === 'talking' &&
-          prev.customers.find((p) => p.id === c.id)?.handlerId !== PLAYER_ID &&
-          quoted(c),
-      )
-    }
     case 'staleUsed': {
       const stale = (s: TipState) =>
         s.inventory.filter((c) => c.status === 'available' && isStale(c, s.clock.day))
@@ -169,11 +150,6 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return next.franchise !== prev.franchise
     case 'expansion':
       return unlockedBy(prev.career.rank, next.career.rank).length > 0
-    case 'rivalOpens':
-    case 'rivalBust': {
-      const status = id === 'rivalOpens' ? 'open' : 'closed'
-      return next.rival.status === status && prev.rival.status !== status
-    }
     case 'serviceBay':
       return garageUp(next) && !garageUp(prev)
     case 'recon': {
@@ -187,6 +163,12 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           c.used.condition < ROUGH_CONDITION,
       )
     }
+    case 'cupcakes':
+      return (
+        next.clock.day === 1 &&
+        next.clock.minute >= CUPCAKES_TIP_MINUTE &&
+        prev.clock.minute < CUPCAKES_TIP_MINUTE
+      )
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

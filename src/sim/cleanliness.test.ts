@@ -49,7 +49,6 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   vehicle: null,
   selling: null,
   trade: null,
-  rivalQuote: null,
 })
 
 describe('cleanliness', () => {
@@ -102,7 +101,7 @@ describe('cleanliness', () => {
     expect(washCar(dirty, 'lot-car-2')).toBe(dirty)
   })
 
-  it('smudges a car Nazma gets at, down to filthy and no further', () => {
+  it('smudges a car Jaguar gets at, down to filthy and no further', () => {
     const inv = withDirt({ 'lot-car-1': 0.9, 'lot-car-2': 0.2 })
     expect(car(smudgeCar(inv, 'lot-car-1'), 'lot-car-1').cleanliness).toBeCloseTo(0.9 - SMUDGE_DIRT)
     expect(car(smudgeCar(inv, 'lot-car-2'), 'lot-car-2').cleanliness).toBe(0)

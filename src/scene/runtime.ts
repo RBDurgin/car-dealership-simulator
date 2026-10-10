@@ -13,6 +13,7 @@ import {
 } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import { nearestStandable, PLAYER_RADIUS } from '../sim/movement'
+import { JAGUAR_ID } from '../sim/jaguar'
 import { NAZMA_ID } from '../sim/nazma'
 import {
   buildLayout,
@@ -26,6 +27,7 @@ import {
   type ExpansionId,
   type Rect,
 } from '../sim/layout'
+import { isBikeId } from '../sim/riding'
 import { vehicleOwnerId } from '../sim/sellers'
 import { bayCount, RECON_MAX } from '../sim/service'
 import { POSTS } from '../sim/staff'
@@ -170,7 +172,9 @@ export const staffPos = new Map<string, Vec2>()
  * Visitors' cars in the world, by their customer's id: where each one's
  * centre is, which way it faces, and whether it's on the move. Owned by
  * scene/DrivenCar. A moving car counts as people along its length, so walkers
- * step around it.
+ * step around it. Nazma's and Jaguar's motorcycles are here too, as
+ * `bikeId(rider)` (owned by scene/Nazma and scene/Jaguar): a bike counts as
+ * one person, parked or not.
  */
 export const vehiclePos = new Map<string, { pos: Vec2; heading: number; moving: boolean }>()
 
@@ -179,8 +183,8 @@ const CAR_BODY_OFFSETS = [-1, 0, 1]
 
 /**
  * Walkers the store doesn't know about: passers-by (scene/Pedestrians), a
- * couple's companion (scene/Customers), the owner (scene/Owner) and Nazma
- * (scene/Nazma). Here only
+ * couple's companion (scene/Customers), the owner (scene/Owner) and Jaguar
+ * (scene/Jaguar). Here only
  * so everyone else keeps their distance.
  */
 export const ambientPos = new Map<string, Vec2>()
@@ -207,9 +211,11 @@ export function crowdAgents(): Agent[] {
   add(PLAYER_ID, playerPos)
   for (const [id, pos] of customerPos) add(id, pos)
   for (const [id, pos] of staffPos) add(id, pos)
-  for (const [id, pos] of ambientPos) add(id, pos)
+  // Nazma is just visiting: he steps round people, but nobody steps round him.
+  for (const [id, pos] of ambientPos) if (id !== NAZMA_ID) add(id, pos)
   for (const [id, car] of vehiclePos) {
-    if (!car.moving) continue
+    if (isBikeId(id)) add(id, car.pos)
+    if (!car.moving || isBikeId(id)) continue
     const fx = Math.sin(car.heading)
     const fz = Math.cos(car.heading)
     CAR_BODY_OFFSETS.forEach((d, i) =>
@@ -247,7 +253,7 @@ function canRecondition(game: ReturnType<typeof useGame.getState>, id: string): 
 }
 
 /**
- * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Nazma approached
+ * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Jaguar approached
  * from where they're standing right now. Undefined if it's gone.
  */
 export function findInteractable(id: string): Interactable | undefined {
@@ -283,10 +289,10 @@ export function findInteractable(id: string): Interactable | undefined {
       actions: owner.selling || owner.trade ? ['appraise'] : [],
     }
   }
-  const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined
-  if (nPos && game.nazma?.status === 'onLot') {
+  const nPos = id === JAGUAR_ID ? ambientPos.get(id) : undefined
+  if (nPos && game.jaguar?.status === 'onLot') {
     const tile = grid.worldToTile(nPos.x, nPos.z)
-    return personInteractable(grid, { id, name: 'Nazma' }, 'nazma', tile, ['confront'])
+    return personInteractable(grid, { id, name: 'Jaguar' }, 'jaguar', tile, ['confront'])
   }
   return undefined
 }

@@ -33,6 +33,7 @@ const VOLUME: Record<SfxCue, number> = {
   fanfare: 0.5,
   engine: 0.55,
   door: 0.6,
+  motorbike: 0.5,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */
@@ -43,6 +44,14 @@ export function playUiCue(cue: SfxCue): void {
   if (allowCue(last, cue, performance.now())) play(cue)
 }
 
+/**
+ * A sound the store never hears about, placed at `subject` (a motorcycle
+ * setting off, from scene/Jaguar and scene/Nazma), through the same gaps.
+ */
+export function playWorldCue(cue: SfxCue, subject: SfxSubject): void {
+  if (allowCue(last, cue, performance.now())) play(cue, subject)
+}
+
 function positionOf(subject: SfxSubject): Vec2 | undefined {
   switch (subject.kind) {
     case 'customer':
@@ -50,7 +59,8 @@ function positionOf(subject: SfxSubject): Vec2 | undefined {
     case 'employee':
       return staffPos.get(subject.id)
     case 'ambient':
-      return ambientPos.get(subject.id)
+      // Someone walking about, or a motorcycle (scene/Jaguar, scene/Nazma).
+      return ambientPos.get(subject.id) ?? vehiclePos.get(subject.id)?.pos
     case 'vehicle': {
       // Where it is, or its space if the car isn't in the world yet.
       const car = vehiclePos.get(subject.id)

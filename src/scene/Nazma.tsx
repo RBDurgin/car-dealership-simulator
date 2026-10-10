@@ -3,20 +3,37 @@ import { useFrame } from '@react-three/fiber'
 import { Suspense, useRef, useState } from 'react'
 import type { Group } from 'three'
 import { isClosed } from '../sim/clock'
-import { CUSTOMER_SPEED } from '../sim/customers'
-import type { Tile, Vec2 } from '../sim/grid'
+import { CUSTOMER_SPEED, PLAYER_ID } from '../sim/customers'
+import type { Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { RIVAL_CROSSING, RIVAL_GATE, SIDEWALK_ENDS } from '../sim/layout'
-import { NAZMA_ID, NAZMA_VARIANT, nextTarget, POACH_SECONDS } from '../sim/nazma'
-import { createRng, hashSeed } from '../sim/rng'
+import { SHOP_GATE } from '../sim/layout'
+import { COFFEE_STOP, NAZMA_ID, NAZMA_VARIANT, nextStop, STOP_SECONDS } from '../sim/nazma'
+import { BIKE_BAYS, bikeId, nazmaRide } from '../sim/riding'
+import { playWorldCue } from '../audio/sfxBridge'
 import { isPaused, useGame } from '../state/store'
+import {
+  bayToWorld,
+  bikeHandling,
+  parkedBike,
+  routeToWorld,
+  walkStraight,
+  type Ride,
+} from './bikes'
 import { Character } from './Character'
-import { Interactable } from './Interactable'
-import { ambientPos, gameTime, grid, interactables, staffPos } from './runtime'
+import { Motorcycle, Rider } from './Motorcycle'
+import { followRoute, startRoute } from './route'
+import {
+  ambientPos,
+  gameTime,
+  grid,
+  interactables,
+  playerPos,
+  staffPos,
+  vehiclePos,
+} from './runtime'
 import {
   createWalker,
   frameSeconds,
-  inwardHeading,
   pathTo,
   releaseWalker,
   turnToward,
@@ -24,94 +41,76 @@ import {
   type Walker,
 } from './walker'
 
-/** A dark hoodie, over the staff uniform he still has. */
-const HOODIE_TINT = '#26262b'
-/** Seconds (at game speed) he spends rubbing grime into one car. */
-export const SMUDGE_SECONDS = 6
-/** Caught: he hurries for the street this much faster than a stroll. */
-const RUN_FACTOR = 2
+/** A pink baker's apron, a mint scooter-ish tank and a cream helmet. */
+const APRON_TINT = '#f9a8d4'
+const BIKE_PAINT = '#6ee7b7'
+const HELMET = '#fef3c7'
+/** He takes it easy: gentle on the road, and walking pace on the sidewalk and his forecourt. */
+const RIDE: Ride = { road: 4, offRoad: 1.5, accel: 2.5, brake: 4 }
+const BIKE_ID = bikeId(NAZMA_ID)
+/** The sidewalk tile beside his parked bike on the lot side, where he steps on and off the grid. */
+const LOT_STEP = {
+  tx: Math.round(BIKE_BAYS.nazmaLot.pos.x),
+  tz: Math.round(BIKE_BAYS.nazmaLot.pos.z) - 1,
+}
 const BADGE_HEIGHT = 1.5
-/** Close enough to the employee he's poaching to talk them round. */
+/** Close enough to whoever he's visiting to chat. */
 const CHAT_REACH = 1.6
-/** As close as he can get (say, across a desk), stopped: near enough to talk. */
+/** As close as he can get (say, across a desk), stopped: near enough to chat. */
 const CHAT_FAR = 2.6
 /** Following someone on the move: game seconds between new paths to where they are now. */
 const FOLLOW_REPLAN_SECONDS = 0.5
+/** Game seconds he waves for on reaching someone, before the chat. */
+const WAVE_SECONDS = 1.2
 
 interface NazmaWalker extends Walker {
-  /**
-   * `target:<carId>` while working through his list, `poach:<employeeId>` on
-   * his way to (or chatting with) someone, then `leave` or `flee`.
-   */
+  /** `stop:<id>` while making his stops, then `leave`. */
   task: string
-  /** Seconds spent smudging the car, or talking to the employee, he's at. */
+  /** Seconds spent at the stop he's at. */
   timer: number
-  /** Poaching: game seconds until he looks again where his target is. */
+  /** Visiting someone: game seconds until he looks again where they are. */
   replan: number
-  /** Crossing the road to or from his lot: where he's walking, straight and off the grid. */
-  crossing: Vec2 | null
-  /** Done with the lot, and on his way back across the road. */
-  homeward: boolean
 }
 
-/** Nazma on the lot, if he's here, and the day he came in on. */
-const visit: { walker: NazmaWalker | null; day: number } = { walker: null, day: 0 }
-
-/** Whether his rival lot is open, so he comes and goes across the road. */
-const fromRivalLot = () => useGame.getState().rival.status === 'open'
-
-/** A point off the grid, in tile coordinates, as a world position. */
-const worldOf = (t: Tile): Vec2 => grid.tileToWorld(t.tx, t.tz)
-
 /**
- * Nazma steps out: from his own lot across the road while it's open (and
- * onto the lot once he's crossed), otherwise along the sidewalk from one end.
+ * - to-bike: out of the shop door to his bike out front
+ * - ride-out: over the road to the lot's sidewalk
+ * - lot: making his stops (the store has him `onLot`)
+ * - mount: from the sidewalk tile back onto his bike
+ * - ride-home: back over the road to the shop
+ * - to-door: from his bike in through the shop door
  */
-function arrive(day: number): NazmaWalker {
-  const crossing = fromRivalLot()
-  const spawn = crossing
-    ? RIVAL_CROSSING
-    : createRng(hashSeed(`${NAZMA_ID}-${day}`)).pick(SIDEWALK_ENDS)
+type Stage = 'to-bike' | 'ride-out' | 'lot' | 'mount' | 'ride-home' | 'to-door'
+
+/** Nazma out of his shop, if he is, where he's got to, and the day he came over on. */
+const visit: { walker: NazmaWalker | null; stage: Stage; day: number } = {
+  walker: null,
+  stage: 'to-bike',
+  day: 0,
+}
+
+/** His bike: out front of the shop, unless he's riding it or it's parked over on the lot side. */
+const bike = parkedBike(BIKE_BAYS.nazmaShop)
+
+/** Puts his bike back out front of the shop (a new day, or a fresh start). */
+function parkAtShop(): void {
+  Object.assign(bike, parkedBike(BIKE_BAYS.nazmaShop))
+  vehiclePos.set(BIKE_ID, bike.at)
+}
+
+const worldOf = (t: { tx: number; tz: number }): Vec2 => grid.tileToWorld(t.tx, t.tz)
+
+/** Out of the shop door, heading for his bike. */
+function arrive(): NazmaWalker {
   const w: NazmaWalker = {
-    ...createWalker(NAZMA_ID, spawn, inwardHeading(spawn)),
+    ...createWalker(NAZMA_ID, SHOP_GATE, Math.PI),
     task: '',
     timer: 0,
     replan: 0,
-    crossing: null,
-    homeward: false,
   }
-  if (crossing) {
-    const gate = worldOf(RIVAL_GATE)
-    w.pos.x = gate.x
-    w.pos.z = gate.z
-    w.heading = Math.PI
-    w.crossing = worldOf(RIVAL_CROSSING)
-  } else useGame.getState().nazmaArrived()
+  visit.stage = 'to-bike'
   ambientPos.set(NAZMA_ID, w.pos)
   return w
-}
-
-/**
- * Walks him straight toward `w.crossing`, over the road where there are no
- * tiles to path through. Returns true once he's there.
- */
-function cross(w: NazmaWalker, speed: number, seconds: number): boolean {
-  const to = w.crossing!
-  const dx = to.x - w.pos.x
-  const dz = to.z - w.pos.z
-  const dist = Math.hypot(dx, dz)
-  const step = speed * seconds
-  if (dist <= step) {
-    w.pos.x = to.x
-    w.pos.z = to.z
-    w.crossing = null
-    return true
-  }
-  w.pos.x += (dx / dist) * step
-  w.pos.z += (dz / dist) * step
-  w.heading = Math.atan2(dx, dz)
-  w.anim.current = speed > CUSTOMER_SPEED ? 'sprint' : 'walk'
-  return false
 }
 
 function leave(): void {
@@ -120,168 +119,205 @@ function leave(): void {
   releaseWalker(NAZMA_ID)
 }
 
-/** Where he leaves the lot: the crossing to his own, or the sidewalk end nearest to him. */
-function nearestExit(w: Walker): Tile {
-  if (fromRivalLot()) return RIVAL_CROSSING
-  let best = SIDEWALK_ENDS[0]
-  let bestDist = Infinity
-  for (const end of SIDEWALK_ENDS) {
-    const p = grid.tileToWorld(end.tx, end.tz)
-    const d = Math.hypot(p.x - w.pos.x, p.z - w.pos.z)
-    if (d < bestDist) {
-      best = end
-      bestDist = d
-    }
-  }
-  return best
+/** Gets on his bike and rides `way`. */
+function ride(w: NazmaWalker, way: 'out' | 'home'): void {
+  ambientPos.delete(NAZMA_ID)
+  releaseWalker(NAZMA_ID)
+  w.waypoints = []
+  w.anim.current = 'sit'
+  visit.stage = way === 'out' ? 'ride-out' : 'ride-home'
+  startRoute(bike, routeToWorld(nazmaRide(way)))
+  playWorldCue('motorbike', { kind: 'ambient', id: BIKE_ID })
 }
 
-/**
- * Poaching: walks up to the employee (following them if they move) and talks
- * to them for `POACH_SECONDS`, then the store hears they're thinking of
- * quitting. Someone let go (or gone home) is no use to him.
- */
-function poach(w: NazmaWalker, employeeId: string, seconds: number): void {
+/** Off his bike where it stopped, on foot again. */
+function dismount(w: NazmaWalker): void {
+  bike.at.moving = false
+  w.pos.x = bike.at.pos.x
+  w.pos.z = bike.at.pos.z
+  w.anim.current = 'idle'
+  ambientPos.set(NAZMA_ID, w.pos)
+}
+
+/** Where the person at stop `id` stands, or null if they're not around to visit. */
+function personAt(id: string): Vec2 | null {
+  if (id === PLAYER_ID) return playerPos
+  const e = useGame.getState().roster.find((x) => x.id === id)
+  if (!e || e.fired || e.status === 'off' || e.status === 'leaving') return null
+  return staffPos.get(id) ?? null
+}
+
+/** Walks up to the person at stop `id` (following them if they move), waves and chats. */
+function visitPerson(w: NazmaWalker, id: string, seconds: number): void {
   const game = useGame.getState()
-  const e = game.roster.find((x) => x.id === employeeId)
-  const at = staffPos.get(employeeId)
-  if (!e || e.fired || e.status === 'off' || e.status === 'leaving' || !at) {
-    game.nazmaPoach(employeeId)
-    return
-  }
+  const at = personAt(id)
+  if (!at) return game.nazmaStop(id)
   const dist = Math.hypot(at.x - w.pos.x, at.z - w.pos.z)
   const near = dist < CHAT_REACH || (w.waypoints.length === 0 && dist < CHAT_FAR)
   if (near) {
     w.waypoints = []
     turnToward(w, at, seconds)
-    w.anim.current = 'idle'
-    if (!game.nazma?.chatting) game.nazmaChat()
+    w.anim.current = w.timer < WAVE_SECONDS ? 'emote-yes' : 'idle'
+    if (w.timer >= WAVE_SECONDS && !game.nazma?.chatting) game.nazmaChat()
     w.timer += seconds
-    if (w.timer >= POACH_SECONDS) game.nazmaPoach(employeeId)
+    if (w.timer >= WAVE_SECONDS + STOP_SECONDS) game.nazmaStop(id)
     return
   }
-  // They've moved off: after them.
   if ((w.replan -= seconds) <= 0 || (w.waypoints.length === 0 && !w.unreachable)) {
     w.replan = FOLLOW_REPLAN_SECONDS
     const tile = grid.worldToTile(at.x, at.z)
-    if (tile) pathTo(w, approachTilesFor(grid, { ...tile, w: 1, h: 1 }))
+    pathTo(w, approachTilesFor(grid, { ...tile, w: 1, h: 1 }))
+    // Nowhere to stand near them: never mind.
+    if (w.unreachable) return game.nazmaStop(id)
   }
   walk(w, CUSTOMER_SPEED, seconds, at)
 }
 
 /**
- * Walks to each car on his list and smudges it, or to the employee he means
- * to poach, then strolls off. Caught, he drops what he's doing and runs for
- * the nearest sidewalk end.
+ * One frame of his visit, stage by stage: out to his bike, the ride over, the
+ * lot (`update`), back onto his bike, the ride home and in through the door.
+ * The store hears `nazmaArrived` as he gets off his bike on the lot side and
+ * `nazmaLeft` once he's back in the shop.
+ */
+function step(w: NazmaWalker, seconds: number): void {
+  const game = useGame.getState()
+  if (!game.nazma) return leave()
+  switch (visit.stage) {
+    case 'to-bike':
+      w.anim.current = 'walk'
+      if (walkStraight(w, bayToWorld(BIKE_BAYS.nazmaShop), CUSTOMER_SPEED, seconds)) ride(w, 'out')
+      return
+    case 'ride-out':
+      if (!followRoute(bike, seconds, bikeHandling(BIKE_ID, RIDE))) return
+      dismount(w)
+      visit.stage = 'lot'
+      game.nazmaArrived()
+      return
+    case 'lot':
+      return update(w, seconds)
+    case 'mount':
+      w.anim.current = 'walk'
+      if (walkStraight(w, bayToWorld(BIKE_BAYS.nazmaLot), CUSTOMER_SPEED, seconds)) ride(w, 'home')
+      return
+    case 'ride-home':
+      if (!followRoute(bike, seconds, bikeHandling(BIKE_ID, RIDE))) return
+      dismount(w)
+      visit.stage = 'to-door'
+      return
+    case 'to-door':
+      w.anim.current = 'walk'
+      if (!walkStraight(w, worldOf(SHOP_GATE), CUSTOMER_SPEED, seconds)) return
+      game.nazmaLeft()
+      return leave()
+  }
+}
+
+/**
+ * Each of his stops in turn: a wave and a chat with the player or one of the
+ * staff, or a coffee from the lounge machine. Then back to his bike. Closing
+ * time sends him home early.
  */
 function update(w: NazmaWalker, seconds: number): void {
   const game = useGame.getState()
   const nazma = game.nazma
   if (!nazma) return leave()
-  if (w.crossing) {
-    const speed = nazma.status === 'runOff' ? CUSTOMER_SPEED * RUN_FACTOR : CUSTOMER_SPEED
-    if (!cross(w, speed, seconds)) return
-    // Back across the road: gone. Over to this side: on the lot.
-    if (w.homeward) return leave()
-    w.anim.current = 'idle'
-    game.nazmaArrived()
-    return
-  }
-  const target = nazma.status === 'onLot' && !isClosed(game.clock) ? nextTarget(nazma) : null
-  const kind = nazma.scheme === 'poach' ? 'poach' : 'target'
-  const task = nazma.status === 'runOff' ? 'flee' : target ? `${kind}:${target}` : 'leave'
-  if (target && kind === 'poach') {
-    if (task !== w.task) {
-      w.task = task
-      w.timer = 0
-      w.replan = 0
-      w.faceTo = null
-    }
-    return poach(w, target, seconds)
-  }
-  const it = target ? interactables.get(target) : undefined
-
+  const stop = nazma.status === 'onLot' && !isClosed(game.clock) ? nextStop(nazma) : null
+  const task = stop ? `stop:${stop}` : 'leave'
+  const coffee = stop === COFFEE_STOP ? interactables.get(COFFEE_STOP) : undefined
   if (task !== w.task) {
     w.task = task
     w.timer = 0
-    w.faceTo = it ? interactableCenter(grid, it) : null
-    if (task === 'flee' || task === 'leave') pathTo(w, [nearestExit(w)])
-    else if (it) pathTo(w, it.approachTiles)
-    else w.unreachable = true
+    w.replan = 0
+    w.faceTo = coffee ? interactableCenter(grid, coffee) : null
+    if (task === 'leave') pathTo(w, [LOT_STEP])
+    else if (coffee) pathTo(w, coffee.approachTiles)
   }
+  if (stop && stop !== COFFEE_STOP) return visitPerson(w, stop, seconds)
 
-  const speed = task === 'flee' ? CUSTOMER_SPEED * RUN_FACTOR : CUSTOMER_SPEED
-  walk(w, speed, seconds, w.faceTo)
-  if (task === 'flee') w.anim.current = w.waypoints.length > 0 ? 'sprint' : 'idle'
+  walk(w, CUSTOMER_SPEED, seconds, w.faceTo)
   if (w.waypoints.length > 0) return
-
-  if (task === 'flee' || task === 'leave') {
-    game.nazmaLeft()
-    if (!fromRivalLot()) return leave()
-    // Off the lot, and back over the road to his own.
-    w.homeward = true
-    w.crossing = worldOf(RIVAL_GATE)
-    releaseWalker(NAZMA_ID)
+  if (task === 'leave') {
+    // At the sidewalk by his bike: on it, and home.
+    visit.stage = 'mount'
     return
   }
-  // Sold, or out of reach: on to the next one without a smudge.
-  if (!it || w.unreachable) {
-    game.nazmaSmudge(target!)
-    return
-  }
+  if (!coffee || w.unreachable) return game.nazmaStop(stop!)
   w.anim.current = 'interact-right'
   w.timer += seconds
-  if (w.timer >= SMUDGE_SECONDS) game.nazmaSmudge(target!)
+  if (w.timer >= STOP_SECONDS) game.nazmaStop(stop!)
 }
 
+type Shown = 'none' | 'riding' | 'walking'
+const shownOf = (): Shown =>
+  !visit.walker
+    ? 'none'
+    : visit.stage === 'ride-out' || visit.stage === 'ride-home'
+      ? 'riding'
+      : 'walking'
+
 /**
- * Nazma, on the days he visits (see `sim/nazma.ts`): in from the sidewalk (or
- * across the road from his own lot, once it's open) at his arrival time, round the cars he means to smudge, then off again, or
- * sprinting off once caught. His plan lives in the store; the walk is all here.
+ * Nazma, on the days he pops over from the cupcake shop (see `sim/nazma.ts`):
+ * out to his bike at his arrival time, over the road to the lot's sidewalk,
+ * round his stops, and home again the same way. His bike stands out front of
+ * the shop the rest of the time. He changes nothing in the store but his own
+ * visit, and nothing targets him.
  */
 export function Nazma() {
-  const [present, setPresent] = useState(false)
+  const [shown, setShown] = useState<Shown>('none')
   const group = useRef<Group>(null)
-  const catchable = useGame((s) => s.nazma?.status === 'onLot')
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
     const day = game.clock.day
-    if (visit.walker && visit.day !== day) leave()
+    if (visit.day !== day) {
+      if (visit.walker) leave()
+      parkAtShop()
+      visit.day = day
+    }
     const due =
       game.nazma?.status === 'coming' &&
       gameTime.minute >= game.nazma.arrivalMinute &&
       !isClosed(game.clock)
-    if (!visit.walker && due && !isPaused(game)) {
-      visit.walker = arrive(day)
-      visit.day = day
-    }
+    if (!visit.walker && due && !isPaused(game)) visit.walker = arrive()
     const w = visit.walker
-    if (w) update(w, frameSeconds(rawDelta, game.timeScale).seconds)
-    const here = !!visit.walker
-    if (here !== present) setPresent(here)
+    if (w && !isPaused(game)) step(w, frameSeconds(rawDelta, game.timeScale).seconds)
+    const now = shownOf()
+    if (now !== shown) setShown(now)
     if (visit.walker && group.current) {
       group.current.position.set(visit.walker.pos.x, 0, visit.walker.pos.z)
       group.current.rotation.y = visit.walker.heading
     }
   })
 
-  if (!present || !visit.walker) return null
+  const w = visit.walker
+  const badge = (
+    <Html position={[0, BADGE_HEIGHT, 0]} center zIndexRange={[1, 0]} pointerEvents="none">
+      <div className="staff-badge nazma-badge">Nazma</div>
+    </Html>
+  )
   return (
-    <group ref={group} position={[visit.walker.pos.x, 0, visit.walker.pos.z]}>
-      <Interactable id={NAZMA_ID} disabled={!catchable}>
-        <Suspense fallback={null}>
-          <Character
-            variant={NAZMA_VARIANT}
-            anim={visit.walker.anim}
-            moveSpeed={CUSTOMER_SPEED}
-            bodyTint={HOODIE_TINT}
-          />
-        </Suspense>
-      </Interactable>
-      <Html position={[0, BADGE_HEIGHT, 0]} center zIndexRange={[1, 0]} pointerEvents="none">
-        <div className="staff-badge nazma-badge">Nazma</div>
-      </Html>
-    </group>
+    <>
+      <Motorcycle bike={bike} paint={BIKE_PAINT}>
+        {shown === 'riding' && w && (
+          <>
+            <Rider variant={NAZMA_VARIANT} anim={w.anim} tint={APRON_TINT} helmet={HELMET} />
+            {badge}
+          </>
+        )}
+      </Motorcycle>
+      {shown === 'walking' && w && (
+        <group ref={group} position={[w.pos.x, 0, w.pos.z]}>
+          <Suspense fallback={null}>
+            <Character
+              variant={NAZMA_VARIANT}
+              anim={w.anim}
+              moveSpeed={CUSTOMER_SPEED}
+              bodyTint={APRON_TINT}
+            />
+          </Suspense>
+          {badge}
+        </group>
+      )}
+    </>
   )
 }

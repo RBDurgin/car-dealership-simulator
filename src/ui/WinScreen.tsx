@@ -13,7 +13,6 @@ export function WinScreen() {
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const difficulty = useGame((s) => s.difficulty)
-  const rivalOpened = useGame((s) => s.rival.generation > 0)
   if (!open) return null
 
   return (
@@ -38,12 +37,6 @@ export function WinScreen() {
           <dd className="price">{formatMoney(bestMonthSoFar(career))}</dd>
           <dt>Franchise</dt>
           <dd>{tierName(franchise)}</dd>
-          {rivalOpened && (
-            <>
-              <dt>Rivals beaten</dt>
-              <dd>{career.rivalsBeaten}</dd>
-            </>
-          )}
         </dl>
         <p className="muted">
           The game goes on: keep growing and chase a better month. Your save will carry a trophy.
