@@ -493,6 +493,8 @@ export type CustomerEvent =
   | { type: 'booked'; id: string; jobId: string; promisedMinute: number; dropOff: boolean }
   /** A service client paid for the job and gets back in their car. */
   | { type: 'collect'; id: string }
+  /** A service client took extra work: their car is ready later, at `promisedMinute`. */
+  | { type: 'repromise'; id: string; promisedMinute: number }
   /** A drop-off walked off the map. Removes them until they come back (the store keeps them). */
   | { type: 'wentAway'; id: string }
   /** Walked off the map. Removes them. */
@@ -658,6 +660,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       }
     case 'collect':
       return c.phase === 'servicing' ? leave(c, 'serviced') : c
+    case 'repromise':
+      if (c.phase !== 'servicing' || !c.service) return c
+      return { ...c, service: { ...c.service, promisedMinute: ev.promisedMinute } }
     case 'wentAway':
       return c.phase === 'servicing' && c.service?.dropOff && !c.service.returned ? null : c
     case 'despawn':

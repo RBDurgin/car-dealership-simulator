@@ -19,7 +19,9 @@ import { rollUsedCar, type UsedInfo } from './usedCars'
  *                                                    leaving(declined)
  *
  * A drop-off walks off to the sidewalk and `wentAway` removes them; the store
- * keeps them until the time they were promised, and they walk back in.
+ * keeps them until the time they were promised, and they walk back in. A job
+ * that doesn't hold brings them back later in the day (`comebackClient`) for
+ * a free redo.
  */
 
 /** What a service client came for, and how it's going. */
@@ -41,6 +43,8 @@ export interface ServiceVisit {
   dropOff: boolean
   /** A drop-off back to collect their car. */
   returned: boolean
+  /** Back because the last job didn't hold: the redo is free. */
+  comeback: boolean
 }
 
 /** What a client drove in for, in a sentence: "for an oil change". */
@@ -95,6 +99,40 @@ export function serviceClient(
       promisedMinute: null,
       dropOff: false,
       returned: false,
+      comeback: false,
+    },
+  }
+}
+
+/** Nothing to pay: a redo of a job that didn't hold. */
+export const FREE_QUOTE: Quote = { labor: 0, parts: 0, partsCost: 0 }
+
+/**
+ * Client `c`, who collected their car and drove off, driving back in as `id`
+ * into service space `spot` because the job didn't hold: the same person and
+ * car, patient again, for a free redo.
+ */
+export function comebackClient(c: Customer, id: string, spot: number): Customer {
+  return {
+    ...c,
+    id,
+    phase: 'arriving',
+    leaveReason: null,
+    handlerId: null,
+    chairId: null,
+    offer: null,
+    haggle: null,
+    patienceLeft: c.patience,
+    service: {
+      ...c.service!,
+      spot,
+      parked: false,
+      quote: FREE_QUOTE,
+      jobId: null,
+      promisedMinute: null,
+      dropOff: false,
+      returned: false,
+      comeback: true,
     },
   }
 }

@@ -176,6 +176,7 @@ import {
   financeOnDuty,
   generateCandidates,
   isGuarded,
+  MIN_SKILL,
   patienceFactor,
   retentionRaise,
   payroll,
@@ -205,14 +206,20 @@ import {
   type Purchase,
 } from '../sim/sellers'
 import {
+  acceptFinding,
   bayCount,
   clientJob,
+  comebackChance,
+  comebackMinute,
+  declineFinding,
   defaultService,
   emptySchedule,
+  findingBlocker,
   finishedLate,
   finishRecon,
   inTime,
-  jobMinutes,
+  jobMinutesFor,
+  laterPromise,
   overtimeFor,
   planServiceVisits,
   promiseMinute,
@@ -222,11 +229,16 @@ import {
   reconJob,
   reconPartsCost,
   returnFromShop,
+  rollFinding,
+  SERVICE_WEEKDAY,
   serviceDemand,
   stampReady,
   takeDueVisits,
+  upsellChance,
   wasLate,
   workJobs,
+  type Comeback,
+  type RateLevel,
   type ReconBook,
   type ServiceJob,
   type ServiceSchedule,
@@ -234,6 +246,7 @@ import {
   type ServiceStats,
 } from '../sim/service'
 import {
+  comebackClient,
   freeServiceSpot,
   freeServiceSpots,
   JOB_WANTS,
@@ -323,6 +336,8 @@ interface GameState {
    * they were promised (or closing). Off the lot, so not in `customers`. Never saved.
    */
   serviceAway: Customer[]
+  /** Clients whose job didn't hold, on their way back for a redo. Never saved. */
+  serviceComebacks: Comeback[]
   /** The shop rate and whether trade-ins are reconditioned on their own. Saved. */
   service: ServiceSettings
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
@@ -474,6 +489,10 @@ interface GameState {
   staffSign: (employeeId: string, customerId: string) => void
   /** Service advisor `employeeId` checks in service client `customerId` at the counter. */
   staffCheckIn: (employeeId: string, customerId: string) => void
+  /** Service advisor `employeeId` offers the client the extra work found on job `jobId`. */
+  staffRecommend: (employeeId: string, jobId: string) => void
+  /** From the Service tab: the player phones a client who's away about the extra work found on job `jobId`. */
+  callClient: (jobId: string) => void
   /** Service client `customerId` reached their car, which is ready: they pay and get in. */
   serviceCollect: (customerId: string) => void
   /** Service client `customerId`, dropping their car off, walked off the lot until it's ready. */
@@ -489,6 +508,8 @@ interface GameState {
   recondition: (carId: string) => boolean
   /** Turns reconditioning used cars as they come in on or off. */
   setAutoRecon: (on: boolean) => void
+  /** Sets the shop rate: quotes from now on, the number of clients from tomorrow. */
+  setServiceRate: (rate: RateLevel) => void
   /** From the end-of-day summary: opens the doors on the next day. */
   startNextDay: () => void
   /** Puts one of today's candidates on the payroll. */
@@ -561,6 +582,11 @@ export function winShowing(
 }
 
 /** Mechanics on the payroll (not let go). */
+/** Whether a service advisor is at the counter. */
+function advisorAtPost(roster: readonly Employee[]): boolean {
+  return roster.some((e) => e.role === 'advisor' && e.status === 'atPost' && !e.fired)
+}
+
 function mechanicCount(roster: readonly Employee[]): number {
   return roster.filter((e) => e.role === 'mechanic' && !e.fired).length
 }
@@ -668,6 +694,7 @@ function dayOne(difficulty: Difficulty) {
     serviceJobs: [] as ServiceJob[],
     serviceVisits: emptySchedule(),
     serviceAway: [] as Customer[],
+    serviceComebacks: [] as Comeback[],
     service: defaultService(),
     quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
@@ -702,7 +729,7 @@ export const useGame = create<GameState>((set, get) => {
     const gone = (id: string | null) => {
       if (!id || !s.customers.some((c) => c.id === id)) return false
       const c = customers.find((x) => x.id === id)
-      return !c || customerActions(c).length === 0
+      return !c || customerActions(c, get().serviceJobs).length === 0
     }
     set({
       customers,
@@ -717,7 +744,15 @@ export const useGame = create<GameState>((set, get) => {
     // way), or a deal to close with nobody left to sign it.
     const a = get().activeAction
     const blocker =
-      a && actionBlocker(a.action, a.targetId, customers, get().roster, get().inventory)
+      a &&
+      actionBlocker(
+        a.action,
+        a.targetId,
+        customers,
+        get().roster,
+        get().inventory,
+        get().serviceJobs,
+      )
     if (a && blocker) {
       dispatch({ type: 'cancel' })
       notify(blocker)
@@ -732,7 +767,7 @@ export const useGame = create<GameState>((set, get) => {
   const announceWaiting = (prev: readonly Customer[], next: readonly Customer[]) => {
     const s = get()
     const reception = patienceFactor(s.roster) !== 1
-    const advisor = s.roster.some((e) => e.role === 'advisor' && e.status === 'atPost' && !e.fired)
+    const advisor = advisorAtPost(s.roster)
     for (const c of next) {
       if (c.phase !== 'waiting') continue
       const was = prev.find((x) => x.id === c.id)?.phase
@@ -928,12 +963,74 @@ export const useGame = create<GameState>((set, get) => {
       serviceJobs: s.serviceJobs.map((j) => (j === job ? { ...j, status: 'done' as const } : j)),
     })
     addService({
-      jobs: 1,
+      jobs: job.redo ? 0 : 1,
       labor: job.labor,
       parts: job.parts,
       partsCost: job.partsCost,
       late: wasLate(job, c.service?.promisedMinute ?? null) ? 1 : 0,
     })
+    if (!job.redo) rollComeback(job, c)
+  }
+
+  /**
+   * Whether `job`, just collected by `c`, holds: the less skilled its
+   * mechanic, the likelier it doesn't, and the client drives back in for a
+   * free redo later in the day. Too late for that, they only grumble.
+   */
+  const rollComeback = (job: ServiceJob, c: Customer) => {
+    const s = get()
+    const skill = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
+    if (serviceRng.next() >= comebackChance(skill, tuning().comebackScale)) return
+    addService({ comebacks: 1 })
+    const minute = isClosed(s.clock) ? null : comebackMinute(s.clock.minute)
+    if (minute === null) return
+    set({ serviceComebacks: [...get().serviceComebacks, { minute, client: c }] })
+  }
+
+  /**
+   * `by` (the player or the service advisor) offers the client of job `jobId`
+   * the extra work the mechanic found: in person, or by phone if they're away.
+   * Taken, the job and the bill grow and the car is promised later.
+   */
+  const offerFinding = (jobId: string, by: string) => {
+    const s = get()
+    const job = s.serviceJobs.find((j) => j.id === jobId)
+    const c = [...s.customers, ...s.serviceAway].find((x) => x.id === job?.customerId)
+    if (!job || !c?.service || c.phase !== 'servicing') return
+    const player = by === PLAYER_ID
+    const blocker = findingBlocker(job, s.clock.minute)
+    if (blocker) {
+      if (player) notify(blocker)
+      return
+    }
+    const f = job.finding!
+    const skill = player ? PLAYER_SKILL : (s.roster.find((e) => e.id === by)?.skill ?? MIN_SKILL)
+    const yes = serviceRng.next() < upsellChance(s.service.rate, c.archetype, skill)
+    const mechanic = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
+    const next = yes ? acceptFinding(job, mechanic) : declineFinding(job)
+    set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
+    addService({ offered: 1, upsold: yes ? 1 : 0 })
+    const promised = c.service.promisedMinute
+    if (yes && promised !== null) {
+      const ev = {
+        type: 'repromise',
+        id: c.id,
+        promisedMinute: laterPromise(promised, next.minutes - job.minutes),
+      } as const
+      set({ serviceAway: reduceCustomers(get().serviceAway, ev) })
+      commit(reduceCustomers(get().customers, ev))
+    }
+    const work = `${f.label.toLowerCase()}, ${formatMoney(f.labor + f.parts)}`
+    if (player) {
+      notify(
+        yes
+          ? `${c.name}: "Go ahead, fix the ${f.label.toLowerCase()} too."`
+          : `${c.name}: "Not today, thanks."`,
+      )
+    } else if (yes) {
+      const who = s.roster.find((e) => e.id === by)?.name ?? 'Your advisor'
+      notify(`${who} sold ${c.name} extra work: ${work}.`)
+    }
   }
 
   /** `by` (the player or the service advisor) checks service client `id` in and quotes the job. */
@@ -971,7 +1068,8 @@ export const useGame = create<GameState>((set, get) => {
           : `The garage can't fit ${c.name}'s car in before closing. They drove off.`,
       )
     }
-    if (serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
+    // A redo is free: nobody turns that down.
+    if (!visit.comeback && serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
       addService({ declined: 1 })
       walk()
       if (player) notify(`${c.name}: "That's more than I want to spend. I'll go elsewhere."`)
@@ -980,16 +1078,17 @@ export const useGame = create<GameState>((set, get) => {
     const n = s.serviceJobs.filter((j) => j.customerId).length + 1
     const jobId = `client-${s.clock.day}-${n}`
     const client = { name: c.name, model: visit.car.model, condition: visit.car.condition }
-    const job = clientJob(jobId, visit.kind, c.id, visit.quote, client)
+    const job = clientJob(jobId, visit.kind, c.id, visit.quote, client, visit.comeback)
     const dropOff = promised - s.clock.minute > WAIT_LIMIT
     set({ serviceJobs: [...s.serviceJobs, job] })
     const ev = { type: 'booked', id: c.id, jobId, promisedMinute: promised, dropOff } as const
     commit(reduceCustomers(get().customers, ev))
     if (!player) return
+    const again = visit.comeback ? `It's doing it again. ` : ''
     notify(
       dropOff
-        ? `${c.name}: "I'll leave it with you and come back at ${formatTime(promised)}."`
-        : `${c.name}: "Ready by ${formatTime(promised)}? I'll wait."`,
+        ? `${c.name}: "${again}I'll leave it with you and come back at ${formatTime(promised)}."`
+        : `${c.name}: "${again}Ready by ${formatTime(promised)}? I'll wait."`,
     )
   }
 
@@ -1000,7 +1099,9 @@ export const useGame = create<GameState>((set, get) => {
    */
   const serviceArrivals = (step: GameTime, present: readonly Customer[]) => {
     const s = get()
-    if (isClosed(step)) return { schedule: s.serviceVisits, arrived: [], away: s.serviceAway }
+    if (isClosed(step)) {
+      return { schedule: s.serviceVisits, arrived: [], away: s.serviceAway, comebacks: [] }
+    }
     const free = freeServiceSpots(present, s.serviceAway)
     const { schedule, due } = takeDueVisits(s.serviceVisits, step.minute, free)
     const arrived: Customer[] = []
@@ -1010,11 +1111,23 @@ export const useGame = create<GameState>((set, get) => {
       const rate = s.service.rate
       arrived.push(serviceClient(id, kind, spot, serviceRng, step.day, rate, tuning().patience))
     })
+    // Clients whose job didn't hold drive back in, while there's a space.
+    const comebacks: Comeback[] = []
+    for (const back of s.serviceComebacks) {
+      const spot =
+        back.minute <= step.minute ? freeServiceSpot([...present, ...arrived], s.serviceAway) : null
+      if (spot === null) {
+        comebacks.push(back)
+        continue
+      }
+      const n = s.serviceComebacks.length - comebacks.length
+      arrived.push(comebackClient(back.client, `comeback-${step.day}-${step.minute}-${n}`, spot))
+    }
     const due2 = (c: Customer) => (c.service?.promisedMinute ?? Infinity) <= step.minute
     for (const c of s.serviceAway.filter(due2)) {
       arrived.push({ ...c, phase: 'servicing', service: { ...c.service!, returned: true } })
     }
-    return { schedule, arrived, away: s.serviceAway.filter((c) => !due2(c)) }
+    return { schedule, arrived, away: s.serviceAway.filter((c) => !due2(c)), comebacks }
   }
 
   /**
@@ -1107,6 +1220,10 @@ export const useGame = create<GameState>((set, get) => {
         return appraiseCar(finished.targetId)
       case 'checkIn':
         return checkIn(finished.targetId, PLAYER_ID)
+      case 'recommend': {
+        const c = get().customers.find((x) => x.id === finished.targetId)
+        return c?.service?.jobId ? offerFinding(c.service.jobId, PLAYER_ID) : undefined
+      }
       case 'offer':
         return offer(finished.targetId)
       case 'closeDeal':
@@ -1494,7 +1611,15 @@ export const useGame = create<GameState>((set, get) => {
     const newMonth = date.dayOfMonth === 1
     const owner = isOwnerDay(day)
       ? {
-          goal: generateGoal(createRng(OWNER_SEED + day), inventory, salesStaff, !!event),
+          goal: generateGoal(
+            createRng(OWNER_SEED + day),
+            inventory,
+            salesStaff,
+            !!event,
+            SERVICE_WEEKDAY[date.weekday] > 0
+              ? bayCount(installedExpansions(s.expansions, day))
+              : 0,
+          ),
           announced: false,
         }
       : null
@@ -1526,6 +1651,7 @@ export const useGame = create<GameState>((set, get) => {
       purchases: [],
       serviceJobs: [],
       serviceAway: [],
+      serviceComebacks: [],
       serviceVisits: planServiceVisits(
         serviceRng,
         serviceDemand(day, s.career, {
@@ -1629,7 +1755,7 @@ export const useGame = create<GameState>((set, get) => {
           ? confrontBlocker(s.nazma)
           : action === 'recondition'
             ? reconBlocker(reconBook(s), targetId)
-            : actionBlocker(action, targetId, s.customers, s.roster, s.inventory)
+            : actionBlocker(action, targetId, s.customers, s.roster, s.inventory, s.serviceJobs)
       if (blocker) {
         set({ menu: null })
         return notify(blocker)
@@ -1747,6 +1873,7 @@ export const useGame = create<GameState>((set, get) => {
         serviceJobs: jobs,
         serviceVisits: service.schedule,
         serviceAway: service.away,
+        serviceComebacks: service.comebacks,
       })
       if (jobs !== s.serviceJobs) {
         jobsDone(jobs.filter((j, i) => j.status !== s.serviceJobs[i].status))
@@ -2083,6 +2210,17 @@ export const useGame = create<GameState>((set, get) => {
         `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!${tradeLine(sale)}`,
       )
     },
+    staffRecommend: (employeeId, jobId) => {
+      const e = get().roster.find((x) => x.id === employeeId)
+      if (e?.role !== 'advisor' || e.fired || e.status !== 'atPost') return
+      offerFinding(jobId, employeeId)
+    },
+    callClient: (jobId) => {
+      const s = get()
+      const job = s.serviceJobs.find((j) => j.id === jobId)
+      if (!s.serviceAway.some((c) => c.id === job?.customerId)) return
+      offerFinding(jobId, PLAYER_ID)
+    },
     staffCheckIn: (employeeId, customerId) => {
       const s = get()
       const e = s.roster.find((x) => x.id === employeeId)
@@ -2132,10 +2270,19 @@ export const useGame = create<GameState>((set, get) => {
           status: 'inBay',
           bay,
           mechanicId: e.id,
-          minutes: jobMinutes(job.kind, e.skill),
+          minutes: jobMinutesFor(job, e.skill),
+          // Clients' cars get looked over: there may be more that needs doing.
+          finding:
+            job.customerId && !job.redo ? rollFinding(job.kind, s.service.rate, serviceRng) : null,
         }
       }
       set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
+      const f = next.finding
+      if (f && !job.finding && !advisorAtPost(s.roster)) {
+        notify(
+          `${e.name} found more work on ${next.client!.name}'s car: ${f.label.toLowerCase()}, ${formatMoney(f.labor + f.parts)}. Recommend it to them, or call from the Service tab.`,
+        )
+      }
     },
     recondition: (carId) => {
       const s = get()
@@ -2156,6 +2303,10 @@ export const useGame = create<GameState>((set, get) => {
     setAutoRecon: (on) => {
       const service = get().service
       if (service.autoRecon !== on) set({ service: { ...service, autoRecon: on } })
+    },
+    setServiceRate: (rate) => {
+      const service = get().service
+      if (service.rate !== rate) set({ service: { ...service, rate } })
     },
     startNextDay: () => {
       const s = get()

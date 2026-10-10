@@ -90,6 +90,19 @@ describe('generateGoal', () => {
     }
   })
 
+  it('asks for service jobs only with the garage open, more with more bays', () => {
+    const goals = (bays: number) =>
+      Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 1, false, bays))
+    expect(goals(0).some((g) => g.kind === 'serviced')).toBe(false)
+    // Without a garage, the day's goal rolls as it always did.
+    expect(goals(0)).toEqual(
+      Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 1)),
+    )
+    const counts = goals(2).flatMap((g) => (g.kind === 'serviced' ? [g.count] : []))
+    expect(counts.length).toBeGreaterThan(0)
+    expect(new Set(counts)).toEqual(new Set([3, 4]))
+  })
+
   it("never asks for a body type that isn't for sale", () => {
     const empty = inventory.reduce((inv, c) => sellCar(inv, c.id), inventory)
     for (let i = 0; i < 50; i++) {
@@ -110,6 +123,17 @@ describe('goalLabel', () => {
 })
 
 describe('goalProgress', () => {
+  it('counts finished service jobs toward a service goal', () => {
+    const goal: OwnerGoal = { kind: 'serviced', count: 3 }
+    const stats = (jobs: number) => ({
+      ...emptyStats(),
+      service: { ...emptyServiceStats(), jobs },
+    })
+    expect(goalProgress(goal, stats(2))).toEqual({ current: 2, target: 3, met: false })
+    expect(goalProgress(goal, stats(3)).met).toBe(true)
+    expect(goalLabel(goal, String)).toBe('Finish 3 service jobs')
+  })
+
   it('counts sales toward a sales goal', () => {
     const goal: OwnerGoal = { kind: 'sales', count: 2 }
     expect(goalProgress(goal, withSales(sale('van', 30_000)))).toEqual({

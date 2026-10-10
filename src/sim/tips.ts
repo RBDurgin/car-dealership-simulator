@@ -9,7 +9,7 @@ import { quoteFor } from './negotiation'
 import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
 import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
-import { bayCount } from './service'
+import { bayCount, type ServiceJob } from './service'
 import { isStale, STALE_DAYS } from './usedCars'
 
 /** A used car this worn or worse is worth reconditioning (see the `recon` tip). */
@@ -39,6 +39,7 @@ export type TipId =
   | 'serviceBay'
   | 'recon'
   | 'serviceClient'
+  | 'finding'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -72,6 +73,8 @@ export const TIPS: Record<TipId, string> = {
     'This used car is in rough shape. Pick Recondition on it, or use the Service tab: a mechanic raises its condition, and it goes back on sale for more.',
   serviceClient:
     'A service client drove in. Meet them at the garage’s counter and choose Check in to quote the job; they pay when they collect their car. A service advisor checks clients in for you.',
+  finding:
+    'A mechanic found more work on a client’s car. Choose Recommend work on the client in the garage, or Call from the Service tab if they’re away. A higher shop rate makes a yes less likely; a car ready before anyone offers it loses the sale.',
   rivalOpens:
     "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
@@ -99,6 +102,7 @@ export interface TipState {
   career: { rank: RankId }
   rival: { status: RivalStatus }
   expansions: readonly OwnedExpansion[]
+  serviceJobs: readonly ServiceJob[]
 }
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
@@ -196,6 +200,11 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return next.customers.some(
         (c) => c.service && c.phase === 'waiting' && before.get(c.id) === 'arriving',
       )
+    }
+    case 'finding': {
+      if (next.serviceJobs === prev.serviceJobs) return false
+      const had = new Set(prev.serviceJobs.filter((j) => j.finding).map((j) => j.id))
+      return next.serviceJobs.some((j) => j.finding?.status === 'found' && !had.has(j.id))
     }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH

@@ -39,10 +39,13 @@ import {
 import { rankById, rankGross, RANKS } from '../sim/progression'
 import { EXPANSION_IDS, EXPANSIONS } from '../sim/expansions'
 import {
+  COMEBACK_DELAY,
   GARAGE_BAYS,
   GARAGE_EXPANSION,
   JOBS,
   OVERTIME_HOURLY,
+  RATE_IDS,
+  RATE_LEVELS,
   RECON_MAX,
   RECON_STEP,
 } from '../sim/service'
@@ -427,9 +430,26 @@ function BusinessTab({ touch, click }: TabProps) {
           you&apos;ve sold, the more come in. Mondays are busiest, and the shop is shut on Sundays.
         </p>
         <p>
+          The <b>shop rate</b> is set on the Service tab:{' '}
+          {RATE_IDS.map(
+            (id) => `${RATE_LEVELS[id].label} ${formatMoney(RATE_LEVELS[id].hourly)}`,
+          ).join(', ')}{' '}
+          an hour of labor. A lower rate brings more clients (from the next day) and more of them
+          say yes; a higher one earns more from fewer.
+        </p>
+        <p>
+          Sometimes the mechanic finds more work on a client&apos;s car, like worn brake pads.{' '}
+          {click} the client in the garage and choose <b>Recommend work</b>, or press <b>Call</b> on
+          the Service tab if they left the car; a service advisor offers it on their own. About half
+          say yes at the standard rate, fewer at a higher one. If they do, the job grows, so does
+          the bill and the car is ready later. Offer it before the car is done, or the sale is lost.
+        </p>
+        <p>
           A happy client adds to your reputation. A car ready after the time promised, or a client
           turned away (no mechanic, or no time left before closing), costs a point. So does one who
-          gives up waiting at the counter, like any customer.
+          gives up waiting at the counter, like any customer. Now and then a job doesn&apos;t hold:
+          the client drives back about {COMEBACK_DELAY} minutes later for a free redo, and it costs
+          a point. Skilled mechanics have far fewer comebacks.
         </p>
         <p>
           A job still in a bay at closing, or a client&apos;s car still waiting for one, is finished
@@ -650,12 +670,13 @@ function PeopleTab({ touch, click }: TabProps) {
           <li>
             A <b>mechanic</b> works a bay in the service garage, once you&apos;ve built it, fixing
             clients&apos; cars first, then reconditioning used cars. The more skilled, the faster
-            the work. Someone thinking of quitting downs tools, and a job left in a bay waits for
-            the next mechanic.
+            the work and the fewer cars that come back for a redo. Someone thinking of quitting
+            downs tools, and a job left in a bay waits for the next mechanic.
           </li>
           <li>
             A <b>service advisor</b> sits at the garage&apos;s counter and checks service clients
-            in, so you don&apos;t have to. The more skilled, the quicker.
+            in, so you don&apos;t have to, and offers clients the extra work the mechanics find. The
+            more skilled, the quicker, and the more often clients say yes.
           </li>
         </ul>
       </section>

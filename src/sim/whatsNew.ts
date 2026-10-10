@@ -231,6 +231,18 @@ export const UPDATES: readonly Update[] = [
       'Happy clients raise your reputation; a late car or a client turned away lowers it.',
     ],
   },
+  {
+    id: 22,
+    phase: '15',
+    title: 'Extra work, the shop rate and comebacks',
+    items: [
+      'Mechanics sometimes find more work. Pick Recommend work on the client, or Call from the Service tab.',
+      'A service advisor offers the extra work too.',
+      'Set the shop rate on the Service tab: Budget brings more clients, Premium earns more from fewer.',
+      'A job that doesn’t hold brings the client back for a free redo and costs reputation.',
+      'The owner may now ask for a number of service jobs finished.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

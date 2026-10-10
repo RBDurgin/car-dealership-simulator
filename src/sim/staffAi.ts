@@ -4,7 +4,7 @@ import { financeBusy } from './deal'
 import type { InventoryCar } from './inventory'
 import type { Tile } from './grid'
 import { GUARD_PATROL_TILES, SALES_DESKS, type ExpansionId } from './layout'
-import { jobPriority, type ServiceJob } from './service'
+import { findingBlocker, jobPriority, openFinding, type ServiceJob } from './service'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 
 /**
@@ -309,4 +309,29 @@ export function nextCheckIn(
     if (!best || c.patienceLeft < best.patienceLeft) best = c
   }
   return best
+}
+
+/**
+ * The job whose extra work the advisor `e` offers next, when nobody is at
+ * the counter: the first with a finding still open whose client is waiting
+ * on it (on the lot, or away and called) and that can be done by closing at
+ * `now`. Null while they're not at work.
+ */
+export function nextFinding(
+  e: Employee,
+  jobs: readonly ServiceJob[],
+  clients: readonly Customer[],
+  now: number,
+): ServiceJob | null {
+  if (e.status !== 'atPost' || e.fired || e.quitting) return null
+  const waiting = new Set(clients.filter((c) => c.phase === 'servicing').map((c) => c.id))
+  return (
+    jobs.find(
+      (j) =>
+        openFinding(j) &&
+        j.customerId !== null &&
+        waiting.has(j.customerId) &&
+        findingBlocker(j, now) === null,
+    ) ?? null
+  )
 }

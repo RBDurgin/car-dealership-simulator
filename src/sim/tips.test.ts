@@ -4,6 +4,7 @@ import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import { createRng } from './rng'
+import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
 import { STALE_DAYS } from './usedCars'
 import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
@@ -37,6 +38,7 @@ const base: TipState = {
   career: { rank: 'corner-lot' },
   rival: { status: 'unopened' },
   expansions: [],
+  serviceJobs: [],
 }
 const garage: TipState['expansions'] = [
   { id: 'east-lot', day: 1 },
@@ -82,6 +84,19 @@ const tip = (next: Partial<TipState>, prev: Partial<TipState> = {}, seen: TipId[
   tipFor({ ...base, ...prev }, { ...base, ...next }, seen)
 
 const visit = serviceClient('s1', 'oil', 0, createRng(1), 1, 'standard').service!
+const job = clientJob('client-1-1', 'oil', 's1', visit.quote, {
+  name: 'Sam',
+  model: 'sedan',
+  condition: 0.6,
+})
+const finding: Finding = {
+  label: 'Worn brake pads',
+  minutes: 60,
+  labor: 120,
+  parts: 140,
+  partsCost: 100,
+  status: 'found',
+}
 
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   wash: [{ inventory: withCar({ cleanliness: WASH_BELOW - 0.01 }) }, {}],
@@ -124,6 +139,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   serviceClient: [
     { customers: [customer('s1', { phase: 'waiting', service: visit })] },
     { customers: [customer('s1', { phase: 'arriving', service: visit })] },
+  ],
+  finding: [
+    { serviceJobs: [{ ...job, status: 'inBay', bay: 0, finding }] },
+    { serviceJobs: [{ ...job, status: 'inBay', bay: 0 }] },
   ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },

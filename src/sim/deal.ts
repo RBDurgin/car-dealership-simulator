@@ -23,7 +23,7 @@ import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
-import { emptyServiceStats, type ServiceStats } from './service'
+import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
 import { financeOnDuty, type Employee } from './staff'
 import { tradeOver, type TradeRecord } from './tradeIns'
 
@@ -117,12 +117,17 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
 
 /**
  * What the player can do with a customer right now. A seller waits for an
- * offer, a service client to be checked in. Nothing while staff have them.
+ * offer, a service client to be checked in, or told about extra work the
+ * mechanic found on their car (among today's `jobs`). Nothing while staff have them.
  */
-export function customerActions(c: Customer): ActionId[] {
+export function customerActions(c: Customer, jobs: readonly ServiceJob[] = []): ActionId[] {
   if (staffHandled(c)) return []
   // A service client is checked in at the counter, then left to the garage.
-  if (c.service) return c.phase === 'waiting' ? ['checkIn'] : []
+  if (c.service) {
+    if (c.phase === 'waiting') return ['checkIn']
+    const job = jobs.find((j) => j.id === c.service!.jobId)
+    return c.phase === 'servicing' && openFinding(job) ? ['recommend'] : []
+  }
   switch (c.phase) {
     case 'browsing':
     case 'waiting':
@@ -157,11 +162,22 @@ export function personInteractable(
   }
 }
 
-export function customerInteractable(grid: Grid, c: Customer, tile: Tile): Interactable {
-  return personInteractable(grid, c, 'customer', tile, customerActions(c))
+export function customerInteractable(
+  grid: Grid,
+  c: Customer,
+  tile: Tile,
+  jobs: readonly ServiceJob[] = [],
+): Interactable {
+  return personInteractable(grid, c, 'customer', tile, customerActions(c, jobs))
 }
 
-const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'makeOffer', 'offer', 'checkIn'])
+const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set([
+  'greet',
+  'makeOffer',
+  'offer',
+  'checkIn',
+  'recommend',
+])
 
 export function isCustomerAction(action: ActionId): boolean {
   return CUSTOMER_ACTIONS.has(action)
@@ -176,6 +192,7 @@ export function actionBlocker(
   customers: readonly Customer[],
   roster: readonly Employee[],
   inventory: readonly InventoryCar[],
+  jobs: readonly ServiceJob[] = [],
 ): string | null {
   if (action === 'wash') return washBlocker(inventory.find((c) => c.id === targetId))
   if (action === 'appraise')
@@ -187,7 +204,10 @@ export function actionBlocker(
       const by = roster.find((e) => e.id === c.handlerId)
       return by ? `${by.name} is helping ${c.name}.` : `${c.name} is being helped.`
     }
-    return customerActions(c).includes(action) ? null : `${c.name} is busy.`
+    if (action === 'recommend' && !customerActions(c, jobs).includes(action)) {
+      return `There's nothing more to offer ${c.name}.`
+    }
+    return customerActions(c, jobs).includes(action) ? null : `${c.name} is busy.`
   }
   const deal = dealCustomer(customers, PLAYER_ID)
   if (action === 'closeDeal') {

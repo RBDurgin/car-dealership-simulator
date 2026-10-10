@@ -2,8 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { emptyCareer } from './progression'
 import { createRng } from './rng'
 import {
+  acceptFinding,
   bayCount,
+  clientJob,
+  COMEBACK_DELAY,
   comebackChance,
+  comebackMinute,
+  declineFinding,
+  FINDING_ACCEPT,
+  FINDING_CHANCE,
+  findingBlocker,
+  jobMinutesFor,
+  laterPromise,
+  openFinding,
+  REDO_SHARE,
+  rollFinding,
+  upsellChance,
+  type Finding,
   emptySchedule,
   finishedLate,
   finishRecon,
@@ -39,7 +54,7 @@ import {
 } from './service'
 import { buildInventory, type InventoryCar } from './inventory'
 import { usedStockCar } from './usedCars'
-import { OPEN_MINUTE } from './clock'
+import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 
 const sold = (sales: number) => ({ ...emptyCareer(), sales })
 // Day 1 is a Monday, day 7 a Sunday.
@@ -182,6 +197,106 @@ describe('comebacks', () => {
     expect(comebackChance(5)).toBeCloseTo(0.02)
     for (let s = 1; s < 5; s++) expect(comebackChance(s + 1)).toBeLessThan(comebackChance(s))
     expect(comebackChance(9)).toBeCloseTo(0.02)
+  })
+
+  it('scale with the level', () => {
+    expect(comebackChance(1, 0.5)).toBeCloseTo(0.075)
+    expect(comebackChance(1, 1.5)).toBeCloseTo(0.225)
+  })
+
+  it('drive back in COMEBACK_DELAY later, unless that is too late in the day', () => {
+    expect(comebackMinute(600)).toBe(600 + COMEBACK_DELAY)
+    expect(comebackMinute(LAST_SERVICE_MINUTE - COMEBACK_DELAY)).toBe(LAST_SERVICE_MINUTE)
+    expect(comebackMinute(LAST_SERVICE_MINUTE - COMEBACK_DELAY + 10)).toBeNull()
+  })
+
+  it('take half the time to redo', () => {
+    const job = { kind: 'brakes' as const, redo: true }
+    expect(jobMinutesFor(job, 3)).toBe(Math.round(jobMinutes('brakes', 3) * REDO_SHARE))
+    expect(jobMinutesFor({ ...job, redo: false }, 3)).toBe(jobMinutes('brakes', 3))
+  })
+})
+
+describe('findings', () => {
+  const finding: Finding = {
+    label: 'Worn brake pads',
+    minutes: 60,
+    labor: 120,
+    parts: 140,
+    partsCost: 100,
+    status: 'found',
+  }
+  const client = { name: 'Sam', model: 'sedan' as const, condition: 0.5 }
+  const base = clientJob('client-1-1', 'oil', 'c1', { labor: 60, parts: 50, partsCost: 35 }, client)
+  const inBay: ServiceJob = { ...base, status: 'inBay', bay: 0, minutes: 30, finding }
+
+  it('turn up FINDING_CHANCE of the time, priced at the shop rate, never on recon', () => {
+    const rolls = Array.from({ length: 2000 }, (_, i) =>
+      rollFinding('oil', 'standard', createRng(i)),
+    )
+    const found = rolls.filter((f) => f !== null)
+    expect(found.length / rolls.length).toBeCloseTo(FINDING_CHANCE, 1)
+    for (const f of found) {
+      expect(f.status).toBe('found')
+      expect(f.labor).toBe(Math.round((f.minutes / 60) * RATE_LEVELS.standard.hourly))
+      expect(f.parts).toBe(Math.round(f.partsCost * (1 + PARTS_MARKUP)))
+      // About a customer-pay job's worth or less.
+      expect(f.labor + f.parts).toBeLessThan(500)
+    }
+    for (let i = 0; i < 100; i++) expect(rollFinding('recon', 'standard', createRng(i))).toBeNull()
+  })
+
+  it("aren't what the job already covers", () => {
+    for (let i = 0; i < 500; i++) {
+      const f = rollFinding('brakes', 'premium', createRng(i))
+      if (f) expect(f.label).not.toMatch(/brake/i)
+    }
+  })
+
+  it('are taken about half the time at the standard rate, less at a dearer one or from the less skilled', () => {
+    expect(upsellChance('standard', 'regular', 3)).toBeCloseTo(FINDING_ACCEPT)
+    expect(upsellChance('budget', 'regular', 3)).toBeGreaterThan(
+      upsellChance('standard', 'regular', 3),
+    )
+    expect(upsellChance('premium', 'regular', 3)).toBeLessThan(
+      upsellChance('standard', 'regular', 3),
+    )
+    expect(upsellChance('standard', 'regular', 5)).toBeGreaterThan(
+      upsellChance('standard', 'regular', 1),
+    )
+    expect(upsellChance('premium', 'tire-kicker', 1)).toBeGreaterThanOrEqual(0.1)
+    expect(upsellChance('budget', 'decisive', 5)).toBeLessThanOrEqual(0.9)
+  })
+
+  it('can be offered only while the car is in its bay and there is time before closing', () => {
+    expect(openFinding(inBay)).toBe(finding)
+    expect(findingBlocker(inBay, 600)).toBeNull()
+    expect(findingBlocker(inBay, CLOSE_MINUTE - 60)).toMatch(/time/)
+    expect(openFinding({ ...inBay, status: 'ready' })).toBeNull()
+    expect(findingBlocker({ ...inBay, status: 'ready' }, 600)).not.toBeNull()
+    expect(openFinding({ ...inBay, finding: { ...finding, status: 'declined' } })).toBeNull()
+    expect(openFinding(undefined)).toBeNull()
+  })
+
+  it('add their work and bill to the job when taken, and nothing when turned down', () => {
+    const taken = acceptFinding(inBay, 3)
+    expect(taken).toMatchObject({
+      minutes: 30 + 60,
+      labor: 60 + 120,
+      parts: 50 + 140,
+      partsCost: 35 + 100,
+      finding: { status: 'accepted' },
+    })
+    expect(acceptFinding(taken, 3)).toBe(taken)
+    expect(acceptFinding(inBay, 5).minutes).toBeLessThan(taken.minutes)
+    const no = declineFinding(inBay)
+    expect(no).toMatchObject({ labor: 60, minutes: 30, finding: { status: 'declined' } })
+    expect(declineFinding(no)).toBe(no)
+  })
+
+  it('push the promise back to the next 10 minutes', () => {
+    expect(laterPromise(600, 45)).toBe(650)
+    expect(laterPromise(600, 60)).toBe(660)
   })
 })
 

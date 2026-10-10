@@ -5,7 +5,7 @@ import type { DayStats } from './deal'
  * The dealership's good name, 0 to 100. It moves once a day, when the day is
  * settled: happy buyers and service clients spread the word, and customers
  * who walk out unhappy, give up waiting, can't find what they want or get
- * their car back late do the opposite. A good name
+ * their car back late (or back again) do the opposite. A good name
  * brings more of the usual visitors, sends friends of past buyers in as
  * referrals and makes every ad work harder; a bad one does the reverse.
  */
@@ -29,6 +29,8 @@ export const REPUTATION_POINTS = {
   late: -1,
   /** A service client the garage had no time (or no mechanic) for. */
   turnedAway: -1,
+  /** A service client whose job didn't hold, so they came back (or would have). */
+  comeback: -1,
 }
 
 /** One day can't move reputation by more than this either way. */
@@ -63,14 +65,15 @@ const MEDIUM_SCALE: RepScale = { gain: 1, loss: 1 }
  */
 export function reputationChange(stats: DayStats, scale: RepScale = MEDIUM_SCALE): number {
   const missed = Object.values(stats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
-  const { jobs, late, turnedAway } = stats.service
+  const { jobs, late, turnedAway, comebacks } = stats.service
   const gain = stats.sales.length * REPUTATION_POINTS.sale + jobs * REPUTATION_POINTS.serviced
   const loss =
     stats.refused * REPUTATION_POINTS.refused +
     stats.impatient * REPUTATION_POINTS.impatient +
     missed * REPUTATION_POINTS.missed +
     late * REPUTATION_POINTS.late +
-    turnedAway * REPUTATION_POINTS.turnedAway
+    turnedAway * REPUTATION_POINTS.turnedAway +
+    comebacks * REPUTATION_POINTS.comeback
   const raw = Math.round(gain * scale.gain + loss * scale.loss)
   return Math.max(-MAX_DAILY_CHANGE, Math.min(MAX_DAILY_CHANGE, raw))
 }

@@ -14,10 +14,12 @@ import {
   nextSalesTask,
   mechanicWorking,
   nextMechanicTask,
+  nextFinding,
   pickSalesCustomer,
   salesChairFor,
 } from './staffAi'
-import { reconJob, type ServiceJob } from './service'
+import { CLOSE_MINUTE } from './clock'
+import { clientJob, reconJob, type ServiceJob } from './service'
 
 const shopper = (id: string, extra: Partial<Customer> = {}): Customer => ({
   id,
@@ -425,5 +427,55 @@ describe('nextMechanicTask', () => {
     expect(mechanicWorking([], 'm1')).toBe(false)
     expect(mechanicWorking([{ ...mech, quitting: true }], 'm1')).toBe(false)
     expect(mechanicWorking([{ ...mech, status: 'leaving' }], 'm1')).toBe(false)
+  })
+})
+
+describe('nextFinding', () => {
+  const adv = staff('a1', 'advisor')
+  const finding = {
+    label: 'Worn brake pads',
+    minutes: 60,
+    labor: 120,
+    parts: 140,
+    partsCost: 100,
+    status: 'found' as const,
+  }
+  const job = (id: string, customerId: string, over: Partial<ServiceJob> = {}): ServiceJob => ({
+    ...clientJob(
+      id,
+      'oil',
+      customerId,
+      { labor: 60, parts: 50, partsCost: 35 },
+      {
+        name: 'S',
+        model: 'sedan',
+        condition: 1,
+      },
+    ),
+    status: 'inBay',
+    bay: 0,
+    minutes: 30,
+    finding,
+    ...over,
+  })
+  const waiting = shopper('c1', { phase: 'servicing' })
+
+  it('offers an open finding to a client waiting on their car', () => {
+    const jobs = [job('j0', 'c1', { finding: null }), job('j1', 'c1')]
+    expect(nextFinding(adv, jobs, [waiting], 600)?.id).toBe('j1')
+  })
+
+  it('leaves alone what is offered, ready, too late to fit in, or whose client is gone', () => {
+    const declined = { ...finding, status: 'declined' as const }
+    expect(nextFinding(adv, [job('j', 'c1', { finding: declined })], [waiting], 600)).toBeNull()
+    expect(nextFinding(adv, [job('j', 'c1', { status: 'ready' })], [waiting], 600)).toBeNull()
+    expect(nextFinding(adv, [job('j', 'c1')], [waiting], CLOSE_MINUTE - 30)).toBeNull()
+    expect(nextFinding(adv, [job('j', 'c1')], [], 600)).toBeNull()
+  })
+
+  it('does nothing off the clock or let go', () => {
+    for (const e of [staff('a', 'advisor', { status: 'arriving' }), { ...adv, fired: true }]) {
+      expect(nextFinding(e, [job('j', 'c1')], [waiting], 600)).toBeNull()
+    }
   })
 })

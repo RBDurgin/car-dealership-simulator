@@ -14,10 +14,18 @@ const MARGIN = 90
 /** A landscape phone is only ~375px tall: keep the ring nearer the edges. */
 const COMPACT_MARGIN = 70
 
-/** Button text: an offer names the suggested ask (or, to a seller, the suggested offer). */
+/**
+ * Button text: an offer names the suggested ask (or, to a seller, the
+ * suggested offer), a recommendation the extra work and its price.
+ */
 function labelFor(action: ActionId, it: Interactable): string {
-  if (action !== 'offer') return ACTIONS[action].label
   const s = useGame.getState()
+  if (action === 'recommend') {
+    const c = s.customers.find((x) => x.id === it.id)
+    const f = s.serviceJobs.find((j) => j.id === c?.service?.jobId)?.finding
+    return f ? `${f.label}, ${formatMoney(f.labor + f.parts)}` : ACTIONS.recommend.label
+  }
+  if (action !== 'offer') return ACTIONS[action].label
   const c = s.customers.find((x) => x.id === it.id)
   if (c?.selling) return `Offer ${formatMoney(suggestedBuy(c))}`
   const car = s.inventory.find((x) => x.id === c?.targetCarId)
@@ -33,6 +41,8 @@ export function ActionMenu() {
   const roster = useGame((s) => s.roster)
   // And when a car is sold or washed.
   const inventory = useGame((s) => s.inventory)
+  // And when extra work on a service client's car is offered.
+  const jobs = useGame((s) => s.serviceJobs)
   const ref = useRef<HTMLDivElement>(null)
   const radius = useMediaQuery(COARSE) ? TOUCH_RADIUS : RADIUS
   const margin = useMediaQuery(COMPACT) ? COMPACT_MARGIN : MARGIN
@@ -61,7 +71,7 @@ export function ActionMenu() {
         // Start at the top and go clockwise.
         const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n
         // Unavailable actions stay clickable: requestAction explains why they can't run.
-        const blocked = actionBlocker(id, it.id, customers, roster, inventory) !== null
+        const blocked = actionBlocker(id, it.id, customers, roster, inventory, jobs) !== null
         return (
           <button
             key={id}

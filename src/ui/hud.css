@@ -890,6 +890,12 @@ kbd {
   justify-content: flex-end;
   gap: 6px;
 }
+.service-rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
 .stock-why {
   grid-area: why;
   font-size: 12px;

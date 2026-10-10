@@ -312,7 +312,9 @@ export function findInteractable(id: string): Interactable | undefined {
   if (it) return it
   const c = game.customers.find((x) => x.id === id)
   const cPos = customerPos.get(id)
-  if (c && cPos) return customerInteractable(grid, c, grid.worldToTile(cPos.x, cPos.z))
+  if (c && cPos) {
+    return customerInteractable(grid, c, grid.worldToTile(cPos.x, cPos.z), game.serviceJobs)
+  }
   const e = game.roster.find((x) => x.id === id)
   const ePos = staffPos.get(id)
   if (e && ePos) {

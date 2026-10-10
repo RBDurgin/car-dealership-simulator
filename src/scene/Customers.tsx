@@ -551,7 +551,7 @@ const CustomerFigure = memo(function CustomerFigure({
   // Clickable while there's something to do with them (greet, make an offer).
   const helpable = useGame((s) => {
     const c = s.customers.find((x) => x.id === id)
-    return !!c && customerActions(c).length > 0
+    return !!c && customerActions(c, s.serviceJobs).length > 0
   })
   return (
     <>

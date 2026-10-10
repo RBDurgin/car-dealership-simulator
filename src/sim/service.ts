@@ -1,3 +1,4 @@
+import { ARCHETYPES, type Archetype } from './archetypes'
 import { calendarOf } from './calendar'
 import { washCar } from './cleanliness'
 import type { Customer } from './customers'
@@ -65,19 +66,32 @@ export interface ServiceJob {
   labor: number
   parts: number
   partsCost: number
-  /** Extra work the mechanic found (15d), or null. */
+  /** Extra work the mechanic found when they started (see `rollFinding`), or null. */
   finding: Finding | null
+  /** A free redo of a job that came back (see `comebackChance`): nobody pays for it. */
+  redo: boolean
   /** A client's name and car, for the Service tab and the lift; null for our own. */
   client: { name: string; model: CarModel; condition: number } | null
   /** The game minute a client's car was ready, or null until it is. */
   readyMinute: number | null
 }
 
+/**
+ * Where a finding stands: `found` until someone offers it to the client, who
+ * takes it (`accepted`) or not (`declined`). One still `found` when the car is
+ * ready is lost.
+ */
+export type FindingStatus = 'found' | 'accepted' | 'declined'
+
+/** Extra work a mechanic found on a client's car: "Worn brake pads, $260". */
 export interface Finding {
   label: string
+  /** Book time in game minutes, added to the job if the client takes it. */
+  minutes: number
   labor: number
   parts: number
   partsCost: number
+  status: FindingStatus
 }
 
 /** The shop rate: what labor costs the client, and what that does to business. */
@@ -252,14 +266,146 @@ export function takeDueVisits(
   return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due }
 }
 
+/** The odds a mechanic starting on a client's car finds something else it needs. */
+export const FINDING_CHANCE = 0.35
+
+interface FindingSpec {
+  label: string
+  minutes: number
+  parts: { min: number; max: number }
+  /** A job that already covers it: nobody finds worn pads during a brake job. */
+  not?: JobKind
+}
+
+/** What a mechanic might find. */
+export const FINDINGS: readonly FindingSpec[] = [
+  { label: 'Worn brake pads', minutes: 60, parts: { min: 80, max: 140 }, not: 'brakes' },
+  { label: 'Bald front tires', minutes: 40, parts: { min: 140, max: 260 }, not: 'tires' },
+  { label: 'Leaking coolant hose', minutes: 45, parts: { min: 30, max: 70 } },
+  { label: 'Cracked drive belt', minutes: 40, parts: { min: 40, max: 90 } },
+  { label: 'Tired battery', minutes: 20, parts: { min: 100, max: 170 } },
+  { label: 'Clogged cabin filter', minutes: 15, parts: { min: 20, max: 40 } },
+]
+
+/**
+ * What the mechanic starting a `kind` job finds, priced at the shop `rate`
+ * like a quote, `FINDING_CHANCE` of the time; otherwise null. Never on our own
+ * cars or on a free redo.
+ */
+export function rollFinding(kind: JobKind, rate: RateLevel, rng: Rng): Finding | null {
+  if (kind === 'recon' || rng.next() >= FINDING_CHANCE) return null
+  const spec = rng.pick(FINDINGS.filter((f) => f.not !== kind))
+  const partsCost = Math.round(rng.int(spec.parts.min, spec.parts.max) / 5) * 5
+  return {
+    label: spec.label,
+    minutes: spec.minutes,
+    labor: Math.round((spec.minutes / 60) * RATE_LEVELS[rate].hourly),
+    parts: Math.round(partsCost * (1 + PARTS_MARKUP)),
+    partsCost,
+    status: 'found',
+  }
+}
+
+/** A finding that can still be offered: found, and the car still in its bay. */
+export function openFinding(job: ServiceJob | undefined): Finding | null {
+  return job?.status === 'inBay' && job.finding?.status === 'found' ? job.finding : null
+}
+
+/** The odds a client takes a finding at the standard rate, offered by someone of middling skill. */
+export const FINDING_ACCEPT = 0.5
+/** What each skill level above or below middling adds to (or takes off) those odds. */
+export const UPSELL_PER_SKILL = 0.05
+const UPSELL_RANGE = { min: 0.1, max: 0.9 }
+
+/**
+ * The odds a client of `archetype` takes extra work offered at the shop
+ * `rate` by someone of `skill` (the advisor's, or the player's).
+ */
+export function upsellChance(rate: RateLevel, archetype: Archetype, skill: number): number {
+  const chance =
+    FINDING_ACCEPT * RATE_LEVELS[rate].accept +
+    ARCHETYPES[archetype].accept +
+    (skill - (MIN_SKILL + MAX_SKILL) / 2) * UPSELL_PER_SKILL
+  return Math.max(UPSELL_RANGE.min, Math.min(UPSELL_RANGE.max, chance))
+}
+
+/**
+ * Why a finding can't go on `job` at `now`: the client would only have their
+ * car after closing. Null if it fits.
+ */
+export function findingBlocker(job: ServiceJob, now: number): string | null {
+  const f = openFinding(job)
+  if (!f) return 'There’s nothing to offer.'
+  if (now + minutesLeft(job) + f.minutes > CLOSE_MINUTE) return 'No time to fit it in today.'
+  return null
+}
+
+/**
+ * `job` with its finding taken: the work and the bill grow, the extra time at
+ * the speed of the mechanic of `skill` on it.
+ */
+export function acceptFinding(job: ServiceJob, skill: number): ServiceJob {
+  const f = job.finding
+  if (!f || f.status !== 'found') return job
+  return {
+    ...job,
+    minutes: job.minutes + Math.round(skillSeconds(f.minutes, skill)),
+    labor: job.labor + f.labor,
+    parts: job.parts + f.parts,
+    partsCost: job.partsCost + f.partsCost,
+    finding: { ...f, status: 'accepted' },
+  }
+}
+
+/** `job` with its finding turned down. */
+export function declineFinding(job: ServiceJob): ServiceJob {
+  const f = job.finding
+  if (!f || f.status !== 'found') return job
+  return { ...job, finding: { ...f, status: 'declined' } }
+}
+
+/** A promise of `promised` pushed back by `minutes` of extra work, to the next 10 minutes. */
+export function laterPromise(promised: number, minutes: number): number {
+  return Math.ceil((promised + minutes) / 10) * 10
+}
+
 /** Comeback odds at the lowest and highest skill. */
 const COMEBACK = { worst: 0.15, best: 0.02 }
 
-/** The odds a job done by a mechanic of `skill` brings the car back for a redo. */
-export function comebackChance(skill: number): number {
+/**
+ * The odds a job done by a mechanic of `skill` brings the car back for a
+ * redo, × the level's `Tuning.comebackScale`.
+ */
+export function comebackChance(skill: number, scale = 1): number {
   const s = Math.max(MIN_SKILL, Math.min(MAX_SKILL, skill))
   const t = (s - MIN_SKILL) / (MAX_SKILL - MIN_SKILL)
-  return COMEBACK.worst + (COMEBACK.best - COMEBACK.worst) * t
+  return (COMEBACK.worst + (COMEBACK.best - COMEBACK.worst) * t) * scale
+}
+
+/** Game minutes after collecting that a client whose job didn't hold drives back in. */
+export const COMEBACK_DELAY = 90
+/** A redo takes this share of the job's time: the mechanic knows what to look at. */
+export const REDO_SHARE = 0.5
+
+/**
+ * When a client collecting at `now` comes back for a redo, or null when that
+ * would be too late in the day for the garage to take them (they only grumble).
+ */
+export function comebackMinute(now: number): number | null {
+  const minute = now + COMEBACK_DELAY
+  return minute <= LAST_SERVICE_MINUTE ? minute : null
+}
+
+/** A client's car on its way back for a redo, and when it drives in. */
+export interface Comeback {
+  minute: number
+  client: Customer
+}
+
+/** Game minutes a mechanic of `skill` takes over `job`: half the time on a redo. */
+export function jobMinutesFor(job: Pick<ServiceJob, 'kind' | 'redo'>, skill: number): number {
+  const minutes = jobMinutes(job.kind, skill)
+  return job.redo ? Math.round(minutes * REDO_SHARE) : minutes
 }
 
 /** The day's service department, for the summary. */
@@ -281,6 +427,9 @@ export interface ServiceStats {
   declined: number
   late: number
   comebacks: number
+  /** Extra work the mechanics found offered to clients, and how much of it they took. */
+  offered: number
+  upsold: number
 }
 
 export function emptyServiceStats(): ServiceStats {
@@ -296,6 +445,8 @@ export function emptyServiceStats(): ServiceStats {
     declined: 0,
     late: 0,
     comebacks: 0,
+    offered: 0,
+    upsold: 0,
   }
 }
 
@@ -402,6 +553,7 @@ export function reconJob(id: string, carId: string, partsCost: number): ServiceJ
     parts: 0,
     partsCost,
     finding: null,
+    redo: false,
     client: null,
     readyMinute: null,
   }
@@ -478,6 +630,7 @@ export function clientJob(
   customerId: string,
   q: Quote,
   client: NonNullable<ServiceJob['client']>,
+  redo = false,
 ): ServiceJob {
   return {
     id,
@@ -493,6 +646,7 @@ export function clientJob(
     parts: q.parts,
     partsCost: q.partsCost,
     finding: null,
+    redo,
     client,
     readyMinute: null,
   }

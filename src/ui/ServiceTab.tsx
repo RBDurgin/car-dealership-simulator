@@ -7,13 +7,17 @@ import type { InventoryCar } from '../sim/inventory'
 import { rankById } from '../sim/progression'
 import {
   bayCount,
+  findingBlocker,
   GARAGE_EXPANSION,
   JOBS,
   minutesLeft,
+  RATE_IDS,
+  RATE_LEVELS,
   RECON_MAX,
   reconBlocker,
   reconGain,
   wasLate,
+  type RateLevel,
   type ServiceJob,
 } from '../sim/service'
 import { mechanicWorking } from '../sim/staffAi'
@@ -66,30 +70,108 @@ function clientStatus(job: ServiceJob): string {
   }
 }
 
-/** A client's job today: whose car, what it needs, where it stands and what it pays. */
+/** What came of the extra work found on `job`, for the Clients list. */
+function findingText(job: ServiceJob): string | null {
+  const f = job.finding
+  if (!f) return null
+  const work = `${f.label}, ${formatMoney(f.labor + f.parts)}`
+  switch (f.status) {
+    case 'accepted':
+      return `Added: ${work}`
+    case 'declined':
+      return `Turned down: ${work}`
+    case 'found':
+      return job.status === 'inBay' ? `Found: ${work}` : `Missed: ${work}`
+  }
+}
+
+/**
+ * A client's job today: whose car, what it needs, where it stands and what it
+ * pays, and any extra work the mechanic found. A client who's away can be
+ * phoned about it.
+ */
 function ClientRow({ job }: { job: ServiceJob }) {
+  const touch = useMediaQuery(COARSE)
   const promised = useGame((s) => {
     const c = [...s.customers, ...s.serviceAway].find((x) => x.id === job.customerId)
     return c?.service?.promisedMinute ?? null
   })
+  const away = useGame((s) => s.serviceAway.some((c) => c.id === job.customerId))
+  const blocker = useGame((s) => findingBlocker(job, s.clock.minute))
   const late = promised !== null && job.status !== 'done' && wasLate(job, promised)
+  const found = job.status === 'inBay' && job.finding?.status === 'found'
+  const finding = findingText(job)
   return (
     <li className="stock-row">
       <div className="stock-who">
         <div className="staff-name">
           {job.client!.name}
-          <span className="stock-badge">{JOBS[job.kind].label}</span>
+          <span className="stock-badge">{job.redo ? 'Redo' : JOBS[job.kind].label}</span>
         </div>
         <div className="staff-meta">
           {carName(job.client!.model)} · {clientStatus(job)}
           {promised !== null && job.status !== 'done' && ` · promised ${formatTime(promised)}`}
           {late && ' (late)'}
         </div>
+        {finding && <div className="staff-meta">{finding}</div>}
       </div>
       <div className="staff-wage price" title="What they pay for labor and parts">
-        {formatMoney(job.labor + job.parts)}
+        {job.redo ? 'Free' : formatMoney(job.labor + job.parts)}
       </div>
+      {found && (
+        <div className="stock-actions">
+          {away ? (
+            <button
+              className="btn btn-small btn-primary"
+              disabled={!!blocker}
+              title={blocker ?? 'Phone them about the extra work'}
+              onClick={() => useGame.getState().callClient(job.id)}
+            >
+              Call
+            </button>
+          ) : (
+            <span className="muted" title="Choose Recommend work on them in the garage">
+              In the garage
+            </span>
+          )}
+        </div>
+      )}
+      {touch && found && away && blocker && <div className="stock-why muted">{blocker}</div>}
     </li>
+  )
+}
+
+/** "Busier", "Quieter": what a rate does to the number of clients, against the standard. */
+function demandWord(rate: RateLevel): string {
+  const d = RATE_LEVELS[rate].demand
+  return d > 1 ? 'more clients' : d < 1 ? 'fewer clients' : 'the usual clients'
+}
+
+/** The shop rate: what labor costs clients, and what that does to how many come and say yes. */
+function RatePicker() {
+  const rate = useGame((s) => s.service.rate)
+  return (
+    <>
+      <h3>Shop rate</h3>
+      <div className="service-rates" role="radiogroup" aria-label="Shop rate">
+        {RATE_IDS.map((id) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={rate === id}
+            className={rate === id ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            title={`${formatMoney(RATE_LEVELS[id].hourly)} an hour of labor, ${demandWord(id)}`}
+            onClick={() => useGame.getState().setServiceRate(id)}
+          >
+            {RATE_LEVELS[id].label} · {formatMoney(RATE_LEVELS[id].hourly)}/h
+          </button>
+        ))}
+      </div>
+      <p className="muted">
+        A lower rate brings {demandWord('budget')} (from tomorrow), and more of them say yes to a
+        quote or extra work. A higher one earns more per hour from fewer. New quotes use it now.
+      </p>
+    </>
   )
 }
 
@@ -191,6 +273,7 @@ export function ServiceTab() {
       {waiting.length > 0 && (
         <p className="muted">Waiting for a bay: {waiting.map(queued).join(', ')}.</p>
       )}
+      <RatePicker />
       <h3>Clients</h3>
       {clients.length === 0 ? (
         <p className="muted staff-empty">
@@ -229,6 +312,20 @@ export function ServiceTab() {
       <dl className="stock-summary">
         <dt>Client jobs</dt>
         <dd>{stats.service.jobs}</dd>
+        {stats.service.offered > 0 && (
+          <>
+            <dt>Extra work sold</dt>
+            <dd>
+              {stats.service.upsold} of {stats.service.offered}
+            </dd>
+          </>
+        )}
+        {stats.service.comebacks > 0 && (
+          <>
+            <dt>Came back</dt>
+            <dd>{stats.service.comebacks}</dd>
+          </>
+        )}
         <dt>Reconditioned</dt>
         <dd>{stats.service.recon}</dd>
         <dt>Service income</dt>

@@ -172,6 +172,8 @@ export const SALES_COUNTER_SECONDS = 2
 export const SALES_SIGN_SECONDS = 6
 /** Game seconds an average service advisor takes to check a client in. */
 export const ADVISOR_CHECK_IN_SECONDS = 4
+/** Game seconds an average service advisor takes to talk a client through extra work. */
+export const ADVISOR_CALL_SECONDS = 6
 /** Game seconds an average lot porter takes to wash a car. */
 export const PORTER_WASH_SECONDS = 8
 /** Each skill level above or below average takes this much off a task's time or adds it on. */

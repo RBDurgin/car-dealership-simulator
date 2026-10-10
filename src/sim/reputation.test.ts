@@ -34,6 +34,14 @@ describe('reputationChange', () => {
     expect(reputationChange(emptyStats())).toBe(0)
   })
 
+  it('loses a point for each service job that came back', () => {
+    const base = emptyStats()
+    expect(reputationChange({ ...base, service: { ...base.service, comebacks: 2 } })).toBe(
+      2 * REPUTATION_POINTS.comeback,
+    )
+    expect(REPUTATION_POINTS.comeback).toBe(-1)
+  })
+
   it('rises with buyers and falls with unhappy customers', () => {
     expect(reputationChange(stats({ sales: [sale, sale] }))).toBe(2 * REPUTATION_POINTS.sale)
     expect(reputationChange(stats({ refused: 1 }))).toBe(REPUTATION_POINTS.refused)

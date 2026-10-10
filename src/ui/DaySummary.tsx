@@ -34,13 +34,14 @@ import { rankLine } from './rankText'
  * End of the day: shown once the doors are closed and the last customer has
  * left. Starting the next day resets the clock and the day's arrivals.
  */
-/** "1 late, 2 turned away, 1 declined": service clients who left unhappy. */
+/** "1 late, 2 turned away, 1 declined, 1 came back": service clients who left unhappy. */
 function serviceLetDown(stats: DayStats): string {
-  const { late, turnedAway, declined } = stats.service
+  const { late, turnedAway, declined, comebacks } = stats.service
   return [
     late > 0 && `${late} late`,
     turnedAway > 0 && `${turnedAway} turned away`,
     declined > 0 && `${declined} declined`,
+    comebacks > 0 && `${comebacks} came back`,
   ]
     .filter(Boolean)
     .join(', ')
@@ -114,7 +115,19 @@ export function DaySummary() {
               </dd>
             </>
           )}
-          {stats.service.late + stats.service.turnedAway + stats.service.declined > 0 && (
+          {stats.service.offered > 0 && (
+            <>
+              <dt className="summary-sub">· extra work sold</dt>
+              <dd className="summary-sub">
+                {stats.service.upsold} of {stats.service.offered} offered
+              </dd>
+            </>
+          )}
+          {stats.service.late +
+            stats.service.turnedAway +
+            stats.service.declined +
+            stats.service.comebacks >
+            0 && (
             <>
               <dt className="summary-sub">· clients let down</dt>
               <dd className="summary-sub">{serviceLetDown(stats)}</dd>

@@ -20,6 +20,7 @@ import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
 import {
+  ADVISOR_CALL_SECONDS,
   ADVISOR_CHECK_IN_SECONDS,
   financeSeconds,
   GUARD_CHASE_SPEED,
@@ -37,6 +38,7 @@ import {
 import { bayCount } from '../sim/service'
 import {
   nextCheckIn,
+  nextFinding,
   nextGuardTask,
   nextMechanicTask,
   nextPorterTask,
@@ -112,7 +114,8 @@ interface StaffWalker extends Walker {
   task: string | null
   /**
    * Finance: the buyer whose paperwork is under way, and game seconds left on
-   * it. The service advisor: the client being checked in.
+   * it. The service advisor: the client being checked in, or the job whose
+   * extra work they're offering (`finding:<job id>`).
    */
   paperwork: { customerId: string; left: number } | null
   /**
@@ -233,10 +236,7 @@ function doCheckIns(
 ): void {
   const game = useGame.getState()
   const c = nextCheckIn(e, customers, atCounter, game.activeAction?.targetId ?? null)
-  if (!c) {
-    w.paperwork = null
-    return
-  }
+  if (!c) return doFindings(e, w, seconds, customers)
   if (w.paperwork?.customerId !== c.id) {
     w.paperwork = { customerId: c.id, left: skillSeconds(ADVISOR_CHECK_IN_SECONDS, e.skill) }
   }
@@ -244,6 +244,33 @@ function doCheckIns(
   if (w.paperwork.left > 0) return
   w.paperwork = null
   game.staffCheckIn(e.id, c.id)
+}
+
+/**
+ * With nobody at the counter, the service advisor tells clients (in the
+ * garage's chairs, or by phone) about extra work the mechanics found.
+ */
+function doFindings(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): void {
+  const game = useGame.getState()
+  const clients = [...customers, ...game.serviceAway]
+  const job = nextFinding(e, game.serviceJobs, clients, game.clock.minute)
+  if (!job) {
+    w.paperwork = null
+    return
+  }
+  const key = `finding:${job.id}`
+  if (w.paperwork?.customerId !== key) {
+    w.paperwork = { customerId: key, left: skillSeconds(ADVISOR_CALL_SECONDS, e.skill) }
+  }
+  w.paperwork.left -= seconds
+  if (w.paperwork.left > 0) return
+  w.paperwork = null
+  game.staffRecommend(e.id, job.id)
 }
 
 /** The key a salesperson's task is planned under: a new key means a new path. */

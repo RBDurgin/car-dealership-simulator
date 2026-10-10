@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
 import { moodOf, reduceCustomer, reduceCustomers, type Customer } from './customers'
-import { customerActions, recordMissed, emptyStats } from './deal'
+import { actionBlocker, customerActions, recordMissed, emptyStats } from './deal'
 import {
   bayPose,
   bayToSpot,
@@ -38,6 +38,8 @@ import {
   type ServiceJob,
 } from './service'
 import {
+  comebackClient,
+  FREE_QUOTE,
   freeServiceSpot,
   freeServiceSpots,
   quoteAcceptChance,
@@ -109,6 +111,69 @@ describe('a service client', () => {
     expect(c).toMatchObject({ phase: 'leaving', leaveReason: 'serviced' })
     expect(moodOf(c)).toBe('happy')
     expect(reduceCustomer(c, { type: 'droveOff', id: c.id })).toBeNull()
+  })
+
+  it('can be recommended extra work only while their car is in a bay with a finding open', () => {
+    const visit = { ...client().service!, jobId: 'j' }
+    const c = client('s-1', { phase: 'servicing', service: visit })
+    const finding = {
+      label: 'Worn brake pads',
+      minutes: 60,
+      labor: 120,
+      parts: 140,
+      partsCost: 100,
+      status: 'found' as const,
+    }
+    const job: ServiceJob = {
+      ...clientJob('j', 'oil', 's-1', visit.quote, { name: 'S', model: 'sedan', condition: 1 }),
+      status: 'inBay',
+      bay: 0,
+      finding,
+    }
+    expect(customerActions(c, [job])).toEqual(['recommend'])
+    expect(customerActions(c)).toEqual([])
+    expect(customerActions(c, [{ ...job, status: 'ready' }])).toEqual([])
+    expect(customerActions(c, [{ ...job, finding: { ...finding, status: 'declined' } }])).toEqual(
+      [],
+    )
+    expect(actionBlocker('recommend', 's-1', [c], [], [], [job])).toBeNull()
+    expect(actionBlocker('recommend', 's-1', [c], [], [], [])).toMatch(/nothing more/)
+  })
+
+  it('takes a new promise for extra work only while servicing', () => {
+    const visit = { ...client().service!, jobId: 'j', promisedMinute: 600 }
+    const c = client('s-1', { phase: 'servicing', service: visit })
+    const ev = { type: 'repromise', id: 's-1', promisedMinute: 660 } as const
+    expect(reduceCustomer(c, ev)!.service!.promisedMinute).toBe(660)
+    const waiting = client('s-1', { phase: 'waiting' })
+    expect(reduceCustomer(waiting, ev)).toBe(waiting)
+  })
+
+  it('comes back as the same person in the same car for a free redo', () => {
+    const left = client('s-1', {
+      phase: 'leaving',
+      leaveReason: 'serviced',
+      patienceLeft: 3,
+      service: { ...client().service!, jobId: 'j', promisedMinute: 600, parked: true },
+    })
+    const back = comebackClient(left, 'comeback-1', 2)
+    expect(back).toMatchObject({
+      id: 'comeback-1',
+      name: left.name,
+      phase: 'arriving',
+      leaveReason: null,
+      patienceLeft: left.patience,
+    })
+    expect(back.service).toMatchObject({
+      kind: left.service!.kind,
+      car: left.service!.car,
+      spot: 2,
+      parked: false,
+      quote: FREE_QUOTE,
+      jobId: null,
+      promisedMinute: null,
+      comeback: true,
+    })
   })
 
   it('leaves declined when they turn the quote down', () => {
