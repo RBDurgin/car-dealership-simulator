@@ -5,6 +5,7 @@ import {
   DESK_CHAIR_ID,
   RECEPTION_CHAIR_ID,
   salesDesks,
+  SERVICE_CHAIR_ID,
   serviceBays,
   type ExpansionId,
   type SalesDesk,
@@ -24,7 +25,8 @@ import type { Rng } from './rng'
  * now; a fired employee is removed once they've left. Someone Nazma poached is
  * `quitting` until kept with a raise; at `close` they walk out for good.
  */
-export type Role = 'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic'
+export type Role =
+  'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic' | 'advisor'
 
 export const ROLES: readonly Role[] = [
   'sales',
@@ -33,6 +35,7 @@ export const ROLES: readonly Role[] = [
   'porter',
   'security',
   'mechanic',
+  'advisor',
 ]
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -42,6 +45,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   porter: 'Lot porter',
   security: 'Security guard',
   mechanic: 'Mechanic',
+  advisor: 'Service advisor',
 }
 const ROLE_PLURALS: Record<Role, string> = {
   sales: 'salespeople',
@@ -50,6 +54,7 @@ const ROLE_PLURALS: Record<Role, string> = {
   porter: 'lot porters',
   security: 'security guards',
   mechanic: 'mechanics',
+  advisor: 'service advisors',
 }
 /** What each role does, for applicants in the staff panel. */
 export const ROLE_BLURBS: Record<Role, string> = {
@@ -59,6 +64,7 @@ export const ROLE_BLURBS: Record<Role, string> = {
   porter: 'Washes the dirtiest cars on the lot.',
   security: 'Patrols the lot, chases off Nazma and makes his visits rarer.',
   mechanic: 'Works a bay in the service garage. Skill sets how fast.',
+  advisor: "Checks service clients in at the garage counter, so you don't have to.",
 }
 /** Short label for the badge over their head. */
 export const ROLE_BADGES: Record<Role, string> = {
@@ -68,11 +74,12 @@ export const ROLE_BADGES: Record<Role, string> = {
   porter: 'Porter',
   security: 'Security',
   mechanic: 'Mechanic',
+  advisor: 'Service',
 }
 
 /**
  * Most of each role on the payroll at once, before the showroom wing and the
- * garage. No mechanics until there's a garage to work in.
+ * garage. No mechanics or service advisor until there's a garage to work in.
  */
 export const ROLE_LIMITS: Record<Role, number> = {
   sales: 2,
@@ -81,17 +88,21 @@ export const ROLE_LIMITS: Record<Role, number> = {
   porter: 1,
   security: 1,
   mechanic: 0,
+  advisor: 0,
 }
 
 /** With the showroom wing up: a desk for each of 4 salespeople, and 2 porters for the bigger lot. */
 const WING_LIMITS: Partial<Record<Role, number>> = { sales: 4, porter: 2 }
 
-/** Most of each role on the payroll at once with the `expansions` that are up: a mechanic per bay. */
+/**
+ * Most of each role on the payroll at once with the `expansions` that are up:
+ * a mechanic per bay, and a service advisor once there's a garage.
+ */
 export function roleLimits(expansions: readonly ExpansionId[] = []): Record<Role, number> {
   const wing = expansions.includes('showroom-wing')
   const bays = serviceBays(expansions).length
   if (!wing && !bays) return ROLE_LIMITS
-  return { ...ROLE_LIMITS, ...(wing && WING_LIMITS), mechanic: bays }
+  return { ...ROLE_LIMITS, ...(wing && WING_LIMITS), mechanic: bays, advisor: bays > 0 ? 1 : 0 }
 }
 
 /**
@@ -105,6 +116,7 @@ export const POSTS: Record<Role, string | null> = {
   porter: null,
   security: null,
   mechanic: null,
+  advisor: SERVICE_CHAIR_ID,
 }
 
 export type StaffStatus = 'off' | 'arriving' | 'atPost' | 'leaving'
@@ -139,6 +151,7 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   porter: { base: 60, perSkill: 15 },
   security: { base: 80, perSkill: 20 },
   mechanic: { base: 100, perSkill: 30 },
+  advisor: { base: 80, perSkill: 25 },
 }
 
 /** Share of a sale's gross profit (price less cost) a salesperson earns for making it. */
@@ -157,6 +170,8 @@ export const SALES_PITCH_SECONDS = 4
 export const SALES_COUNTER_SECONDS = 2
 /** Game seconds of paperwork per deal for an average salesperson at their own desk. */
 export const SALES_SIGN_SECONDS = 6
+/** Game seconds an average service advisor takes to check a client in. */
+export const ADVISOR_CHECK_IN_SECONDS = 4
 /** Game seconds an average lot porter takes to wash a car. */
 export const PORTER_WASH_SECONDS = 8
 /** Each skill level above or below average takes this much off a task's time or adds it on. */
@@ -288,7 +303,7 @@ export function canHire(
   const count = roster.filter((e) => e.role === role && !e.fired).length
   const limit = roleLimits(expansions)[role]
   if (count < limit) return null
-  // Only mechanics need somewhere to work before they can be hired.
+  // Only the garage's staff need somewhere to work before they can be hired.
   if (limit === 0) return 'Build a service garage first.'
   return limit === 1
     ? `You already have a ${ROLE_LABELS[role].toLowerCase()}.`

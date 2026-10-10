@@ -1,5 +1,6 @@
 import type { Vec2 } from '../sim/grid'
-import { parkedPose } from '../sim/driving'
+import { parkedPose, servicePose } from '../sim/driving'
+import { SERVICE_BAYS } from '../sim/layout'
 import { allowCue, sfxFor, spatialMix, type SfxCue, type SfxSubject } from '../sim/sfxEvents'
 import {
   ambientPos,
@@ -33,6 +34,8 @@ const VOLUME: Record<SfxCue, number> = {
   fanfare: 0.5,
   engine: 0.55,
   door: 0.6,
+  wrench: 0.5,
+  lift: 0.45,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */
@@ -55,9 +58,11 @@ function positionOf(subject: SfxSubject): Vec2 | undefined {
       // Where it is, or its space if the car isn't in the world yet.
       const car = vehiclePos.get(subject.id)
       if (car) return car.pos
-      const { pos } = parkedPose(subject.spot)
+      const { pos } = subject.service ? servicePose(subject.spot) : parkedPose(subject.spot)
       return grid.tileToWorld(pos.x, pos.z)
     }
+    case 'bay':
+      return rectBounds(SERVICE_BAYS[subject.bay].rect)
     case 'car': {
       const car = useGame.getState().inventory.find((c) => c.id === subject.id)
       return car && rectBounds(car.rect)

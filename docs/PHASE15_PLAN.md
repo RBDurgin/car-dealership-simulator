@@ -1,6 +1,6 @@
 # Phase 15 Plan: Service Department
 
-**Status:** planned 2026-10-08. 15a built 2026-10-09 (save v22). 15b built 2026-10-09. Phase 13 comes first: the garage is one of its expansions, unlocked by its ranks, and service demand reads its `Career`. Phase 15 doesn't need Phase 14, but it comes after it in the plan. 15a takes the next save version, whichever order Phases 14 and 15 are built in. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
+**Status:** planned 2026-10-08. 15a built 2026-10-09 (save v22). 15b built 2026-10-09. 15c built 2026-10-09. Phase 13 comes first: the garage is one of its expansions, unlocked by its ranks, and service demand reads its `Career`. Phase 15 doesn't need Phase 14, but it comes after it in the plan. 15a takes the next save version, whichever order Phases 14 and 15 are built in. After that, we do one sub-phase per session and stop for Robert's review after each, as in earlier phases.
 
 ## Context
 

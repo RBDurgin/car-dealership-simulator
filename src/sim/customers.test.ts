@@ -56,6 +56,7 @@ const base: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  service: null,
 }
 
 const run = (c: Customer, ...events: CustomerEvent[]) =>
@@ -728,6 +729,7 @@ describe('salespeople', () => {
       selling: null,
       trade: null,
       rivalQuote: null,
+      service: null,
     })
   })
 

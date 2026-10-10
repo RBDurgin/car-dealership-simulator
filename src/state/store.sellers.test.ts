@@ -53,6 +53,7 @@ const seller = (extra: Partial<Customer> = {}): Customer => ({
   selling: { hope: 11_000, estimate: { estimate: 10_000, margin: 2_500 }, appraised: false },
   trade: null,
   rivalQuote: null,
+  service: null,
   ...extra,
 })
 

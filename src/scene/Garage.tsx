@@ -6,7 +6,7 @@ import { GARAGE_SIGN, SERVICE_BAYS, type ServiceBay } from '../sim/layout'
 import type { ServiceJob } from '../sim/service'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
-import { rectBounds } from './runtime'
+import { lifts, rectBounds } from './runtime'
 import { useGround } from './useUpNow'
 
 /** How high a lift raises a car, and how fast (units a second). */
@@ -77,7 +77,7 @@ function ServiceSign() {
  * them, moved in `useFrame`), the car itself, and the roll-up door rolled up
  * over its opening.
  */
-function Bay({ bay, car }: { bay: ServiceBay; car: InventoryCar | null }) {
+function Bay({ index, bay, car }: { index: number; bay: ServiceBay; car: InventoryCar | null }) {
   const lift = useRef<Group>(null)
   const b = rectBounds(bay.rect)
   const door = rectBounds(bay.door)
@@ -97,9 +97,11 @@ function Bay({ bay, car }: { bay: ServiceBay; car: InventoryCar | null }) {
   useFrame((_, delta) => {
     const g = lift.current
     if (!g) return
-    const target = car ? LIFT_UP : 0
+    // Up with one of our cars on it, or a client's standing on it (scene/DrivenCar).
+    const target = car || lifts.cars.has(index) ? LIFT_UP : 0
     const step = Math.min(LIFT_SPEED * delta, Math.abs(target - g.position.y))
     g.position.y += Math.sign(target - g.position.y) * step
+    lifts.heights[index] = g.position.y
   })
   return (
     <group onPointerDown={swallowClick} onPointerUp={swallowClick}>
@@ -151,7 +153,8 @@ function carInBay(
 
 /**
  * The service garage, once it's built: its walls, floor, counter and chairs
- * come from the layout; this adds the lifts, the cars on them, the roll-up
+ * come from the layout; this adds the lifts, our own cars on them (a client's
+ * is drawn by scene/DrivenCar, raised with the lift), the roll-up
  * doors and the SERVICE sign.
  */
 export function Garage() {
@@ -162,7 +165,7 @@ export function Garage() {
   return (
     <>
       {SERVICE_BAYS.map((bay, i) => (
-        <Bay key={i} bay={bay} car={carInBay(i, jobs, inventory)} />
+        <Bay key={i} index={i} bay={bay} car={carInBay(i, jobs, inventory)} />
       ))}
       <ServiceSign />
     </>

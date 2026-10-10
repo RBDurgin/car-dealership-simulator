@@ -9,6 +9,7 @@ import type { Haggle } from './negotiation'
 import type { Rng } from './rng'
 import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
+import type { ServiceVisit } from './serviceClients'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
 
@@ -35,7 +36,8 @@ import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './us
  * instead. Waiting customers lose patience on `tick` and leave impatient at
  * zero, unless someone is on their way to help. `close` sends everyone home
  * except a customer mid-signature or in staff hands. `cancel` from any deal
- * phase puts them back to waiting, and drops a claim.
+ * phase puts them back to waiting, and drops a claim. Service clients take
+ * their own way through (see `sim/serviceClients.ts`).
  */
 export type CustomerPhase =
   | 'arriving'
@@ -47,13 +49,20 @@ export type CustomerPhase =
   | 'signing'
   /** Handed off to finance: sitting in the lounge until the desk is free. */
   | 'queued'
+  /** A service client who took the quote: their car is in the shop (see `sim/serviceClients.ts`). */
+  | 'servicing'
   | 'leaving'
 
 /** The player's id as a customer's handler (and in the crowd). */
 export const PLAYER_ID = 'player'
 
-/** `sold`: a seller who sold us their car, leaving on foot. */
-export type LeaveReason = 'bought' | 'sold' | 'refused' | 'impatient' | 'closing'
+/**
+ * `sold`: a seller who sold us their car, leaving on foot. `serviced`: a
+ * service client who collected their car; `declined`: one who turned the
+ * quote down (or couldn't be fitted in).
+ */
+export type LeaveReason =
+  'bought' | 'sold' | 'refused' | 'impatient' | 'closing' | 'serviced' | 'declined'
 
 export type { CustomerVariant }
 
@@ -131,6 +140,11 @@ export interface Customer {
    * (`assignQuotes`). Null for anyone who hasn't been there.
    */
   rivalQuote: RivalQuote | null
+  /**
+   * A service client: the job they drove in for and how it's going. Null for
+   * shoppers and sellers. Their car isn't a `vehicle`: it parks in a service space.
+   */
+  service: ServiceVisit | null
 }
 
 const FIRST_NAMES = [
@@ -296,6 +310,7 @@ export function generateCustomer(
     selling: null,
     trade: null,
     rivalQuote: null,
+    service: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -394,7 +409,8 @@ export function moodOf(c: Customer): Mood {
       return 'happy'
     case 'leaving':
       if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'happy'
-      if (c.leaveReason === 'closing') return 'neutral'
+      if (c.leaveReason === 'serviced') return 'happy'
+      if (c.leaveReason === 'closing' || c.leaveReason === 'declined') return 'neutral'
       return 'unhappy'
     case 'waiting':
       return c.patienceLeft < c.patience * IMPATIENT_FRACTION ? 'impatient' : 'neutral'
@@ -419,6 +435,7 @@ export function bubbleOf(c: Customer): Bubble | null {
       return 'considering'
     case 'leaving':
       if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'bought'
+      if (c.leaveReason === 'serviced') return 'bought'
       return moodOf(c) === 'unhappy' ? 'upset' : null
     default:
       return null
@@ -469,6 +486,15 @@ export type CustomerEvent =
   | { type: 'appraised'; id: string; estimate: Appraisal }
   /** Their handler walked away mid-conversation or mid-deal. */
   | { type: 'cancel'; id: string }
+  /**
+   * A service client took the quote: job `jobId`, promised for `promisedMinute`.
+   * `dropOff`: they leave the car and come back for it.
+   */
+  | { type: 'booked'; id: string; jobId: string; promisedMinute: number; dropOff: boolean }
+  /** A service client paid for the job and gets back in their car. */
+  | { type: 'collect'; id: string }
+  /** A drop-off walked off the map. Removes them until they come back (the store keeps them). */
+  | { type: 'wentAway'; id: string }
   /** Walked off the map. Removes them. */
   | { type: 'despawn'; id: string }
   /** Got back in their car to drive off. Removes them; the car leaves in the world. */
@@ -511,9 +537,13 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
   switch (ev.type) {
     case 'arrive':
       // A driver arrives by parking.
-      if (c.phase !== 'arriving' || c.vehicle) return c
+      if (c.phase !== 'arriving' || c.vehicle || c.service) return c
       return { ...c, phase: c.browseCarIds.length > 0 ? 'browsing' : 'waiting' }
     case 'parked':
+      // A service client heads for the counter.
+      if (c.phase === 'arriving' && c.service && !c.service.parked) {
+        return { ...c, phase: 'waiting', service: { ...c.service, parked: true } }
+      }
       if (c.phase !== 'arriving' || !c.vehicle || c.vehicle.parked) return c
       return {
         ...c,
@@ -533,8 +563,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.phase !== 'browsing' && c.phase !== 'waiting') return c
       // Someone else has claimed them.
       if (c.handlerId !== null && c.handlerId !== ev.by) return c
-      // Nothing left they could want. A seller isn't shopping.
-      if (ev.carId === null && !c.selling) return leave(c, 'refused')
+      // Nothing left they could want. A seller or a service client isn't shopping.
+      if (ev.carId === null && !c.selling && !c.service) return leave(c, 'refused')
       return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by, sellerId: ev.by }
     case 'offer':
       if (c.phase !== 'talking') return c
@@ -552,6 +582,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (ev.answer === 'accept' && c.selling) {
         return leave({ ...c, offer: null, vehicle: null }, 'sold')
       }
+      // A service client takes the quote through `booked`.
+      if (c.service && ev.answer !== 'accept') return leave({ ...c, offer: null }, 'declined')
+      if (c.service) return c
       if (ev.answer === 'accept') return { ...c, phase: 'following' }
       if (ev.answer === 'walk' || ev.counter === undefined) {
         return leave({ ...c, offer: null }, 'refused')
@@ -608,10 +641,29 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         chairId: null,
         sellerId: null,
       }
+    case 'booked':
+      if (c.phase !== 'considering' || !c.service) return c
+      return {
+        ...c,
+        phase: 'servicing',
+        offer: null,
+        handlerId: null,
+        chairId: null,
+        service: {
+          ...c.service,
+          jobId: ev.jobId,
+          promisedMinute: ev.promisedMinute,
+          dropOff: ev.dropOff,
+        },
+      }
+    case 'collect':
+      return c.phase === 'servicing' ? leave(c, 'serviced') : c
+    case 'wentAway':
+      return c.phase === 'servicing' && c.service?.dropOff && !c.service.returned ? null : c
     case 'despawn':
       return c.phase === 'leaving' ? null : c
     case 'droveOff':
-      return c.phase === 'leaving' && c.vehicle ? null : c
+      return c.phase === 'leaving' && (c.vehicle || c.service) ? null : c
     case 'tick': {
       // Nobody gives up while someone is on their way to help them.
       if (c.phase !== 'waiting' || ev.minutes <= 0 || ev.except === c.id) return c
@@ -623,9 +675,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         : { ...c, patienceLeft }
     }
     case 'close':
-      // Let a signature in progress finish, and staff finish the buyers they
-      // have in hand; everyone else heads out.
-      if (c.phase === 'leaving' || c.phase === 'signing') return c
+      // Let a signature in progress finish, staff finish the buyers they have
+      // in hand and service clients collect their cars; everyone else heads out.
+      if (c.phase === 'leaving' || c.phase === 'signing' || c.phase === 'servicing') return c
       if (staffHandled(c) && (c.phase === 'queued' || c.phase === 'following')) return c
       return leave({ ...c, offer: null }, 'closing')
   }

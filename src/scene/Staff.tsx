@@ -20,6 +20,7 @@ import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
 import {
+  ADVISOR_CHECK_IN_SECONDS,
   financeSeconds,
   GUARD_CHASE_SPEED,
   PORTER_WASH_SECONDS,
@@ -35,6 +36,7 @@ import {
 } from '../sim/staff'
 import { bayCount } from '../sim/service'
 import {
+  nextCheckIn,
   nextGuardTask,
   nextMechanicTask,
   nextPorterTask,
@@ -46,6 +48,7 @@ import { Character } from './Character'
 import { Interactable } from './Interactable'
 import {
   ambientPos,
+  atCounter,
   customerPos,
   customersAtCar,
   grid,
@@ -107,7 +110,10 @@ interface StaffWalker extends Walker {
    * (`wash:lot-car-2`). A new task means a new path.
    */
   task: string | null
-  /** Finance: the buyer whose paperwork is under way, and game seconds left on it. */
+  /**
+   * Finance: the buyer whose paperwork is under way, and game seconds left on
+   * it. The service advisor: the client being checked in.
+   */
   paperwork: { customerId: string; left: number } | null
   /**
    * Game seconds spent on the current task (a salesperson's pitch or paperwork,
@@ -213,6 +219,31 @@ function doPaperwork(
   if (w.paperwork.left > 0) return
   w.paperwork = null
   useGame.getState().staffSign(e.id, c.id)
+}
+
+/**
+ * The service advisor at the counter checks in the client who's been
+ * standing there longest, taking a moment over each.
+ */
+function doCheckIns(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): void {
+  const game = useGame.getState()
+  const c = nextCheckIn(e, customers, atCounter, game.activeAction?.targetId ?? null)
+  if (!c) {
+    w.paperwork = null
+    return
+  }
+  if (w.paperwork?.customerId !== c.id) {
+    w.paperwork = { customerId: c.id, left: skillSeconds(ADVISOR_CHECK_IN_SECONDS, e.skill) }
+  }
+  w.paperwork.left -= seconds
+  if (w.paperwork.left > 0) return
+  w.paperwork = null
+  game.staffCheckIn(e.id, c.id)
 }
 
 /** The key a salesperson's task is planned under: a new key means a new path. */
@@ -499,6 +530,9 @@ function update(
   if (e.role === 'finance' && w.task === 'post' && w.waypoints.length === 0) {
     doPaperwork(e, w, seconds, customers)
   }
+  if (e.role === 'advisor' && w.task === 'post' && w.waypoints.length === 0) {
+    doCheckIns(e, w, seconds, customers)
+  }
 }
 
 /** Role label over an employee's head, so staff read as staff; a "?" while they think of quitting. */
@@ -544,7 +578,8 @@ const onLot = (e: Employee) => e.status !== 'off'
  * walk in from the sidewalk at opening (or when hired), work from their post
  * (the finance manager signs buyers' paperwork at the office desk, the porter
  * washes the dirtiest cars, the guard patrols the lot and chases off Nazma,
- * mechanics work the garage's bays), and walk
+ * mechanics work the garage's bays, the service advisor checks clients in at
+ * its counter), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */

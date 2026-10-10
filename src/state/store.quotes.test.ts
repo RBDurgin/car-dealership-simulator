@@ -44,6 +44,7 @@ const shopper = (price: number): Customer => ({
   selling: null,
   trade: null,
   rivalQuote: { model: car().model, price },
+  service: null,
 })
 
 /** Runs an action to the end, as the player and the timers would. */

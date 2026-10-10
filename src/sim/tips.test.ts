@@ -4,6 +4,7 @@ import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import { createRng } from './rng'
+import { serviceClient } from './serviceClients'
 import { STALE_DAYS } from './usedCars'
 import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
 
@@ -80,6 +81,8 @@ const withCar = (patch: Partial<InventoryCar>) =>
 const tip = (next: Partial<TipState>, prev: Partial<TipState> = {}, seen: TipId[] = []) =>
   tipFor({ ...base, ...prev }, { ...base, ...next }, seen)
 
+const visit = serviceClient('s1', 'oil', 0, createRng(1), 1, 'standard').service!
+
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   wash: [{ inventory: withCar({ cleanliness: WASH_BELOW - 0.01 }) }, {}],
   haggle: [
@@ -117,6 +120,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   recon: [
     { inventory: [...inventory, roughUsed], expansions: garage, clock: { day: 3 } },
     { expansions: garage, clock: { day: 3 } },
+  ],
+  serviceClient: [
+    { customers: [customer('s1', { phase: 'waiting', service: visit })] },
+    { customers: [customer('s1', { phase: 'arriving', service: visit })] },
   ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },

@@ -34,6 +34,7 @@ const browser: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  service: null,
 }
 
 /** Sets car `id`'s cleanliness directly. */

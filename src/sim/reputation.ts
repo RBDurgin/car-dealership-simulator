@@ -3,8 +3,9 @@ import type { DayStats } from './deal'
 
 /**
  * The dealership's good name, 0 to 100. It moves once a day, when the day is
- * settled: happy buyers spread the word, and customers who walk out unhappy,
- * give up waiting or can't find what they want do the opposite. A good name
+ * settled: happy buyers and service clients spread the word, and customers
+ * who walk out unhappy, give up waiting, can't find what they want or get
+ * their car back late do the opposite. A good name
  * brings more of the usual visitors, sends friends of past buyers in as
  * referrals and makes every ad work harder; a bad one does the reverse.
  */
@@ -22,6 +23,12 @@ export const REPUTATION_POINTS = {
   impatient: -2,
   /** Found none of the body types they wanted in stock. */
   missed: -1,
+  /** A service client who collected their car. */
+  serviced: 1,
+  /** A service client whose car was ready after the time they were promised. */
+  late: -1,
+  /** A service client the garage had no time (or no mechanic) for. */
+  turnedAway: -1,
 }
 
 /** One day can't move reputation by more than this either way. */
@@ -56,11 +63,14 @@ const MEDIUM_SCALE: RepScale = { gain: 1, loss: 1 }
  */
 export function reputationChange(stats: DayStats, scale: RepScale = MEDIUM_SCALE): number {
   const missed = Object.values(stats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
-  const gain = stats.sales.length * REPUTATION_POINTS.sale
+  const { jobs, late, turnedAway } = stats.service
+  const gain = stats.sales.length * REPUTATION_POINTS.sale + jobs * REPUTATION_POINTS.serviced
   const loss =
     stats.refused * REPUTATION_POINTS.refused +
     stats.impatient * REPUTATION_POINTS.impatient +
-    missed * REPUTATION_POINTS.missed
+    missed * REPUTATION_POINTS.missed +
+    late * REPUTATION_POINTS.late +
+    turnedAway * REPUTATION_POINTS.turnedAway
   const raw = Math.round(gain * scale.gain + loss * scale.loss)
   return Math.max(-MAX_DAILY_CHANGE, Math.min(MAX_DAILY_CHANGE, raw))
 }

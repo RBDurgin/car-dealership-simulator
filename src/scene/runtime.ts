@@ -22,6 +22,7 @@ import {
   GUEST_CHAIR_ID,
   parkedCarRect,
   SALES_DESKS,
+  SERVICE_SPOTS,
   SPAWN_TILE,
   type ExpansionId,
   type Rect,
@@ -64,6 +65,7 @@ let parkedSpots = new Set<number>()
 function resetGrid(): void {
   grid.copyFrom(createGrid(layout))
   for (const n of parkedSpots) grid.setRectBlocked(parkedCarRect(CUSTOMER_PARKING[n]), true)
+  for (const n of serviceSpotsTaken) grid.setRectBlocked(parkedCarRect(SERVICE_SPOTS[n]), true)
 }
 
 /**
@@ -141,6 +143,35 @@ useGame.subscribe((s, prev) => {
   parkedSpots = parked
 })
 
+/**
+ * Service spaces with a client's car standing in them (not off in a bay),
+ * which block its footprint like customer parking.
+ */
+let serviceSpotsTaken = new Set<number>()
+
+useGame.subscribe((s, prev) => {
+  const same =
+    s.customers === prev.customers &&
+    s.serviceAway === prev.serviceAway &&
+    s.serviceJobs === prev.serviceJobs
+  if (same) return
+  const inBay = new Set(s.serviceJobs.filter((j) => j.status === 'inBay').map((j) => j.customerId))
+  const taken = new Set(
+    [...s.customers, ...s.serviceAway].flatMap((c) =>
+      c.service?.parked && !inBay.has(c.id) ? [c.service.spot] : [],
+    ),
+  )
+  SERVICE_SPOTS.forEach((space, n) => {
+    if (taken.has(n) === serviceSpotsTaken.has(n)) return
+    const rect = parkedCarRect(space)
+    grid.setRectBlocked(rect, taken.has(n))
+    if (taken.has(n) && touches(rect, playerPos)) {
+      Object.assign(playerPos, nearestStandable(grid, playerPos))
+    }
+  })
+  serviceSpotsTaken = taken
+})
+
 /** Whether someone standing at `pos` overlaps the tiles of `rect`. */
 function touches(rect: Rect, pos: Vec2): boolean {
   return [-PLAYER_RADIUS, PLAYER_RADIUS].some((ox) =>
@@ -162,6 +193,25 @@ export const customerPos = new Map<string, Vec2>()
  * between cars). Owned by scene/Customers; less skilled salespeople wait for this.
  */
 export const customersAtCar = new Set<string>()
+
+/**
+ * Service clients standing at the garage's counter, waiting to be checked in.
+ * Owned by scene/Customers; the service advisor checks in only those who are there.
+ */
+export const atCounter = new Set<string>()
+
+/**
+ * Service clients whose car is standing in its service space (not driving,
+ * not in a bay). Owned by scene/DrivenCar; a client collecting waits for it.
+ */
+export const serviceCarsHome = new Set<string>()
+
+/**
+ * The garage's lifts: the bays with a client's car standing on them (from
+ * scene/DrivenCar, which raises the car with the lift) and each lift's
+ * height (from scene/Garage).
+ */
+export const lifts = { cars: new Set<number>(), heights: [] as number[] }
 
 /** Where each employee on the lot is standing, by employee id. Owned by scene/Staff. */
 export const staffPos = new Map<string, Vec2>()

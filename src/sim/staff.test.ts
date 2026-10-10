@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { GUARD_VARIANT, STAFF_VARIANTS } from './characters'
-import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS } from './layout'
+import { DESK_CHAIR_ID, RECEPTION_CHAIR_ID, SALES_DESKS, SERVICE_CHAIR_ID } from './layout'
 import { createRng } from './rng'
 import {
   canHire,
+  POSTS,
   FINANCE_FEE,
   FINANCE_SECONDS,
   financeOnDuty,
@@ -64,12 +65,13 @@ describe('candidates', () => {
     }
   })
 
-  it('offers no mechanics until there is a garage, and rolls the rest as before', () => {
+  it('offers no garage staff until there is a garage, and rolls the rest as before', () => {
+    const garageRoles = ['mechanic', 'advisor']
     for (let day = 1; day <= 20; day++) {
       const cands = generateCandidates(createRng(day), day)
-      expect(cands.some((c) => c.role === 'mechanic')).toBe(false)
-      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length - 1)
-      expect(cands.length).toBeLessThanOrEqual(ROLES.length)
+      expect(cands.some((c) => garageRoles.includes(c.role))).toBe(false)
+      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length - 2)
+      expect(cands.length).toBeLessThanOrEqual(ROLES.length - 1)
     }
     expect(generateCandidates(createRng(5), 3, ['east-lot'])).toEqual(
       generateCandidates(createRng(5), 3),
@@ -87,6 +89,16 @@ describe('candidates', () => {
     })
     expect(canHire([], 'mechanic')).toBe('Build a service garage first.')
     expect(canHire([], 'mechanic', ['east-lot', 'service-bay'])).toBeNull()
+  })
+
+  it('allows one service advisor once there is a garage', () => {
+    expect(roleLimits([]).advisor).toBe(0)
+    expect(roleLimits(['east-lot', 'service-bay']).advisor).toBe(1)
+    expect(canHire([], 'advisor')).toBe('Build a service garage first.')
+    const garage = ['east-lot', 'service-bay'] as const
+    const cands = generateCandidates(createRng(4), 4, [...garage])
+    expect(cands.some((c) => c.role === 'advisor')).toBe(true)
+    expect(POSTS.advisor).toBe(SERVICE_CHAIR_ID)
   })
 
   it('is deterministic for a seed and gives each day distinct ids', () => {

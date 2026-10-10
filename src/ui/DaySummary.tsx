@@ -15,6 +15,7 @@ import {
   salesBySeller,
   salesBySource,
   walkOuts,
+  type DayStats,
 } from '../sim/deal'
 import { TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
@@ -33,6 +34,18 @@ import { rankLine } from './rankText'
  * End of the day: shown once the doors are closed and the last customer has
  * left. Starting the next day resets the clock and the day's arrivals.
  */
+/** "1 late, 2 turned away, 1 declined": service clients who left unhappy. */
+function serviceLetDown(stats: DayStats): string {
+  const { late, turnedAway, declined } = stats.service
+  return [
+    late > 0 && `${late} late`,
+    turnedAway > 0 && `${turnedAway} turned away`,
+    declined > 0 && `${declined} declined`,
+  ]
+    .filter(Boolean)
+    .join(', ')
+}
+
 export function DaySummary() {
   const open = useGame(dayOver)
   const day = useGame((s) => s.clock.day)
@@ -89,6 +102,22 @@ export function DaySummary() {
               <dd className="price summary-sub">{formatMoney(split.new)}</dd>
               <dt className="summary-sub">· on used cars</dt>
               <dd className="price summary-sub">{formatMoney(split.used)}</dd>
+            </>
+          )}
+          {stats.service.jobs > 0 && (
+            <>
+              <dt>
+                Service ({stats.service.jobs} job{stats.service.jobs === 1 ? '' : 's'})
+              </dt>
+              <dd className="price">
+                {formatMoney(stats.service.labor + stats.service.parts - stats.service.partsCost)}
+              </dd>
+            </>
+          )}
+          {stats.service.late + stats.service.turnedAway + stats.service.declined > 0 && (
+            <>
+              <dt className="summary-sub">· clients let down</dt>
+              <dd className="summary-sub">{serviceLetDown(stats)}</dd>
             </>
           )}
           {stats.service.overtime > 0 && (

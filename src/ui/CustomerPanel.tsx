@@ -20,6 +20,8 @@ import {
   type Warmth,
 } from '../sim/negotiation'
 import { buyBlocker, estimateRange, lotSlotFor, SELLER_HINTS } from '../sim/sellers'
+import { quoteTotal } from '../sim/service'
+import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
 import { stockValue, usedTag } from '../sim/usedCars'
 import { levelTuning, sellerBonusFor, useGame } from '../state/store'
@@ -350,6 +352,33 @@ function SellerPanel({ c }: { c: Customer }) {
   )
 }
 
+/** A service client being checked in: what they need, and what it'll cost them. */
+function ServicePanel({ c }: { c: Customer }) {
+  const visit = c.service!
+  return (
+    <div className="panel customer-panel">
+      <div className="info-kicker">Service client</div>
+      <h2>{c.name}</h2>
+      <p className="customer-quote">
+        “My {carName(visit.car.model)} needs {JOB_WANTS[visit.kind]}. How much?”
+      </p>
+      <dl>
+        <dt className="customer-car">Car</dt>
+        <dd className="customer-car">
+          {carName(visit.car.model)} ({usedTag(visit.car)})
+        </dd>
+        <dt>Labor</dt>
+        <dd className="price">{formatMoney(visit.quote.labor)}</dd>
+        <dt>Parts</dt>
+        <dd className="price">{formatMoney(visit.quote.parts)}</dd>
+        <dt>Quote</dt>
+        <dd className="price">{formatMoney(quoteTotal(visit.quote))}</dd>
+      </dl>
+      <div className="customer-status">Thinking it over…</div>
+    </div>
+  )
+}
+
 /** A buyer's trade-in: the car, and what we make of its value (closer once appraised). */
 function TradeFigures({ c }: { c: Customer }) {
   const car = c.vehicle!.car
@@ -382,6 +411,7 @@ export function CustomerPanel() {
   const day = useGame((s) => s.clock.day)
   const rivalName = useGame((s) => s.rival.name)
   if (c?.selling) return <SellerPanel c={c} />
+  if (c?.service) return <ServicePanel c={c} />
   if (!c || !car) return null
 
   const game = useGame.getState()

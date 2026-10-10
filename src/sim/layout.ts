@@ -550,10 +550,34 @@ const GARAGE_WALLS: WallRun[] = [
   { kind: 'solid', rect: { tx: GARAGE.tx, tz: GARAGE.tz + GARAGE.h - 1, w: GARAGE.w, h: 1 } },
 ]
 
-/** The roll-up doors and the clients' door by the counter. */
+/**
+ * The service drive's gate in the street fence, east of the east lot: client
+ * cars come and go through it, up and down the lane (tx 53–54) between the
+ * east lot's rows and the service spaces.
+ */
+export const SERVICE_GATE: Rect = { tx: 53, tz: 24, w: 2, h: 1 }
+
+/**
+ * Where service clients' cars park, along the east fence south of the
+ * garage, noses to the fence. A car keeps its space from drop-off until it
+ * drives off: it goes from there to a bay and comes back to it when it's done.
+ */
+export const SERVICE_SPOTS: ParkingSpace[] = spaceRow(
+  4,
+  { tx: 55, tz: 14 },
+  { tx: 0, tz: 2 },
+  { w: 4, h: 2 },
+  1,
+)
+
+/** The service counter, where clients check in. */
+export const SERVICE_COUNTER_ID = 'service-counter'
+
+/** The roll-up doors, the clients' door by the counter and the service drive's gate. */
 const GARAGE_OPENINGS: Rect[] = [
   ...SERVICE_BAYS.map((b) => b.door),
   { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 },
+  SERVICE_GATE,
 ]
 
 /** The garage floor, inside its walls. */
@@ -565,7 +589,7 @@ const GARAGE_FLOOR: Rect = {
 }
 
 const GARAGE_PROPS: Prop[] = [
-  { id: 'service-counter', model: 'desk', rect: { tx: 56, tz: 3, w: 2, h: 1 }, facing: 0 },
+  { id: SERVICE_COUNTER_ID, model: 'desk', rect: { tx: 56, tz: 3, w: 2, h: 1 }, facing: 0 },
   {
     id: 'service-monitor',
     model: 'computerScreen',

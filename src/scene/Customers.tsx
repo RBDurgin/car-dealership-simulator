@@ -14,10 +14,18 @@ import {
   type CustomerVariant,
 } from '../sim/customers'
 import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
-import { doorTile } from '../sim/driving'
+import { doorTile, serviceDoorTile } from '../sim/driving'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
-import { GUEST_CHAIR_ID, LOT_ENTRY_TILES, SIDEWALK_ENDS, SOFA_IDS, type Prop } from '../sim/layout'
+import {
+  GUEST_CHAIR_ID,
+  LOT_ENTRY_TILES,
+  SERVICE_COUNTER_ID,
+  SERVICE_WAIT_IDS,
+  SIDEWALK_ENDS,
+  SOFA_IDS,
+  type Prop,
+} from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { useGame } from '../state/store'
@@ -26,6 +34,7 @@ import { CustomerBubble } from './CustomerBubble'
 import { Interactable } from './Interactable'
 import {
   ambientPos,
+  atCounter,
   customerPos,
   customersAtCar,
   gameTime,
@@ -33,6 +42,8 @@ import {
   interactables,
   layout,
   playerPos,
+  rectBounds,
+  serviceCarsHome,
   staffPos,
   walkInSpawns,
 } from './runtime'
@@ -75,6 +86,9 @@ const sofaSeats = (): Prop[] =>
   )
 /** Who has each sofa seat, by seat id. */
 const sofaTaken = new Map<string, string>()
+/** Who has each of the garage's waiting chairs, by chair id. */
+const waitTaken = new Map<string, string>()
+const prop = (id: string) => layout.props.find((p) => p.id === id)
 
 /** What the player is up to, as far as customers care. */
 interface PlayerIntent {
@@ -100,6 +114,8 @@ interface CustomerWalker extends Walker {
   followTile: Tile | null
   /** The sofa seat they're heading to or sitting on while waiting for finance. */
   sofaSeat: Prop | null
+  /** A service client's waiting chair in the garage, heading to it or sitting in it. */
+  waitChair: Prop | null
 }
 
 /** A couple's other half: tags along after the customer, with no state of their own. */
@@ -115,7 +131,8 @@ const companions = new Map<string, Companion>()
 const companionGroups = new Map<string, Group>()
 
 /** Still driving in: they're in their car (scene/DrivenCar), not on foot. */
-const inCar = (c: Customer) => !!c.vehicle && !c.vehicle.parked
+const inCar = (c: Customer) =>
+  (!!c.vehicle && !c.vehicle.parked) || (!!c.service && !c.service.parked)
 
 /**
  * The customer's walker, created on first sight: at a sidewalk end, where
@@ -128,11 +145,15 @@ function walkerFor(c: Customer): CustomerWalker {
   const rng = createRng(hashSeed(c.id))
   const walkIn = walkInSpawns.get(c.id)
   walkInSpawns.delete(c.id)
+  // A service client steps out of their car, or walks back in for it later.
+  const serviceDoor = c.service && !c.service.returned ? serviceDoorTile(c.service.spot) : null
   const spawn = c.vehicle
     ? doorTile(c.vehicle.spot)
-    : walkIn
-      ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z)
-      : rng.pick(SIDEWALK_ENDS)
+    : serviceDoor
+      ? serviceDoor
+      : walkIn
+        ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z)
+        : rng.pick(SIDEWALK_ENDS)
   // They leave the way they came: back to their car, or on either lane of the
   // sidewalk; a passer-by carries on their way.
   const exit = c.vehicle
@@ -149,6 +170,7 @@ function walkerFor(c: Customer): CustomerWalker {
     emote: null,
     followTile: null,
     sofaSeat: null,
+    waitChair: null,
   }
   if (walkIn) w.pos = { ...walkIn.pos }
   walkers.set(c.id, w)
@@ -174,9 +196,17 @@ function leaveSofa(w: CustomerWalker): void {
   w.sofaSeat = null
 }
 
+/** Gives up their waiting chair in the garage, if they have one. */
+function leaveWaitChair(w: CustomerWalker): void {
+  if (w.waitChair) waitTaken.delete(w.waitChair.id)
+  w.waitChair = null
+}
+
 function removeWalker(id: string): void {
   const w = walkers.get(id)
   if (w) leaveSofa(w)
+  if (w) leaveWaitChair(w)
+  atCounter.delete(id)
   walkers.delete(id)
   customerPos.delete(id)
   customersAtCar.delete(id)
@@ -187,8 +217,28 @@ function removeWalker(id: string): void {
   companions.delete(id)
 }
 
+/**
+ * A service client's task: to the counter to check in, then to a waiting
+ * chair (or off down the sidewalk, leaving the car), and to their car once
+ * it's `ready`.
+ */
+function serviceTask(c: Customer, ready: ReadonlySet<string>): string {
+  switch (c.phase) {
+    case 'waiting':
+      return 'toCounter'
+    case 'servicing':
+      if (ready.has(c.id)) return 'collect'
+      return c.service!.dropOff && !c.service!.returned ? 'goAway' : 'waitChair'
+    case 'leaving':
+      return 'leave'
+    default:
+      return c.phase
+  }
+}
+
 /** What they're doing in the world. A new key means they need a new path. */
-function taskKey(c: Customer, player: PlayerIntent): string {
+function taskKey(c: Customer, player: PlayerIntent, ready: ReadonlySet<string>): string {
+  if (c.service) return serviceTask(c, ready)
   switch (c.phase) {
     case 'arriving':
       return 'arrive'
@@ -212,9 +262,12 @@ function taskKey(c: Customer, player: PlayerIntent): string {
 function plan(c: Customer, w: CustomerWalker, task: string): void {
   // Just answered an offer: nod or shake their head first. A counter gets a
   // single "hmm, not quite" shake, and they stay to talk it over.
-  if (w.task === 'considering' && c.phase === 'following') {
+  if (w.task === 'considering' && (c.phase === 'following' || c.phase === 'servicing')) {
     w.emote = { anim: 'emote-yes', left: EMOTE_SECONDS }
-  } else if (w.task === 'considering' && c.leaveReason === 'refused') {
+  } else if (
+    w.task === 'considering' &&
+    (c.leaveReason === 'refused' || c.leaveReason === 'declined')
+  ) {
     w.emote = { anim: 'emote-no', left: EMOTE_SECONDS }
   } else if (w.task === 'considering' && c.phase === 'talking') {
     w.emote = { anim: 'emote-no', left: EMOTE_SECONDS / 2 }
@@ -228,6 +281,9 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   w.followTile = null
   if (c.phase !== 'signing') standUp(w)
   if (task !== 'toSofa') leaveSofa(w)
+  if (task !== 'waitChair') leaveWaitChair(w)
+  atCounter.delete(c.id)
+  if (c.service) return planService(c, w, task)
 
   let goals: Tile[]
   switch (c.phase) {
@@ -283,12 +339,77 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   pathTo(w, goals, true)
 }
 
+/** Starts a service client walking toward the goal for `task`. */
+function planService(c: Customer, w: CustomerWalker, task: string): void {
+  const counter = prop(SERVICE_COUNTER_ID)
+  w.faceTo = null
+  switch (task) {
+    case 'toCounter':
+      // The front of the counter, facing it.
+      if (!counter) return
+      w.faceTo = rectBounds(counter.rect)
+      pathTo(
+        w,
+        approachTilesFor(grid, counter.rect).filter((t) => t.tz > counter.rect.tz),
+      )
+      return
+    case 'waitChair': {
+      // A free chair; with them all taken, they stand by the counter.
+      const chair = SERVICE_WAIT_IDS.map(prop).find((p) => p && !waitTaken.has(p.id))
+      if (chair) {
+        waitTaken.set(chair.id, c.id)
+        w.waitChair = chair
+      }
+      const near = chair ?? counter
+      if (near) pathTo(w, approachTilesFor(grid, near.rect))
+      return
+    }
+    case 'goAway':
+      pathTo(w, [w.rng.pick(SIDEWALK_ENDS), ...SIDEWALK_ENDS], true)
+      return
+    case 'collect':
+    case 'leave':
+      pathTo(w, [serviceDoorTile(c.service!.spot)], true)
+      return
+    default:
+      // Being checked in: stay put.
+      return
+  }
+}
+
+/** Reports a service client's progress once they've stopped at their goal. */
+function onServiceArrived(c: Customer, w: CustomerWalker): void {
+  const game = useGame.getState()
+  switch (w.task) {
+    case 'toCounter':
+      atCounter.add(c.id)
+      break
+    case 'waitChair':
+      if (w.waitChair && !w.seat) sitOn(w, w.waitChair)
+      break
+    case 'goAway':
+      game.serviceWentAway(c.id)
+      break
+    case 'collect':
+      // They wait by the space until the car is back in it.
+      if (serviceCarsHome.has(c.id)) game.serviceCollect(c.id)
+      break
+    case 'leave':
+      // The car may still be on its way back from a bay.
+      if (!serviceCarsHome.has(c.id)) break
+      removeWalker(c.id)
+      game.dispatchCustomer({ type: 'droveOff', id: c.id })
+      break
+  }
+}
+
 /**
  * Reports progress to the store once a walker has stopped at its goal (or given
  * up on it). Called every frame while they stand still; phases with nothing to
  * report are ignored.
  */
 function onArrived(c: Customer, w: CustomerWalker): void {
+  if (c.service) return onServiceArrived(c, w)
   const game = useGame.getState()
   switch (c.phase) {
     case 'arriving':
@@ -367,8 +488,9 @@ function update(
   seconds: number,
   realSeconds: number,
   player: PlayerIntent,
+  ready: ReadonlySet<string>,
 ): void {
-  const task = taskKey(c, player)
+  const task = taskKey(c, player, ready)
   if (task !== w.task) plan(c, w, task)
 
   if (w.emote) {
@@ -488,12 +610,16 @@ export function Customers() {
       targetId: game.activeAction?.targetId ?? null,
       closingDeal: game.activeAction?.action === 'closeDeal',
     }
+    // Service clients whose car is done.
+    const ready = new Set(
+      game.serviceJobs.flatMap((j) => (j.status === 'ready' && j.customerId ? [j.customerId] : [])),
+    )
     const live = new Set<string>()
     for (const c of game.customers) {
       if (inCar(c)) continue
       live.add(c.id)
       const w = walkerFor(c)
-      update(c, w, seconds, realSeconds, player)
+      update(c, w, seconds, realSeconds, player, ready)
       // Removed if they just walked off the map.
       const m = walkers.has(c.id) && companionFor(c, w)
       if (m) updateCompanion(c, w, m, seconds, player)

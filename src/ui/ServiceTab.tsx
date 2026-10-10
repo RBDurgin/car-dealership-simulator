@@ -13,6 +13,7 @@ import {
   RECON_MAX,
   reconBlocker,
   reconGain,
+  wasLate,
   type ServiceJob,
 } from '../sim/service'
 import { mechanicWorking } from '../sim/staffAi'
@@ -27,7 +28,7 @@ function BayRow({ bay, job }: { bay: number; job: ServiceJob | undefined }) {
   const inventory = useGame((s) => s.inventory)
   const roster = useGame((s) => s.roster)
   const minute = useGame((s) => s.clock.minute)
-  const car = job?.carId ? inventory.find((c) => c.id === job.carId) : undefined
+  const car = job?.client ?? (job?.carId ? inventory.find((c) => c.id === job.carId) : undefined)
   const mechanic = roster.find((e) => e.id === job?.mechanicId)
   const working = !!job && mechanicWorking(roster, job.mechanicId)
   return (
@@ -40,12 +41,53 @@ function BayRow({ bay, job }: { bay: number; job: ServiceJob | undefined }) {
         <div className="staff-meta">
           {!job
             ? 'Empty'
-            : `${car ? carName(car.model) : 'A car'} · ${
+            : `${car ? carName(car.model) : 'A car'}${job.client ? `, ${job.client.name}'s` : ''} · ${
                 working
                   ? `${mechanic!.name}, ready about ${formatTime(minute + minutesLeft(job))}`
                   : 'Stalled: nobody is working on it'
               }`}
         </div>
+      </div>
+    </li>
+  )
+}
+
+/** Where a client's job stands, for the Clients list. */
+function clientStatus(job: ServiceJob): string {
+  switch (job.status) {
+    case 'waiting':
+      return 'Waiting for a bay'
+    case 'inBay':
+      return `In bay ${job.bay! + 1}`
+    case 'ready':
+      return 'Ready to collect'
+    case 'done':
+      return 'Collected'
+  }
+}
+
+/** A client's job today: whose car, what it needs, where it stands and what it pays. */
+function ClientRow({ job }: { job: ServiceJob }) {
+  const promised = useGame((s) => {
+    const c = [...s.customers, ...s.serviceAway].find((x) => x.id === job.customerId)
+    return c?.service?.promisedMinute ?? null
+  })
+  const late = promised !== null && job.status !== 'done' && wasLate(job, promised)
+  return (
+    <li className="stock-row">
+      <div className="stock-who">
+        <div className="staff-name">
+          {job.client!.name}
+          <span className="stock-badge">{JOBS[job.kind].label}</span>
+        </div>
+        <div className="staff-meta">
+          {carName(job.client!.model)} · {clientStatus(job)}
+          {promised !== null && job.status !== 'done' && ` · promised ${formatTime(promised)}`}
+          {late && ' (late)'}
+        </div>
+      </div>
+      <div className="staff-wage price" title="What they pay for labor and parts">
+        {formatMoney(job.labor + job.parts)}
       </div>
     </li>
   )
@@ -122,7 +164,8 @@ export function ServiceTab() {
   const autoRecon = useGame((s) => s.service.autoRecon)
   const stats = useGame((s) => s.dayStats)
   if (bays === 0) return <NoGarage bought={bought} />
-  const waiting = jobs.filter((j) => j.status === 'waiting')
+  const waiting = jobs.filter((j) => j.status === 'waiting' && j.carId)
+  const clients = jobs.filter((j) => j.client)
   const candidates = inventory
     .filter((c) => c.status === 'available' && c.used && c.used.condition < RECON_MAX)
     .sort((a, b) => reconGain(b, day) - reconGain(a, day))
@@ -148,6 +191,18 @@ export function ServiceTab() {
       {waiting.length > 0 && (
         <p className="muted">Waiting for a bay: {waiting.map(queued).join(', ')}.</p>
       )}
+      <h3>Clients</h3>
+      {clients.length === 0 ? (
+        <p className="muted staff-empty">
+          No service clients yet today. They drive in and check in at the garage’s counter.
+        </p>
+      ) : (
+        <ul className="staff-list">
+          {clients.map((j) => (
+            <ClientRow key={j.id} job={j} />
+          ))}
+        </ul>
+      )}
       <h3>Reconditioning</h3>
       <p className="muted">
         A mechanic raises a used car’s condition and details it. It goes back on sale at what it’s
@@ -172,14 +227,16 @@ export function ServiceTab() {
       )}
       <h3>Today</h3>
       <dl className="stock-summary">
+        <dt>Client jobs</dt>
+        <dd>{stats.service.jobs}</dd>
         <dt>Reconditioned</dt>
         <dd>{stats.service.recon}</dd>
         <dt>Service income</dt>
         <dd className="price">{formatMoney(serviceGross(stats))}</dd>
       </dl>
       <p className="muted">
-        Anything still in a bay at closing is finished in overtime. Cars waiting for a bay go back
-        on sale, with their parts money back.
+        Anything still in a bay at closing, and clients’ cars waiting for one, are finished in
+        overtime. Our own cars waiting for a bay go back on sale, with their parts money back.
       </p>
     </>
   )

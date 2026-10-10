@@ -10,7 +10,15 @@ import {
 import { calendarOf, DAYS_PER_MONTH, weekdayTraffic } from '../sim/calendar'
 import type { CustomerVariant } from '../sim/characters'
 import { browseDirt, dirtyOvernight, smudgeCar, washCar } from '../sim/cleanliness'
-import { dayOver, isClosed, startOfDay, toStep, type GameTime } from '../sim/clock'
+import {
+  CLOSE_MINUTE,
+  dayOver,
+  formatTime,
+  isClosed,
+  startOfDay,
+  toStep,
+  type GameTime,
+} from '../sim/clock'
 import {
   chooseTarget,
   generateCustomer,
@@ -198,25 +206,41 @@ import {
 } from '../sim/sellers'
 import {
   bayCount,
+  clientJob,
   defaultService,
   emptySchedule,
   finishedLate,
   finishRecon,
+  inTime,
   jobMinutes,
   overtimeFor,
   planServiceVisits,
+  promiseMinute,
+  quoteTotal,
   RECON_MAX,
   reconBlocker,
   reconJob,
   reconPartsCost,
   returnFromShop,
   serviceDemand,
+  stampReady,
+  takeDueVisits,
+  wasLate,
   workJobs,
   type ReconBook,
   type ServiceJob,
   type ServiceSchedule,
   type ServiceSettings,
+  type ServiceStats,
 } from '../sim/service'
+import {
+  freeServiceSpot,
+  freeServiceSpots,
+  JOB_WANTS,
+  quoteAcceptChance,
+  serviceClient,
+  WAIT_LIMIT,
+} from '../sim/serviceClients'
 import { assignTrades, tradeRecord } from '../sim/tradeIns'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../sim/usedCars'
 import { formatMoney } from '../ui/format'
@@ -294,6 +318,11 @@ interface GameState {
   serviceJobs: ServiceJob[]
   /** Today's service visits and how many have driven in. */
   serviceVisits: ServiceSchedule
+  /**
+   * Service clients who dropped their car off and went away, until the time
+   * they were promised (or closing). Off the lot, so not in `customers`. Never saved.
+   */
+  serviceAway: Customer[]
   /** The shop rate and whether trade-ins are reconditioned on their own. Saved. */
   service: ServiceSettings
   /** Ad campaigns running or starting tomorrow. Finished ones are dropped each morning. */
@@ -443,6 +472,12 @@ interface GameState {
   staffLead: (employeeId: string) => void
   /** Finance, or a salesperson at their desk, finished the paperwork for the buyer opposite. */
   staffSign: (employeeId: string, customerId: string) => void
+  /** Service advisor `employeeId` checks in service client `customerId` at the counter. */
+  staffCheckIn: (employeeId: string, customerId: string) => void
+  /** Service client `customerId` reached their car, which is ready: they pay and get in. */
+  serviceCollect: (customerId: string) => void
+  /** Service client `customerId`, dropping their car off, walked off the lot until it's ready. */
+  serviceWentAway: (customerId: string) => void
   /** Lot porter `employeeId` finished washing car `carId`. */
   staffWash: (employeeId: string, carId: string) => void
   /**
@@ -525,6 +560,11 @@ export function winShowing(
   return s.screen === 'playing' && dayOver(s) && atTopRank(s.career) && !s.won
 }
 
+/** Mechanics on the payroll (not let go). */
+function mechanicCount(roster: readonly Employee[]): number {
+  return roster.filter((e) => e.role === 'mechanic' && !e.fired).length
+}
+
 /** What deciding whether a car can go to the shop needs, from the store. */
 export function reconBook(
   s: Pick<GameState, 'inventory' | 'customers' | 'roster' | 'expansions' | 'clock'>,
@@ -533,7 +573,7 @@ export function reconBook(
     inventory: s.inventory,
     customers: s.customers,
     bays: bayCount(expansionsUp(s)),
-    mechanics: s.roster.filter((e) => e.role === 'mechanic' && !e.fired).length,
+    mechanics: mechanicCount(s.roster),
     closed: isClosed(s.clock),
   }
 }
@@ -627,6 +667,7 @@ function dayOne(difficulty: Difficulty) {
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
     serviceVisits: emptySchedule(),
+    serviceAway: [] as Customer[],
     service: defaultService(),
     quota: monthlyQuota(0, BASE_SLOTS, START_REPUTATION, tuning.quota),
     arrivals: planArrivals(
@@ -683,14 +724,28 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
-  /** The receptionist lets the player know when someone done browsing starts waiting. */
+  /**
+   * The receptionist lets the player know when someone done browsing starts
+   * waiting. With no service advisor at the counter, the player hears about
+   * service clients there too.
+   */
   const announceWaiting = (prev: readonly Customer[], next: readonly Customer[]) => {
     const s = get()
-    if (patienceFactor(s.roster) === 1) return
+    const reception = patienceFactor(s.roster) !== 1
+    const advisor = s.roster.some((e) => e.role === 'advisor' && e.status === 'atPost' && !e.fired)
     for (const c of next) {
       if (c.phase !== 'waiting') continue
       const was = prev.find((x) => x.id === c.id)?.phase
       if (was !== 'arriving' && was !== 'browsing') continue
+      if (c.service) {
+        if (!advisor) {
+          notify(
+            `${c.name} drove in for ${JOB_WANTS[c.service.kind]}. They're at the service counter.`,
+          )
+        }
+        continue
+      }
+      if (!reception) continue
       if (c.selling && c.vehicle) {
         notify(
           `${c.name} wants to sell their ${carName(c.vehicle.car.model)}. They're waiting by it.`,
@@ -815,28 +870,151 @@ export const useGame = create<GameState>((set, get) => {
     )
   }
 
-  /** At closing: jobs in the bays are finished in overtime, and waiting cars come back. */
+  /**
+   * At closing: jobs in the bays, and clients' cars still waiting for one, are
+   * finished in overtime. Our own cars still waiting go back on sale, and the
+   * parts money comes back. Clients who dropped their car off are booked as
+   * collecting it after hours.
+   */
   const closeShop = () => {
     const s = get()
-    const started = s.serviceJobs.filter((j) => j.status === 'inBay')
+    const late = s.serviceJobs.filter(
+      (j) => j.status === 'inBay' || (j.status === 'waiting' && j.customerId),
+    )
     const unstarted = s.serviceJobs.filter((j) => j.status === 'waiting' && j.carId)
-    if (started.length === 0 && unstarted.length === 0) return
-    const overtime = started.reduce((sum, j) => sum + overtimeFor(j), 0)
+    if (late.length === 0 && unstarted.length === 0 && s.serviceAway.length === 0) return
+    const overtime = late.reduce((sum, j) => sum + overtimeFor(j), 0)
     const refund = unstarted.reduce((sum, j) => sum + j.partsCost, 0)
     let inventory = s.inventory
     for (const j of unstarted) inventory = returnFromShop(inventory, j.carId!)
     set({
       inventory,
       cash: s.cash + refund - overtime,
-      serviceJobs: s.serviceJobs
-        .filter((j) => !unstarted.includes(j))
-        .map((j) => (started.includes(j) ? finishedLate(j) : j)),
-      dayStats: {
-        ...s.dayStats,
-        service: { ...s.dayStats.service, overtime: s.dayStats.service.overtime + overtime },
-      },
+      serviceJobs: stampReady(
+        s.serviceJobs
+          .filter((j) => !unstarted.includes(j))
+          .map((j) => (late.includes(j) ? finishedLate(j) : j)),
+        CLOSE_MINUTE,
+      ),
     })
-    jobsDone(started.map(finishedLate), true)
+    addService({ overtime })
+    jobsDone(late.map(finishedLate), true)
+    for (const c of get().serviceAway) {
+      const job = get().serviceJobs.find((j) => j.id === c.service?.jobId)
+      if (job?.status === 'ready') collected(job, c)
+    }
+    set({ serviceAway: [] })
+  }
+
+  /** Adds to today's service tally. */
+  const addService = (change: Partial<Record<keyof ServiceStats, number>>) => {
+    const stats = get().dayStats
+    const service = { ...stats.service }
+    for (const [key, n] of Object.entries(change) as [keyof ServiceStats, number][]) {
+      service[key] += n
+    }
+    set({ dayStats: { ...stats, service } })
+  }
+
+  /**
+   * Client `c` pays for `job`, which is ready: labor and parts come in, the
+   * parts' cost goes out, and the job is done. Late if it was ready after the
+   * time they were promised.
+   */
+  const collected = (job: ServiceJob, c: Customer) => {
+    const s = get()
+    set({
+      cash: s.cash + job.labor + job.parts - job.partsCost,
+      serviceJobs: s.serviceJobs.map((j) => (j === job ? { ...j, status: 'done' as const } : j)),
+    })
+    addService({
+      jobs: 1,
+      labor: job.labor,
+      parts: job.parts,
+      partsCost: job.partsCost,
+      late: wasLate(job, c.service?.promisedMinute ?? null) ? 1 : 0,
+    })
+  }
+
+  /** `by` (the player or the service advisor) checks service client `id` in and quotes the job. */
+  const checkIn = (id: string, by: string) => {
+    const c = get().customers.find((x) => x.id === id)
+    if (!c?.service || c.phase !== 'waiting') return
+    if (c.handlerId !== null && c.handlerId !== by) return
+    commit(reduceCustomers(get().customers, { type: 'greet', id, carId: null, by }))
+    const price = quoteTotal(c.service.quote)
+    const ev = { type: 'offer', id, carId: vehicleTargetId(id), price } as const
+    commit(reduceCustomers(get().customers, ev))
+  }
+
+  /**
+   * Service client `c` answers the quote. With no mechanic, or no time left
+   * to do the job by closing, they're turned away; otherwise they take it
+   * (more likely at a lower shop rate) or not. Taken, the job is booked with a
+   * time it'll be ready: soon enough and they wait, otherwise they drop the car off.
+   */
+  const answerService = (c: Customer) => {
+    const s = get()
+    const visit = c.service!
+    const player = c.handlerId === PLAYER_ID
+    const mechanics = mechanicCount(s.roster)
+    const promised = promiseMinute(s.clock.minute, s.serviceJobs, visit.kind, mechanics)
+    const walk = () =>
+      commit(reduceCustomers(get().customers, { type: 'respond', id: c.id, answer: 'walk' }))
+    if (!inTime(promised)) {
+      addService({ turnedAway: 1 })
+      walk()
+      if (!player) return
+      return notify(
+        mechanics === 0
+          ? `There's no mechanic to do the work, so ${c.name} drove off.`
+          : `The garage can't fit ${c.name}'s car in before closing. They drove off.`,
+      )
+    }
+    if (serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
+      addService({ declined: 1 })
+      walk()
+      if (player) notify(`${c.name}: "That's more than I want to spend. I'll go elsewhere."`)
+      return
+    }
+    const n = s.serviceJobs.filter((j) => j.customerId).length + 1
+    const jobId = `client-${s.clock.day}-${n}`
+    const client = { name: c.name, model: visit.car.model, condition: visit.car.condition }
+    const job = clientJob(jobId, visit.kind, c.id, visit.quote, client)
+    const dropOff = promised - s.clock.minute > WAIT_LIMIT
+    set({ serviceJobs: [...s.serviceJobs, job] })
+    const ev = { type: 'booked', id: c.id, jobId, promisedMinute: promised, dropOff } as const
+    commit(reduceCustomers(get().customers, ev))
+    if (!player) return
+    notify(
+      dropOff
+        ? `${c.name}: "I'll leave it with you and come back at ${formatTime(promised)}."`
+        : `${c.name}: "Ready by ${formatTime(promised)}? I'll wait."`,
+    )
+  }
+
+  /**
+   * Service clients due by `step` drive in while a service space is free (the
+   * rest wait for one), and drop-offs whose time has come walk back in.
+   * Nobody new after closing.
+   */
+  const serviceArrivals = (step: GameTime, present: readonly Customer[]) => {
+    const s = get()
+    if (isClosed(step)) return { schedule: s.serviceVisits, arrived: [], away: s.serviceAway }
+    const free = freeServiceSpots(present, s.serviceAway)
+    const { schedule, due } = takeDueVisits(s.serviceVisits, step.minute, free)
+    const arrived: Customer[] = []
+    due.forEach((kind, i) => {
+      const id = `service-${step.day}-${s.serviceVisits.spawned + i + 1}`
+      const spot = freeServiceSpot([...present, ...arrived], s.serviceAway)!
+      const rate = s.service.rate
+      arrived.push(serviceClient(id, kind, spot, serviceRng, step.day, rate, tuning().patience))
+    })
+    const due2 = (c: Customer) => (c.service?.promisedMinute ?? Infinity) <= step.minute
+    for (const c of s.serviceAway.filter(due2)) {
+      arrived.push({ ...c, phase: 'servicing', service: { ...c.service!, returned: true } })
+    }
+    return { schedule, arrived, away: s.serviceAway.filter((c) => !due2(c)) }
   }
 
   /**
@@ -927,6 +1105,8 @@ export const useGame = create<GameState>((set, get) => {
         return greet(finished.targetId)
       case 'appraise':
         return appraiseCar(finished.targetId)
+      case 'checkIn':
+        return checkIn(finished.targetId, PLAYER_ID)
       case 'offer':
         return offer(finished.targetId)
       case 'closeDeal':
@@ -1345,6 +1525,7 @@ export const useGame = create<GameState>((set, get) => {
       cash: s.cash - (stolen?.floored ? stolen.cost : 0),
       purchases: [],
       serviceJobs: [],
+      serviceAway: [],
       serviceVisits: planServiceVisits(
         serviceRng,
         serviceDemand(day, s.career, {
@@ -1552,14 +1733,20 @@ export const useGame = create<GameState>((set, get) => {
           { hope: level.tradeHope, noise: level.appraisalNoise },
         ),
       )
-      customers = [...customers, ...arrived]
+      const service = serviceArrivals(step, customers)
+      customers = [...customers, ...arrived, ...service.arrived]
       // The mechanics put in the time on what's in the bays.
-      const jobs = workJobs(s.serviceJobs, minutes, (id) => mechanicWorking(s.roster, id))
+      const jobs = stampReady(
+        workJobs(s.serviceJobs, minutes, (id) => mechanicWorking(s.roster, id)),
+        step.minute,
+      )
       set({
         clock: step,
         arrivals: schedule,
         dayStats: tallyMissed(recordVisitors(s.dayStats, arrived), arrived),
         serviceJobs: jobs,
+        serviceVisits: service.schedule,
+        serviceAway: service.away,
       })
       if (jobs !== s.serviceJobs) {
         jobsDone(jobs.filter((j, i) => j.status !== s.serviceJobs[i].status))
@@ -1788,6 +1975,7 @@ export const useGame = create<GameState>((set, get) => {
       const c = s.customers.find((x) => x.id === id)
       if (c?.phase !== 'considering' || !c.offer) return
       if (c.selling) return answerSeller(c)
+      if (c.service) return answerService(c)
       const car = s.inventory.find((x) => x.id === c.offer?.carId)
       const { price, allowance } = c.offer
       const res =
@@ -1819,8 +2007,11 @@ export const useGame = create<GameState>((set, get) => {
       // One customer at a time, and never the one the player is heading to.
       if (s.customers.some((c) => c.handlerId === employeeId && c.phase !== 'leaving')) return false
       if (s.activeAction?.targetId === customerId) return false
+      const c = s.customers.find((x) => x.id === customerId)
+      // Service clients are for the garage's counter.
+      if (c?.service) return false
       // A seller's car needs a lot space and some cash.
-      if (s.customers.find((c) => c.id === customerId)?.selling && buyBlocker(s)) return false
+      if (c?.selling && buyBlocker(s)) return false
       commit(reduceCustomers(s.customers, { type: 'claim', id: customerId, by: employeeId }))
       return get().customers.find((c) => c.id === customerId)?.handlerId === employeeId
     },
@@ -1891,6 +2082,31 @@ export const useGame = create<GameState>((set, get) => {
       notify(
         `${sale.soldBy ?? e.name} sold the ${carName(sale.model)} to ${c.name} for ${formatMoney(sale.price)}!${tradeLine(sale)}`,
       )
+    },
+    staffCheckIn: (employeeId, customerId) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      if (e?.role !== 'advisor' || e.fired || e.status !== 'atPost') return
+      if (s.activeAction?.targetId === customerId) return
+      checkIn(customerId, employeeId)
+    },
+    serviceCollect: (customerId) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === customerId)
+      const job = c?.service && s.serviceJobs.find((j) => j.id === c.service!.jobId)
+      if (c?.phase !== 'servicing' || job?.status !== 'ready') return
+      collected(job, c)
+      commit(reduceCustomers(get().customers, { type: 'collect', id: customerId }))
+      notify(
+        `${c.name} collected their ${carName(c.service!.car.model)} and paid ${formatMoney(job.labor + job.parts)}.`,
+      )
+    },
+    serviceWentAway: (customerId) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === customerId)
+      if (c?.phase !== 'servicing' || !c.service?.dropOff || c.service.returned) return
+      set({ serviceAway: [...s.serviceAway, c] })
+      commit(reduceCustomers(get().customers, { type: 'wentAway', id: customerId }))
     },
     staffWash: (employeeId, carId) => {
       const e = get().roster.find((x) => x.id === employeeId)

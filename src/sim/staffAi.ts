@@ -67,6 +67,8 @@ export function pickSalesCustomer(
   for (const c of customers) {
     if (c.phase !== 'browsing' && c.phase !== 'waiting') continue
     if (c.handlerId !== null || exclude.has(c.id)) continue
+    // Service clients are for the garage's counter.
+    if (c.service) continue
     // No room or cash for their car.
     if (c.selling && !buying) continue
     if (c.phase === 'browsing' && !canGreetBrowsing(c)) continue
@@ -286,4 +288,25 @@ export function nextMechanicTask(
     if (!next || jobPriority(j) < jobPriority(next)) next = j
   }
   return next ? { kind: 'job', jobId: next.id, bay } : IDLE_MECHANIC
+}
+
+/**
+ * The service client the advisor `e` checks in next: the one who's been at
+ * the counter longest (least patience left), nobody else is helping and the
+ * player isn't on their way to. Null while they're not at work.
+ */
+export function nextCheckIn(
+  e: Employee,
+  customers: readonly Customer[],
+  atCounter: ReadonlySet<string>,
+  playerTargetId: string | null,
+): Customer | null {
+  if (e.status !== 'atPost' || e.fired || e.quitting) return null
+  let best: Customer | null = null
+  for (const c of customers) {
+    if (!c.service || c.phase !== 'waiting' || c.handlerId !== null) continue
+    if (!atCounter.has(c.id) || c.id === playerTargetId) continue
+    if (!best || c.patienceLeft < best.patienceLeft) best = c
+  }
+  return best
 }

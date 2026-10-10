@@ -220,6 +220,17 @@ export const UPDATES: readonly Update[] = [
       'The Service tab can also send the used cars you take in to the shop on its own.',
     ],
   },
+  {
+    id: 21,
+    phase: '15',
+    title: 'Service clients',
+    items: [
+      'With a garage built, people drive in for oil changes, tires, brakes and repairs, through a new east gate.',
+      'Check them in at the garage counter to quote the job, or hire a service advisor. They pay on collecting.',
+      'Short jobs: they sit and wait. Long ones: they leave the car and come back at the time promised.',
+      'Happy clients raise your reputation; a late car or a client turned away lowers it.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

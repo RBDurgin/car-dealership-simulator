@@ -87,6 +87,7 @@ const base: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  service: null,
 }
 
 /** In the middle of a haggle: they countered `counter` to `lastAsk`. */

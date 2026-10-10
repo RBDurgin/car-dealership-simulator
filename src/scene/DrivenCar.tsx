@@ -5,12 +5,18 @@ import { useShallow } from 'zustand/react/shallow'
 import { dampAngle } from '../sim/agent'
 import type { Customer } from '../sim/customers'
 import {
+  bayPose,
+  bayToSpot,
   blockedAhead,
   drivenCleanliness,
   inboundRoute,
   outboundRoute,
   parkedPose,
   routeLength,
+  serviceInbound,
+  serviceOutbound,
+  servicePose,
+  spotToBay,
   type Leg,
   type RoadEnd,
 } from '../sim/driving'
@@ -18,10 +24,11 @@ import type { Vec2 } from '../sim/grid'
 import type { CarModel } from '../sim/layout'
 import { createRng, hashSeed } from '../sim/rng'
 import { vehicleTargetId } from '../sim/sellers'
+import type { ServiceJob } from '../sim/service'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
 import { Interactable } from './Interactable'
-import { crowdAgents, grid, vehiclePos } from './runtime'
+import { crowdAgents, grid, lifts, serviceCarsHome, vehiclePos } from './runtime'
 import { frameSeconds, MAX_STEP_S } from './walker'
 
 /** Top speed on the road and on the lot, in tiles per game second. */
@@ -66,6 +73,13 @@ interface DrivenCar {
   pushOn: number
   /** We bought it: it stays in its space until it goes into stock at closing. */
   bought: boolean
+  /**
+   * A service client's car: where it's headed (or standing), its service
+   * space or a bay. Null for anyone parking in customer parking.
+   */
+  service: { place: 'spot' | number } | null
+  /** Height off the ground: up with the lift while it's in a bay. */
+  y: number
 }
 
 const cars = new Map<string, DrivenCar>()
@@ -77,8 +91,11 @@ const toWorld = (legs: Leg[]): Leg[] =>
   legs.map((l) => ({ ...l, points: l.points.map((p) => grid.tileToWorld(p.x, p.z)) }))
 
 function removeCar(id: string): void {
+  const car = cars.get(id)
+  if (typeof car?.service?.place === 'number') lifts.cars.delete(car.service.place)
   cars.delete(id)
   vehiclePos.delete(id)
+  serviceCarsHome.delete(id)
 }
 
 /** A visitor's car on first sight: at the end of the road, or in its space if they've parked. */
@@ -109,10 +126,55 @@ function createCar(c: Customer): DrivenCar {
     waited: 0,
     pushOn: 0,
     bought: false,
+    service: null,
+    y: 0,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
   return car
+}
+
+/** A service client's car on first sight: at the end of the road, heading for its service space. */
+function createServiceCar(c: Customer): DrivenCar {
+  const visit = c.service!
+  const rng = createRng(hashSeed(`${c.id}:car`))
+  const end: RoadEnd = rng.next() < 0.5 ? 'west' : 'east'
+  const legs = toWorld(serviceInbound(visit.spot, end))
+  const car: DrivenCar = {
+    id: c.id,
+    model: visit.car.model,
+    condition: visit.car.condition,
+    cleanliness: drivenCleanliness(c.id, visit.car.condition),
+    spot: visit.spot,
+    end,
+    stage: 'in',
+    legs,
+    leg: 0,
+    next: 1,
+    at: {
+      pos: { ...legs[0].points[0] },
+      heading: end === 'west' ? Math.PI / 2 : -Math.PI / 2,
+      moving: true,
+    },
+    speed: 0,
+    waited: 0,
+    pushOn: 0,
+    bought: false,
+    service: { place: 'spot' },
+    y: 0,
+  }
+  cars.set(c.id, car)
+  vehiclePos.set(c.id, car.at)
+  return car
+}
+
+/** Sets a car off along `legs`. */
+function setOff(car: DrivenCar, legs: Leg[]): void {
+  car.legs = toWorld(legs)
+  car.leg = 0
+  car.next = 1
+  car.speed = 0
+  car.at.moving = true
 }
 
 /** Pulls out of its space and heads back the way it came. */
@@ -226,12 +288,78 @@ function update(
 }
 
 /**
+ * One service car's frame: it drives to where its job says it should be (its
+ * space, a bay while it's worked on, or off once it's collected and its
+ * driver has got in), always by way of its space. Returns false once it has
+ * driven off the map.
+ */
+function updateService(
+  car: DrivenCar,
+  c: Customer | undefined,
+  job: ServiceJob | undefined,
+  seconds: number,
+): boolean {
+  const service = car.service!
+  if (car.at.moving) {
+    if (!drive(car, seconds)) return true
+    if (car.stage === 'out') return false
+    const pose = service.place === 'spot' ? servicePose(car.spot) : bayPose(service.place)
+    car.at.heading = pose.heading
+    car.at.moving = false
+    car.stage = 'parked'
+    if (service.place === 'spot' && c?.phase === 'arriving') {
+      useGame.getState().dispatchCustomer({ type: 'parked', id: c.id })
+    }
+  }
+  // Closing came while they were still driving in: straight back out.
+  if (c?.phase === 'leaving' && !c.service?.parked) {
+    useGame.getState().dispatchCustomer({ type: 'droveOff', id: c.id })
+  }
+  const want: 'spot' | number | 'gone' =
+    job?.status === 'inBay' && job.bay !== null
+      ? job.bay
+      : !c && (!job || job.status === 'done')
+        ? 'gone'
+        : 'spot'
+  const onLift = typeof service.place === 'number'
+  if (onLift) lifts.cars.add(service.place as number)
+  else serviceCarsHome.add(car.id)
+  if (want === service.place) return true
+  // Leaving where it stands: back to its space first, from a bay.
+  serviceCarsHome.delete(car.id)
+  if (onLift) {
+    lifts.cars.delete(service.place as number)
+    setOff(car, bayToSpot(service.place as number, car.spot))
+    service.place = 'spot'
+  } else if (want === 'gone') {
+    car.stage = 'out'
+    setOff(car, serviceOutbound(car.spot, car.end))
+  } else {
+    setOff(car, spotToBay(car.spot, want as number))
+    service.place = want
+  }
+  return true
+}
+
+/** How high a car stands: on the lift's arms in a bay, else on the ground. */
+function heightOf(car: DrivenCar): number {
+  const bay = car.service?.place
+  if (typeof bay !== 'number' || car.at.moving) return 0
+  const h = lifts.heights[bay] ?? 0
+  // The arms are under it once the lift starts up.
+  return h + Math.min(0.11, h)
+}
+
+/**
  * Visitors' cars: each drives along the road, in through the gate and into
  * its customer-parking space on a fixed route (`sim/driving.ts`), and the
  * store hears `parked` once the driver gets out. Once they've got back in
  * (`droveOff`, from scene/Customers) it backs out and drives off the way it
  * came. A car we bought stays in its space until it goes into stock at
- * closing, and a seller's car (or a trade-in) can be clicked to appraise. A moving car waits
+ * closing, and a seller's car (or a trade-in) can be clicked to appraise. A
+ * service client's car drives in to its service space, to a bay and up on the
+ * lift while it's worked on, back again when it's done, and off once it's
+ * collected; it stays while its driver is away. A moving car waits
  * for anyone in front of it; walkers step around it through `vehiclePos`. Re-renders only when a car appears or leaves.
  */
 export function DrivenCars() {
@@ -255,22 +383,33 @@ export function DrivenCars() {
     }
     const byId = new Map(game.customers.map((c) => [c.id, c]))
     const bought = new Set(game.purchases.map((p) => p.customerId))
+    const jobs = new Map(
+      game.serviceJobs.flatMap((j) => (j.customerId ? [[j.customerId, j] as const] : [])),
+    )
     for (const c of game.customers) {
       if (c.vehicle && !cars.has(c.id)) {
         createCar(c)
+        changed = true
+      } else if (c.service && !c.service.returned && !cars.has(c.id)) {
+        createServiceCar(c)
         changed = true
       }
     }
     const { seconds } = frameSeconds(rawDelta, game.timeScale)
     for (const car of [...cars.values()]) {
-      if (update(car, byId.get(car.id), bought.has(car.id), seconds)) continue
+      const c = byId.get(car.id)
+      const going = car.service
+        ? updateService(car, c, jobs.get(car.id), seconds)
+        : update(car, c, bought.has(car.id), seconds)
+      if (going) continue
       removeCar(car.id)
       changed = true
     }
     for (const [id, g] of groups) {
       const car = cars.get(id)
       if (!car) continue
-      g.position.set(car.at.pos.x, 0, car.at.pos.z)
+      car.y = heightOf(car)
+      g.position.set(car.at.pos.x, car.y, car.at.pos.z)
       g.rotation.y = car.at.heading
     }
     if (changed) setIds([...cars.keys()])
@@ -284,7 +423,7 @@ export function DrivenCars() {
         return (
           <group
             key={id}
-            position={[car.at.pos.x, 0, car.at.pos.z]}
+            position={[car.at.pos.x, car.y, car.at.pos.z]}
             rotation-y={car.at.heading}
             ref={(g) => {
               if (g) groups.set(id, g)

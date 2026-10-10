@@ -51,7 +51,7 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
   return s.roster.find((e) => e.id === speaker)?.variant ?? null
 }
 
-export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach'
+export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn'
 
 /** Two people talking back and forth; `speakers[0]` opens. */
 export interface Conversation {
@@ -67,7 +67,10 @@ const COUPLE_PHASES: readonly CustomerPhase[] = ['browsing', 'waiting']
 export function conversationsOf(s: ChatterState): Conversation[] {
   const out: Conversation[] = []
   for (const c of s.customers) {
-    if (c.phase === 'talking' && c.handlerId) {
+    const checkingIn = c.phase === 'talking' || c.phase === 'considering'
+    if (c.service && checkingIn && c.handlerId) {
+      out.push({ key: `checkIn:${c.id}`, kind: 'checkIn', speakers: [c.id, c.handlerId] })
+    } else if (c.phase === 'talking' && c.handlerId) {
       out.push({ key: `pitch:${c.id}`, kind: 'pitch', speakers: [c.handlerId, c.id] })
     } else if (c.phase === 'signing' && c.handlerId) {
       out.push({ key: `signing:${c.id}`, kind: 'signing', speakers: [c.handlerId, c.id] })
@@ -92,6 +95,7 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   signing: [800, 2000],
   couple: [2000, 9000],
   poach: [300, 800],
+  checkIn: [500, 1000],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -105,8 +109,9 @@ export const COUPLE_PAUSE_MS: readonly [number, number] = [7000, 16000]
  * Line number `turn` (from 0) of `conv`, and the silence after it in ms. The
  * two sides take turns: in a pitch the seller talks up the car and the
  * customer chimes in, at the desk it's a murmur over the paperwork, a
- * couple trade a remark now and then, and Nazma talks someone round in a low
- * voice while they ask questions.
+ * couple trade a remark now and then, Nazma talks someone round in a low
+ * voice while they ask questions, and a service client explains what's wrong
+ * with their car.
  */
 export function nextLine(
   conv: Conversation,
@@ -146,6 +151,18 @@ export function nextLine(
       const gapMs = first ? between(rng, [250, 600]) : between(rng, COUPLE_PAUSE_MS)
       return { line: { speaker, tone, syllables: rng.int(2, 5) }, gapMs }
     }
+    case 'checkIn': {
+      // The client says what's wrong with the car; whoever checks them in hums along.
+      const tone: Tone = first
+        ? rng.next() < 0.35
+          ? 'question'
+          : 'neutral'
+        : rng.next() < 0.5
+          ? 'murmur'
+          : 'neutral'
+      const syllables = first ? rng.int(3, 7) : rng.int(2, 4)
+      return { line: { speaker, tone, syllables }, gapMs: between(rng, [400, 1100]) }
+    }
     case 'poach': {
       const tone: Tone = first
         ? rng.next() < 0.6
@@ -168,7 +185,8 @@ export const REACTION_GAP_MS = 250
  * - a greeting from whoever starts helping a customer, and one back;
  * - the receptionist's hello when someone reaches the lot;
  * - a "hmm" while a customer considers an offer, a question when they counter;
- * - a happy yes (and a happy seller) on accepting, a grumble on walking out;
+ * - a happy yes (and a happy seller, or a booked service client) on
+ *   accepting, a grumble on walking out or turning down a service quote;
  * - the owner's hello and goal when they reach the office;
  * - Nazma's grumble as he's run off.
  */
@@ -202,13 +220,18 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
         )
       } else if (from === 'considering' && to === 'talking' && c.haggle) {
         out.push([{ speaker: c.id, tone: 'question', syllables: rng.int(3, 5) }])
-      } else if (from === 'considering' && (to === 'following' || c.leaveReason === 'sold')) {
+      } else if (
+        from === 'considering' &&
+        (to === 'following' || to === 'servicing' || c.leaveReason === 'sold')
+      ) {
         const lines: Line[] = [{ speaker: c.id, tone: 'happy', syllables: rng.int(2, 4) }]
         if (c.handlerId) lines.push({ speaker: c.handlerId, tone: 'happy', syllables: 2 })
         out.push(lines)
       } else if (
         to === 'leaving' &&
-        (c.leaveReason === 'refused' || c.leaveReason === 'impatient')
+        (c.leaveReason === 'refused' ||
+          c.leaveReason === 'impatient' ||
+          c.leaveReason === 'declined')
       ) {
         out.push([{ speaker: c.id, tone: 'grumble', syllables: rng.int(3, 5) }])
       }

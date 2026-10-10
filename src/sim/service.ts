@@ -1,9 +1,9 @@
 import { calendarOf } from './calendar'
 import { washCar } from './cleanliness'
-import { OPEN_MINUTE } from './clock'
 import type { Customer } from './customers'
 import type { InventoryCar } from './inventory'
-import { SERVICE_BAYS, serviceBays, type ExpansionId } from './layout'
+import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
+import { SERVICE_BAYS, serviceBays, type CarModel, type ExpansionId } from './layout'
 import type { Career } from './progression'
 import type { Rng } from './rng'
 import { MAX_SKILL, MIN_SKILL, skillSeconds } from './staff'
@@ -67,6 +67,10 @@ export interface ServiceJob {
   partsCost: number
   /** Extra work the mechanic found (15d), or null. */
   finding: Finding | null
+  /** A client's name and car, for the Service tab and the lift; null for our own. */
+  client: { name: string; model: CarModel; condition: number } | null
+  /** The game minute a client's car was ready, or null until it is. */
+  readyMinute: number | null
 }
 
 export interface Finding {
@@ -227,15 +231,23 @@ function pickKind(rng: Rng): JobKind {
 }
 
 /**
- * The jobs of the visits due by `minute` that haven't spawned yet. Returns the
- * same schedule when none are due.
+ * The jobs of the visits due by `minute` that haven't spawned yet, at most
+ * `max` of them (the rest wait for a free service space). Returns the same
+ * schedule when none are due.
  */
 export function takeDueVisits(
   schedule: ServiceSchedule,
   minute: number,
+  max = Infinity,
 ): { schedule: ServiceSchedule; due: JobKind[] } {
   let spawned = schedule.spawned
-  while (spawned < schedule.minutes.length && schedule.minutes[spawned] <= minute) spawned++
+  while (
+    spawned < schedule.minutes.length &&
+    schedule.minutes[spawned] <= minute &&
+    spawned - schedule.spawned < max
+  ) {
+    spawned++
+  }
   const due = schedule.kinds.slice(schedule.spawned, spawned)
   return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due }
 }
@@ -390,6 +402,8 @@ export function reconJob(id: string, carId: string, partsCost: number): ServiceJ
     parts: 0,
     partsCost,
     finding: null,
+    client: null,
+    readyMinute: null,
   }
 }
 
@@ -402,7 +416,7 @@ export function reconPartsCost(rng: Rng): number {
  * Which waiting job a mechanic takes first: clients' cars (15c), then recalls
  * (15e), then our own reconditioning.
  */
-export function jobPriority(job: ServiceJob): number {
+export function jobPriority(job: Pick<ServiceJob, 'kind'>): number {
   if (job.kind === 'recon') return 2
   if (job.kind === 'recall') return 1
   return 0
@@ -455,4 +469,82 @@ function withWork(job: ServiceJob, worked: number): ServiceJob {
 /** `job` finished off after closing, in overtime. */
 export function finishedLate(job: ServiceJob): ServiceJob {
   return withWork(job, job.minutes)
+}
+
+/** A client's job, at the `quote` they took. Its time is set again by whoever starts it. */
+export function clientJob(
+  id: string,
+  kind: JobKind,
+  customerId: string,
+  q: Quote,
+  client: NonNullable<ServiceJob['client']>,
+): ServiceJob {
+  return {
+    id,
+    kind,
+    customerId,
+    carId: null,
+    bay: null,
+    mechanicId: null,
+    status: 'waiting',
+    worked: 0,
+    minutes: JOBS[kind].minutes,
+    labor: q.labor,
+    parts: q.parts,
+    partsCost: q.partsCost,
+    finding: null,
+    client,
+    readyMinute: null,
+  }
+}
+
+/** What a client pays for the job quoted: labor and parts. */
+export function quoteTotal(q: Pick<Quote, 'labor' | 'parts'>): number {
+  return q.labor + q.parts
+}
+
+/** Game minutes added to a promise for the car getting to the bay and the mechanic to it. */
+export const PROMISE_SLACK = 10
+
+/**
+ * When a `kind` job booked at `now` will be ready: after the work already in
+ * the bays and the clients' (and recalls') jobs waiting ahead of it, shared
+ * between the `mechanics`, plus its own book time and `PROMISE_SLACK`, rounded up to the next 10
+ * minutes. Our own reconditioning waits behind clients. Null with nobody to
+ * do the work.
+ */
+export function promiseMinute(
+  now: number,
+  jobs: readonly ServiceJob[],
+  kind: JobKind,
+  mechanics: number,
+): number | null {
+  if (mechanics <= 0) return null
+  const rank = jobPriority({ kind })
+  const ahead = jobs
+    .filter((j) => j.status === 'inBay' || (j.status === 'waiting' && jobPriority(j) <= rank))
+    .reduce((sum, j) => sum + minutesLeft(j), 0)
+  const ready = now + ahead / mechanics + JOBS[kind].minutes + PROMISE_SLACK
+  return Math.ceil(ready / 10) * 10
+}
+
+/** Whether a job promised for `promised` can still be done before closing. */
+export function inTime(promised: number | null): promised is number {
+  return promised !== null && promised <= CLOSE_MINUTE
+}
+
+/**
+ * `jobs` with the clients' cars that have just come ready stamped with
+ * `minute`. Returns the same array when none have.
+ */
+export function stampReady(jobs: ServiceJob[], minute: number): ServiceJob[] {
+  if (!jobs.some((j) => j.status === 'ready' && j.readyMinute === null)) return jobs
+  return jobs.map((j) =>
+    j.status === 'ready' && j.readyMinute === null ? { ...j, readyMinute: minute } : j,
+  )
+}
+
+/** Whether a client's `job` was ready after the time they were promised. */
+export function wasLate(job: ServiceJob, promised: number | null): boolean {
+  return promised !== null && job.readyMinute !== null && job.readyMinute > promised
 }

@@ -5,7 +5,7 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare' | 'engine' | 'door'
+type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -24,7 +24,15 @@ const FILES: Record<Exclude<SfxId, Synth>, string> = {
   shoo: 'sfx/shoo.ogg',
 }
 
-const ALL_IDS = [...Object.keys(FILES), 'spray', 'fanfare', 'engine', 'door'] as SfxId[]
+const ALL_IDS = [
+  ...Object.keys(FILES),
+  'spray',
+  'fanfare',
+  'engine',
+  'door',
+  'wrench',
+  'lift',
+] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
 
@@ -130,15 +138,66 @@ function doorBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+const WRENCH_SECONDS = 0.9
+/** When each click of the ratchet lands, in seconds. */
+const RATCHET_CLICKS = [0, 0.09, 0.18, 0.27, 0.5, 0.59, 0.68]
+
+/**
+ * A ratchet wrench at work: a run of sharp clicks, each a tick of noise with
+ * a short metallic ring (a couple of high, inharmonic partials), in two bursts.
+ */
+function wrenchBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(WRENCH_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const at of RATCHET_CLICKS) {
+    const start = Math.floor(at * rate)
+    const end = Math.min(data.length, start + Math.floor(0.06 * rate))
+    for (let i = start; i < end; i++) {
+      const t = (i - start) / rate
+      const tick = (Math.random() * 2 - 1) * Math.exp(-t / 0.003)
+      const ring =
+        (Math.sin(2 * Math.PI * 2900 * t) + 0.6 * Math.sin(2 * Math.PI * 4650 * t)) *
+        Math.exp(-t / 0.018)
+      data[i] += (tick * 0.7 + ring * 0.35) * 0.8
+    }
+  }
+  return buffer
+}
+
+const LIFT_SECONDS = 1.6
+
+/**
+ * A hydraulic lift: a pump's hum that rises a little in pitch as it works,
+ * with a hiss of fluid, easing in and out.
+ */
+function liftBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(LIFT_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  let phase = 0
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate
+    phase += (2 * Math.PI * (110 + 30 * (t / LIFT_SECONDS))) / rate
+    const hum = Math.sin(phase) + 0.5 * Math.sin(2 * phase) + 0.25 * Math.sin(3 * phase)
+    const hiss = (Math.random() * 2 - 1) * 0.15
+    const envelope = Math.min(1, t / 0.15) * Math.min(1, (LIFT_SECONDS - t) / 0.3)
+    data[i] = (hum * 0.35 + hiss) * envelope
+  }
+  return buffer
+}
+
 const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   spray: sprayBuffer,
   fanfare: fanfareBuffer,
   engine: engineBuffer,
   door: doorBuffer,
+  wrench: wrenchBuffer,
+  lift: liftBuffer,
 }
 
 /** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */
-const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500 }
+const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500, lift: 1200 }
 
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)

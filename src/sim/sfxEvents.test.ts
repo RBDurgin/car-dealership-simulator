@@ -45,6 +45,7 @@ const base: SfxState = {
   audioOpen: false,
   inspectedId: null,
   nazma: null,
+  serviceJobs: [],
 }
 const cues = (next: Partial<SfxState>, prev: Partial<SfxState> = {}) =>
   sfxFor({ ...base, ...prev }, { ...base, ...next }).map((e) => e.cue)

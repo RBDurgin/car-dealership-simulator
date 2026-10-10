@@ -1,6 +1,14 @@
 import type { Customer } from './customers'
 import type { Tile, Vec2 } from './grid'
-import { CUSTOMER_PARKING, GRID_WIDTH, parkedCarRect, type CarModel } from './layout'
+import {
+  CUSTOMER_PARKING,
+  GRID_WIDTH,
+  parkedCarRect,
+  SERVICE_BAYS,
+  SERVICE_SPOTS,
+  type CarModel,
+  type ParkingSpace,
+} from './layout'
 import { driveInChance } from './marketing'
 import { createRng, hashSeed, type Rng } from './rng'
 import { rollUsedCar, type UsedInfo } from './usedCars'
@@ -86,7 +94,10 @@ export function doorTile(spot: number): Tile {
 
 /** Where a parked car's centre sits, and which way it faces (radians, 0 = +z). */
 export function parkedPose(spot: number): { pos: Vec2; heading: number } {
-  const space = CUSTOMER_PARKING[spot]
+  return poseIn(CUSTOMER_PARKING[spot])
+}
+
+function poseIn(space: ParkingSpace): { pos: Vec2; heading: number } {
   const r = parkedCarRect(space)
   return {
     pos: { x: r.tx + (r.w - 1) / 2, z: r.tz + (r.h - 1) / 2 },
@@ -228,4 +239,97 @@ export function blockedAhead(pos: Vec2, dir: Vec2, others: Iterable<Vec2>): bool
     if (ahead > 0 && ahead < YIELD_AHEAD && side < YIELD_HALF_WIDTH) return true
   }
   return false
+}
+
+// The service drive (Phase 15c): client cars come in through `SERVICE_GATE`,
+// up the lane between the east lot and the service spaces, and into their
+// space; from there to a bay and back, and out the way they came.
+
+/** Up the lane on its east side, down it on its west, so cars passing don't stop for each other. */
+const SERVICE_IN_X = 54.5
+const SERVICE_OUT_X = 53.1
+/** The apron in front of the garage's doors, where cars turn into and out of the bays. */
+const GARAGE_APRON_Z = 11.5
+
+/** Where a service client's car stands in service space `spot`, and which way it faces. */
+export function servicePose(spot: number): { pos: Vec2; heading: number } {
+  return poseIn(SERVICE_SPOTS[spot])
+}
+
+/** Where a service client gets out and back in: the tile behind their car, on the lane. */
+export function serviceDoorTile(spot: number): Tile {
+  const { rect } = SERVICE_SPOTS[spot]
+  return { tx: rect.tx, tz: rect.tz }
+}
+
+/** Where a car on the lift in bay `bay` stands, nose in. */
+export function bayPose(bay: number): { pos: Vec2; heading: number } {
+  const { rect, facing } = SERVICE_BAYS[bay]
+  return {
+    pos: { x: rect.tx + (rect.w - 1) / 2, z: rect.tz + (rect.h - 1) / 2 },
+    heading: (facing * Math.PI) / 2,
+  }
+}
+
+/** From a road end, through the service gate, up the lane and nose-first into service space `spot`. */
+export function serviceInbound(spot: number, from: RoadEnd): Leg[] {
+  const { pos } = servicePose(spot)
+  const lane = from === 'west' ? LANE.eastbound : LANE.westbound
+  const start = from === 'west' ? ROAD_WEST : ROAD_EAST
+  return [
+    {
+      points: smoothCorners([p(start, lane), p(SERVICE_IN_X, lane), p(SERVICE_IN_X, pos.z), pos]),
+      reverse: false,
+    },
+  ]
+}
+
+/** Backs out of service space `spot` into the lane, then up it and nose-first onto the lift in `bay`. */
+export function spotToBay(spot: number, bay: number): Leg[] {
+  const { pos } = servicePose(spot)
+  const lift = bayPose(bay).pos
+  return [
+    { points: [pos, p(SERVICE_IN_X, pos.z)], reverse: true },
+    {
+      points: smoothCorners([
+        p(SERVICE_IN_X, pos.z),
+        p(SERVICE_IN_X, GARAGE_APRON_Z),
+        p(lift.x, GARAGE_APRON_Z),
+        lift,
+      ]),
+      reverse: false,
+    },
+  ]
+}
+
+/** Backs off the lift in `bay` onto the apron, then down the lane and back into service space `spot`. */
+export function bayToSpot(bay: number, spot: number): Leg[] {
+  const { pos } = servicePose(spot)
+  const lift = bayPose(bay).pos
+  return [
+    { points: [lift, p(lift.x, GARAGE_APRON_Z)], reverse: true },
+    {
+      points: smoothCorners([
+        p(lift.x, GARAGE_APRON_Z),
+        p(SERVICE_IN_X, GARAGE_APRON_Z),
+        p(SERVICE_IN_X, pos.z),
+        pos,
+      ]),
+      reverse: false,
+    },
+  ]
+}
+
+/** Backs out of service space `spot` across the lane, then down it, out of the gate and off toward `to`. */
+export function serviceOutbound(spot: number, to: RoadEnd): Leg[] {
+  const { pos } = servicePose(spot)
+  const lane = to === 'west' ? LANE.westbound : LANE.eastbound
+  const end = to === 'west' ? ROAD_WEST : ROAD_EAST
+  return [
+    { points: [pos, p(SERVICE_OUT_X, pos.z)], reverse: true },
+    {
+      points: smoothCorners([p(SERVICE_OUT_X, pos.z), p(SERVICE_OUT_X, lane), p(end, lane)]),
+      reverse: false,
+    },
+  ]
 }

@@ -38,6 +38,7 @@ export type TipId =
   | 'expansion'
   | 'serviceBay'
   | 'recon'
+  | 'serviceClient'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -69,6 +70,8 @@ export const TIPS: Record<TipId, string> = {
     'Your service garage is open. Hire a mechanic for each bay from the staff panel; the Service tab on the office computer shows what they’re working on.',
   recon:
     'This used car is in rough shape. Pick Recondition on it, or use the Service tab: a mechanic raises its condition, and it goes back on sale for more.',
+  serviceClient:
+    'A service client drove in. Meet them at the garage’s counter and choose Check in to quote the job; they pay when they collect their car. A service advisor checks clients in for you.',
   rivalOpens:
     "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
@@ -185,6 +188,13 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           c.status === 'available' &&
           !!c.used &&
           c.used.condition < ROUGH_CONDITION,
+      )
+    }
+    case 'serviceClient': {
+      if (next.customers === prev.customers) return false
+      const before = new Map(prev.customers.map((c) => [c.id, c.phase]))
+      return next.customers.some(
+        (c) => c.service && c.phase === 'waiting' && before.get(c.id) === 'arriving',
       )
     }
     case 'lowCash':

@@ -5,6 +5,7 @@ import type { Vec2 } from './grid'
 import type { InventoryCar } from './inventory'
 import { NAZMA_ID, type NazmaVisit } from './nazma'
 import { atTopRank, type Career } from './progression'
+import type { ServiceJob } from './service'
 import type { Employee } from './staff'
 
 /** What a sound effect is for. `audio/samples.ts` maps each to a file (or a synth). */
@@ -26,17 +27,21 @@ export type SfxCue =
   | 'fanfare'
   | 'engine'
   | 'door'
+  | 'wrench'
+  | 'lift'
 
 /**
  * Where a cue happens: a customer, an employee, a car in stock, a visitor's
- * car (by its customer's id, with the space it parks in) or someone the store
- * doesn't place (Nazma). UI cues have none.
+ * car (by its customer's id, with the space it parks in: a service space for a
+ * service client's), a garage bay or someone the store doesn't place (Nazma).
+ * UI cues have none.
  */
 export type SfxSubject =
   | { kind: 'customer'; id: string }
   | { kind: 'employee'; id: string }
   | { kind: 'car'; id: string }
-  | { kind: 'vehicle'; id: string; spot: number }
+  | { kind: 'vehicle'; id: string; spot: number; service?: boolean }
+  | { kind: 'bay'; bay: number }
   | { kind: 'ambient'; id: string }
 
 export interface SfxEvent {
@@ -56,6 +61,7 @@ export interface SfxState {
   improvements: readonly unknown[]
   career: Career
   nazma: NazmaVisit | null
+  serviceJobs: readonly ServiceJob[]
   notice: { id: number } | null
   staffOpen: boolean
   stockOpen: boolean
@@ -86,6 +92,8 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   fanfare: 2000,
   engine: 800,
   door: 300,
+  wrench: 1500,
+  lift: 1500,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -114,31 +122,63 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
     const before = new Map(prev.customers.map((c) => [c.id, c]))
     const after = new Set(next.customers.map((c) => c.id))
     const car = (c: Customer, spot: number): SfxSubject => ({ kind: 'vehicle', id: c.id, spot })
+    const serviceCar = (c: Customer): SfxSubject => ({
+      kind: 'vehicle',
+      id: c.id,
+      spot: c.service!.spot,
+      service: true,
+    })
     for (const c of next.customers) {
       const was = before.get(c.id)
       const subject: SfxSubject = { kind: 'customer', id: c.id }
       if (!was) {
+        // A drop-off walking back in for their car isn't news.
+        if (c.service?.returned) continue
         out.push({ cue: 'chime', subject })
         // A driver is heard coming up the road.
         if (c.vehicle) out.push({ cue: 'engine', subject: car(c, c.vehicle.spot) })
+        if (c.service) out.push({ cue: 'engine', subject: serviceCar(c) })
         continue
       }
       if (c.vehicle?.parked && !was.vehicle?.parked) {
         out.push({ cue: 'door', subject: car(c, c.vehicle.spot) })
       }
+      if (c.service?.parked && !was.service?.parked) {
+        out.push({ cue: 'door', subject: serviceCar(c) })
+      }
       if (c.phase !== 'leaving' || was.phase === 'leaving') continue
       if (c.leaveReason === 'bought') out.push({ cue: 'sale', subject })
-      // We bought their car.
-      else if (c.leaveReason === 'sold') out.push({ cue: 'coin' })
-      else if (c.leaveReason === 'refused' || c.leaveReason === 'impatient') {
+      // We bought their car, or they paid for a job.
+      else if (c.leaveReason === 'sold' || c.leaveReason === 'serviced') {
+        out.push({ cue: 'coin' })
+      } else if (c.leaveReason === 'refused' || c.leaveReason === 'impatient') {
         out.push({ cue: 'thud', subject })
       }
     }
     // A driver got back in and is pulling away.
     for (const c of prev.customers) {
-      if (after.has(c.id) || !c.vehicle || c.phase !== 'leaving') continue
-      if (c.vehicle.parked) out.push({ cue: 'door', subject: car(c, c.vehicle.spot) })
-      out.push({ cue: 'engine', subject: car(c, c.vehicle.spot) })
+      if (after.has(c.id) || c.phase !== 'leaving') continue
+      if (c.vehicle) {
+        if (c.vehicle.parked) out.push({ cue: 'door', subject: car(c, c.vehicle.spot) })
+        out.push({ cue: 'engine', subject: car(c, c.vehicle.spot) })
+      } else if (c.service) {
+        out.push({ cue: 'door', subject: serviceCar(c) })
+        out.push({ cue: 'engine', subject: serviceCar(c) })
+      }
+    }
+  }
+
+  // A job going onto a lift: the lift goes up and the wrenches come out. A
+  // car done and coming off it: the lift comes down.
+  if (next.serviceJobs !== prev.serviceJobs) {
+    const before = new Map(prev.serviceJobs.map((j) => [j.id, j.status]))
+    for (const j of next.serviceJobs) {
+      const was = before.get(j.id)
+      if (j.bay === null || was === j.status) continue
+      const subject: SfxSubject = { kind: 'bay', bay: j.bay }
+      if (j.status === 'inBay' && was === 'waiting') {
+        out.push({ cue: 'lift', subject }, { cue: 'wrench', subject })
+      } else if (was === 'inBay') out.push({ cue: 'lift', subject })
     }
   }
 

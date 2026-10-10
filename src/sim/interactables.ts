@@ -18,6 +18,7 @@ export type ActionId =
   | 'makeOffer'
   | 'offer'
   | 'appraise'
+  | 'checkIn'
   | 'closeDeal'
   | 'handOff'
   | 'orderStock'
@@ -31,6 +32,8 @@ export type ActionId =
 
 /** Real seconds the player spends looking a seller's car over. */
 export const APPRAISE_SECONDS = 4
+/** Real seconds the player spends checking a service client in. */
+export const CHECK_IN_SECONDS = 2
 
 /**
  * How an action plays out once the player reaches the object:
@@ -77,6 +80,14 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     verb: 'Appraising the car',
     mode: 'timed',
     durationMs: APPRAISE_SECONDS * 1000,
+  },
+  // A service client at the counter: hear what they need and quote the job.
+  checkIn: {
+    id: 'checkIn',
+    label: 'Check in',
+    verb: 'Checking them in',
+    mode: 'timed',
+    durationMs: CHECK_IN_SECONDS * 1000,
   },
   // Starts performing only once the customer is seated (see scene/Player).
   closeDeal: {

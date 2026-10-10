@@ -117,10 +117,12 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
 
 /**
  * What the player can do with a customer right now. A seller waits for an
- * offer. Nothing while a salesperson has them: the deal is theirs.
+ * offer, a service client to be checked in. Nothing while staff have them.
  */
 export function customerActions(c: Customer): ActionId[] {
   if (staffHandled(c)) return []
+  // A service client is checked in at the counter, then left to the garage.
+  if (c.service) return c.phase === 'waiting' ? ['checkIn'] : []
   switch (c.phase) {
     case 'browsing':
     case 'waiting':
@@ -159,7 +161,7 @@ export function customerInteractable(grid: Grid, c: Customer, tile: Tile): Inter
   return personInteractable(grid, c, 'customer', tile, customerActions(c))
 }
 
-const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'makeOffer', 'offer'])
+const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set(['greet', 'makeOffer', 'offer', 'checkIn'])
 
 export function isCustomerAction(action: ActionId): boolean {
   return CUSTOMER_ACTIONS.has(action)
@@ -432,8 +434,8 @@ export function recordMissed(
   let missedUsed = stats.missedUsed
   const usedInStock = available.some((c) => c.used)
   for (const c of arrived) {
-    // A seller isn't shopping.
-    if (c.selling) continue
+    // A seller or a service client isn't shopping.
+    if (c.selling || c.service) continue
     // A used-car shopper is missed for want of a used car, whatever its body type.
     if (c.archetype === 'used-shopper') {
       if (!usedInStock) missedUsed++

@@ -419,9 +419,23 @@ function BusinessTab({ touch, click }: TabProps) {
           their own.
         </p>
         <p>
-          A job still in a bay at closing is finished in overtime, at {formatMoney(OVERTIME_HOURLY)}{' '}
-          an hour, taken off the day&apos;s net. Cars still waiting for a bay go back on sale and
-          the parts money comes back.
+          Service clients drive in through the gate east of the east lot, park in the service spaces
+          and wait at the garage&apos;s counter. {click} them and choose <b>Check in</b> to quote
+          the job, or hire a <b>service advisor</b> to do it. Most take the quote. They&apos;re told
+          when it&apos;ll be ready: within an hour and they sit and wait, otherwise they leave the
+          car and come back for it. They pay for labor and parts when they collect it. The more cars
+          you&apos;ve sold, the more come in. Mondays are busiest, and the shop is shut on Sundays.
+        </p>
+        <p>
+          A happy client adds to your reputation. A car ready after the time promised, or a client
+          turned away (no mechanic, or no time left before closing), costs a point. So does one who
+          gives up waiting at the counter, like any customer.
+        </p>
+        <p>
+          A job still in a bay at closing, or a client&apos;s car still waiting for one, is finished
+          in overtime, at {formatMoney(OVERTIME_HOURLY)} an hour, taken off the day&apos;s net.
+          Clients who left their car collect it after hours. Your own cars still waiting for a bay
+          go back on sale and the parts money comes back.
         </p>
       </section>
       <section>
@@ -634,9 +648,14 @@ function PeopleTab({ touch, click }: TabProps) {
             the further they see.
           </li>
           <li>
-            A <b>mechanic</b> works a bay in the service garage, once you&apos;ve built it,
-            reconditioning used cars. The more skilled, the faster the work. Someone thinking of
-            quitting downs tools, and a job left in a bay waits for the next mechanic.
+            A <b>mechanic</b> works a bay in the service garage, once you&apos;ve built it, fixing
+            clients&apos; cars first, then reconditioning used cars. The more skilled, the faster
+            the work. Someone thinking of quitting downs tools, and a job left in a bay waits for
+            the next mechanic.
+          </li>
+          <li>
+            A <b>service advisor</b> sits at the garage&apos;s counter and checks service clients
+            in, so you don&apos;t have to. The more skilled, the quicker.
           </li>
         </ul>
       </section>

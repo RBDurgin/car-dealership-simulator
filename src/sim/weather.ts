@@ -156,7 +156,8 @@ export function waitingOutside(
 ): Set<string> {
   const ids = new Set<string>()
   for (const c of customers) {
-    if (c.phase !== 'waiting') continue
+    // A service client waits at the counter, indoors.
+    if (c.phase !== 'waiting' || c.service) continue
     const carId = c.browseCarIds[c.browseCarIds.length - 1]
     const car = carId ? inventory.find((x) => x.id === carId) : undefined
     if (!car || car.location === 'lot') ids.add(c.id)
