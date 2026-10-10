@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+import { bookSummary } from '../sim/clients'
 import { difficultyLabel } from '../sim/difficulty'
 import { tierName } from '../sim/franchise'
 import { bestMonthSoFar, TOP_RANK } from '../sim/progression'
@@ -14,6 +16,8 @@ export function WinScreen() {
   const franchise = useGame((s) => s.franchise)
   const difficulty = useGame((s) => s.difficulty)
   const rivalOpened = useGame((s) => s.rival.generation > 0)
+  const clients = useGame((s) => s.clients)
+  const book = useMemo(() => bookSummary(clients), [clients])
   if (!open) return null
 
   return (
@@ -38,6 +42,19 @@ export function WinScreen() {
           <dd className="price">{formatMoney(bestMonthSoFar(career))}</dd>
           <dt>Franchise</dt>
           <dd>{tierName(franchise)}</dd>
+          <dt>Client book</dt>
+          <dd>
+            {book.clients} client{book.clients === 1 ? '' : 's'}
+            {book.satisfaction !== null && (
+              <span className="muted">, satisfaction {book.satisfaction}</span>
+            )}
+          </dd>
+          {career.bestCsi !== null && (
+            <>
+              <dt>Best month&apos;s CSI</dt>
+              <dd>{career.bestCsi}</dd>
+            </>
+          )}
           {rivalOpened && (
             <>
               <dt>Rivals beaten</dt>

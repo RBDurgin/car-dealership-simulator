@@ -20,6 +20,7 @@ import {
 } from '../sim/clients'
 import { callList, type CallKind } from '../sim/calls'
 import { formatTime } from '../sim/clock'
+import { CSI_FLOOR, CSI_TIER_MIN, csiFactor, csiOf } from '../sim/csi'
 import { carName } from '../sim/interactables'
 import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
 import { useGame } from '../state/store'
@@ -51,6 +52,7 @@ const CALL_TITLES: Record<CallKind, string> = {
   beBack: 'Call them back about the car',
   tradeUp: 'Invite them in to trade up',
   checkIn: 'Check in on how they’re doing',
+  winBack: 'Try to win them back',
 }
 
 /** "Appointment today at 10:30 AM", "Appointment tomorrow at 2:00 PM". */
@@ -139,6 +141,7 @@ export function ClientsTab() {
   const loyalty = useGame((s) => s.clientPerks.loyaltyDiscount)
   const fee = useGame((s) => s.clientPerks.referralFee)
   const receptionist = useGame((s) => s.roster.some((e) => e.role === 'receptionist' && !e.fired))
+  const csi = useGame((s) => csiOf(s.monthCsi))
   const [filter, setFilter] = useState<ClientFilter>('all')
   const [shown, setShown] = useState(PAGE)
   const rows = useMemo(() => filterClients(clients, filter, day), [clients, filter, day])
@@ -170,6 +173,17 @@ export function ClientsTab() {
             <>
               <SatisfactionChip score={summary.satisfaction} />{' '}
               <span className="muted">on average</span>
+            </>
+          )}
+        </dd>
+        <dt title="The manufacturer's survey of this month's new-car buyers">CSI this month</dt>
+        <dd>
+          {csi === null ? (
+            <span className="muted">No new-car buyers yet</span>
+          ) : (
+            <>
+              <SatisfactionChip score={csi} />{' '}
+              <span className="muted">holdback ×{csiFactor(csi).toFixed(2)}</span>
             </>
           )}
         </dd>
@@ -260,6 +274,13 @@ export function ClientsTab() {
         days of being due, they buy elsewhere. Each visit is scored on the wait, the haggling, the
         price against what they hoped to pay, how clean the car was and the trade-in, and blended
         into how happy they are with you. A star over a waiting customer means they’re in the book.
+      </p>
+      <p className="muted">
+        Clients bring the car you sold them in for service every couple of weeks once you have a
+        garage; a job done on time pleases them and keeps their car’s trade-in value up. The month’s
+        CSI is the average score of its new-car buyers: under {CSI_FLOOR} the holdback loses a
+        quarter, and under {CSI_TIER_MIN} the manufacturer won’t move you up a tier. While {rival}{' '}
+        is open, clients who drift away may buy there instead; a call can sometimes win them back.
       </p>
     </>
   )

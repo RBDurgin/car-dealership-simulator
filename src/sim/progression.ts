@@ -51,6 +51,8 @@ export interface Career {
   rank: RankId
   /** Times Nazma's rival lot has gone bust. */
   rivalsBeaten: number
+  /** The best month's CSI (see `sim/csi.ts`), or null before a month with a new-car buyer. */
+  bestCsi: number | null
 }
 
 export function emptyCareer(): Career {
@@ -63,6 +65,7 @@ export function emptyCareer(): Career {
     bestMonth: 0,
     rank: RANKS[0].id,
     rivalsBeaten: 0,
+    bestCsi: null,
   }
 }
 
@@ -118,7 +121,8 @@ export function nextRank(id: RankId): Rank | null {
 /**
  * The day's sales and service added to `career`, its rank brought up to date at
  * `reputation` (after the day). On the month's last day (`monthEnd`) the
- * month's gross is weighed against the best month and starts again.
+ * month's gross is weighed against the best month and starts again, and its
+ * `csi` against the best month's CSI.
  */
 export function addDay(
   career: Career,
@@ -126,6 +130,7 @@ export function addDay(
   reputation: number,
   monthEnd: boolean,
   scale = 1,
+  csi: number | null = null,
 ): Career {
   const gross = totalGross(stats)
   const monthGross = career.monthGross + gross
@@ -140,6 +145,7 @@ export function addDay(
     bestMonth: monthEnd ? Math.max(career.bestMonth, monthGross) : career.bestMonth,
     rank: career.rank,
     rivalsBeaten: career.rivalsBeaten,
+    bestCsi: monthEnd && csi !== null ? Math.max(career.bestCsi ?? 0, csi) : career.bestCsi,
   }
   return { ...next, rank: rankOf(next, reputation, scale).id }
 }

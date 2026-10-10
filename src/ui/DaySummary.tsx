@@ -18,7 +18,8 @@ import {
   walkOuts,
   type DayStats,
 } from '../sim/deal'
-import { TIERS, tierName } from '../sim/franchise'
+import { heldByCsi, TIERS, tierName } from '../sim/franchise'
+import { CSI_FLOOR, CSI_TIER_MIN, csiFactor, csiOf } from '../sim/csi'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
@@ -92,6 +93,7 @@ export function DaySummary() {
   const weather = useGame((s) => s.weather)
   const monthSold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
+  const monthCsi = useGame((s) => csiOf(s.monthCsi))
   const difficulty = useGame((s) => s.difficulty)
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
@@ -334,9 +336,37 @@ export function DaySummary() {
               quotaLine(monthSold, quota, daysLeft(calendarOf(day).dayOfMonth))
             )}
           </dd>
+          <dt title="The manufacturer's survey of the month's new-car buyers">CSI</dt>
+          <dd>
+            {stats.quota ? (
+              stats.quota.csi === null ? (
+                <span className="muted">No new-car buyers this month</span>
+              ) : (
+                <>
+                  {stats.quota.csi}{' '}
+                  <span className="muted">
+                    (holdback ×{csiFactor(stats.quota.csi).toFixed(2)}
+                    {stats.quota.csi < CSI_FLOOR && `, under ${CSI_FLOOR}`})
+                  </span>
+                </>
+              )
+            ) : monthCsi === null ? (
+              <span className="muted">No new-car buyers yet this month</span>
+            ) : (
+              <>
+                {monthCsi} <span className="muted">so far this month</span>
+              </>
+            )}
+          </dd>
           <dt>Franchise</dt>
           <dd>
             {tierName(franchise)}
+            {stats.quota && heldByCsi(stats.quota) && (
+              <span className="muted">
+                {' '}
+                (quota met, but a CSI under {CSI_TIER_MIN} kept you from moving up)
+              </span>
+            )}
             {stats.quota && stats.quota.tier.from !== stats.quota.tier.to && (
               <span className="muted">
                 {' '}

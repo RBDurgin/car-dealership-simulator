@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { emptyCareer } from './progression'
 import { createRng } from './rng'
 import {
   acceptFinding,
@@ -48,6 +47,8 @@ import {
   returnFromShop,
   serviceDemand,
   takeDueVisits,
+  withBookVisits,
+  demandScale,
   TOWN_SERVICE,
   WARRANTY_HOURLY,
   warrantyPay,
@@ -59,7 +60,6 @@ import { buildInventory, type InventoryCar } from './inventory'
 import { usedStockCar } from './usedCars'
 import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 
-const sold = (sales: number) => ({ ...emptyCareer(), sales })
 // Day 1 is a Monday, day 7 a Sunday.
 const MONDAY = 1
 const THURSDAY = 4
@@ -125,33 +125,29 @@ describe('service demand', () => {
     expect(bayCount([])).toBe(0)
     expect(bayCount(['east-lot'])).toBe(0)
     expect(bayCount(['east-lot', GARAGE_EXPANSION])).toBe(GARAGE_BAYS)
-    expect(serviceDemand(THURSDAY, sold(200), { ...opts, bays: 0 })).toBe(0)
+    expect(serviceDemand(THURSDAY, { ...opts, bays: 0 })).toBe(0)
   })
 
-  it('rises with the cars sold over the game', () => {
-    expect(serviceDemand(THURSDAY, sold(0), opts)).toBe(TOWN_SERVICE)
-    expect(serviceDemand(THURSDAY, sold(200), opts)).toBeGreaterThan(
-      serviceDemand(THURSDAY, sold(40), opts),
-    )
+  it('is the town’s visits: the cars we sold come from the client book', () => {
+    expect(serviceDemand(THURSDAY, opts)).toBe(TOWN_SERVICE)
   })
 
   it('follows the week: Monday busiest, nobody on Sunday', () => {
-    const career = sold(100)
-    const week = [1, 2, 3, 4, 5, 6, 7].map((d) => serviceDemand(d, career, opts))
-    expect(Math.max(...week)).toBe(serviceDemand(MONDAY, career, opts))
-    expect(serviceDemand(SUNDAY, career, opts)).toBe(0)
+    const week = [1, 2, 3, 4, 5, 6, 7].map((d) => serviceDemand(d, opts))
+    expect(Math.max(...week)).toBe(serviceDemand(MONDAY, opts))
+    expect(serviceDemand(SUNDAY, opts)).toBe(0)
+    expect(demandScale(SUNDAY, 'standard')).toBe(0)
   })
 
   it('scales with the shop rate and the level', () => {
-    const career = sold(100)
-    const standard = serviceDemand(THURSDAY, career, opts)
-    expect(serviceDemand(THURSDAY, career, { ...opts, rate: 'budget' })).toBeGreaterThan(standard)
-    expect(serviceDemand(THURSDAY, career, { ...opts, rate: 'premium' })).toBeLessThan(standard)
-    expect(serviceDemand(THURSDAY, career, { ...opts, factor: 0.8 })).toBeCloseTo(standard * 0.8)
+    const standard = serviceDemand(THURSDAY, opts)
+    expect(serviceDemand(THURSDAY, { ...opts, rate: 'budget' })).toBeGreaterThan(standard)
+    expect(serviceDemand(THURSDAY, { ...opts, rate: 'premium' })).toBeLessThan(standard)
+    expect(serviceDemand(THURSDAY, { ...opts, factor: 0.8 })).toBeCloseTo(standard * 0.8)
   })
 
   it('is capped by the bays', () => {
-    expect(serviceDemand(MONDAY, sold(10_000), opts)).toBe(GARAGE_BAYS * JOBS_PER_BAY)
+    expect(serviceDemand(MONDAY, { ...opts, bays: 0.1 })).toBeCloseTo(0.1 * JOBS_PER_BAY)
   })
 })
 
@@ -202,6 +198,22 @@ describe('service visits', () => {
     expect(again.due).toEqual([])
     expect(again.schedule).toBe(first.schedule)
     expect(takeDueVisits(first.schedule, LAST_SERVICE_MINUTE).due).toEqual(plan.kinds.slice(2))
+  })
+
+  it('take in the client book’s visits by minute, saying whose they are', () => {
+    const plan = planServiceVisits(createRng(5), 3)
+    const merged = withBookVisits(plan, [
+      { clientId: 'client-1-0', minute: plan.minutes[0] - 1, kind: 'oil' },
+      { clientId: 'client-1-1', minute: LAST_SERVICE_MINUTE, kind: 'brakes' },
+    ])
+    expect(merged.minutes).toEqual([...merged.minutes].sort((a, b) => a - b))
+    expect(merged.clientIds[0]).toBe('client-1-0')
+    expect(merged.clientIds.at(-1)).toBe('client-1-1')
+    expect(merged.clientIds.filter((id) => id === null)).toHaveLength(plan.minutes.length)
+    const first = takeDueVisits(merged, merged.minutes[0])
+    expect(first.due).toEqual(['oil'])
+    expect(first.clientIds).toEqual(['client-1-0'])
+    expect(withBookVisits(plan, [])).toBe(plan)
   })
 })
 

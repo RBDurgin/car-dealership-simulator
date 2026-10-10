@@ -414,6 +414,15 @@ export const HIRES_KEPT = 6
 /** Strength he gains per skill point of each employee he poaches. */
 export const HIRE_STRENGTH = 2
 
+/** Strength a client from the book who goes to his lot adds (× the level's `growth`). */
+export const DEFECT_STRENGTH = 0.5
+
+/** `count` clients from the book bought from him: while he's open, each adds `DEFECT_STRENGTH`. */
+export function rivalDefected(rival: Rival, count: number, growth = 1): Rival {
+  if (rival.status !== 'open' || count <= 0) return rival
+  return { ...rival, strength: Math.min(100, rival.strength + count * DEFECT_STRENGTH * growth) }
+}
+
 /** A car of `model` stolen overnight: on his lot while he's open. */
 export function rivalStole(rival: Rival, model: CarModel): Rival {
   if (rival.status !== 'open') return rival
@@ -502,18 +511,21 @@ export const QUOTE_RATE = 1
 /**
  * Some of `arrived` have shopped at his lot first: each new-car shopper
  * carries his quote with odds of his `share` × `QUOTE_RATE`, on one of the
- * models they want. Used-car shoppers and sellers never do. Nothing unless
- * he's open.
+ * models they want. Used-car shoppers, sellers and the `loyal` clients from
+ * the book never do. Nothing unless he's open.
  */
 export function assignQuotes(
   arrived: readonly Customer[],
   rival: Rival,
   share: number,
   rng: Rng,
+  loyal: ReadonlySet<string> = new Set(),
 ): Customer[] {
   if (rival.status !== 'open' || share <= 0) return [...arrived]
   return arrived.map((c) => {
     if (c.selling || c.archetype === 'used-shopper' || c.preferredModels.length === 0) return c
+    // A loyal client comes straight to us.
+    if (c.clientId && loyal.has(c.clientId)) return c
     if (rng.next() >= share * QUOTE_RATE) return c
     const model = rng.pick(c.preferredModels)
     return { ...c, rivalQuote: { model, price: rivalPrice(rival, BASE_MSRP[model]) } }

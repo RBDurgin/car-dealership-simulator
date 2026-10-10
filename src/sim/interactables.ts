@@ -23,6 +23,7 @@ export type ActionId =
   | 'appraise'
   | 'checkIn'
   | 'recommend'
+  | 'pitch'
   | 'closeDeal'
   | 'handOff'
   | 'office'
@@ -36,6 +37,8 @@ export const APPRAISE_SECONDS = 4
 export const CHECK_IN_SECONDS = 2
 /** Real seconds the player spends telling a service client about extra work. */
 export const RECOMMEND_SECONDS = 2
+/** Real seconds the player spends pitching a trade-up to a service client. */
+export const PITCH_SECONDS = 3
 /** Real ms a call takes the player: `CALL_MINUTES` of game time at normal speed. */
 export const CALL_MS = Math.round((CALL_MINUTES * DEFAULT_DAY_MS) / (CLOSE_MINUTE - OPEN_MINUTE))
 
@@ -100,6 +103,14 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     verb: 'Explaining the work',
     mode: 'timed',
     durationMs: RECOMMEND_SECONDS * 1000,
+  },
+  // A client from the book waiting on their car, due to trade up soon: book them to come back for it.
+  pitch: {
+    id: 'pitch',
+    label: 'Pitch a trade-up',
+    verb: 'Talking trade-ups',
+    mode: 'timed',
+    durationMs: PITCH_SECONDS * 1000,
   },
   // Starts performing only once the customer is seated (see scene/Player).
   closeDeal: {

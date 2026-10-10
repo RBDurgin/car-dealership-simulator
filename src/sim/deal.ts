@@ -124,10 +124,15 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
 export function customerActions(c: Customer, jobs: readonly ServiceJob[] = []): ActionId[] {
   if (staffHandled(c)) return []
   // A service client is checked in at the counter, then left to the garage.
-  if (c.service) {
+  const visit = c.service
+  if (visit) {
     if (c.phase === 'waiting') return ['checkIn']
-    const job = jobs.find((j) => j.id === c.service!.jobId)
-    return c.phase === 'servicing' && openFinding(job) ? ['recommend'] : []
+    if (c.phase !== 'servicing') return []
+    const job = jobs.find((j) => j.id === visit.jobId)
+    const out: ActionId[] = openFinding(job) ? ['recommend'] : []
+    // A client from the book due to trade up soon, waiting on their car.
+    if (visit.pitch && !visit.dropOff && !visit.returned) out.push('pitch')
+    return out
   }
   switch (c.phase) {
     case 'browsing':
@@ -178,6 +183,7 @@ const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set([
   'offer',
   'checkIn',
   'recommend',
+  'pitch',
 ])
 
 export function isCustomerAction(action: ActionId): boolean {

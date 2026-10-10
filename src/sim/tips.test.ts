@@ -1,3 +1,4 @@
+import { CSI_FLOOR } from './csi'
 import { describe, expect, it } from 'vitest'
 import { WASH_BELOW } from './cleanliness'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
@@ -41,7 +42,7 @@ const base: TipState = {
   cash: 20_000,
   inventory,
   customers: [customer('c1')],
-  dayStats: { missed: {} },
+  dayStats: { missed: {}, quota: null },
   owner: null,
   nazma: null,
   franchise: 'bronze',
@@ -122,13 +123,28 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     {},
   ],
   restock: [{ inventory: withCar({ status: 'sold' }) }, {}],
-  missed: [{ dayStats: { missed: { sedan: 1 } } }, {}],
+  missed: [{ dayStats: { missed: { sedan: 1 }, quota: null } }, {}],
   nazma: [{ nazma: nazma('onLot') }, { nazma: nazma('coming') }],
   owner: [
     { owner: { goal: { kind: 'noImpatient' }, announced: true } },
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  csi: [
+    {
+      dayStats: {
+        missed: {},
+        quota: {
+          quota: 40,
+          sold: 42,
+          payout: 900,
+          csi: CSI_FLOOR - 1,
+          tier: { from: 'bronze', to: 'silver' },
+        },
+      },
+    },
+    {},
+  ],
   franchise: [{ franchise: 'silver' }, { franchise: 'bronze' }],
   expansion: [{ career: { rank: 'main-street' } }, { career: { rank: 'corner-lot' } }],
   seller: [

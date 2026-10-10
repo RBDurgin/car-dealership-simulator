@@ -1,3 +1,4 @@
+import { CSI_TIER_MIN, holdsTier } from './csi'
 import { carName } from './interactables'
 import type { CarModel } from './layout'
 import { HOLDBACK_FLOOR, type QuotaResult } from './quota'
@@ -64,19 +65,42 @@ export function lockedReason(model: CarModel, tier: FranchiseTier): string | nul
 /**
  * The tier after a month that ended with `result`: up one for meeting the
  * target, down one for selling under the holdback floor, otherwise the same.
- * `slack` (the level's `franchiseSlack`) lowers the share a month must fall
- * under before the tier drops.
+ * A month's CSI under `CSI_TIER_MIN` keeps the tier where it is even when the
+ * target was met. `slack` (the level's `franchiseSlack`) lowers the share a
+ * month must fall under before the tier drops.
  */
 export function nextTier(
   tier: FranchiseTier,
-  result: Pick<QuotaResult, 'quota' | 'sold'>,
+  result: Pick<QuotaResult, 'quota' | 'sold'> & { csi?: number | null },
   slack = 0,
 ): FranchiseTier {
   const share = result.sold / result.quota
   const i = rank(tier)
-  if (share >= 1) return TIERS[Math.min(i + 1, TIERS.length - 1)]
+  if (share >= 1) {
+    if (holdsTier(result.csi ?? null)) return tier
+    return TIERS[Math.min(i + 1, TIERS.length - 1)]
+  }
   if (share < HOLDBACK_FLOOR - slack) return TIERS[Math.max(i - 1, 0)]
   return tier
+}
+
+/**
+ * Whether the month in `result` met the target but its CSI kept the tier from
+ * going up (not at the top tier already).
+ */
+export function heldByCsi(result: QuotaResult): boolean {
+  return (
+    result.sold >= result.quota &&
+    result.tier.from === result.tier.to &&
+    rank(result.tier.from) < TIERS.length - 1 &&
+    holdsTier(result.csi)
+  )
+}
+
+/** The morning's word on a month that met the target but stayed put for its CSI. */
+export function heldNotice(result: QuotaResult): string {
+  const to = TIERS[rank(result.tier.from) + 1]
+  return `You met the quota, but your CSI of ${result.csi} kept you from ${tierName(to)}: the manufacturer wants ${CSI_TIER_MIN} or better.`
 }
 
 /** The morning's word on a tier change, or null if it didn't change. */

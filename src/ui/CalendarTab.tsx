@@ -41,6 +41,15 @@ import {
   quotaStatus,
 } from '../sim/quota'
 import {
+  CSI_FACTORS,
+  CSI_FLOOR,
+  CSI_PAR,
+  CSI_TIER_MIN,
+  CSI_TOP,
+  csiFactor,
+  csiOf,
+} from '../sim/csi'
+import {
   dayOrdinal,
   RECALL_FIRST,
   RECALL_LAST,
@@ -134,7 +143,13 @@ function MonthQuota({ day }: { day: number }) {
   const left = daysLeft(calendarOf(day).dayOfMonth)
   const status = quotaStatus(sales.count, quota, left)
   const tier = useGame((s) => s.franchise)
-  const payout = holdback(sales.count, quota, sales.msrp, TIER_PERKS[tier].holdback)
+  const csi = useGame((s) => csiOf(s.monthCsi))
+  const payout = holdback(
+    sales.count,
+    quota,
+    sales.msrp,
+    TIER_PERKS[tier].holdback * csiFactor(csi),
+  )
   return (
     <>
       <h3>
@@ -160,6 +175,17 @@ function MonthQuota({ day }: { day: number }) {
           </>
         )}
         . As things stand: <b className="price">{formatMoney(payout)}</b>.
+      </p>
+      <h3>
+        Customer satisfaction (CSI){' '}
+        <span className="muted">· {csi === null ? 'no new-car buyers yet' : csi}</span>
+      </h3>
+      <p className="muted cal-intro">
+        The manufacturer surveys every new-car buyer. The month&apos;s average scales the holdback:
+        × {CSI_FACTORS.under} under {CSI_FLOOR}, × 1 at {CSI_PAR}, up to × {CSI_FACTORS.top} from{' '}
+        {CSI_TOP}
+        {csi !== null && <> (× {csiFactor(csi).toFixed(2)} now)</>}. Under {CSI_TIER_MIN}, meeting
+        the quota won&apos;t move you up a tier.
       </p>
     </>
   )

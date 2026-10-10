@@ -117,7 +117,7 @@ export interface Client {
   friendsSent: number
   /** Thanked by phone since their last purchase: they refer more. */
   thanked: boolean
-  /** The day their car is due for service, or null (16f). */
+  /** The day their car is due for service, or null without a car from us (see `sim/clientService.ts`). */
   serviceDue: number | null
 }
 
@@ -125,6 +125,8 @@ export interface Client {
 export const PROSPECT_DAYS = 14
 /** Days after a purchase a client is due to trade up, rolled at the sale. */
 export const TRADE_UP_DAYS = { min: 30, max: 60 }
+/** Days between services of a car bought from us. */
+export const SERVICE_INTERVAL = 14
 /** Days after `dueDay` a client who hasn't come back has bought elsewhere. */
 export const LAPSE_DAYS = 21
 /** The book's size limit (see `pruneBook`). */
@@ -384,6 +386,7 @@ export function recordVisit(
       lastDeal: null,
       expires: null,
       dueDay: day + rng.int(TRADE_UP_DAYS.min, TRADE_UP_DAYS.max),
+      serviceDue: day + SERVICE_INTERVAL,
       // A new purchase: they'll send friends (and be thanked) afresh.
       friendsSent: 0,
       thanked: false,
@@ -459,6 +462,46 @@ export function dueCount(book: readonly Client[], day: number): number {
   return book.filter((c) => isDue(c, day)).length
 }
 
+// Nazma's lot (16f).
+
+/** At or over this satisfaction a client is loyal: they never shop at Nazma's first. */
+export const LOYAL = 80
+/** Most of those leaving the book who go to Nazma's. */
+export const MAX_DEFECT = 0.9
+
+/**
+ * The odds someone of `satisfaction` leaving the book (a lapsing client, an
+ * expiring unhappy prospect) went to Nazma's, with his lot taking `share` of
+ * the market: about a third at 70 with a 20% share, more the unhappier.
+ */
+export function defectChance(satisfaction: number, share: number): number {
+  const unhappy = 1.5 - clamp(satisfaction, 0, 100) / 100
+  return clamp(share * 2 * unhappy, 0, MAX_DEFECT)
+}
+
+/** Nazma's lot is open with `share` of the market; who leaves the book is rolled on `rng`. */
+export interface Defection {
+  share: number
+  rng: Rng
+}
+
+/** How many in `after` went to Nazma's since `before`. */
+export function newlyDefected(before: readonly Client[], after: readonly Client[]): Client[] {
+  const was = new Map(before.map((c) => [c.id, c.status]))
+  return after.filter((c) => c.status === 'defected' && was.get(c.id) !== 'defected')
+}
+
+/** The morning's word on people from the book who went to the rival lot overnight. */
+export function defectNotice(gone: readonly Client[], rival: string): string {
+  if (gone.length === 1) return `${gone[0].name} took their business to ${rival}.`
+  return `${gone.length} people from your client book took their business to ${rival}.`
+}
+
+/** Clients who are loyal (at or over `LOYAL`): returning, they carry no rival quote. */
+export function loyalIds(book: readonly Client[]): Set<string> {
+  return new Set(book.filter((c) => isActive(c) && c.satisfaction >= LOYAL).map((c) => c.id))
+}
+
 /** Statuses dropped first when the book is over `CLIENT_CAP`, in order. */
 const DROP_ORDER: readonly ClientStatus[] = ['defected', 'lapsed', 'prospect', 'client']
 
@@ -466,25 +509,45 @@ const DROP_ORDER: readonly ClientStatus[] = ['defected', 'lapsed', 'prospect', '
  * The book on the morning of `day`: expired prospects gone (unless booked
  * to come in), clients past
  * `dueDay + LAPSE_DAYS` lapsed (no car, not due), appointments from earlier
- * days dropped, and at most `CLIENT_CAP`
+ * days dropped. While Nazma's lot is open (`defect`), a lapsing client, or an
+ * expiring prospect under `UNHAPPY`, goes to him (`defected`) with
+ * `defectChance`. At most `CLIENT_CAP`
  * entries, dropping defected clients first, then lapsed ones, then the oldest
  * prospects (and, failing that, the clients seen longest ago). Returns the
  * same array when nothing changed.
  */
-export function pruneBook(book: Client[], day: number): Client[] {
+export function pruneBook(book: Client[], day: number, defect?: Defection): Client[] {
   let changed = false
   let kept: Client[] = []
+  // While Nazma's lot is open, someone leaving the book may go to him instead.
+  const defects = (c: Client) =>
+    !!defect && defect.share > 0 && defect.rng.next() < defectChance(c.satisfaction, defect.share)
+  const gone = (c: Client): Client => ({
+    ...c,
+    status: 'defected',
+    car: null,
+    dueDay: null,
+    expires: null,
+    serviceDue: null,
+    appointment: null,
+  })
   for (const c of book) {
     // A missed appointment (they didn't show, or nobody saw them) is dropped.
     const appointment = c.appointment && c.appointment.day < day ? null : c.appointment
     // A prospect booked to come in is kept for it.
     if (c.status === 'prospect' && c.expires !== null && day > c.expires && !appointment) {
       changed = true
+      // An unhappy prospect may have bought across the road.
+      if (c.satisfaction < UNHAPPY && defects(c)) kept.push(gone(c))
       continue
     }
     if (c.status === 'client' && c.dueDay !== null && day > c.dueDay + LAPSE_DAYS) {
       changed = true
-      kept.push({ ...c, status: 'lapsed', car: null, dueDay: null, appointment })
+      kept.push(
+        defects(c)
+          ? gone(c)
+          : { ...c, status: 'lapsed', car: null, dueDay: null, serviceDue: null, appointment },
+      )
       continue
     }
     if (appointment !== c.appointment) {
@@ -535,6 +598,8 @@ export interface ScoredVisit {
   outcome: VisitOutcome
   score: number
   reasons: ScoreReason[]
+  /** Bought a new car: counted in the month's CSI (see `sim/csi.ts`). */
+  newCar: boolean
 }
 
 /** What the client book did today. */
@@ -624,7 +689,10 @@ export function recordClients(
         prospects: s.prospects + (!before && entry.status === 'prospect' ? 1 : 0),
         returned: s.returned + (before && outcome === 'bought' ? 1 : 0),
         referrals: s.referrals + (referred ? 1 : 0),
-        scores: [...s.scores, { clientId: entry.id, outcome, ...score }],
+        scores: [
+          ...s.scores,
+          { clientId: entry.id, outcome, ...score, newCar: outcome === 'bought' && !car?.used },
+        ],
       },
     }
   }

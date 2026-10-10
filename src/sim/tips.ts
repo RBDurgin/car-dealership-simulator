@@ -1,3 +1,4 @@
+import { CSI_FLOOR } from './csi'
 import { WASH_BELOW } from './cleanliness'
 import { dueCount, type Client } from './clients'
 import { PLAYER_ID, type Customer } from './customers'
@@ -48,6 +49,7 @@ export type TipId =
   | 'tradeUpDue'
   | 'referral'
   | 'appreciation'
+  | 'csi'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -100,6 +102,7 @@ export const TIPS: Record<TipId, string> = {
     'A friend of one of your clients is here: their panel says who sent them. Happy clients send friends for a few weeks after buying. A referral fee in the Clients tab, and a thank-you call, make them send more.',
   appreciation:
     'Your book has 10 clients. Book a client appreciation day in the Calendar tab: a cookout on the lot that brings clients back, leaves them happier and brings in clients due to trade up.',
+  csi: `This month's CSI came in under ${CSI_FLOOR}, so the manufacturer cut the holdback by a quarter. Every new-car buyer's visit counts: keep waits short, haggle less, and hand over clean cars at a fair price.`,
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -117,7 +120,7 @@ export interface TipState {
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
-  dayStats: Pick<DayStats, 'missed'>
+  dayStats: Pick<DayStats, 'missed' | 'quota'>
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
   franchise: FranchiseTier
@@ -270,6 +273,10 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
         clientCount(next) >= APPRECIATION_TIP_CLIENTS &&
         clientCount(prev) < APPRECIATION_TIP_CLIENTS
       )
+    case 'csi': {
+      const csi = next.dayStats.quota?.csi
+      return !prev.dayStats.quota && csi !== undefined && csi !== null && csi < CSI_FLOOR
+    }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

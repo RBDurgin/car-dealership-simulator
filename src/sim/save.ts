@@ -4,6 +4,7 @@ import { CUSTOMER_VARIANTS } from './characters'
 import {
   defaultPerks,
   emptyMonthCsi,
+  SERVICE_INTERVAL,
   LOYALTY_DISCOUNTS,
   REFERRAL_FEES,
   type Appreciation,
@@ -41,7 +42,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 24
+export const SAVE_VERSION = 25
 
 export interface SaveData {
   version: number
@@ -299,6 +300,19 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
       ? raw.clients.map((c) => (isObject(c) ? { ...c, friendsSent: 0, thanked: false } : c))
       : raw.clients,
   }),
+  // v25: the best month's CSI (none yet), and clients with a car from us due
+  // for service a service interval after they bought it.
+  24: (raw) => ({
+    ...raw,
+    career: isObject(raw.career) ? { ...raw.career, bestCsi: null } : raw.career,
+    clients: Array.isArray(raw.clients)
+      ? raw.clients.map((c) =>
+          isObject(c) && c.status === 'client' && isObject(c.car) && isNumber(c.car.boughtDay)
+            ? { ...c, serviceDue: c.car.boughtDay + SERVICE_INTERVAL }
+            : c,
+        )
+      : raw.clients,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -469,6 +483,7 @@ function isCareer(v: unknown): boolean {
     isNumber(v.bestMonth) &&
     isRankId(v.rank) &&
     isNumber(v.rivalsBeaten) &&
+    (v.bestCsi === null || isNumber(v.bestCsi)) &&
     isObject(v.soldByModel) &&
     Object.entries(v.soldByModel).every(
       ([model, n]) => (CAR_MODELS as readonly string[]).includes(model) && isNumber(n),

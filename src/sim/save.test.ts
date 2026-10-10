@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultPerks,
   emptyMonthCsi,
+  SERVICE_INTERVAL,
   type Appreciation,
   type Client,
   type ClientPerks,
@@ -112,7 +113,7 @@ const client: Client = {
   referrals: 0,
   friendsSent: 0,
   thanked: false,
-  serviceDue: null,
+  serviceDue: 3 + SERVICE_INTERVAL,
 }
 
 const order: Order = {
@@ -436,6 +437,25 @@ describe('save data', () => {
     expect(parseSave({ ...save, clients: [old] })).toBeNull()
   })
 
+  it('upgrades a version 24 save: no best CSI yet, and clients due for service after buying', () => {
+    const save = createSave({ ...source(), clients: [client] }, 123)
+    const { bestCsi: _, ...career } = save.career
+    const v24 = {
+      ...save,
+      version: 24,
+      career,
+      clients: [
+        { ...client, serviceDue: null },
+        { ...client, id: 'p', status: 'prospect', car: null, serviceDue: null },
+      ],
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v24)))
+    expect(upgraded?.career.bestCsi).toBeNull()
+    expect(upgraded?.clients[0].serviceDue).toBe(client.car!.boughtDay + SERVICE_INTERVAL)
+    expect(upgraded?.clients[1].serviceDue).toBeNull()
+    expect(parseSave({ ...save, career })).toBeNull()
+  })
+
   it('upgrades a version 22 save with an empty client book', () => {
     const save = createSave({ ...source(), clients: [client] }, 123)
     const v22 = {
@@ -573,6 +593,7 @@ describe('save data', () => {
       days: 20,
       monthGross: 30_000,
       bestMonth: 95_000,
+      bestCsi: 84,
       rank: 'main-street',
       rivalsBeaten: 2,
       soldByModel: { sedan: 30, truck: 11 },

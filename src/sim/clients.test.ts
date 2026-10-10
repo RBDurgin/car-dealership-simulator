@@ -27,6 +27,12 @@ import {
   PRICE_CAP,
   PROSPECT_DAYS,
   pruneBook,
+  defectChance,
+  defectNotice,
+  LOYAL,
+  loyalIds,
+  MAX_DEFECT,
+  newlyDefected,
   QUICK_POINTS,
   reasonText,
   recordClients,
@@ -282,6 +288,46 @@ describe('pruneBook', () => {
     expect(pruneBook(book, DAY)).toBe(book)
   })
 
+  it('sends some of those leaving to Nazma’s while he’s open: unhappier ones likelier', () => {
+    expect(defectChance(70, 0)).toBe(0)
+    expect(defectChance(70, 0.2)).toBeCloseTo(0.32)
+    expect(defectChance(30, 0.2)).toBeGreaterThan(defectChance(90, 0.2))
+    expect(defectChance(0, 1)).toBe(MAX_DEFECT)
+    const lapsing = Array.from({ length: 200 }, (_, i) => entry(`c${i}`, { dueDay: 10 }))
+    const after = pruneBook(lapsing, 11 + LAPSE_DAYS, { share: 0.2, rng: createRng(3) })
+    const gone = newlyDefected(lapsing, after)
+    expect(gone.length / lapsing.length).toBeCloseTo(defectChance(lapsing[0].satisfaction, 0.2), 1)
+    for (const c of gone) {
+      expect(c).toMatchObject({ status: 'defected', car: null, dueDay: null, serviceDue: null })
+    }
+    expect(after.filter((c) => c.status === 'lapsed')).toHaveLength(200 - gone.length)
+    // Not while he's shut, and not with no share.
+    expect(newlyDefected(lapsing, pruneBook(lapsing, 11 + LAPSE_DAYS))).toEqual([])
+    const none = pruneBook(lapsing, 11 + LAPSE_DAYS, { share: 0, rng: createRng(3) })
+    expect(newlyDefected(lapsing, none)).toEqual([])
+  })
+
+  it('sends an expiring prospect to Nazma’s only if they’re unhappy', () => {
+    const prospect = (id: string, satisfaction: number) =>
+      entry(id, { status: 'prospect', car: null, dueDay: null, expires: 10, satisfaction })
+    const defect = { share: 1, rng: createRng(1) }
+    expect(pruneBook([prospect('h', UNHAPPY)], 11, defect)).toEqual([])
+    const [gone] = pruneBook([prospect('u', 10)], 11, defect)
+    expect(gone).toMatchObject({ id: 'u', status: 'defected', expires: null })
+  })
+
+  it('counts clients at LOYAL or more as loyal', () => {
+    const book = [
+      entry('a', { satisfaction: LOYAL }),
+      entry('b', { satisfaction: LOYAL - 1 }),
+      entry('c', { satisfaction: 95, status: 'defected' }),
+    ]
+    expect(loyalIds(book)).toEqual(new Set(['a']))
+    expect(defectNotice([book[0]], 'Nazma’s Motors')).toBe(
+      `${book[0].name} took their business to Nazma’s Motors.`,
+    )
+  })
+
   it('caps the book: defected first, then lapsed, then the oldest prospects', () => {
     const clients = Array.from({ length: CLIENT_CAP - 2 }, (_, i) => entry(`c${i}`))
     const defected = entry('d', { status: 'defected', car: null, dueDay: null })
@@ -393,7 +439,7 @@ describe('recordClients', () => {
     expect(book).toHaveLength(1)
     expect(stats).toMatchObject({ added: 1, prospects: 0, returned: 0 })
     expect(stats.scores).toEqual([
-      { clientId: book[0].id, outcome: 'bought', ...score(buyer({ id: 'b' })) },
+      { clientId: book[0].id, outcome: 'bought', ...score(buyer({ id: 'b' })), newCar: true },
     ])
   })
 
@@ -493,6 +539,7 @@ describe('the Clients tab', () => {
         outcome: 'bought' as const,
         score: 60,
         reasons: [{ kind: 'wait' as const, points: -20, detail: 42 }],
+        newCar: true,
       },
       {
         clientId: 'b',
@@ -502,12 +549,14 @@ describe('the Clients tab', () => {
           { kind: 'wait' as const, points: -10, detail: 31 },
           { kind: 'haggle' as const, points: -15, detail: 4 },
         ],
+        newCar: false,
       },
       {
         clientId: 'c',
         outcome: 'bought' as const,
         score: 90,
         reasons: [{ kind: 'goodPrice' as const, points: 10, detail: 5 }],
+        newCar: true,
       },
     ]
     expect(costliestReason(scores)).toBe('Long waits: 2 customers waited up to 42 minutes')

@@ -39,6 +39,8 @@ export interface QuotaResult {
   quota: number
   sold: number
   payout: number
+  /** The month's CSI (see `sim/csi.ts`), or null with no new-car buyer. */
+  csi: number | null
   /** The franchise tier the month was played at, and the one it earned. */
   tier: { from: FranchiseTier; to: FranchiseTier }
 }
@@ -75,7 +77,10 @@ export function holdbackRate(sold: number, quota: number): number {
   return 0
 }
 
-/** The holdback for the month, × the franchise tier's `factor`, rounded to $10. */
+/**
+ * The holdback for the month, × `factor` (the franchise tier's, and the CSI's
+ * `csiFactor`), rounded to $10.
+ */
 export function holdback(sold: number, quota: number, msrp: number, factor = 1): number {
   return Math.round((msrp * holdbackRate(sold, quota) * factor) / 10) * 10
 }

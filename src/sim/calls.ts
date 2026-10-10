@@ -1,5 +1,6 @@
 import {
   isDue,
+  PROSPECT_DAYS,
   returnChance,
   UNHAPPY,
   type AppointmentReason,
@@ -15,13 +16,15 @@ import { MIN_SKILL } from './staff'
  * Follow-up calls from the office desk phone (16c). The player, or a
  * receptionist with nobody waiting, calls one person from the book at a time:
  * a thank-you to a recent buyer, a prospect who walked out (a be-back), a
- * client due to trade up, or an unhappy client. A call can book an appointment for the next day, which
- * `planClientVisits` turns into a visit.
+ * client due to trade up, an unhappy client, or one who went to Nazma's (a
+ * win-back). A call can book an appointment for the next day, which
+ * `planClientVisits` turns into a visit, and a win-back can make someone a
+ * prospect again.
  */
 
-export type CallKind = 'thanks' | 'beBack' | 'tradeUp' | 'checkIn'
+export type CallKind = 'thanks' | 'beBack' | 'tradeUp' | 'checkIn' | 'winBack'
 
-export type CallOutcome = 'booked' | 'thanked' | 'notNow' | 'noAnswer' | 'annoyed'
+export type CallOutcome = 'booked' | 'thanked' | 'wonBack' | 'notNow' | 'noAnswer' | 'annoyed'
 
 /** Game minutes a call takes the player (about 10 seconds at normal speed). */
 export const CALL_MINUTES = 15
@@ -43,7 +46,12 @@ export const BOOK_ODDS: Record<CallKind, number> = {
   beBack: 0.45,
   tradeUp: 0.6,
   checkIn: 0.3,
+  winBack: 0,
 }
+/** The odds an answered win-back call makes them a prospect again, at satisfaction 50. */
+export const WIN_BACK_CHANCE = 0.3
+/** Satisfaction a win-back adds: someone noticed they'd gone. */
+export const WIN_BACK_POINTS = 5
 /** Most an answered call books. */
 export const MAX_BOOK = 0.9
 /** × the book odds per skill level from 3. */
@@ -58,15 +66,18 @@ const CALL_REASON: Record<CallKind, AppointmentReason | null> = {
   beBack: 'beBack',
   tradeUp: 'tradeUp',
   checkIn: 'checkIn',
+  winBack: null,
 }
 
 /**
  * Why `c` would be called on `day`, or null: a prospect is a be-back, a
  * client due to trade up a trade-up, an unhappy client a check-in, and a
- * buyer from the last `THANKS_DAYS` who hasn't been called since a thank-you.
+ * buyer from the last `THANKS_DAYS` who hasn't been called since a thank-you,
+ * and someone who went to Nazma's a win-back.
  */
 export function callKind(c: Client, day: number): CallKind | null {
   if (c.status === 'prospect') return 'beBack'
+  if (c.status === 'defected') return 'winBack'
   if (c.status !== 'client') return null
   if (isDue(c, day)) return 'tradeUp'
   if (c.satisfaction < UNHAPPY) return 'checkIn'
@@ -85,7 +96,7 @@ function calledLately(c: Client, day: number): boolean {
 }
 
 /** Kinds in the order they're worth calling: a due client is the likeliest sale, then a be-back. */
-const KIND_ORDER: readonly CallKind[] = ['tradeUp', 'beBack', 'checkIn', 'thanks']
+const KIND_ORDER: readonly CallKind[] = ['tradeUp', 'beBack', 'checkIn', 'thanks', 'winBack']
 
 /**
  * Who to call on `day`, likeliest to pay first: clients due to trade up and
@@ -138,10 +149,18 @@ export interface CallResult {
   change: number
 }
 
+/** The odds an answered win-back call to `c` wins them back, from a caller of `skill`. */
+export function winBackChance(c: Client, skill: number, scale = 1): number {
+  const mood = 0.6 + (c.satisfaction / 100) * 0.8
+  const craft = 1 + (skill - 3) * SKILL_STEP
+  return Math.min(MAX_BOOK, Math.max(0, WIN_BACK_CHANCE * mood * craft * scale))
+}
+
 /**
  * How a `kind` call to `c` goes, from a caller of `skill`: nobody picks up
  * (`NO_ANSWER`), a call past `MAX_CALLS` this cycle annoys them, a thank-you
- * pleases them, and otherwise they book (`bookChance`) or say not now.
+ * pleases them, a win-back wins them back (`winBackChance`) or not, and
+ * otherwise they book (`bookChance`) or say not now.
  */
 export function callOutcome(
   c: Client,
@@ -153,6 +172,10 @@ export function callOutcome(
   if (rng.next() < NO_ANSWER) return { outcome: 'noAnswer', change: 0 }
   if (c.callsThisCycle >= MAX_CALLS) return { outcome: 'annoyed', change: -ANNOY_POINTS }
   if (kind === 'thanks') return { outcome: 'thanked', change: THANKS_BOOST }
+  if (kind === 'winBack') {
+    const won = rng.next() < winBackChance(c, skill, opts.scale)
+    return won ? { outcome: 'wonBack', change: WIN_BACK_POINTS } : { outcome: 'notNow', change: 0 }
+  }
   if (rng.next() < bookChance(c, kind, skill, opts.scale)) return { outcome: 'booked', change: 0 }
   return { outcome: 'notNow', change: 0 }
 }
@@ -166,8 +189,9 @@ export function appointmentMinute(rng: Rng): number {
 /**
  * The book after a `kind` call to client `id` on `day` went `result`. Nobody
  * answering changes nothing. Otherwise the call is logged (`lastCall`,
- * `callsThisCycle`), satisfaction moves, and a booking sets an appointment
- * for the next day at `minute`.
+ * `callsThisCycle`), satisfaction moves, a booking sets an appointment
+ * for the next day at `minute`, and someone won back is a prospect again for
+ * `PROSPECT_DAYS`.
  */
 export function applyCall(
   book: Client[],
@@ -187,6 +211,11 @@ export function applyCall(
       callsThisCycle: c.callsThisCycle + 1,
       satisfaction: Math.min(100, Math.max(0, c.satisfaction + result.change)),
       ...(result.outcome === 'thanked' && { thanked: true }),
+      ...(result.outcome === 'wonBack' && {
+        status: 'prospect' as const,
+        expires: day + PROSPECT_DAYS,
+        callsThisCycle: 0,
+      }),
       ...(result.outcome === 'booked' &&
         reason && { appointment: { day: day + 1, minute, reason } }),
     }
@@ -282,8 +311,11 @@ export function callLine(name: string, kind: CallKind, result: CallResult, minut
     case 'notNow':
       if (kind === 'checkIn') return `${name}: "Thanks for checking. I'm fine for now."`
       if (kind === 'tradeUp') return `${name}: "I'm happy with my car for now, thanks."`
+      if (kind === 'winBack') return `${name}: "I'm doing business elsewhere now, thanks."`
       return `${name}: "Not right now, thanks."`
     case 'booked':
       return `${name} will come in tomorrow at ${formatTime(minute)}.`
+    case 'wonBack':
+      return `${name}: "Fair enough, I'll give you another look." They're a prospect again.`
   }
 }

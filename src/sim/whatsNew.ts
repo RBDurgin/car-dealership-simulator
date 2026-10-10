@@ -301,6 +301,18 @@ export const UPDATES: readonly Update[] = [
       'Book a client appreciation day in the Calendar tab: a cookout on the lot that brings your clients back.',
     ],
   },
+  {
+    id: 28,
+    phase: '16',
+    title: 'Customer satisfaction, service clients and Nazma',
+    items: [
+      'The manufacturer surveys new-car buyers each month (CSI). A low score cuts the holdback and blocks a tier-up.',
+      'Your clients bring the cars you sold them in for service, by name. Fewer strangers come from town.',
+      'Pitch a trade-up to a client waiting in the garage who is due soon, and they come back tomorrow to trade.',
+      'While Nazma’s lot is open, clients who drift away may buy there. Call them to win them back.',
+      'The owner may ask you to sell to returning clients.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

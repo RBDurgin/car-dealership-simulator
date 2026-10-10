@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultPerks, emptyMonthCsi, PROSPECT_DAYS, type Client } from '../sim/clients'
+import {
+  defaultPerks,
+  emptyMonthCsi,
+  PROSPECT_DAYS,
+  SERVICE_INTERVAL,
+  type Client,
+} from '../sim/clients'
 import { CLOSE_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
 import { createSave } from '../sim/save'
@@ -113,6 +119,13 @@ describe('the client book', () => {
     expect(game().dayStats.clients.scores).toEqual([
       expect.objectContaining({ clientId: alex.id, outcome: 'bought', score: alex.satisfaction }),
     ])
+  })
+
+  it('counts a new-car buyer’s score in the month’s CSI, due for service later', () => {
+    sellToAlex()
+    const [alex] = game().clients
+    expect(game().monthCsi).toEqual({ total: alex.satisfaction, count: 1 })
+    expect(alex.serviceDue).toBe(game().clock.day + SERVICE_INTERVAL)
   })
 
   it('keeps a greeted walk-out as a prospect, but not one nobody greeted', () => {

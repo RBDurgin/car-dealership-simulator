@@ -5,6 +5,8 @@ import { generateCustomer, type Customer } from './customers'
 import { BASE_MSRP, buildInventory } from './inventory'
 import {
   assignQuotes,
+  DEFECT_STRENGTH,
+  rivalDefected,
   emptyRival,
   emptyRivalStats,
   isRival,
@@ -354,6 +356,23 @@ describe('assignQuotes', () => {
     )
     const out = assignQuotes(others, open(), 0.35, createRng(1))
     expect(out.some((c) => c.rivalQuote)).toBe(false)
+  })
+
+  it('never quotes a loyal client from the book, but other clients as usual', () => {
+    const clients = shoppers.map((c, i) => ({ ...c, clientId: `client-1-${i}` }))
+    const loyal = new Set(clients.filter((_, i) => i % 2 === 0).map((c) => c.clientId))
+    const out = assignQuotes(clients, open(), 0.35, createRng(1), loyal)
+    expect(out.some((c) => c.rivalQuote && loyal.has(c.clientId!))).toBe(false)
+    expect(out.some((c) => c.rivalQuote && !loyal.has(c.clientId!))).toBe(true)
+  })
+
+  it('grows stronger for each client from the book who goes to him, only while open', () => {
+    const rival = open({ strength: 40 })
+    expect(rivalDefected(rival, 3).strength).toBeCloseTo(40 + 3 * DEFECT_STRENGTH)
+    expect(rivalDefected(rival, 2, 2).strength).toBeCloseTo(40 + 4 * DEFECT_STRENGTH)
+    expect(rivalDefected(rival, 0)).toBe(rival)
+    const shut = open({ status: 'closed' })
+    expect(rivalDefected(shut, 3)).toBe(shut)
   })
 
   it('quotes nobody unless he is open', () => {

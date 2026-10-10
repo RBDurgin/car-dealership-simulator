@@ -41,8 +41,12 @@ import {
   bookNames,
   clientCarInfo,
   defaultPerks,
+  defectNotice,
+  emptyClientStats,
   emptyMonthCsi,
   isDue,
+  loyalIds,
+  newlyDefected,
   loyaltyBonus,
   pickReturning,
   pruneBook,
@@ -184,7 +188,26 @@ import {
   type Career,
 } from '../sim/progression'
 import { addSale, emptyMonthSales, holdback, monthlyQuota, type MonthSales } from '../sim/quota'
-import { nextTier, START_TIER, TIER_PERKS, tierNotice, type FranchiseTier } from '../sim/franchise'
+import {
+  heldByCsi,
+  heldNotice,
+  nextTier,
+  START_TIER,
+  TIER_PERKS,
+  tierNotice,
+  type FranchiseTier,
+} from '../sim/franchise'
+import { addCsi, csiFactor, csiOf } from '../sim/csi'
+import {
+  afterService,
+  canPitch,
+  pitchBooked,
+  pitchChance,
+  planBookService,
+  recallClient,
+  recallOwners,
+  type ServiceOutcome,
+} from '../sim/clientService'
 import {
   applyChange,
   campaignScale,
@@ -209,6 +232,7 @@ import {
   sabotageScale,
   type Rival,
   type RivalStats,
+  rivalDefected,
 } from '../sim/rival'
 import { createRng, type Rng } from '../sim/rng'
 import type { SaveData } from '../sim/save'
@@ -288,6 +312,8 @@ import {
   type ServiceSchedule,
   type ServiceSettings,
   type ServiceStats,
+  demandScale,
+  withBookVisits,
 } from '../sim/service'
 import {
   comebackClient,
@@ -297,6 +323,7 @@ import {
   quoteAcceptChance,
   serviceClient,
   WAIT_LIMIT,
+  bookServiceClient,
 } from '../sim/serviceClients'
 import { recallDemand, recallNotice, recallOn, recallStarts } from '../sim/recalls'
 import { assignTrades, toTrader, tradeRecord } from '../sim/tradeIns'
@@ -842,10 +869,13 @@ export const useGame = create<GameState>((set, get) => {
       shift: tuning().satisfactionShift,
       rng: clientRng,
     })
+    // The month's CSI takes in today's new-car buyers as they're scored.
+    const scored = book.stats.scores.slice(s.dayStats.clients.scores.length)
     set({
       customers,
       inventory: browseDirt(s.inventory, s.customers, customers),
       clients: book.book,
+      monthCsi: addCsi(s.monthCsi, scored),
       dayStats: withClientStats(recordDepartures(s.dayStats, s.customers, customers), book.stats),
       menu: gone(s.menu?.targetId ?? null) ? null : s.menu,
       hoveredId: gone(s.hoveredId) ? null : s.hoveredId,
@@ -932,7 +962,8 @@ export const useGame = create<GameState>((set, get) => {
       : null
     const reputation = applyChange(s.reputation, reputationChange(s.dayStats, repScale(level)))
     const monthEnd = calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
-    const career = addDay(s.career, s.dayStats, reputation, monthEnd, level.rankScale)
+    const csi = csiOf(s.monthCsi)
+    const career = addDay(s.career, s.dayStats, reputation, monthEnd, level.rankScale, csi)
     const quota = monthEnd
       ? {
           quota: s.quota,
@@ -941,13 +972,14 @@ export const useGame = create<GameState>((set, get) => {
             s.monthSales.count,
             s.quota,
             s.monthSales.msrp,
-            TIER_PERKS[s.franchise].holdback,
+            TIER_PERKS[s.franchise].holdback * csiFactor(csi),
           ),
+          csi,
           tier: {
             from: s.franchise,
             to: nextTier(
               s.franchise,
-              { quota: s.quota, sold: s.monthSales.count },
+              { quota: s.quota, sold: s.monthSales.count, csi },
               level.franchiseSlack,
             ),
           },
@@ -1083,7 +1115,18 @@ export const useGame = create<GameState>((set, get) => {
       partsCost: job.partsCost,
       late: wasLate(job, c.service?.promisedMinute ?? null) ? 1 : 0,
     })
-    if (!job.redo) rollComeback(job, c)
+    if (!job.redo) {
+      serviceBook(c, wasLate(job, c.service?.promisedMinute ?? null) ? 'late' : 'serviced')
+      rollComeback(job, c)
+    }
+  }
+
+  /** How a service visit by client `c` from the book went moves their record. */
+  const serviceBook = (c: Customer, outcome: ServiceOutcome) => {
+    if (!c.clientId) return
+    const s = get()
+    const clients = afterService(s.clients, c.clientId, outcome, s.clock.day)
+    if (clients !== s.clients) set({ clients })
   }
 
   /**
@@ -1096,6 +1139,7 @@ export const useGame = create<GameState>((set, get) => {
     const skill = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
     if (serviceRng.next() >= comebackChance(skill, tuning().comebackScale)) return
     addService({ comebacks: 1 })
+    serviceBook(c, 'comeback')
     const minute = isClosed(s.clock) ? null : comebackMinute(s.clock.minute)
     if (minute === null) return
     set({ serviceComebacks: [...get().serviceComebacks, { minute, client: c }] })
@@ -1174,6 +1218,7 @@ export const useGame = create<GameState>((set, get) => {
       commit(reduceCustomers(get().customers, { type: 'respond', id: c.id, answer: 'walk' }))
     if (!inTime(promised)) {
       addService({ turnedAway: 1 })
+      serviceBook(c, 'turnedAway')
       walk()
       if (!player) return
       return notify(
@@ -1186,6 +1231,7 @@ export const useGame = create<GameState>((set, get) => {
     const free = visit.comeback || visit.kind === 'recall'
     if (!free && serviceRng.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
       addService({ declined: 1 })
+      serviceBook(c, 'turnedAway')
       walk()
       if (player) notify(`${c.name}: "That's more than I want to spend. I'll go elsewhere."`)
       return
@@ -1210,7 +1256,9 @@ export const useGame = create<GameState>((set, get) => {
   /**
    * Service clients due by `step` drive in while a service space is free (the
    * rest wait for one), and drop-offs whose time has come walk back in.
-   * Nobody new after closing.
+   * Clients from the book come by name, and a recall visit is one of the
+   * book's drivers of the recalled model while there's one who hasn't been
+   * in. Nobody new after closing.
    */
   const serviceArrivals = (step: GameTime, present: readonly Customer[]) => {
     const s = get()
@@ -1218,16 +1266,35 @@ export const useGame = create<GameState>((set, get) => {
       return { schedule: s.serviceVisits, arrived: [], away: s.serviceAway, comebacks: [] }
     }
     const free = freeServiceSpots(present, s.serviceAway)
-    const { schedule, due } = takeDueVisits(s.serviceVisits, step.minute, free)
+    const { schedule, due, clientIds } = takeDueVisits(s.serviceVisits, step.minute, free)
     const arrived: Customer[] = []
     const recalled = recallOn(step.day, bayCount(expansionsUp(s)))?.model ?? null
+    // Nobody from the book twice: not those on the lot, away, or just arrived.
+    const busy = new Set(
+      [...present, ...s.serviceAway].flatMap((c) => (c.clientId ? [c.clientId] : [])),
+    )
     due.forEach((kind, i) => {
       const id = `service-${step.day}-${s.serviceVisits.spawned + i + 1}`
       const spot = freeServiceSpot([...present, ...arrived], s.serviceAway)!
       const rate = s.service.rate
-      arrived.push(
-        serviceClient(id, kind, spot, serviceRng, step.day, rate, tuning().patience, recalled),
-      )
+      const patience = tuning().patience
+      const named = clientIds[i]
+      const client =
+        named !== null
+          ? s.clients.find((c) => c.id === named && !busy.has(c.id))
+          : kind === 'recall' && recalled
+            ? recallClient(s.clients, recalled, step.day, busy, clientRng)
+            : null
+      if (client?.car) {
+        busy.add(client.id)
+        arrived.push(
+          bookServiceClient(client, id, kind, spot, serviceRng, step.day, rate, patience),
+        )
+        return
+      }
+      // A client from the book who can't come (on the lot already) doesn't.
+      if (named !== null) return
+      arrived.push(serviceClient(id, kind, spot, serviceRng, step.day, rate, patience, recalled))
     })
     // Clients whose job didn't hold drive back in, while there's a space.
     const comebacks: Comeback[] = []
@@ -1487,6 +1554,8 @@ export const useGame = create<GameState>((set, get) => {
         const c = get().customers.find((x) => x.id === finished.targetId)
         return c?.service?.jobId ? offerFinding(c.service.jobId, PLAYER_ID) : undefined
       }
+      case 'pitch':
+        return pitch(finished.targetId)
       case 'offer':
         return offer(finished.targetId)
       case 'closeDeal':
@@ -1507,6 +1576,34 @@ export const useGame = create<GameState>((set, get) => {
     }
   }
 
+  /**
+   * The player pitches a trade-up to service client `id`, a client from the
+   * book due soon, once a visit. Taken (`pitchChance`), they're booked to come
+   * back tomorrow, ready to trade in the car we're servicing.
+   */
+  const pitch = (id: string) => {
+    const s = get()
+    const c = s.customers.find((x) => x.id === id)
+    const client = c?.clientId ? s.clients.find((x) => x.id === c.clientId) : undefined
+    if (!c?.service?.pitch) return
+    commit(
+      s.customers.map((x) => (x === c ? { ...x, service: { ...c.service!, pitch: false } } : x)),
+    )
+    const car = carName(c.service.car.model)
+    if (!client || !canPitch(client, s.clock.day) || clientRng.next() >= pitchChance(client)) {
+      return notify(`${c.name}: "I'm happy with my ${car} for now, thanks."`)
+    }
+    const minute = appointmentMinute(clientRng)
+    const stats = get().dayStats.clients
+    set({
+      clients: pitchBooked(get().clients, client.id, s.clock.day, minute),
+      dayStats: withClientStats(get().dayStats, { ...stats, booked: stats.booked + 1 }),
+    })
+    notify(
+      `${c.name} will come back tomorrow at ${formatTime(minute)} to look at trading in their ${car}.`,
+    )
+  }
+
   /** Updates today's Nazma tally. */
   const tallyNazma = (change: Partial<NazmaStats>) => {
     const stats = get().dayStats
@@ -1523,7 +1620,13 @@ export const useGame = create<GameState>((set, get) => {
   /** Some of `arrived` have been to the rival's lot first and carry his price. */
   const withQuotes = (arrived: readonly Customer[]) => {
     const s = get()
-    return assignQuotes(arrived, s.rival, s.dayStats.rival?.share ?? 0, quoteRng)
+    return assignQuotes(
+      arrived,
+      s.rival,
+      s.dayStats.rival?.share ?? 0,
+      quoteRng,
+      loyalIds(s.clients),
+    )
   }
 
   /** Stores Nazma's visit, dropping a confront aimed at him once he's no longer on the lot. */
@@ -1878,31 +1981,16 @@ export const useGame = create<GameState>((set, get) => {
       : null
     const newMonth = date.dayOfMonth === 1
     const bays = bayCount(installedExpansions(s.expansions, day))
-    const demand = serviceDemand(day, s.career, {
-      bays,
-      rate: s.service.rate,
-      factor: level.serviceDemand,
-    })
-    // Recall visits come on top, within what the bays can take.
-    const recalls = Math.min(recallDemand(day, s.career, bays), bays * JOBS_PER_BAY - demand)
+    const demand = serviceDemand(day, { bays, rate: s.service.rate, factor: level.serviceDemand })
     const recall = recallStarts(day, bays, bayCount(installedExpansions(s.expansions, day - 1)))
       ? recallOn(day, bays)
       : null
-    const owner = isOwnerDay(day)
-      ? {
-          goal: generateGoal(
-            createRng(OWNER_SEED + day),
-            inventory,
-            salesStaff,
-            !!event,
-            SERVICE_WEEKDAY[date.weekday] > 0 ? bays : 0,
-          ),
-          announced: false,
-        }
-      : null
-    // The book's day, all on its own rng: appointments and due clients, the
-    // friends happy clients send in, and on appreciation day the guests.
-    const pruned = pruneBook(s.clients, day)
+    // The book's day, all on its own rng: who leaves it (to Nazma's, while
+    // he's open), appointments and due clients, the friends happy clients send
+    // in, on appreciation day the guests, and the cars we sold due for service.
+    const open = rival.status === 'open'
+    const pruned = pruneBook(s.clients, day, open ? { share, rng: clientRng } : undefined)
+    const defectors = newlyDefected(s.clients, pruned)
     const coming = planClientVisits(
       pruned,
       day,
@@ -1924,11 +2012,35 @@ export const useGame = create<GameState>((set, get) => {
       : []
     const clientVisits = [...coming, ...friends, ...guests].sort((a, b) => a.minute - b.minute)
     const clients = countFriends(pruned, clientVisits)
+    const cap = bays * JOBS_PER_BAY
+    const bookService = planBookService(clients, day, clientRng, {
+      scale: demandScale(day, s.service.rate, level.serviceDemand),
+      clientReturn: level.clientReturn,
+      max: bays > 0 ? cap - demand : 0,
+      skip: new Set(clientVisits.map((v) => v.clientId)),
+    })
+    // Recall visits come on top, within what the bays can take.
+    const recalls = Math.min(recallDemand(day, s.career, bays), cap - demand - bookService.length)
+    const returning = clients.filter((c) => isDue(c, day) || c.appointment?.day === day).length
+    const owner = isOwnerDay(day)
+      ? {
+          goal: generateGoal(
+            createRng(OWNER_SEED + day),
+            inventory,
+            salesStaff,
+            !!event,
+            SERVICE_WEEKDAY[date.weekday] > 0 ? bays : 0,
+            returning,
+          ),
+          announced: false,
+        }
+      : null
     // GameClock picks up the new day and resyncs the running time.
     set({
       clock: startOfDay(day),
       weather,
       monthSales: newMonth ? emptyMonthSales() : s.monthSales,
+      monthCsi: newMonth ? emptyMonthCsi() : s.monthCsi,
       quota: newMonth ? monthlyQuota(date.month, BASE_SLOTS, s.reputation, level.quota) : s.quota,
       inventory,
       orders: [],
@@ -1952,13 +2064,13 @@ export const useGame = create<GameState>((set, get) => {
       serviceJobs: [],
       serviceAway: [],
       serviceComebacks: [],
-      serviceVisits: planServiceVisits(serviceRng, demand, recalls),
+      serviceVisits: withBookVisits(planServiceVisits(serviceRng, demand, recalls), bookService),
       clients,
       clientVisits,
       callsTried: [],
       playerCall: null,
       receptionCall: null,
-      rival,
+      rival: rivalDefected(rival, defectors.length, level.rivalStrength),
       ...(bust && {
         reputation: applyChange(s.reputation, BUST_REPUTATION),
         career: { ...s.career, rivalsBeaten: s.career.rivalsBeaten + 1 },
@@ -1972,6 +2084,7 @@ export const useGame = create<GameState>((set, get) => {
           rival: rival.status === 'open' ? rival.name : null,
         },
         rival: rival.status === 'open' ? emptyRivalStats(share) : null,
+        clients: { ...emptyClientStats(), defected: defectors.length },
       },
       missedYesterday: s.dayStats.missed,
       candidates: generateCandidates(staffRng, day, installedExpansions(s.expansions, day)),
@@ -1983,10 +2096,17 @@ export const useGame = create<GameState>((set, get) => {
     const notices = [
       s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
       s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
+      s.dayStats.quota && heldByCsi(s.dayStats.quota) && heldNotice(s.dayStats.quota),
       s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
       opening.event && rivalNotice(rival, opening.event),
       eventNotice(day),
-      recall && recallNotice(recall, s.career.soldByModel[recall.model] ?? 0),
+      recall &&
+        recallNotice(
+          recall,
+          s.career.soldByModel[recall.model] ?? 0,
+          recallOwners(clients, recall.model),
+        ),
+      defectors.length > 0 && defectNotice(defectors, rival.name),
       theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
       delivered.length > 0 && deliveryNotice(delivered),
       appointmentsNotice(clients, day),
@@ -2134,7 +2254,8 @@ export const useGame = create<GameState>((set, get) => {
       })
       const { schedule, due } = takeDue(s.arrivals, step.minute)
       // Clients on an appointment come first, and get first pick of the parking.
-      const booked = clientArrivals(step.minute, customers)
+      // Loyal clients come straight to us; the rest may have seen Nazma's prices.
+      const booked = withQuotes(clientArrivals(step.minute, customers))
       customers = [...customers, ...booked]
       const stock = availableCars(s.inventory)
       // Some drive in, while there's room in customer parking. Some of those

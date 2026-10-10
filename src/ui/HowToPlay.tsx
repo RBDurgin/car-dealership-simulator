@@ -1,8 +1,16 @@
+import { CSI_FACTORS, CSI_FLOOR, CSI_PAR, CSI_TIER_MIN, CSI_TOP } from '../sim/csi'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
 import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
-import { LAPSE_DAYS, PROSPECT_DAYS, TRADE_UP_DAYS } from '../sim/clients'
+import {
+  DUE_SOON,
+  LAPSE_DAYS,
+  LOYAL,
+  PROSPECT_DAYS,
+  SERVICE_INTERVAL,
+  TRADE_UP_DAYS,
+} from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import {
@@ -385,6 +393,20 @@ function SellingTab({ touch, click }: TabProps) {
           fee (see the Business tab) or after a thank-you call. A friend&apos;s panel says who sent
           them. If they buy, the client is happier with you and the friend joins the book too.
         </p>
+        <p>
+          Once you have a service garage, clients bring the car you sold them in for service about
+          every {SERVICE_INTERVAL} days, by name. A job done on time leaves them happier and keeps
+          their car in better shape for its trade-in; a late one, a comeback or being turned away
+          costs. A client waiting in the garage who&apos;s due to trade up within {DUE_SOON} days
+          can be pitched: {click.toLowerCase()} them and choose <b>Pitch a trade-up</b>. If
+          they&apos;re keen, they come back tomorrow to trade in the car you just serviced.
+        </p>
+        <p>
+          While {RIVAL_NAMES[0]} is open across the road, clients who drift away (and unhappy
+          prospects) may buy from him instead: the Clients tab shows them as at his lot. Call them
+          and you may win them back as a prospect. Clients at {LOYAL} or more satisfaction are loyal
+          and come straight to you without his price.
+        </p>
       </section>
       <section>
         <h3>Reputation</h3>
@@ -520,8 +542,10 @@ function BusinessTab({ touch, click }: TabProps) {
           and wait at the garage&apos;s counter. {click} them and choose <b>Check in</b> to quote
           the job, or hire a <b>service advisor</b> to do it. Most take the quote. They&apos;re told
           when it&apos;ll be ready: within an hour and they sit and wait, otherwise they leave the
-          car and come back for it. They pay for labor and parts when they collect it. The more cars
-          you&apos;ve sold, the more come in. Mondays are busiest, and the shop is shut on Sundays.
+          car and come back for it. They pay for labor and parts when they collect it. A few come
+          from town every day, and your clients bring the cars you sold them (see Clients on the
+          Selling tab), so the bigger your book, the busier the garage. Mondays are busiest, and the
+          shop is shut on Sundays.
         </p>
         <p>
           The <b>shop rate</b> is set on the Service tab:{' '}
@@ -548,11 +572,11 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>
           Some months the manufacturer <b>recalls</b> a model, from the {dayOrdinal(RECALL_FIRST)}{' '}
           to the {dayOrdinal(RECALL_LAST)}. About {Math.round(RECALL_RESPONSE * 100)}% of the people
-          you sold one to bring it in over that time, on top of the usual clients. Check them in
-          like anyone else: they pay nothing, and the manufacturer pays for the work (
-          {formatMoney(WARRANTY_HOURLY)} an hour, and the parts at cost). Extra work found on a
-          recalled car is paid by the client as usual. The Calendar and Service tabs show the recall
-          on now.
+          you sold one to bring it in over that time, on top of the usual clients, your own clients
+          who drive one first (the notice says how many there are). Check them in like anyone else:
+          they pay nothing, and the manufacturer pays for the work ({formatMoney(WARRANTY_HOURLY)}{' '}
+          an hour, and the parts at cost). Extra work found on a recalled car is paid by the client
+          as usual. The Calendar and Service tabs show the recall on now.
         </p>
         <p>
           A job still in a bay at closing, or a client&apos;s car still waiting for one, is finished
@@ -610,14 +634,20 @@ function BusinessTab({ touch, click }: TabProps) {
           {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
           new car sold counts, whoever makes it; used cars don&apos;t.
         </p>
+        <p>
+          The manufacturer also surveys every new-car buyer: the month&apos;s average visit score is
+          its <b>CSI</b>. It scales the holdback: × {CSI_FACTORS.under} under {CSI_FLOOR}, × 1 at{' '}
+          {CSI_PAR}, up to × {CSI_FACTORS.top} from {CSI_TOP}. The Calendar and Clients tabs show
+          the month&apos;s CSI so far.
+        </p>
       </section>
       <section>
         <h3>Franchise tier</h3>
         <p>
           The manufacturer ranks its dealers Bronze, Silver and Gold, and you start at Bronze. A
-          month that meets the quota moves you up a tier; one under{' '}
-          {Math.round(HOLDBACK_FLOOR * 100)}% of it drops you a tier. A higher tier pays less for
-          stock, gets a bigger holdback and may order the top models:
+          month that meets the quota moves you up a tier, as long as its CSI is {CSI_TIER_MIN} or
+          better; one under {Math.round(HOLDBACK_FLOOR * 100)}% of it drops you a tier. A higher
+          tier pays less for stock, gets a bigger holdback and may order the top models:
         </p>
         <ul>
           {TIERS.map((t) => {

@@ -21,11 +21,15 @@ import {
   takeDueClients,
   THANKS_BOOST,
   THANKS_DAYS,
+  WIN_BACK_CHANCE,
+  WIN_BACK_POINTS,
+  winBackChance,
   type CallKind,
 } from './calls'
 import {
   emptyClientStats,
   LAPSE_DAYS,
+  PROSPECT_DAYS,
   pruneBook,
   recordClients,
   returnChance,
@@ -98,11 +102,46 @@ describe('callKind', () => {
     expect(callKind(person('t', { car: boughtOn(DAY - THANKS_DAYS) }), DAY)).toBe('thanks')
   })
 
-  it('leaves out an old buyer, one already thanked, and lapsed or defected clients', () => {
+  it('leaves out an old buyer, one already thanked, and lapsed clients', () => {
     expect(callKind(person('o', { car: boughtOn(DAY - THANKS_DAYS - 1) }), DAY)).toBeNull()
     expect(callKind(person('t', { car: boughtOn(DAY), callsThisCycle: 1 }), DAY)).toBeNull()
     expect(callKind(person('l', { status: 'lapsed', satisfaction: 20 }), DAY)).toBeNull()
-    expect(callKind(person('d', { status: 'defected', satisfaction: 20 }), DAY)).toBeNull()
+  })
+
+  it('tries to win back a client who went to the rival, last on the list', () => {
+    const gone = person('d', { status: 'defected', satisfaction: 20 })
+    expect(callKind(gone, DAY)).toBe('winBack')
+    const list = callList([gone, prospect('p')], DAY)
+    expect(list.map((e) => e.kind)).toEqual(['beBack', 'winBack'])
+  })
+
+  it('wins some back as prospects, more by a skilled caller', () => {
+    const gone = person('d', { status: 'defected', satisfaction: 50 })
+    expect(winBackChance(gone, 5)).toBeGreaterThan(winBackChance(gone, 1))
+    expect(winBackChance(gone, 3)).toBeCloseTo(WIN_BACK_CHANCE)
+    let won = 0
+    for (let i = 0; i < 400; i++) {
+      const r = callOutcome(gone, 'winBack', 3, createRng(i))
+      if (r.outcome === 'wonBack') won++
+      expect(['wonBack', 'notNow', 'noAnswer']).toContain(r.outcome)
+    }
+    expect(won / 400).toBeCloseTo((1 - NO_ANSWER) * WIN_BACK_CHANCE, 1)
+    const back = applyCall(
+      [gone],
+      'd',
+      'winBack',
+      { outcome: 'wonBack', change: WIN_BACK_POINTS },
+      DAY,
+      0,
+    )
+    expect(back[0]).toMatchObject({
+      status: 'prospect',
+      expires: DAY + PROSPECT_DAYS,
+      satisfaction: 50 + WIN_BACK_POINTS,
+      appointment: null,
+    })
+    const no = applyCall([gone], 'd', 'winBack', { outcome: 'notNow', change: 0 }, DAY, 0)
+    expect(no[0].status).toBe('defected')
   })
 })
 
