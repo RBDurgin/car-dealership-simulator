@@ -1,6 +1,6 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
   AdditiveBlending,
   Box3,
@@ -15,7 +15,7 @@ import {
   type Object3D,
 } from 'three'
 import type { Vec2 } from '../sim/grid'
-import { improvementProps, installed, slotTier, swappedModel } from '../sim/improvements'
+import { improvementProps, slotTier, swappedModel } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
 import {
   DEALERSHIP_NAME,
@@ -29,6 +29,7 @@ import {
   type Rect,
 } from '../sim/layout'
 import { PLAYER_RADIUS } from '../sim/movement'
+import { upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
 import { customerPos, interactables, layout, playerPos, rectBounds } from './runtime'
@@ -333,7 +334,7 @@ function Bulbs({ w, h, postX, gap }: { w: number; h: number; postX: number; gap:
 /** The dealership sign, as the upgrades have it (0 is the one it opened with). */
 function Sign({ width }: { width: number }) {
   const texture = useSignTexture()
-  const tier = useGame((s) => slotTier(installed(s.improvements, s.clock.day), 'sign'))
+  const tier = useGame((s) => slotTier(upNow(s), 'sign'))
   const { boardY, extraWidth, post } = SIGN_TIERS[tier]
   const lit = tier >= 2
   const boardW = width - 0.2 + extraWidth
@@ -434,7 +435,29 @@ interface PropViewProps {
   turntable?: boolean
 }
 
-function PropView(props: PropViewProps) {
+/** Same prop, drawn the same: `carProp` makes a fresh prop for each car whenever the stock changes. */
+function samePropView(a: PropViewProps, b: PropViewProps): boolean {
+  const p = a.prop
+  const q = b.prop
+  return (
+    (p === q ||
+      (p.id === q.id &&
+        p.model === q.model &&
+        p.rect === q.rect &&
+        p.facing === q.facing &&
+        !!p.platform === !!q.platform &&
+        p.elevation === q.elevation)) &&
+    a.cleanliness === b.cleanliness &&
+    a.condition === b.condition &&
+    a.turntable === b.turntable
+  )
+}
+
+/**
+ * One prop or car. Memoised, so a change to the stock redraws only the cars
+ * it changed (a wash, a smudge, a sale), not all of them.
+ */
+const PropView = memo(function PropView(props: PropViewProps) {
   const { prop } = props
   const content = <PropContent {...props} />
   return interactables.has(prop.id) ? (
@@ -444,7 +467,7 @@ function PropView(props: PropViewProps) {
       {content}
     </group>
   )
-}
+}, samePropView)
 
 function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps) {
   const b = rectBounds(prop.rect)

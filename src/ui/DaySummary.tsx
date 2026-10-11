@@ -90,8 +90,13 @@ function ClientsBlock({ stats }: { stats: ClientStats }) {
   )
 }
 
+/** The end-of-day summary: selects nothing else until the day is over. */
 export function DaySummary() {
   const open = useGame(dayOver)
+  return open ? <SummaryPanel /> : null
+}
+
+function SummaryPanel() {
   const day = useGame((s) => s.clock.day)
   const stats = useGame((s) => s.dayStats)
   const records = useGame((s) => s.records)
@@ -107,7 +112,6 @@ export function DaySummary() {
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const rankScale = useGame((s) => levelTuning(s).rankScale)
-  if (!open) return null
   const progress = rankProgress(career, reputation, rankScale)
   const event = eventOn(day)
   const missed = missedSummary(stats.missed)

@@ -436,10 +436,17 @@ export function serviceArrivals(k: Kit, step: GameTime, present: readonly Custom
     arrived.push(comebackClient(back.client, `comeback-${step.day}-${step.minute}-${n}`, spot))
   }
   const due2 = (c: Customer) => (c.service?.promisedMinute ?? Infinity) <= step.minute
-  for (const c of s.serviceAway.filter(due2)) {
+  const back = s.serviceAway.filter(due2)
+  for (const c of back) {
     arrived.push({ ...c, phase: 'servicing', service: { ...c.service!, returned: true } })
   }
-  return { schedule, arrived, away: s.serviceAway.filter((c) => !due2(c)), comebacks }
+  // The same lists when nobody moved, so nothing watching them sees a change.
+  return {
+    schedule,
+    arrived,
+    away: back.length === 0 ? s.serviceAway : s.serviceAway.filter((c) => !due2(c)),
+    comebacks: comebacks.length === s.serviceComebacks.length ? s.serviceComebacks : comebacks,
+  }
 }
 
 /**

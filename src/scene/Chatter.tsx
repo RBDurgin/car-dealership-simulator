@@ -21,6 +21,7 @@ import type { Vec2 } from '../sim/grid'
 import { OWNER_ID } from '../sim/owner'
 import { createRng } from '../sim/rng'
 import { isPaused, useGame } from '../state/store'
+import { subscribeDiff, subscribeTo } from '../state/subscribe'
 import { ambientPos, cameraState, customerPos, playerPos, staffPos } from './runtime'
 import { frameSeconds } from './walker'
 
@@ -116,7 +117,7 @@ function syncTalks(s: ChatterState): void {
 export function Chatter() {
   useEffect(
     () =>
-      useGame.subscribe((s, prev) => {
+      subscribeDiff((prev, s) => {
         if (s.screen !== 'playing') return
         for (const lines of reactionsFor(prev, s, rng)) enqueue(s, lines)
       }),
@@ -173,12 +174,14 @@ export function Chatter() {
   // The owner leaves with the day; forget voices of anyone no longer around.
   useEffect(
     () =>
-      useGame.subscribe((s, prev) => {
-        if (s.clock.day === prev.clock.day) return
-        for (const id of voices.keys()) if (id !== PLAYER_ID && id !== OWNER_ID) voices.delete(id)
-        busyUntil.clear()
-        queue = []
-      }),
+      subscribeTo(
+        (s) => s.clock.day,
+        () => {
+          for (const id of voices.keys()) if (id !== PLAYER_ID && id !== OWNER_ID) voices.delete(id)
+          busyUntil.clear()
+          queue = []
+        },
+      ),
     [],
   )
   return null

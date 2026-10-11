@@ -70,6 +70,7 @@ import {
   turnToward,
   walk,
   type Walker,
+  report,
 } from './walker'
 
 /** Just above a ~1.2 unit tall character's head, like customer bubbles. */
@@ -197,7 +198,9 @@ function onArrived(e: Employee, w: StaffWalker): void {
   const chair = postChair(e)
   // Can't reach the chair: work standing up rather than not at all.
   if (chair && !w.seat) sitOn(w, chair)
-  if (e.status === 'arriving') game.dispatchStaff({ type: 'atPost', id: e.id })
+  if (e.status === 'arriving') {
+    report(w, 'atPost', () => game.dispatchStaff({ type: 'atPost', id: e.id }))
+  }
 }
 
 /**
@@ -301,10 +304,15 @@ function updateSales(
     task.kind === 'greet' &&
     !customers.some((c) => c.id === task.customerId && c.handlerId === e.id)
   ) {
-    // Somebody new: claim them first. Someone else got there first: try again next frame.
-    if (!game.staffClaim(e.id, task.customerId)) return
+    // Somebody new: claim them first. Someone else got there first: try again
+    // once something has changed.
+    const claimed = report(w, `claim:${task.customerId}`, () =>
+      game.staffClaim(e.id, task.customerId),
+    )
+    if (!claimed) return
   }
-  if (task.kind === 'lead') return game.staffLead(e.id)
+  // No chair free for them yet: asked again once something has changed.
+  if (task.kind === 'lead') return void report(w, 'lead', () => game.staffLead(e.id))
 
   const key = salesKey(task)
   if (key !== w.task) planSales(e, w, task, key)

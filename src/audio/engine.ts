@@ -1,5 +1,6 @@
 import { effectiveGain, type AudioBus } from '../sim/audioSettings'
 import { isPaused, useGame } from '../state/store'
+import { subscribeTo } from '../state/subscribe'
 
 /** A bus that sounds play on; master is folded into each one's gain. */
 export type OutputBus = Exclude<AudioBus, 'master'>
@@ -86,9 +87,11 @@ export function startAudio(onUnlock?: () => void): () => void {
   }
   document.addEventListener('visibilitychange', onVisibility)
 
-  const unsubscribe = useGame.subscribe((s, prev) => {
-    if (s.audio !== prev.audio || isPaused(s) !== isPaused(prev)) applyGains()
-  })
+  const unsubscribe = subscribeTo(
+    (s) => s,
+    applyGains,
+    (a, b) => a.audio === b.audio && isPaused(a) === isPaused(b),
+  )
 
   return () => {
     removeUnlock()

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { goalLabel, goalProgress, type OwnerGoal } from '../sim/owner'
 import { levelTuning, repScale, useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -27,10 +28,12 @@ function progressText(goal: OwnerGoal, current: number, target: number): string 
  */
 export function GoalBanner() {
   const goal = useGame((s) => (s.owner?.announced ? s.owner.goal : null))
-  const stats = useGame((s) => s.dayStats)
-  const level = useGame(levelTuning)
-  if (!goal) return null
-  const { current, target, met } = goalProgress(goal, stats, repScale(level))
+  // Only the progress, not the whole of the day's stats, so a change elsewhere doesn't re-render.
+  const progress = useGame(
+    useShallow((s) => (goal ? goalProgress(goal, s.dayStats, repScale(levelTuning(s))) : null)),
+  )
+  if (!goal || !progress) return null
+  const { current, target, met } = progress
   const label = goalLabel(goal, formatMoney)
   return (
     <span

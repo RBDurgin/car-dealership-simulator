@@ -8,7 +8,8 @@ import { inStore, watchErrors } from './game'
  * the busy late-game day `?perf=busy` starts (every expansion up, a full
  * lot, a full staff, 12 customers, rain and Nazma on his way), run for 30 s
  * at 1× and at 4× with the `?perf` overlay. The overlay's readings are averaged into
- * `e2e/perf-results.json`; the numbers go in `docs/PERF.md`.
+ * `e2e/perf-results.json`, with React's commits, renders and render time per game
+ * minute (`countRenders`); the numbers go in `docs/PERF.md`.
  */
 
 const SECONDS = 30
@@ -31,6 +32,69 @@ interface Phase {
   walkers: number
   html: number
   heapMB: number | null
+  /** React's work per game minute (dev build): commits, components rendered and render ms. */
+  react: { commits: number; renders: number; renderMs: number }
+}
+
+/** What `countRenders` has counted so far. */
+interface RenderCounts {
+  commits: number
+  renders: number
+  renderMs: number
+}
+
+/**
+ * Counts React's commits, the components each one rendered and their render
+ * time, through the hook React DevTools uses (installed before the page
+ * loads). Components a commit didn't visit keep their old flags, so a subtree
+ * whose children didn't change isn't walked, as DevTools does.
+ */
+async function countRenders(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    interface Fiber {
+      tag: number
+      flags: number
+      alternate: Fiber | null
+      child: Fiber | null
+      sibling: Fiber | null
+    }
+    // Function, forwardRef and memo components; PerformedWork is flag 1.
+    const COMPONENT_TAGS = [0, 11, 14, 15]
+    const counts = { commits: 0, renders: 0, renderMs: 0 }
+    const walk = (fiber: Fiber | null) => {
+      for (let f = fiber; f; f = f.sibling) {
+        if (COMPONENT_TAGS.includes(f.tag) && (f.flags & 1) === 1) counts.renders++
+        if (!(f.alternate && f.child === f.alternate.child)) walk(f.child)
+      }
+    }
+    let renderers = 0
+    Object.assign(window, {
+      __renderCounts: counts,
+      __REACT_DEVTOOLS_GLOBAL_HOOK__: {
+        supportsFiber: true,
+        isDisabled: false,
+        renderers: new Map(),
+        inject: () => ++renderers,
+        checkDCE: () => {},
+        onScheduleFiberRoot: () => {},
+        onCommitFiberUnmount: () => {},
+        onPostCommitFiberRoot: () => {},
+        onCommitFiberRoot: (_: number, root: { current: Fiber & { actualDuration?: number } }) => {
+          counts.commits++
+          counts.renderMs += root.current.actualDuration ?? 0
+          walk(root.current.child)
+        },
+      },
+    })
+  })
+}
+
+/** The render counts so far and the game's minute. */
+function readRenders(page: Page): Promise<RenderCounts & { minute: number }> {
+  return inStore(page, (_, g) => ({
+    ...(window as unknown as { __renderCounts: RenderCounts }).__renderCounts,
+    minute: g().clock.minute,
+  }))
 }
 
 /**
@@ -50,6 +114,7 @@ async function busyDay(page: Page): Promise<void> {
 async function measure(page: Page, speed: number): Promise<Phase> {
   await inStore(page, (useGame, _, s) => useGame.setState({ timeScale: s }), speed)
   const samples: { s: PerfSample; heap: number | null }[] = []
+  const start = await readRenders(page)
   for (let t = 0; t < SECONDS * 1000; t += SAMPLE_MS) {
     await page.waitForTimeout(SAMPLE_MS)
     const reading = await page.evaluate(async () => {
@@ -59,7 +124,10 @@ async function measure(page: Page, speed: number): Promise<Phase> {
     })
     if (reading.s) samples.push({ s: reading.s, heap: reading.heap })
   }
+  const end = await readRenders(page)
   expect(samples.length).toBeGreaterThan(0)
+  const minutes = Math.max(1, end.minute - start.minute)
+  const perMinute = (k: keyof RenderCounts) => Number(((end[k] - start[k]) / minutes).toFixed(2))
   const mean = (f: (s: PerfSample) => number) =>
     Number((samples.reduce((a, x) => a + f(x.s), 0) / samples.length).toFixed(2))
   const heaps = samples.flatMap((x) => (x.heap === null ? [] : [x.heap]))
@@ -77,12 +145,18 @@ async function measure(page: Page, speed: number): Promise<Phase> {
     walkers: mean((s) => s.walkers),
     html: mean((s) => s.html),
     heapMB: heaps.length ? Number((Math.max(...heaps) / 2 ** 20).toFixed(1)) : null,
+    react: {
+      commits: perMinute('commits'),
+      renders: perMinute('renders'),
+      renderMs: perMinute('renderMs'),
+    },
   }
 }
 
 test('a busy late-game day', { tag: '@perf' }, async ({ page }) => {
   test.setTimeout(5 * 60_000)
   const errors = watchErrors(page)
+  await countRenders(page)
   await busyDay(page)
   const state = await inStore(page, (_, g) => ({
     cars: g().inventory.length,

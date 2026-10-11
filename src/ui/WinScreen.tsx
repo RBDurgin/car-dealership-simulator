@@ -12,13 +12,17 @@ import { formatMoney } from './format'
  */
 export function WinScreen() {
   const open = useGame(winShowing)
+  return open ? <WinPanel /> : null
+}
+
+/** The open screen; only it selects the career and the book. */
+function WinPanel() {
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const difficulty = useGame((s) => s.difficulty)
   const rivalOpened = useGame((s) => s.rival.generation > 0)
   const clients = useGame((s) => s.clients)
   const book = useMemo(() => bookSummary(clients), [clients])
-  if (!open) return null
 
   return (
     <div className="modal-backdrop">

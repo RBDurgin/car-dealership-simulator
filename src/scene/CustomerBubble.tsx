@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei'
 import { bubbleOf, type Bubble } from '../sim/customers'
+import { customerById } from '../state/selectors'
 import { useGame } from '../state/store'
 
 /** Just above a ~1.2 unit tall character's head. */
@@ -25,7 +26,7 @@ const ICONS: Record<Bubble, string> = {
  */
 export function CustomerBubble({ id }: { id: string }) {
   const bubble = useGame((s) => {
-    const c = s.customers.find((x) => x.id === id)
+    const c = customerById(s, id)
     return c ? bubbleOf(c) : null
   })
   if (!bubble) return null

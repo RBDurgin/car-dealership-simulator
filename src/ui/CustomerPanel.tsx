@@ -21,12 +21,13 @@ import {
   suggestedBuy,
   type Warmth,
 } from '../sim/negotiation'
-import { buyBlocker, estimateRange, lotSlotFor, SELLER_HINTS } from '../sim/sellers'
+import { estimateRange, SELLER_HINTS } from '../sim/sellers'
 import { quoteTotal } from '../sim/service'
 import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
 import { stockValue, usedTag } from '../sim/usedCars'
-import { levelTuning, sellerBonusFor, useGame } from '../state/store'
+import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /** Gross on the car at `price`, red when it's a loss. */
@@ -58,7 +59,7 @@ function WarmthChip({
   price: number
   allowance?: number
 }) {
-  const bonus = useGame((s) => sellerBonusFor(s, c))
+  const bonus = useGame((s) => sellerBonusOf(s, c))
   const day = useGame((s) => s.clock.day)
   const warmth = dealWarmth(c, car, price, bonus, allowance, day)
   return (
@@ -90,7 +91,7 @@ function TradeMargin({ c, allowance }: { c: Customer; allowance: number }) {
  * rival's quote on this car, **Match his price** sets the stepper to it.
  */
 function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
-  const room = useGame((s) => !!lotSlotFor(s))
+  const room = useGame(lotRoom)
   const trading = !!c.trade && room
   const [allowance, setAllowance] = useState(() => suggestedAllowance(c))
   const allow = trading ? allowance : undefined
@@ -242,7 +243,7 @@ function BuyMargin({ c, price }: { c: Customer; price: number }) {
 function BuyHaggle({ c }: { c: Customer }) {
   const [price, setPrice] = useState(() => suggestedBuy(c))
   const hint = useGame((s) => levelTuning(s).dealHint)
-  const blocker = useGame((s) => buyBlocker(s, price))
+  const blocker = useGame((s) => buyBlockerFor(s, price))
   const game = useGame.getState()
   const offer = (p: number) => game.ask(p)
   const step = (d: number) => setPrice((p) => clampBuy(c, p + d))

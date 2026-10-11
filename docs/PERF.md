@@ -11,8 +11,8 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
   - people in the world (player included), visitors' cars and `<Html>` badges.
   - At the end of each day, the day summary shows the day's readings (only those taken while the day was played) as rows for the device table below, one per game speed played, with a **Copy** button. Under them it shows the renderer's geometries and textures at the day's first and last readings, to show whether they climb. On the first day played, the first reading comes while models are still loading.
 - **`?perf=busy`**: a new game jumps straight to the busy late-game day (`state/perfScenario.ts`, the same scene the `@perf` e2e scenario measures): every expansion, 44 cars, 12 staff, 12 customers at once, rain and Nazma on his way. Such a game is never saved and leaves the trophy case alone, so it's safe on the deployed site. Continuing a save with the flag on isn't changed, but isn't saved either.
-- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, store sets per `tickClock` and per `startNextDay` (each set runs every listener; added in 18b), what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs.
-- **Browser perf scenario**: `npm run e2e:perf` (tagged `@perf`, left out of `npm run e2e` and CI). `e2e/perf.spec.ts` starts a game with `?perf=busy` and reads the overlay once a second for 30 s at 1× and at 4×. It writes `e2e/perf-results.json`, then closes the day and checks the summary's report. Screenshots go to `test-results/perf-busy.png` and `test-results/perf-report.png`. Under SwiftShader the fps measures the CPU, not a GPU; the draw calls, triangles, store sets and walkers are what to compare there.
+- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, store sets per `tickClock` and per `startNextDay` (each set runs every listener; added in 18b), what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. A third run (added in 18c) plays 200 Medium days with the game's listeners subscribed (autosave, the preferences, tips, achievements, the trophy case and the sound ones, with the browser stubbed out; Chatter's live in a scene component) and reports their ms per set, per clock step and per day. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs.
+- **Browser perf scenario**: `npm run e2e:perf` (tagged `@perf`, left out of `npm run e2e` and CI). `e2e/perf.spec.ts` starts a game with `?perf=busy` and reads the overlay once a second for 30 s at 1× and at 4×. It writes `e2e/perf-results.json`, with React's commits, components rendered and render ms per game minute (added in 18c, counted through the hook React DevTools uses, so dev builds only), then closes the day and checks the summary's report. Screenshots go to `test-results/perf-busy.png` and `test-results/perf-report.png`. Under SwiftShader the fps measures the CPU, not a GPU; the draw calls, triangles, store sets, walkers and React's renders are what to compare there. Counted per game minute, the renders don't depend on the frame rate.
 
 ## Baseline (18a)
 
@@ -76,6 +76,42 @@ The store is split into slices, with every change in one clock step, and in one 
 - Ms per tick is up about 15% (Medium 0.067 → 0.077–0.086 over four runs; Hard 0.034 → 0.044–0.046), about 11 µs a tick: each `set` inside a batch copies the state, so what `get` handed out stays unchanged. Copying only after a read (copy-on-write) measured 0.074–0.078, within the noise, so it was reverted. In the browser the trade is worth it: each `set` runs every listener and selector, and 18a measured the listeners alone at 0.07–0.5 ms a set (desktop to SwiftShader), so the set saved per tick is worth several times the copy. 18c's overlay readings will show it.
 - **Medium plays out identically** (every played total and the save size match), which shows the split changed no behaviour.
 - Hard differs only because the bench plays Hard after Medium in one process: before 18b, Hard's customer ids carried on from Medium's game (ids seed some rolls), and now `newGame` resets them (`resetRng`). With the old carry-over put back for a check, Hard matched the baseline exactly (762 sales, cash −$5,427).
+
+## 18c: subscriptions and selectors (2026-10-11)
+
+Listeners go through `subscribeTo` (`state/subscribe.ts`), components select only what they draw (memoised reads in `state/selectors.ts`), and the frame loops stop repeating store calls that changed nothing (`report` in `scene/walker.ts`).
+
+### React on the busy day (SwiftShader, per game minute)
+
+| Speed | Commits, before | after    | Components rendered, before | after   | Render ms, before | after    |
+| ----- | --------------- | -------- | --------------------------- | ------- | ----------------- | -------- |
+| 1×    | 0.80            | **0.55** | 3.0                         | **2.3** | 1.79              | **1.56** |
+| 4×    | 1.91            | **1.50** | 35.7                        | **5.9** | 9.65              | **3.80** |
+
+- Measured with a throwaway probe on 18b and on 18c, one run each, then built into the `@perf` scenario. Its first run on 18c read 0.60 / 2.35 / 0.88 at 1× and 1.49 / 6.03 / 3.35 at 4×, in line.
+- The biggest cut isn't on the plan's list: every change to the stock (a browse visit's dirt, a wash, a sale) re-rendered all ~45 cars and their props. `PropView` is now memoised on what it draws, so only the car that changed redraws. Next came `ActionMenu`, which re-rendered on every customer change while closed, and the summary, win screen and staff panel, which selected the day's stats, the career and the roster while closed.
+- `tickClock` gave `serviceAway` and `serviceComebacks` a new array every step even when nobody moved; it keeps them now, so nothing watching them sees a change.
+
+### `@perf` overlay, busy day (SwiftShader)
+
+| Speed | fps, before | after   | p95 frame, before | after  | Sets/s, before | after | Listener ms/s, before | after |
+| ----- | ----------- | ------- | ----------------- | ------ | -------------- | ----- | --------------------- | ----- |
+| 1×    | 2.6         | **3.3** | 866 ms            | 778 ms | 0.37           | 0.53  | 0.03                  | 0.03  |
+| 4×    | 2.0         | **2.5** | 877 ms            | 806 ms | 3.14           | 3.21  | 0.34                  | 0.30  |
+
+- SwiftShader's frame rate is CPU-bound, so less React work shows up as frames. Draw calls are unchanged (616), as 18c doesn't touch rendering.
+- Sets per second are the same; the frame loops' repeated calls changed nothing, so they never counted as sets (the probe found 1 in about 100 calls over 40 s at 4×). `report` keeps it that way when a claim or a lead fails and would otherwise be retried every frame.
+
+### Listeners (sim bench, 200 Medium days, 324 sets a day)
+
+| Run    | ms per set | ms per day |
+| ------ | ---------- | ---------- |
+| Before | 0.0071     | 2.2        |
+| After  | 0.0093     | 2.9        |
+
+- Same-machine runs, back to back; earlier runs of the "before" code read 2.7–3.4 ms a day, so the difference is about the run-to-run noise. Either way the listeners take under 10 µs a set, far under the 1 ms per step target, and in the browser a set comes a few times a second.
+- The plan gated `sfxFor`, `reactionsFor`, `tipFor` and `achievementsFor` on the fields they read. Measured, that cost more than it saved: sets touch sfx's fields 86% of the time, chatter's 72%, tips' 53% and achievements' 29%, and each diff already returns early on what it doesn't need. Comparing their fields on every set first made them 1.5–4× slower (picking the fields into an object for `shallow`, up to 20×), so they run on every set as before, through `subscribeDiff`.
+- What did stay gated is where the work is real in the browser: music touches its Web Audio nodes only when the track or the muffle changes (before, on every clock step and customer change), the trophy case reads and parses localStorage only when achievements or records change, autosave does nothing until the day is settled, and `scene/runtime`'s grid syncs only on their own fields.
 
 ## CI
 

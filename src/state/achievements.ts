@@ -1,5 +1,6 @@
 import { achievementNotice, achievementsFor, type AchievementId } from '../sim/achievements'
 import { isPaused, useGame } from './store'
+import { subscribeDiff } from './subscribe'
 
 /** Achievements earned while another notice (or the guide) was up, oldest first. */
 let pending: AchievementId[] = []
@@ -12,7 +13,7 @@ let pending: AchievementId[] = []
  */
 export function startAchievements(): () => void {
   pending = []
-  return useGame.subscribe((s, prev) => {
+  return subscribeDiff((prev, s) => {
     if (s.screen !== prev.screen) pending = []
     if (isPaused(s)) return
     const ids = achievementsFor(prev, s, s.achievements)

@@ -4,6 +4,8 @@ import { createSave, parseSave, type SaveData } from '../sim/save'
 import { emptyCase, mergeCase, parseCase, type TrophyCase } from '../sim/trophyCase'
 import { LATEST_NEWS } from '../sim/whatsNew'
 import { useGame } from './store'
+import { sameFields, subscribeTo } from './subscribe'
+import type { GameState } from './types'
 
 const SAVE_KEY = 'car-dealership-simulator.save'
 
@@ -44,33 +46,47 @@ export function clearSave(): void {
   }
 }
 
+/** What the day summary can still change once the day is settled, each worth saving again. */
+const SAVED_AFTER_CLOSING = [
+  'cash',
+  'inventory',
+  'orders',
+  'campaigns',
+  'improvements',
+  'roster',
+  'tipsSeen',
+  'achievements',
+  'service',
+  'clients',
+  'clientPerks',
+  'appreciation',
+  'won',
+] as const
+
+/** Whether the day is over and payroll paid, so the day can be saved. */
+function settledDay(s: GameState): boolean {
+  if (s.screen !== 'playing' || !isClosed(s.clock) || s.customers.length > 0) return false
+  return s.dayStats.settled
+}
+
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
  * payroll is paid, then again for any hiring, firing, ordering, advertising, improving, changing the service settings or the client book's levers from the day summary
  * (or a tip shown or an achievement earned after closing, or Keep playing on the win screen).
+ * Does nothing else until the day is settled.
  */
 export function startAutosave(): () => void {
-  return useGame.subscribe((s, prev) => {
-    if (s.screen !== 'playing' || !isClosed(s.clock) || s.customers.length > 0) return
-    if (!s.dayStats.settled) return
-    const changed =
-      !prev.dayStats.settled ||
-      s.screen !== prev.screen ||
-      s.cash !== prev.cash ||
-      s.inventory !== prev.inventory ||
-      s.orders !== prev.orders ||
-      s.campaigns !== prev.campaigns ||
-      s.improvements !== prev.improvements ||
-      s.roster !== prev.roster ||
-      s.tipsSeen !== prev.tipsSeen ||
-      s.achievements !== prev.achievements ||
-      s.service !== prev.service ||
-      s.clients !== prev.clients ||
-      s.clientPerks !== prev.clientPerks ||
-      s.appreciation !== prev.appreciation ||
-      s.won !== prev.won
-    if (changed) writeSave(createSave(s, Date.now()))
-  })
+  return subscribeTo(
+    (s) => s,
+    (s) => {
+      if (settledDay(s)) writeSave(createSave(s, Date.now()))
+    },
+    (a, b) => {
+      const settled = settledDay(a)
+      if (settled !== settledDay(b)) return false
+      return !settled || sameFields(a, b, SAVED_AFTER_CLOSING)
+    },
+  )
 }
 
 const CONTROLS_KEY = 'car-dealership-simulator.controlsOpen'
@@ -88,14 +104,16 @@ export function startControlsPref(fallback: boolean): () => void {
     // No storage: use the fallback.
   }
   useGame.getState().toggleControls(saved === null ? fallback : saved === '1')
-  return useGame.subscribe((s, prev) => {
-    if (s.controlsOpen === prev.controlsOpen) return
-    try {
-      localStorage.setItem(CONTROLS_KEY, s.controlsOpen ? '1' : '0')
-    } catch {
-      // Not remembered; it still toggles.
-    }
-  })
+  return subscribeTo(
+    (s) => s.controlsOpen,
+    (open) => {
+      try {
+        localStorage.setItem(CONTROLS_KEY, open ? '1' : '0')
+      } catch {
+        // Not remembered; it still toggles.
+      }
+    },
+  )
 }
 
 const AUDIO_KEY = 'car-dealership-simulator.audio'
@@ -113,14 +131,16 @@ export function startAudioPref(): () => void {
     // No storage, or junk in it: use the defaults.
   }
   useGame.setState({ audio: parseAudioSettings(saved) })
-  return useGame.subscribe((s, prev) => {
-    if (s.audio === prev.audio) return
-    try {
-      localStorage.setItem(AUDIO_KEY, JSON.stringify(s.audio))
-    } catch {
-      // Not remembered; the change still applies.
-    }
-  })
+  return subscribeTo(
+    (s) => s.audio,
+    (audio) => {
+      try {
+        localStorage.setItem(AUDIO_KEY, JSON.stringify(audio))
+      } catch {
+        // Not remembered; the change still applies.
+      }
+    },
+  )
 }
 
 const TROPHY_KEY = 'dealership.trophies'
@@ -151,15 +171,18 @@ export function resetTrophyCase(): void {
  * from the save slot, so a new game or a cleared save keeps it.
  */
 export function startTrophyCase(): () => void {
-  return useGame.subscribe((s, prev) => {
-    if (s.achievements === prev.achievements && s.records === prev.records) return
-    const before = readTrophyCase()
-    const after = mergeCase(before, s.achievements, s.records, Date.now())
-    if (after === before) return
-    try {
-      localStorage.setItem(TROPHY_KEY, JSON.stringify(after))
-    } catch {
-      // Not kept; the game carries on.
-    }
-  })
+  return subscribeTo(
+    (s) => s,
+    ({ achievements, records }) => {
+      const before = readTrophyCase()
+      const after = mergeCase(before, achievements, records, Date.now())
+      if (after === before) return
+      try {
+        localStorage.setItem(TROPHY_KEY, JSON.stringify(after))
+      } catch {
+        // Not kept; the game carries on.
+      }
+    },
+    (a, b) => sameFields(a, b, ['achievements', 'records']),
+  )
 }

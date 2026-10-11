@@ -1,6 +1,7 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import type { Group } from 'three'
-import { IMPROVEMENT_FOOTPRINTS, installed } from '../sim/improvements'
+import { IMPROVEMENT_FOOTPRINTS } from '../sim/improvements'
+import { upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { rectBounds } from './runtime'
 
@@ -92,7 +93,7 @@ const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
  * Every so often the air dips and he folds over before shooting back up.
  */
 export function TubeMan() {
-  const up = useGame((s) => installed(s.improvements, s.clock.day).includes('tube-man'))
+  const up = useGame((s) => upNow(s).includes('tube-man'))
 
   useFrame(({ clock }) => {
     if (!up) return

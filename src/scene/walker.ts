@@ -14,6 +14,7 @@ import {
 import type { Tile, Vec2 } from '../sim/grid'
 import type { Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
+import { useGame } from '../state/store'
 import { crowdAgents, grid, rectBounds, reservations } from './runtime'
 
 /**
@@ -201,4 +202,25 @@ export function syncGroups(groups: Map<string, Group>, walkers: Map<string, Walk
     g.position.set(w.pos.x, w.seat ? SEAT_HEIGHT : 0, w.pos.z)
     g.rotation.y = w.heading
   }
+}
+
+/** Each walker's last report that changed nothing, and the store state it was made on. */
+const noOps = new WeakMap<object, { key: string; state: object }>()
+
+/**
+ * Makes a report to the store from a frame loop (`send`: a dispatch, a claim,
+ * Nazma's progress), unless `who` made the same one (`key`) on this very store
+ * state and it changed nothing. Store actions depend only on the state and
+ * what they're given, so it would change nothing again: this saves calling it
+ * every frame while someone stands still, or retrying a failed claim until
+ * something has changed. Gives what `send` returned, or undefined if skipped.
+ */
+export function report<T>(who: object, key: string, send: () => T): T | undefined {
+  const state = useGame.getState()
+  const last = noOps.get(who)
+  if (last && last.key === key && last.state === state) return undefined
+  const result = send()
+  if (useGame.getState() === state) noOps.set(who, { key, state })
+  else noOps.delete(who)
+  return result
 }

@@ -4,6 +4,7 @@ import { CAR_MODELS } from '../sim/customers'
 import type { ExpansionId } from '../sim/layout'
 import { roleLimits, ROLES, type Employee } from '../sim/staff'
 import { useGame } from './store'
+import { subscribeTo } from './subscribe'
 
 /** Every expansion, so the lot, the wing and the garage are all up. */
 const EXPANSION_IDS: readonly ExpansionId[] = ['east-lot', 'showroom-wing', 'service-bay']
@@ -75,11 +76,14 @@ export function busyDay(): void {
  * `?perf=busy`. Continuing a save isn't touched.
  */
 export function startBusyDay(): () => void {
-  const unsubscribe = useGame.subscribe((s, prev) => {
-    if (s.screen !== 'playing' || prev.screen === 'playing' || s.clock.day !== 1) return
-    unsubscribe()
-    // After this set has reached every listener, so none sees the states out of order.
-    queueMicrotask(busyDay)
-  })
+  const unsubscribe = subscribeTo(
+    (s) => s.screen,
+    (screen, _prev, s) => {
+      if (screen !== 'playing' || s.clock.day !== 1) return
+      unsubscribe()
+      // After this set has reached every listener, so none sees the states out of order.
+      queueMicrotask(busyDay)
+    },
+  )
   return unsubscribe
 }

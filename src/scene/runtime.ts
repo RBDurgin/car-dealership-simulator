@@ -5,7 +5,7 @@ import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { expansionsUp } from '../sim/expansions'
-import { improvementFootprints, installed, type ImprovementId } from '../sim/improvements'
+import { improvementFootprints, type ImprovementId } from '../sim/improvements'
 import {
   approachTilesFor,
   buildInteractables,
@@ -31,7 +31,9 @@ import {
 import { vehicleOwnerId } from '../sim/sellers'
 import { bayCount, RECON_MAX } from '../sim/service'
 import { POSTS } from '../sim/staff'
+import { groundUp, upNow as upToday } from '../state/selectors'
 import { useGame } from '../state/store'
+import { sameFields, subscribeTo } from '../state/subscribe'
 
 /** Expansions the layout was last built with. */
 let groundNow: ExpansionId[] = expansionsUp(useGame.getState())
@@ -91,8 +93,6 @@ function syncWorld(inventory: readonly InventoryCar[], improvements: Improvement
 const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
 export const playerPos = { x: spawn.x, z: spawn.z }
 
-const upOn = (s: ReturnType<typeof useGame.getState>) => installed(s.improvements, s.clock.day)
-
 /** Builds the layout again if the expansions up have changed. True if it did. */
 function regrounded(ground: ExpansionId[]): boolean {
   if (ground.length === groundNow.length && ground.every((id) => groundNow.includes(id))) {
@@ -103,50 +103,57 @@ function regrounded(ground: ExpansionId[]): boolean {
   return true
 }
 
-syncWorld(useGame.getState().inventory, upOn(useGame.getState()))
+syncWorld(useGame.getState().inventory, upToday(useGame.getState()))
 // Runs synchronously inside the store update, before React re-renders anything.
-useGame.subscribe((s, prev) => {
-  const up = upOn(s)
-  const raised = up.filter((id) => !upNow.includes(id))
-  const morning = s.clock.day !== prev.clock.day
-  if (!morning && s.inventory === prev.inventory && raised.length === 0) return
-  // New ground only ever opens up, so nobody needs stepping out of it.
-  const rebuilt = regrounded(expansionsUp(s))
-  if (rebuilt || morning) resetGrid()
-  syncWorld(s.inventory, up)
-  if (rebuilt) holdSeats()
-  // A car delivered, back from the shop or an improvement put up overnight
-  // where the player stands steps them out. Only new ones: the player sits on
-  // a blocked chair tile.
-  const before = new Map(prev.inventory.map((c) => [c.id, c.status]))
-  const added = [
-    ...s.inventory
-      .filter((c) => c.status === 'available' && before.get(c.id) !== 'available')
-      .map((c) => c.rect),
-    ...improvementFootprints(raised),
-  ]
-  if (added.some((rect) => touches(rect, playerPos))) {
-    Object.assign(playerPos, nearestStandable(grid, playerPos))
-  }
-})
-
-useGame.subscribe((s, prev) => {
-  if (s.customers === prev.customers && s.purchases === prev.purchases) return
-  const parked = new Set([
-    ...spotsInUse(s.customers.filter((c) => c.vehicle?.parked)),
-    ...s.purchases.map((p) => p.spot),
-  ])
-  if (parked.size === parkedSpots.size && [...parked].every((n) => parkedSpots.has(n))) return
-  CUSTOMER_PARKING.forEach((space, n) => {
-    if (parked.has(n) === parkedSpots.has(n)) return
-    const rect = parkedCarRect(space)
-    grid.setRectBlocked(rect, parked.has(n))
-    if (parked.has(n) && touches(rect, playerPos)) {
+subscribeTo(
+  (s) => s,
+  (s, prev) => {
+    const up = upToday(s)
+    const raised = up.filter((id) => !upNow.includes(id))
+    const morning = s.clock.day !== prev.clock.day
+    if (!morning && s.inventory === prev.inventory && raised.length === 0) return
+    // New ground only ever opens up, so nobody needs stepping out of it.
+    const rebuilt = regrounded(groundUp(s))
+    if (rebuilt || morning) resetGrid()
+    syncWorld(s.inventory, up)
+    if (rebuilt) holdSeats()
+    // A car delivered, back from the shop or an improvement put up overnight
+    // where the player stands steps them out. Only new ones: the player sits on
+    // a blocked chair tile.
+    const before = new Map(prev.inventory.map((c) => [c.id, c.status]))
+    const added = [
+      ...s.inventory
+        .filter((c) => c.status === 'available' && before.get(c.id) !== 'available')
+        .map((c) => c.rect),
+      ...improvementFootprints(raised),
+    ]
+    if (added.some((rect) => touches(rect, playerPos))) {
       Object.assign(playerPos, nearestStandable(grid, playerPos))
     }
-  })
-  parkedSpots = parked
-})
+  },
+  (a, b) => a.clock.day === b.clock.day && sameFields(a, b, ['inventory', 'improvements']),
+)
+
+subscribeTo(
+  (s) => s,
+  (s) => {
+    const parked = new Set([
+      ...spotsInUse(s.customers.filter((c) => c.vehicle?.parked)),
+      ...s.purchases.map((p) => p.spot),
+    ])
+    if (parked.size === parkedSpots.size && [...parked].every((n) => parkedSpots.has(n))) return
+    CUSTOMER_PARKING.forEach((space, n) => {
+      if (parked.has(n) === parkedSpots.has(n)) return
+      const rect = parkedCarRect(space)
+      grid.setRectBlocked(rect, parked.has(n))
+      if (parked.has(n) && touches(rect, playerPos)) {
+        Object.assign(playerPos, nearestStandable(grid, playerPos))
+      }
+    })
+    parkedSpots = parked
+  },
+  (a, b) => sameFields(a, b, ['customers', 'purchases']),
+)
 
 /**
  * Service spaces with a client's car standing in them (not off in a bay),
@@ -154,28 +161,29 @@ useGame.subscribe((s, prev) => {
  */
 let serviceSpotsTaken = new Set<number>()
 
-useGame.subscribe((s, prev) => {
-  const same =
-    s.customers === prev.customers &&
-    s.serviceAway === prev.serviceAway &&
-    s.serviceJobs === prev.serviceJobs
-  if (same) return
-  const inBay = new Set(s.serviceJobs.filter((j) => j.status === 'inBay').map((j) => j.customerId))
-  const taken = new Set(
-    [...s.customers, ...s.serviceAway].flatMap((c) =>
-      c.service?.parked && !inBay.has(c.id) ? [c.service.spot] : [],
-    ),
-  )
-  SERVICE_SPOTS.forEach((space, n) => {
-    if (taken.has(n) === serviceSpotsTaken.has(n)) return
-    const rect = parkedCarRect(space)
-    grid.setRectBlocked(rect, taken.has(n))
-    if (taken.has(n) && touches(rect, playerPos)) {
-      Object.assign(playerPos, nearestStandable(grid, playerPos))
-    }
-  })
-  serviceSpotsTaken = taken
-})
+subscribeTo(
+  (s) => s,
+  (s) => {
+    const inBay = new Set(
+      s.serviceJobs.filter((j) => j.status === 'inBay').map((j) => j.customerId),
+    )
+    const taken = new Set(
+      [...s.customers, ...s.serviceAway].flatMap((c) =>
+        c.service?.parked && !inBay.has(c.id) ? [c.service.spot] : [],
+      ),
+    )
+    SERVICE_SPOTS.forEach((space, n) => {
+      if (taken.has(n) === serviceSpotsTaken.has(n)) return
+      const rect = parkedCarRect(space)
+      grid.setRectBlocked(rect, taken.has(n))
+      if (taken.has(n) && touches(rect, playerPos)) {
+        Object.assign(playerPos, nearestStandable(grid, playerPos))
+      }
+    })
+    serviceSpotsTaken = taken
+  },
+  (a, b) => sameFields(a, b, ['customers', 'serviceAway', 'serviceJobs']),
+)
 
 /** Whether someone standing at `pos` overlaps the tiles of `rect`. */
 function touches(rect: Rect, pos: Vec2): boolean {

@@ -1,7 +1,11 @@
 import { expect, test } from 'vitest'
 import type { Difficulty } from '../../sim/difficulty'
 import { createSave, parseSave } from '../../sim/save'
+import { startAchievements } from '../achievements'
+import { instrumentStore, storeCounts } from '../perf'
+import { startAudioPref, startAutosave, startControlsPref, startTrophyCase } from '../persistence'
 import { useGame } from '../store'
+import { startTips } from '../tips'
 import { nextDay, playDay } from './bot'
 
 /**
@@ -126,6 +130,35 @@ function playGame(level: Difficulty): { run: Run; state: State; saveText: string
   }
 }
 
+/** Days played with the game's listeners subscribed. */
+const LISTENER_DAYS = 200
+
+/**
+ * The game's store listeners that run headless, as `main.tsx` starts them, and
+ * the sound ones with the browser stubbed out (they stay silent: no audio is
+ * unlocked). Chatter's are left out, as they live in a scene component.
+ */
+async function startListeners(): Promise<void> {
+  const noop = () => {}
+  const target = { addEventListener: noop, removeEventListener: noop, hidden: false }
+  Object.assign(globalThis, { requestAnimationFrame: () => 0 })
+  if (typeof window === 'undefined') Object.assign(globalThis, { window: target, document: target })
+  const { startAudio } = await import('../../audio/engine')
+  const { startMusic } = await import('../../audio/music')
+  const { startRain } = await import('../../audio/rain')
+  const { startSfx } = await import('../../audio/sfxBridge')
+  startAutosave()
+  startControlsPref(true)
+  startAudioPref()
+  startTips()
+  startAchievements()
+  startTrophyCase()
+  startAudio(noop)
+  startMusic()
+  startRain()
+  startSfx()
+}
+
 // Each level's game is played once, in its test, and then the benches time
 // the saves of a real day-500 game.
 for (const level of ['medium', 'hard'] as const) {
@@ -144,3 +177,49 @@ for (const level of ['medium', 'hard'] as const) {
     )
   })
 }
+
+// Last, as the listeners stay subscribed: the time they take per clock step
+// and per morning, for 18c's subscription changes.
+test(`listeners over ${LISTENER_DAYS} days on medium`, { timeout: 300_000 }, async () => {
+  useGame.setState(initial, true)
+  instrumentStore(useGame)
+  await startListeners()
+  game().newGame('medium')
+  const tickMs: number[] = []
+  const morningMs: number[] = []
+  let ticks = 0
+  let listenerMs = 0
+  const t = performance.now()
+  for (let d = 0; d < LISTENER_DAYS; d++) {
+    const before = storeCounts.listenerMs
+    playDay(() => {
+      ticks++
+    })
+    tickMs.push(storeCounts.listenerMs - before)
+    const morning = storeCounts.listenerMs
+    nextDay()
+    morningMs.push(storeCounts.listenerMs - morning)
+    listenerMs = storeCounts.listenerMs
+  }
+  const sets = storeCounts.sets
+  console.log(
+    JSON.stringify(
+      {
+        days: LISTENER_DAYS,
+        listeners: storeCounts.listeners,
+        totalSeconds: round((performance.now() - t) / 1000, 1),
+        sets,
+        listenerMs: round(listenerMs, 1),
+        listenerMsPerSet: round(listenerMs / sets, 4),
+        listenerMsPerStep: round(avg(tickMs) / (ticks / LISTENER_DAYS)),
+        listenerMsPerDay: round(avg(tickMs), 2),
+        setsPerDay: round(sets / LISTENER_DAYS, 1),
+        listenerMsPerMorning: round(avg(morningMs), 3),
+        sales: game().lifetime.sales,
+      },
+      null,
+      2,
+    ),
+  )
+  expect(game().log.length).toBe(LISTENER_DAYS)
+})

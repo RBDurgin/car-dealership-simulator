@@ -120,6 +120,19 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18c: Subscriptions and selectors
 
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and the 500-day bench plays out as after 18b. Changes from the plan:
+
+- **Measured first, so one part was dropped.** `sfxFor`, `reactionsFor`, `tipFor` and `achievementsFor` aren't gated on the fields they read: sets touch those fields 29–86% of the time and each diff already returns early, so checking the fields first cost more than it saved. They run through `subscribeDiff` (in `state/subscribe.ts`, with `subscribeTo` and `sameFields`), which diffs against the state the listener last saw. Every other listener moved onto `subscribeTo`: music on its track and muffle, rain on `rainPlays`, the mixer on the audio settings and the pause, autosave once the day is settled (and then on what the summary can change), the preferences, the trophy case, `scene/runtime`'s grid syncs and `?perf=busy`'s start. Watching several fields selects the state and compares them in `equal`, so nothing is allocated per set.
+- `subscribeTo` skips a set overtaken by a newer one made inside another listener (which reaches every listener first), so a listener never sees the states out of order.
+- `ActionMenu` selects nothing while closed; open, it selects its buttons as text (name, label, blocked), not one `useShallow` of the target, as the office desk's actions read the whole deal and the roster.
+- `scene/Customers` selects the ids of those on foot (`useShallow`), and `CustomerFigure` and `CustomerBubble` look themselves up through `customerById`, an index built once per `customers` change.
+- `DaySummary`, `WinScreen` and `StaffPanel` select only whether they're open, and mount a body that selects the rest; `GoalBanner` selects the goal's progress, not `dayStats`. `StockPanel`'s tabs already only mount open.
+- `state/selectors.ts`: `memoLast` and `upNow`, `groundUp`, `customerById`, `sellerBonusOf`, `lotRoom` and `buyBlockerFor`. `useUpNow`/`useGround`, `Props`' sign, `TubeMan`, `StaffPanel`, `CustomerPanel` and `scene/runtime` read them.
+- Not in the plan, found by measuring: `PropView` is memoised (every stock change redrew all ~45 cars), and `serviceArrivals` keeps `serviceAway` and `serviceComebacks` when nobody moved (they were new arrays every clock step).
+- **Frame-loop store calls** go through `report(who, key, send)` in `scene/walker.ts`: a walker's call that changed nothing isn't made again on the same store state. It covers customers' `arrive` and `browsed`, staff's `atPost`, `staffClaim` and `staffLead` (which waits while no chair is free) and Nazma's reports. Waiting for any store change, not only `customers`, as a claim also depends on the roster and the player's action.
+- The `@perf` scenario also counts React's commits, components rendered and render ms per game minute (`countRenders`, through the DevTools hook), and the sim bench times the listeners over 200 days.
+- Tests: `selectors.test.ts`, `subscribe.test.ts` and `scene/walker.test.ts` (`report`).
+
 - **Selector fixes.** Each component takes only what it renders:
   - `ActionMenu` selects nothing while `menu` is null, then only the menu target's customer, employee or car through one `useShallow` selector.
   - `scene/Customers` selects the customer id list with `useShallow`, and each `CustomerView` selects its own customer by id. This removes the O(n²) `find` in each bubble.
