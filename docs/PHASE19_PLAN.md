@@ -1,6 +1,6 @@
 # Phase 19 Plan: F&I (Finance and Warranties)
 
-**Status:** planned 2026-10-10. Phase 19 comes after Phase 18 in the plan. It needs only Phase 15 (service), which is built.
+**Status:** planned 2026-10-10, revised 2026-10-11 to give the player their own desk (19b). Phase 19 comes after Phase 18 in the plan. It needs only Phase 15 (service), which is built.
 
 - 19e's satisfaction hook needs Phase 16's CSI. If 16 isn't built when 19e is, that part waits for it.
 - 19a adds nothing to the save. 19d takes the next free save version (`SAVE_VERSION` + 1).
@@ -35,8 +35,12 @@ Scale: cars list for $24k–$68k, and the front gross is about $2–4k. A good F
 - **The menu is at the desk.**
   - When the player closes a deal, the F&I menu opens once the buyer is seated: pick the lender and the markup, then present products.
   - The buyer takes or declines each product according to their traits. Pushing too much sours them.
-  - With a finance manager on duty, a hand-off has him run the menu by skill, and the player can stay on the floor.
+  - With a finance manager on duty, the player can hand a buyer off and stay on the floor, and he runs the menu by skill. Handing off is a choice: the player can still close at their own desk.
   - Salespeople signing at their own desks arrange the loan at the buy rate and sell no products. This gives the finance manager his job.
+- **Your desk** (added 2026-10-11).
+  - The player gets a manager's desk on the showroom floor, always there. It's built like a sales desk: a desk, a monitor, their chair and a guest chair.
+  - The office desk becomes the F&I desk. The finance manager works there while he's on shift. With nobody hired, the player can still close there, as today.
+  - At their own desk the player always runs the full menu, even with a finance manager on duty, and he earns nothing on those deals.
 - **Credit tiers and lenders.**
   - Each buyer pays cash or finances, has a credit tier A–D (skewed by archetype) and a down payment.
   - Three lenders approve by tier at a buy rate. The dealer adds a markup up to a cap and earns a reserve.
@@ -48,21 +52,24 @@ Scale: cars list for $24k–$68k, and the front gross is about $2–4k. A good F
 
 ## Levers that already exist
 
-| Lever                                                                        | Where                                    | Phase 19 use                                                                          |
-| ---------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| Finance manager, `FINANCE_FEE`, `financeSeconds`, `financeOnDuty`            | `sim/staff.ts`                           | Runs the menu by skill and earns a share of the F&I gross                             |
-| `handOff` → `queued` → `call` → `signing`, `callNextBuyer`, `GUEST_CHAIR_ID` | `sim/customers.ts`, `sim/deal.ts`        | The menu sits between `seat` and `signed`                                             |
-| `sign(c, e)`                                                                 | `state/store.ts`                         | The single place that builds the `Sale`, now with `Sale.fi`                           |
-| `Sale`, `totalGross`, `netIncome`, `grossSplit`                              | `sim/deal.ts`                            | `fiGross` joins `totalGross`; the summary gets an F&I section                         |
-| `ArchetypeTraits` (`budget`, `haggle`)                                       | `sim/archetypes.ts`                      | Each archetype gets `credit` odds and `finance` share                                 |
-| `acceptChance`, `dealWarmth` (Easy's chip)                                   | `sim/customers.ts`, `sim/negotiation.ts` | `productTake` follows the same pattern; Easy's chip goes per product                  |
-| `ServiceJob.warranty`, `warrantyPay`, `serviceDemand`, `upsellChance`        | `sim/service.ts`                         | Warranty claims are paid like recalls; contract holders return and say yes more often |
-| Chatter `signing` conversation                                               | `sim/chatter.ts`                         | Carries on through the menu                                                           |
-| Owner `profit` goal, `Career.gross`                                          | `sim/owner.ts`, `sim/progression.ts`     | Both read `totalGross`, so F&I counts toward ranks and goals                          |
-| Phase 16 visit score and CSI                                                 | `sim/clients.ts` (16f)                   | `fiSatisfaction` adds to the score                                                    |
-| `Tuning` / `TUNING`                                                          | `sim/difficulty.ts`                      | New levers `creditMix`, `productTake` and `chargebackScale`, neutral on Medium        |
-| Office computer tabs, `computerTab`                                          | `ui/StockPanel.tsx`, store               | A Finance tab, key F                                                                  |
-| Save `UPGRADES`                                                              | `sim/save.ts`                            | 19d adds `contracts` and `chargebacks`                                                |
+| Lever                                                                        | Where                                     | Phase 19 use                                                                          |
+| ---------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| Finance manager, `FINANCE_FEE`, `financeSeconds`, `financeOnDuty`            | `sim/staff.ts`                            | Runs the menu by skill and earns a share of the F&I gross                             |
+| `handOff` → `queued` → `call` → `signing`, `callNextBuyer`, `GUEST_CHAIR_ID` | `sim/customers.ts`, `sim/deal.ts`         | The menu sits between `seat` and `signed`                                             |
+| `sign(c, e)`                                                                 | `state/store.ts`                          | The single place that builds the `Sale`, now with `Sale.fi`                           |
+| `Sale`, `totalGross`, `netIncome`, `grossSplit`                              | `sim/deal.ts`                             | `fiGross` joins `totalGross`; the summary gets an F&I section                         |
+| `ArchetypeTraits` (`budget`, `haggle`)                                       | `sim/archetypes.ts`                       | Each archetype gets `credit` odds and `finance` share                                 |
+| `acceptChance`, `dealWarmth` (Easy's chip)                                   | `sim/customers.ts`, `sim/negotiation.ts`  | `productTake` follows the same pattern; Easy's chip goes per product                  |
+| `ServiceJob.warranty`, `warrantyPay`, `serviceDemand`, `upsellChance`        | `sim/service.ts`                          | Warranty claims are paid like recalls; contract holders return and say yes more often |
+| Chatter `signing` conversation                                               | `sim/chatter.ts`                          | Carries on through the menu                                                           |
+| Owner `profit` goal, `Career.gross`                                          | `sim/owner.ts`, `sim/progression.ts`      | Both read `totalGross`, so F&I counts toward ranks and goals                          |
+| Phase 16 visit score and CSI                                                 | `sim/clients.ts` (16f)                    | `fiSatisfaction` adds to the score                                                    |
+| `Tuning` / `TUNING`                                                          | `sim/difficulty.ts`                       | New levers `creditMix`, `productTake` and `chargebackScale`, neutral on Medium        |
+| Office computer tabs, `computerTab`                                          | `ui/StockPanel.tsx`, store                | A Finance tab, key F                                                                  |
+| `salesDesk`, `SalesDesk`, `SALES_DESKS`                                      | `sim/layout.ts`                           | The template for the player's own desk (19b)                                          |
+| `deskActions`, `actionBlocker`, `financeBusy`                                | `sim/deal.ts`                             | The finance manager never blocks `closeDeal` at the player's desk                     |
+| The player's buyer heads for `GUEST_CHAIR_ID`, `seat`                        | `scene/Customers.tsx`, `sim/customers.ts` | Goes to the guest chair of the desk the player closes at                              |
+| Save `UPGRADES`                                                              | `sim/save.ts`                             | 19d adds `contracts` and `chargebacks`                                                |
 
 ## Sub-phases
 
@@ -98,6 +105,14 @@ Lever `Tuning.creditMix` shifts the tier weights: better on Easy, worse on Hard.
 Tests: `credit.test.ts` (seeded rolls, archetype skew, mix), `lenders.test.ts` (approval by tier and down payment, reserve maths, `saveByDown`).
 
 ### 19b: The F&I menu (player)
+
+Your desk comes first, since the menu runs there:
+
+- **Layout:** `MANAGER_DESK: SalesDesk` (`manager-chair`, `manager-guest`) in `sim/layout.ts`, drawn by `salesDesk` once it takes the ids. It goes in a free showroom spot near the office door, for example a desk at (27, 7). The office door, the lounge and the platforms must stay reachable, which the layout tests check.
+- **Which guest chair:** `guestChairOf(deskChairId)` maps the office chair to `GUEST_CHAIR_ID` and the manager's chair to `manager-guest`. The player's `closeDeal` uses the desk it targets: `scene/Customers.tsx`'s `following` route goes to that guest chair, and `seat` sets the buyer's `chairId` to it.
+- **Interactables:** the manager's chair is "Your desk", with `sit` and `closeDeal` (`sim/interactables.ts`, and `scene/runtime.ts`'s chair list). The office chair keeps `deskActions(roster)`.
+- **Blockers:** at the player's desk, `actionBlocker('closeDeal', …)` skips the finance manager checks. It refuses only when there's nobody to sign. Staff never use this desk, so `leadChoice`, `salesDesks` and `financeBusy` leave it out.
+- **The menu at either desk:** the F&I menu below opens for the player's buyer at either desk. With a finance manager on duty, a deal at the player's desk still gets the full menu, keeps `Sale.sellerId` as `PLAYER_ID`, and pays him no `FI_COMMISSION`.
 
 New `sim/fi.ts` (pure, tested):
 
@@ -145,8 +160,10 @@ Chatter: the `signing` conversation runs during `menu` too. A declined product g
 Tests:
 
 - `fi.test.ts`: take odds by archetype, price and pressure, `fiGross`, warmth.
-- `store.fi.test.ts`: menu → sign records `Sale.fi`; a declined buyer leaves; cash buyers have no GAP; `close` spares `menu`.
-- `customers.test.ts`: the new phase transitions.
+- `store.fi.test.ts`: menu → sign records `Sale.fi`; a declined buyer leaves; cash buyers have no GAP; `close` spares `menu`; with a finance manager on duty, a deal at the player's desk records products and pays him nothing.
+- `customers.test.ts`: the new phase transitions; `seat` uses the guest chair of the desk.
+- `layout.test.ts`: the manager's desk props, and its tiles can be reached.
+- `deal.test.ts`: `closeDeal` is allowed at the player's desk with a finance manager on duty and still blocked at his.
 
 ### 19c: The finance manager runs the menu, and the Finance tab
 
@@ -162,6 +179,8 @@ Store: `staffSign` for the finance manager runs `staffMenu` and then `sign`. His
 Pay: the finance manager earns `FINANCE_FEE` plus `FI_COMMISSION` (15%) of the F&I gross, through `payroll`'s `sale.commission`.
 
 Salespeople and their desks: `staffSign` at a salesperson's own desk arranges the loan at the buy rate (markup 0) and presents no products. A declined buyer there is queued for the finance manager if one is on duty, otherwise they walk.
+
+The player's desk (19b) isn't a salesperson's desk: it always runs the full menu, and the finance manager's commission counts only the deals he signed.
 
 Office computer **Finance** tab (`computerTab` `'finance'`, key F, or the office desk's `finance` action), `ui/FinanceTab.tsx`. It shows:
 
@@ -243,12 +262,12 @@ All of this is per-deal maths with no per-frame work:
 ## Help (every sub-phase)
 
 - `ui/HowToPlay.tsx`:
-  - Selling tab: credit and lenders (19a–b), the F&I menu, products and pressure (19b), warranty work (19d).
-  - People tab: what the finance manager does now (19c).
+  - Selling tab: credit and lenders (19a–b), your desk on the showroom floor, the F&I menu, products and pressure (19b), warranty work (19d).
+  - People tab: what the finance manager does now, and that he takes the office desk while you keep yours (19c).
   - Business tab: reserve, chargebacks and the Finance tab (19c–d).
 - `ui/controls.ts`: F for Finance (19c). The touch list's Office line mentions Finance.
 - Tips as in 19e.
-- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '19'`, for 19b, 19c, 19d and 19e. 19a only adds a line to the customer panel, so it goes in with 19b's entry.
+- What's new (12.5): one `UPDATES` entry per sub-phase that changes play, under `phase: '19'`, for 19b, 19c, 19d and 19e. 19a only adds a line to the customer panel, so it goes in with 19b's entry. 19b's entry also announces your new desk.
 
 ## Tuning targets (Medium)
 
@@ -267,7 +286,8 @@ All of this is per-deal maths with no per-frame work:
     - close a financed deal yourself: pick a lender, push the markup, present every product, and watch the answers sour;
     - close a cash deal and check there's no GAP;
     - have a buyer every lender declines walk, and save one with more down;
-    - check the summary's F&I block.
+    - check the summary's F&I block;
+    - hire a finance manager, close a deal at your desk and run the menu: the per-seller table puts it under you and he gets no commission on it. The office desk still offers only **Hand off** while he's on shift.
   - **19c:** hire a finance manager, hand off, and check the summary's F&I column, his pay and the Finance tab (key F).
   - **19d:**
     - sell warranties and skip ahead until warranty clients come to the garage and are paid by the administrator;
