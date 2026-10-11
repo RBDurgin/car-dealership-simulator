@@ -81,7 +81,7 @@ Seventeen phases have each added one more slice to the game, and the structure h
   - ms per `tickClock`;
   - `createSave`/`parseSave` time and save size in bytes at day 500.
 - **Browser perf scenario.** `e2e/perf.spec.ts` is tagged `@perf` and left out of the default `npm run e2e`. Run it with `npm run e2e:perf`. It loads a busy late-game state through `useGame.setState` with a full lot, full staff, 12 customers, rain and Nazma. It runs 30 s at 1× and 4×, then writes fps, draw calls and heap size to `e2e/perf-results.json`.
-- **`docs/PERF.md`**: the baseline table (desktop Chrome, SwiftShader e2e, mid-range Android, iPhone if one is available) and the bundle sizes from `vite build`. Each later sub-phase adds its after numbers.
+- **`docs/PERF.md`**: the baseline table (desktop Chrome, SwiftShader e2e and an iPhone) and the bundle sizes from `vite build`. Each later sub-phase adds its after numbers.
 - **CI.** `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`:
   - job `check`: Node from `.nvmrc` (added), `npm ci`, `npm run lint`, `npx prettier --check .`, `npm test`, `npm run build`;
   - job `e2e` (needs `check`): Playwright Chromium with `npm run e2e`, uploading the report when it fails.
@@ -180,7 +180,9 @@ No behaviour change. Every existing store test passes untouched, and that is the
 
 ## Performance targets
 
-- A busy late-game day on a mid-range Android phone holds **55 fps or more** at 1×. That's 5 above 13c's target of about 50, with the wing built.
+- A busy late-game day (`?perf=busy`) holds **60 fps** at 1× on the devices we have (there's no Android to test on):
+  - the iPhone, which does already (59.6 in `docs/PERF.md`), and must keep doing so;
+  - desktop Chrome, full-window at the default zoom, which runs at 30 today.
 - Draw calls on that day are at least a third lower than the 18a baseline.
 - At most one store `set()` per clock step, and listener time under 1 ms per step.
 - The sim bench shows ms per day flat from day 1 to day 500, with no growth from replays.
@@ -204,7 +206,7 @@ Phase 18 adds nothing the player does, apart from the **Graphics** setting in 18
   - play a full day at 1× and at 4×;
   - check that customers, staff, cars, Nazma, rain and the summary behave as before;
   - take before and after screenshots at the same camera for 18e's merged floors, instanced bulbs, compressed models and each quality tier.
-- On a real phone, play a full busy day on Auto quality. Note the fps and any tier changes.
+- On the iPhone and the desktop, play a full `?perf=busy` day on Auto quality and copy the report from the summary. Note any tier changes.
 - 18b: `git diff --stat` shows no test file edited except for added tests.
 
 ## Left out
