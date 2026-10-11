@@ -1,17 +1,19 @@
 import { writeFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import type { PerfSample } from '../src/state/perf'
-import { inStore, startGame, watchErrors } from './game'
+import { inStore, watchErrors } from './game'
 
 /**
  * The browser perf scenario (`npm run e2e:perf`, left out of `npm run e2e`):
- * a busy late game (every expansion up, a full lot, a full staff, 12
- * customers, rain and Nazma on his way), run for 30 s at 1× and at 4× with
- * the `?perf` overlay. The overlay's readings are averaged into
+ * the busy late-game day `?perf=busy` starts (every expansion up, a full
+ * lot, a full staff, 12 customers, rain and Nazma on his way), run for 30 s
+ * at 1× and at 4× with the `?perf` overlay. The overlay's readings are averaged into
  * `e2e/perf-results.json`; the numbers go in `docs/PERF.md`.
  */
 
 const SECONDS = 30
+/** `BUSY_CUSTOMERS` in `state/perfScenario.ts` (not imported: it pulls in the store). */
+const BUSY_CUSTOMERS = 12
 /** How often the overlay is read, in ms. */
 const SAMPLE_MS = 1000
 
@@ -31,61 +33,17 @@ interface Phase {
   heapMB: number | null
 }
 
-/** Builds the busy day: everything bought, then a day ended so it all arrives. */
+/**
+ * Starts a new game with `?perf=busy`, which jumps to the busy day of
+ * `state/perfScenario.ts` (and skips the guide), and waits for the crowd.
+ */
 async function busyDay(page: Page): Promise<void> {
-  await inStore(page, async (useGame, g) => {
-    const { roleLimits, ROLES } = await import('/src/sim/staff.ts')
-    const { STAFF_VARIANTS } = await import('/src/sim/characters.ts')
-    const { CLOSE_MINUTE } = await import('/src/sim/clock.ts')
-    const { CAR_MODELS } = await import('/src/sim/customers.ts')
-    const ids = ['east-lot', 'showroom-wing', 'service-bay'] as const
-    const limits = roleLimits([...ids])
-    const roster = ROLES.flatMap((role) =>
-      Array.from({ length: limits[role] }, (_, i) => ({
-        id: `perf-${role}-${i}`,
-        name: `Perf ${role} ${i + 1}`,
-        variant: STAFF_VARIANTS[i % STAFF_VARIANTS.length],
-        role,
-        skill: 3,
-        wage: 150,
-        status: 'off' as const,
-        fired: false,
-        quitting: false,
-      })),
-    )
-    useGame.setState({
-      cash: 5_000_000,
-      franchise: 'gold',
-      expansions: ids.map((id) => ({ id, day: 0 })),
-      roster,
-    })
-    // Fill every space the expansions open, then end the day so it's delivered.
-    for (let i = 0; g().orderCar(CAR_MODELS[i % CAR_MODELS.length], 'cash'); i++);
-    useGame.setState({ arrivals: { minutes: [], sources: [], spawned: 0 } })
-    g().tickClock({ day: g().clock.day, minute: CLOSE_MINUTE })
-    for (const c of g().customers) g().dispatchCustomer({ type: 'despawn', id: c.id })
-    for (const e of g().roster) g().dispatchStaff({ type: 'left', id: e.id })
-    g().startNextDay()
-  })
-  // The morning: rain, Nazma coming for three lot cars, and a crowd.
-  await inStore(page, (useGame, g) => {
-    const lot = g()
-      .inventory.filter((c) => c.status === 'available')
-      .slice(-3)
-    useGame.setState({
-      weather: 'rain',
-      helpOpen: false,
-      nazma: {
-        scheme: 'smudge',
-        targets: lot.map((c) => c.id),
-        arrivalMinute: g().clock.minute + 20,
-        status: 'coming',
-        progress: 0,
-        chatting: false,
-      },
-    })
-    g().devSpawnCustomers(12)
-  })
+  await page.goto('/?perf=busy')
+  await page.getByText('New game').click()
+  await page.getByText('Medium').first().click()
+  await expect
+    .poll(() => inStore(page, (_, g) => g().customers.length))
+    .toBeGreaterThanOrEqual(BUSY_CUSTOMERS)
 }
 
 /** Reads the overlay once a second for `SECONDS` at `speed`, and averages the readings. */
@@ -125,7 +83,6 @@ async function measure(page: Page, speed: number): Promise<Phase> {
 test('a busy late-game day', { tag: '@perf' }, async ({ page }) => {
   test.setTimeout(5 * 60_000)
   const errors = watchErrors(page)
-  await startGame(page, 'medium', '/?perf')
   await busyDay(page)
   const state = await inStore(page, (_, g) => ({
     cars: g().inventory.length,
@@ -133,12 +90,49 @@ test('a busy late-game day', { tag: '@perf' }, async ({ page }) => {
     customers: g().customers.length,
     weather: g().weather,
   }))
-  expect(state.customers).toBeGreaterThanOrEqual(12)
+  expect(state).toMatchObject({ staff: 12, weather: 'rain' })
   const phases = [await measure(page, 1), await measure(page, 4)]
   const result = { at: new Date().toISOString(), state, phases }
   // To compare the look before and after a rendering change (18e).
   await page.screenshot({ path: 'test-results/perf-busy.png' })
   writeFileSync('e2e/perf-results.json', JSON.stringify(result, null, 2) + '\n')
   console.log(JSON.stringify(result, null, 2))
+
+  // Closing: the summary shows the day's readings, ready for docs/PERF.md.
+  // The scene's clock is set too, or its next step would set the store's back.
+  await inStore(page, async (useGame) => {
+    const { CLOSE_MINUTE } = await import('/src/sim/clock.ts')
+    const { gameTime } = await import('/src/scene/runtime.ts')
+    gameTime.minute = CLOSE_MINUTE
+    useGame.setState({ timeScale: 1 })
+    useGame.getState().tickClock({ day: useGame.getState().clock.day, minute: CLOSE_MINUTE })
+  })
+  // Everyone heads home, mid-deal or not, until the day settles.
+  await expect
+    .poll(
+      () =>
+        inStore(page, (_, g) => {
+          for (const c of g().customers) {
+            g().dispatchCustomer({
+              type: c.vehicle || c.service ? 'droveOff' : 'despawn',
+              id: c.id,
+            })
+          }
+          return g().dayStats.settled
+        }),
+      { timeout: 60_000 },
+    )
+    .toBe(true)
+  const report = page.locator('.perf-report pre')
+  await expect(report).toContainText(/\| Desktop, Chrome, busy day \| 1× \|/)
+  await expect(report).toContainText(/\| 4× \|/)
+  await expect(report).toContainText(/Geometries \d+ → \d+/)
+  await expect(page.getByText('Not saved: a ?perf=busy game never is.')).toBeVisible()
+  await report.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: 'test-results/perf-report.png' })
+  // A busy game is never saved.
+  const keys = await page.evaluate(() => Object.keys(localStorage))
+  expect(keys).not.toContain('car-dealership-simulator.save')
+  expect(keys).not.toContain('dealership.trophies')
   expect(errors).toEqual([])
 })

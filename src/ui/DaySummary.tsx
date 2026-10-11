@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { calendarOf, longDate } from '../sim/calendar'
 import { buyerScore, costliestReason, type ClientStats } from '../sim/clients'
 import { difficultyLabel } from '../sim/difficulty'
@@ -34,6 +35,10 @@ import { formatMoney } from './format'
 import { rankLine } from './rankText'
 import { newRecordLine } from './statsText'
 import { achievementOf } from '../sim/achievements'
+import { PERF, PERF_BUSY } from '../state/perf'
+
+/** The `?perf` readings for the day, loaded only with the flag. */
+const PerfReport = lazy(() => import('./PerfReport'))
 
 /**
  * End of the day: shown once the doors are closed and the last customer has
@@ -121,6 +126,11 @@ export function DaySummary() {
           {event && ` · ${event.label} sale`} · {difficultyLabel(difficulty)}
         </div>
         <h2>{longDate(day)}</h2>
+        {PERF && (
+          <Suspense fallback={null}>
+            <PerfReport />
+          </Suspense>
+        )}
         <dl className="summary-stats">
           <dt>Visitors</dt>
           <dd>
@@ -522,7 +532,9 @@ export function DaySummary() {
             ))}
           </ul>
         )}
-        <p className="muted summary-saved">Progress saved.</p>
+        <p className="muted summary-saved">
+          {PERF_BUSY ? 'Not saved: a ?perf=busy game never is.' : 'Progress saved.'}
+        </p>
         <button
           className="btn btn-primary"
           autoFocus

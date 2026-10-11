@@ -1807,3 +1807,23 @@ kbd {
     500 13px system-ui,
     sans-serif;
 }
+
+/* ?perf: the day's readings at the top of the day summary, to paste into docs/PERF.md. */
+.perf-report {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 34 / 70%);
+}
+.perf-report pre {
+  margin: 6px 0 8px;
+  font: 11px/1.4 monospace;
+  color: #0f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.day-summary .perf-report .btn {
+  width: auto;
+}

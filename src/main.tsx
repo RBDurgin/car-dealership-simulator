@@ -17,19 +17,21 @@ import {
 } from './state/persistence'
 import { useGame } from './state/store'
 import { startAchievements } from './state/achievements'
-import { instrumentStore, PERF } from './state/perf'
+import { instrumentStore, PERF, PERF_BUSY } from './state/perf'
 import { startTips } from './state/tips'
 
 // Before anything subscribes, so every listener is timed.
 if (PERF) instrumentStore(useGame)
-startAutosave()
+// A ?perf=busy game is a test bench: it never saves, or touches the trophy case.
+if (!PERF_BUSY) startAutosave()
 // The controls hint starts collapsed on phones and touch screens.
 startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
 startAudioPref()
 startTips()
 // After the tips, so neither shows over the other's notice.
 startAchievements()
-startTrophyCase()
+if (!PERF_BUSY) startTrophyCase()
+if (PERF_BUSY) void import('./state/perfScenario').then((m) => m.startBusyDay())
 // Silent until the first gesture; then the sounds load and the music starts.
 startAudio(() => {
   preloadSfx()

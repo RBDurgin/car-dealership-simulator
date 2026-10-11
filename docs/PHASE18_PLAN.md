@@ -69,6 +69,7 @@ Seventeen phases have each added one more slice to the game, and the structure h
 - `e2e/perf.spec.ts` also saves a screenshot to `test-results/perf-busy.png` for 18e's before-and-after comparisons. `startGame` takes an optional path.
 - `prettier --check` failed on two older plan docs (`PHASE7_PLAN.md`, `PHASE8_PLAN.md`), so they were formatted for CI to pass.
 - The real-device rows in `docs/PERF.md` are left for Robert to measure with `?perf`.
+- Added after review (2026-10-11), so a phone can be measured without a console: `?perf=busy` starts a new game on the busy day (`state/perfScenario.ts`, which the `@perf` scenario now uses too), never saving; and the day summary shows the day's readings as rows ready to paste into `docs/PERF.md` (`ui/PerfReport.tsx`).
 
 - **`?perf` overlay** (`ui/PerfOverlay.tsx`, lazy-loaded only with the flag). It replaces the `?fps` `Stats` and shows:
   - fps and frame time (p50/p95);

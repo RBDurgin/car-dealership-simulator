@@ -1,10 +1,10 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { perfReading, storeCounts } from '../state/perf'
+import { dayOver } from '../sim/clock'
+import { PERF_REFRESH_S, perfReading, recordPerf, storeCounts } from '../state/perf'
+import { isPaused, useGame } from '../state/store'
 import { ambientPos, customerPos, staffPos, vehiclePos } from './runtime'
 
-/** How often the numbers are refreshed, in seconds. */
-const REFRESH = 0.5
 /** Frame times kept for the percentiles: about two seconds at 60 fps. */
 const WINDOW = 120
 
@@ -17,7 +17,8 @@ const percentile = (sorted: readonly number[], p: number) =>
  * renderer's live geometries and textures, store sets and listener time per
  * second (`state/perf.ts`), and the walkers, cars and `<Html>` badges in the
  * world. A plain DOM label refreshed a couple of times a second, outside
- * React, so a phone can be checked without a console.
+ * React, so a phone can be checked without a console. Each reading taken
+ * while the day is played goes into `perfDay` for the end-of-day report.
  */
 export default function PerfOverlay() {
   const gl = useThree((s) => s.gl)
@@ -45,7 +46,7 @@ export default function PerfOverlay() {
     times.push(delta * 1000)
     if (times.length > WINDOW) times.shift()
     since.current += delta
-    if (since.current < REFRESH || !label.current) return
+    if (since.current < PERF_REFRESH_S || !label.current) return
     const seconds = since.current
     since.current = 0
 
@@ -73,6 +74,16 @@ export default function PerfOverlay() {
       html: host ? host.childElementCount - 1 : 0,
     }
     perfReading.latest = s
+    // Today's readings for the end-of-day report: only while the day is played.
+    const game = useGame.getState()
+    // Out of the way of the day summary, which shows the day's readings itself.
+    const over = dayOver(game)
+    label.current.hidden = over
+    if (game.screen === 'playing' && !isPaused(game) && !over) {
+      const memory = (performance as { memory?: { usedJSHeapSize: number } }).memory
+      const heap = memory ? memory.usedJSHeapSize / 2 ** 20 : null
+      recordPerf(s, game.clock.day, game.timeScale, heap)
+    }
     label.current.textContent = [
       `${s.fps} fps · ${s.p50.toFixed(1)} / ${s.p95.toFixed(1)} ms (p50/p95)`,
       `${s.calls} calls · ${Math.round(s.triangles / 1000)}k tris`,
