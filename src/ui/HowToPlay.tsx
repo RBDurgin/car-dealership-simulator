@@ -184,6 +184,13 @@ function BasicsTab({ touch, click }: TabProps) {
           <b>Selling</b>). Each day ends with a summary, and your progress is saved then.
         </p>
         <p>
+          Small wins along the way earn <b>achievements</b>: a car sold at full sticker, Nazma run
+          off the lot, a month that meets the quota and more, with a few kept secret. Each pops up
+          with a 🏆 and a chime as you earn it, and those the end of a day earns are listed in the
+          day summary. They&apos;re a record only, the same on every level, and each game keeps its
+          own.
+        </p>
+        <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent
           updates, and it opens by itself when you come back to a game saved before them.
         </p>

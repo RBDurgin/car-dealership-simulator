@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { reduceAction, type ActionEvent, type ActiveAction } from '../sim/actions'
-import { combineSkews, pickArchetype, skewWeights, usedStockSkew } from '../sim/archetypes'
+import { dayAchievements, type AchievementId, type EarnedAchievement } from '../sim/achievements'
+import {
+  ARCHETYPES,
+  combineSkews,
+  pickArchetype,
+  skewWeights,
+  usedStockSkew,
+} from '../sim/archetypes'
 import {
   DEFAULT_AUDIO_SETTINGS,
   withVolume,
@@ -482,6 +489,8 @@ interface GameState {
   won: boolean
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
+  /** Achievements earned this game, each once (see `sim/achievements.ts`). Saved. */
+  achievements: EarnedAchievement[]
   /** Nazma's lot across the road. Moves each morning (opening) and when the day is settled. Saved. */
   rival: Rival
   /** Everyone on the lot. Changes on phase changes and 10-minute patience ticks. */
@@ -541,6 +550,11 @@ interface GameState {
   clearNotice: (id: number) => void
   /** Guided tip `id` was shown; it won't be again this game. */
   markTipSeen: (id: TipId) => void
+  /**
+   * Earns achievements `ids` today at the game's level, those not already
+   * earned, and returns them (`state/achievements.ts` shows their notice).
+   */
+  earnAchievements: (ids: readonly AchievementId[]) => AchievementId[]
   tickClock: (t: GameTime) => void
   /** Sells a car at `price` (default MSRP). False if it isn't for sale. */
   sellCar: (id: string, price?: number) => boolean
@@ -832,6 +846,7 @@ function dayOne(difficulty: Difficulty) {
     rival: emptyRival(),
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
+    achievements: [] as EarnedAchievement[],
     purchases: [] as Purchase[],
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
@@ -1026,6 +1041,25 @@ export const useGame = create<GameState>((set, get) => {
     }
     const log = [...s.log, dayRecord(settled, s.clock.day, reputation, cash + bailout)]
     const records = updateRecords(s.records, log, settled)
+    const inventory =
+      s.purchases.length > 0
+        ? [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)]
+        : s.inventory
+    const franchise = quota?.tier.to ?? s.franchise
+    // The day's achievements show in the summary, not as notices.
+    const earned = dayAchievements(
+      {
+        day: s.clock.day,
+        stats: settled,
+        log,
+        records: records.records,
+        reputation,
+        career,
+        franchise,
+        inventory,
+      },
+      s.achievements,
+    ).map((id) => ({ id, day: s.clock.day, level: s.difficulty }))
     set({
       cash: cash + bailout,
       bailoutUsed: s.bailoutUsed || bailout > 0,
@@ -1034,17 +1068,15 @@ export const useGame = create<GameState>((set, get) => {
       log,
       lifetime: addToLifetime(s.lifetime, settled),
       records: records.records,
-      franchise: quota?.tier.to ?? s.franchise,
+      franchise,
+      ...(earned.length > 0 && { achievements: [...s.achievements, ...earned] }),
       rival: rivalDay(
         s.rival,
         s.dayStats,
         createRng(RIVAL_SEED + s.clock.day),
         level.rivalStrength,
       ),
-      ...(s.purchases.length > 0 && {
-        inventory: [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)],
-        purchases: [],
-      }),
+      ...(s.purchases.length > 0 && { inventory, purchases: [] }),
       dayStats: { ...settled, newRecords: records.broken },
     })
   }
@@ -1687,7 +1719,8 @@ export const useGame = create<GameState>((set, get) => {
   const wash = (id: string) => {
     const inventory = washCar(get().inventory, id)
     if (inventory === get().inventory) return
-    set({ inventory })
+    const stats = get().dayStats
+    set({ inventory, dayStats: { ...stats, washes: stats.washes + 1 } })
     const car = inventory.find((c) => c.id === id)
     if (car) notify(`The ${carName(car.model)} is spotless.`)
   }
@@ -1764,7 +1797,10 @@ export const useGame = create<GameState>((set, get) => {
         purchases: [...s.purchases, purchase],
         dayStats: {
           ...s.dayStats,
-          bought: [...s.dayStats.bought, boughtRecord(purchase, s.clock.day)],
+          bought: [
+            ...s.dayStats.bought,
+            { ...boughtRecord(purchase, s.clock.day), hope: c.selling?.hope },
+          ],
         },
       })
       commit(reduceCustomers(get().customers, { type: 'respond', id: c.id, answer: 'accept' }))
@@ -1873,6 +1909,7 @@ export const useGame = create<GameState>((set, get) => {
     const trade = traded && tradeRecord(c, traded.price, s.clock.day)
     if (trade) sale.trade = trade
     if (car.used) sale.used = true
+    if (c.haggle && roundOf(c) >= ARCHETYPES[c.archetype].haggle.rounds) sale.lastRound = true
     if (s.clients.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
     // The client who sent them gets the referral fee.
     const fee = s.clients.some((x) => x.id === c.referredBy) ? s.clientPerks.referralFee : 0
@@ -2265,6 +2302,20 @@ export const useGame = create<GameState>((set, get) => {
     showNotice: (text) => set({ notice: { id: nextNoticeId++, text } }),
     clearNotice: (id) => {
       if (get().notice?.id === id) set({ notice: null })
+    },
+    earnAchievements: (ids) => {
+      const s = get()
+      const fresh = ids.filter(
+        (id, i) => ids.indexOf(id) === i && !s.achievements.some((a) => a.id === id),
+      )
+      if (fresh.length === 0) return fresh
+      set({
+        achievements: [
+          ...s.achievements,
+          ...fresh.map((id) => ({ id, day: s.clock.day, level: s.difficulty })),
+        ],
+      })
+      return fresh
     },
     markTipSeen: (id) => {
       const seen = get().tipsSeen
@@ -2947,6 +2998,7 @@ export const useGame = create<GameState>((set, get) => {
         won: save.won,
         rival: save.rival,
         tipsSeen: save.tipsSeen,
+        achievements: save.achievements,
         service: save.service,
         clients: save.clients,
         clientPerks: save.clientPerks,

@@ -18,7 +18,7 @@ export function startTips(): () => void {
     if (!TUNING[s.difficulty].tips) return
     const id = tipFor(prev, s, [...s.tipsSeen, ...pending])
     if (id) pending.push(id)
-    if (pending.length === 0 || s.notice || isPaused(s)) return
+    if (pending.length === 0 || useGame.getState().notice || isPaused(s)) return
     const next = pending.shift()!
     s.markTipSeen(next)
     s.showNotice(tipText(next))

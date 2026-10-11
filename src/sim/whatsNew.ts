@@ -325,6 +325,16 @@ export const UPDATES: readonly Update[] = [
       'The day summary says when you break a record.',
     ],
   },
+  {
+    id: 30,
+    phase: '17',
+    title: 'Achievements',
+    items: [
+      'Earn achievements for small wins: a car sold at full sticker, Nazma run off the lot, the quota met and more.',
+      'Each one pops up with a chime as you earn it; those the end of a day earns are listed in the day summary.',
+      'They’re a record only, and count the same on every level. Each game keeps its own.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

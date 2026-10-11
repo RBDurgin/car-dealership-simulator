@@ -31,7 +31,7 @@ synthesized notes made there too. A visitor's car is made there as well: the eng
 few wobbling harmonics with a little noise, and the door a damped thump with a latch's click. So are the service garage's sounds: the
 ratchet wrench is clicks of noise with a short metallic ring, and the lift a rising pump hum
 with a hiss. The desk phone's ring is made there too: two tones (440 and 480 Hz) warbled in
-two short bursts. The rain on rainy days is the same: filtered noise made in
+two short bursts. An achievement's chime is made there as well: three struck bell notes. The rain on rainy days is the same: filtered noise made in
 `src/audio/rain.ts`.
 
 Only the sounds the game uses are copied here, renamed for what they do. To add more,

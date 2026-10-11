@@ -1,3 +1,4 @@
+import type { EarnedAchievement } from './achievements'
 import { describe, expect, it } from 'vitest'
 import {
   defaultPerks,
@@ -90,6 +91,8 @@ const source = () => ({
   lifetime: emptyLifetime() as Lifetime,
   records: emptyRecords() as Records,
   statsFrom: 4,
+  // As a v26 save upgrades, so the older upgrades compare equal.
+  achievements: [] as EarnedAchievement[],
 })
 
 const record = (day: number, extra: Partial<DayRecord> = {}): DayRecord => ({
@@ -531,6 +534,34 @@ describe('save data', () => {
     const start = performance.now()
     expect(parseSave(JSON.parse(json))?.log).toHaveLength(500)
     expect(performance.now() - start).toBeLessThan(50)
+  })
+
+  it('keeps the achievements earned, dropping any this build no longer has', () => {
+    const achievements: EarnedAchievement[] = [
+      { id: 'first-sale', day: 1, level: 'medium' },
+      { id: 'full-sticker', day: 3, level: 'hard' },
+    ]
+    const save = createSave({ ...source(), achievements }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.achievements).toEqual(achievements)
+    const gone = {
+      ...save,
+      achievements: [...achievements, { id: 'moon-shot', day: 2, level: 'easy' }],
+    }
+    expect(parseSave(gone)?.achievements).toEqual(achievements)
+    expect(
+      parseSave({ ...save, achievements: [{ id: 'first-sale', day: 0, level: 'medium' }] }),
+    ).toBeNull()
+    expect(
+      parseSave({ ...save, achievements: [{ id: 'first-sale', day: 1, level: 'insane' }] }),
+    ).toBeNull()
+    expect(parseSave({ ...save, achievements: undefined })).toBeNull()
+  })
+
+  it('upgrades a version 26 save with no achievements', () => {
+    const { achievements: _, ...v26 } = createSave(source(), 123)
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v26, version: 26 })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.achievements).toEqual([])
   })
 
   it('upgrades a version 25 save with an empty log, kept from the next day', () => {

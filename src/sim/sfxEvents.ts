@@ -30,6 +30,7 @@ export type SfxCue =
   | 'wrench'
   | 'lift'
   | 'ring'
+  | 'trophy'
 
 /**
  * Where a cue happens: a customer, an employee, a car in stock, a visitor's
@@ -73,6 +74,8 @@ export interface SfxState {
   activeAction?: { id: number; action: string; phase: string } | null
   /** The receptionist's call to a client, or null. */
   receptionCall?: { employeeId: string; clientId: string } | null
+  /** Achievements earned: one more plays the trophy. */
+  achievements?: readonly unknown[]
 }
 
 /**
@@ -100,6 +103,7 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   wrench: 1500,
   lift: 1500,
   ring: 1500,
+  trophy: 1500,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -123,6 +127,9 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if (dayOver(next) && !dayOver(prev)) out.push({ cue: 'paper' })
   // The top rank: the win screen opens over the summary.
   if (atTopRank(next.career) && !atTopRank(prev.career)) out.push({ cue: 'fanfare' })
+  if ((next.achievements?.length ?? 0) > (prev.achievements?.length ?? 0)) {
+    out.push({ cue: 'trophy' })
+  }
 
   if (next.customers !== prev.customers) {
     const before = new Map(prev.customers.map((c) => [c.id, c]))

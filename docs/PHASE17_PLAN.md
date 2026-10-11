@@ -113,6 +113,18 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 
 ### 17c: Achievements (pure + store + notice)
 
+**Built 2026-10-10.** Changes from the plan:
+
+- Each achievement is either `live` or `day` (`when`), with its own `check`. `dayAchievements(ctx, earned)` takes one `DayContext` (the settled stats, the log and records with the day in, reputation, career, franchise and the stock after settling).
+- 49 in the catalogue, Phases 13–16's included. The groups add Reputation, Career, Service and Clients.
+- Comeback Free Month became **Done Right** (5 service jobs in a day, no comebacks): nothing keeps a month's service totals.
+- Hands Off needs 3+ sales, and Spotless 5+ cars, so neither is free on a quiet day. Fort Knox is day-end (thefts happen overnight); Fully Loaded is checked on the morning's change.
+- Lifetime sale counts and Every Model read `Career` (`sales`, `soldByModel`), which covers games from before 17a; Ad Man and Star Seller read `lifetime`.
+- New fields for the checks: `DayStats.washes` (the player's own), `Sale.lastRound`, `BoughtCar.hope`.
+- `earnAchievements(ids)` returns the new ones; `state/achievements.ts` holds the notice until the change that earned them has had its say (a sale's own notice) and no notice is up. The summary lists everything earned that day.
+- The `achievement` tip waits for 17d's Achievements view, which it points to.
+- Save v27.
+
 - New `sim/achievements.ts` (pure, tested):
   - `Achievement { id, title, text, group, hidden?, check }`. `group` is Selling, Business, People, Adversaries, Calendar or Used cars. `hidden` ones show as "???" until earned.
   - `ACHIEVEMENTS`: about 30–40 at first, listed below. Only achievements for features that are built go in the catalogue. When a later phase lands, it adds its own in the same change (see the CLAUDE.md line below).

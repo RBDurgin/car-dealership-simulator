@@ -11,6 +11,7 @@ import { startUiClicks } from './audio/uiClicks'
 import { COARSE, COMPACT, matchesMedia } from './input/useMediaQuery'
 import { startAudioPref, startAutosave, startControlsPref } from './state/persistence'
 import { useGame } from './state/store'
+import { startAchievements } from './state/achievements'
 import { startTips } from './state/tips'
 
 startAutosave()
@@ -18,6 +19,8 @@ startAutosave()
 startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
 startAudioPref()
 startTips()
+// After the tips, so neither shows over the other's notice.
+startAchievements()
 // Silent until the first gesture; then the sounds load and the music starts.
 startAudio(() => {
   preloadSfx()

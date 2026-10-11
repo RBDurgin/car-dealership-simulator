@@ -161,6 +161,8 @@ export interface BoughtCar {
   value: number
   /** Taken in trade on a sale (at its allowance), rather than bought for cash. */
   trade: boolean
+  /** What a seller first hoped to get (not on a trade). */
+  hope?: number
 }
 
 /** What buying needs to know about the dealership. */

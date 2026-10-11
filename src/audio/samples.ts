@@ -5,7 +5,7 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift' | 'ring'
+type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift' | 'ring' | 'trophy'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -33,6 +33,7 @@ const ALL_IDS = [
   'wrench',
   'lift',
   'ring',
+  'trophy',
 ] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
@@ -218,6 +219,36 @@ function ringBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+/** An achievement's chime: two bright bell notes a fifth apart, then the octave. */
+const TROPHY_NOTES = [
+  { at: 0, hz: 1318.5 },
+  { at: 0.09, hz: 1975.53 },
+  { at: 0.18, hz: 2637.02 },
+]
+const TROPHY_SECONDS = 1.2
+
+/**
+ * Bell-like notes: a sine with a slightly sharp, quicker-fading partial for
+ * the shimmer, each struck and left to ring. Made here so it can't be mistaken
+ * for the sale or the bell.
+ */
+function trophyBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(TROPHY_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const note of TROPHY_NOTES) {
+    const start = Math.floor(note.at * rate)
+    for (let i = start; i < data.length; i++) {
+      const t = (i - start) / rate
+      const strike = Math.min(1, t / 0.004)
+      const ring = Math.sin(2 * Math.PI * note.hz * t) * Math.exp(-t / 0.35)
+      const shimmer = 0.35 * Math.sin(2 * Math.PI * note.hz * 2.76 * t) * Math.exp(-t / 0.08)
+      data[i] += (ring + shimmer) * strike * 0.3
+    }
+  }
+  return buffer
+}
+
 const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   spray: sprayBuffer,
   fanfare: fanfareBuffer,
@@ -226,6 +257,7 @@ const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   wrench: wrenchBuffer,
   lift: liftBuffer,
   ring: ringBuffer,
+  trophy: trophyBuffer,
 }
 
 /** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */

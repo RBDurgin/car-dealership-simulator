@@ -13,6 +13,7 @@ import {
   type MonthCsi,
 } from './clients'
 import type { GameTime } from './clock'
+import { isAchievementId, type EarnedAchievement } from './achievements'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
@@ -53,7 +54,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 26
+export const SAVE_VERSION = 27
 
 export interface SaveData {
   version: number
@@ -114,6 +115,8 @@ export interface SaveData {
   records: Records
   /** The first day the log and lifetime totals cover. */
   statsFrom: number
+  /** Achievements earned this game (see `sim/achievements.ts`). */
+  achievements: EarnedAchievement[]
 }
 
 export interface SaveSource {
@@ -144,6 +147,7 @@ export interface SaveSource {
   lifetime: Lifetime
   records: Records
   statsFrom: number
+  achievements: EarnedAchievement[]
 }
 
 /**
@@ -185,6 +189,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     lifetime: s.lifetime,
     records: s.records,
     statsFrom: s.statsFrom,
+    achievements: s.achievements,
   }
 }
 
@@ -350,6 +355,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
     records: emptyRecords(),
     statsFrom: isNumber(raw.day) ? raw.day + 1 : 1,
   }),
+  // v27: achievements, none earned yet.
+  26: (raw) => ({ ...raw, achievements: [] }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -417,10 +424,26 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isLog(raw.log)) return null
   if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
   if (!Number.isInteger(raw.statsFrom) || (raw.statsFrom as number) < 1) return null
+  if (!Array.isArray(raw.achievements) || !raw.achievements.every(isEarned)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
-  return { ...raw, news: Math.min(news as number, LATEST_NEWS) } as unknown as SaveData
+  return {
+    ...raw,
+    news: Math.min(news as number, LATEST_NEWS),
+    // One this build no longer has is dropped.
+    achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
+  } as unknown as SaveData
+}
+
+function isEarned(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    Number.isInteger(v.day) &&
+    (v.day as number) >= 1 &&
+    isDifficulty(v.level)
+  )
 }
 
 /** Each of the log's records is a tuple of `LOG_FIELDS.length` numbers, its days counting up. */

@@ -46,7 +46,7 @@ export function clearSave(): void {
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
  * payroll is paid, then again for any hiring, firing, ordering, advertising, improving, changing the service settings or the client book's levers from the day summary
- * (or a tip shown after closing, or Keep playing on the win screen).
+ * (or a tip shown or an achievement earned after closing, or Keep playing on the win screen).
  */
 export function startAutosave(): () => void {
   return useGame.subscribe((s, prev) => {
@@ -62,6 +62,7 @@ export function startAutosave(): () => void {
       s.improvements !== prev.improvements ||
       s.roster !== prev.roster ||
       s.tipsSeen !== prev.tipsSeen ||
+      s.achievements !== prev.achievements ||
       s.service !== prev.service ||
       s.clients !== prev.clients ||
       s.clientPerks !== prev.clientPerks ||

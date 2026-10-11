@@ -33,6 +33,7 @@ import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
 import { rankLine } from './rankText'
 import { newRecordLine } from './statsText'
+import { achievementOf } from '../sim/achievements'
 
 /**
  * End of the day: shown once the doors are closed and the last customer has
@@ -89,6 +90,7 @@ export function DaySummary() {
   const day = useGame((s) => s.clock.day)
   const stats = useGame((s) => s.dayStats)
   const records = useGame((s) => s.records)
+  const achievements = useGame((s) => s.achievements)
   const cash = useGame((s) => s.cash)
   const arriving = useGame((s) => s.orders.length)
   const reputation = useGame((s) => s.reputation)
@@ -416,6 +418,20 @@ export function DaySummary() {
             {stats.newRecords.map((key) => (
               <div key={key}>🏆 {newRecordLine(key, records)}</div>
             ))}
+          </div>
+        )}
+        {achievements.some((a) => a.day === day) && (
+          <div className="summary-achievements">
+            {achievements
+              .filter((a) => a.day === day)
+              .map(({ id }) => {
+                const a = achievementOf(id)
+                return (
+                  <div key={id}>
+                    🏆 <b>{a.title}</b>: {a.text}
+                  </div>
+                )
+              })}
           </div>
         )}
         {stats.bailout > 0 && (

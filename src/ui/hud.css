@@ -972,8 +972,16 @@ kbd {
   background: rgba(96, 165, 250, 0.14);
   border: 1px solid rgba(96, 165, 250, 0.45);
 }
-.summary-records div + div {
+.summary-records div + div,
+.summary-achievements div + div {
   margin-top: 2px;
+}
+.summary-achievements {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.45);
 }
 .stock-summary {
   display: grid;

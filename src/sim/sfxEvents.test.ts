@@ -141,6 +141,13 @@ describe('sfxFor', () => {
     expect(cues({ career: top }, { career: top })).toEqual([])
   })
 
+  it('plays the trophy when an achievement is earned', () => {
+    expect(cues({ achievements: [1, 2] }, { achievements: [1] })).toEqual(['trophy'])
+    expect(cues({ achievements: [1] }, { achievements: [1] })).toEqual([])
+    // A new game starting with none is quiet.
+    expect(cues({ achievements: [] }, { achievements: [1] })).toEqual([])
+  })
+
   it('turns the page when the day summary comes up', () => {
     const closed = { clock: { day: 1, minute: CLOSE_MINUTE } }
     expect(cues({ ...closed, customers: [] }, closed)).toEqual(['paper'])

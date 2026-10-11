@@ -37,6 +37,7 @@ const VOLUME: Record<SfxCue, number> = {
   wrench: 0.5,
   lift: 0.45,
   ring: 0.35,
+  trophy: 0.45,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */

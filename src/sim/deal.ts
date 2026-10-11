@@ -270,6 +270,8 @@ export interface Sale {
   used?: boolean
   /** Sold to a client from the book, back for another car. */
   returning?: boolean
+  /** Closed after the buyer's last counter, when they had no rounds left. */
+  lastRound?: boolean
 }
 
 /** One day's results, for the end-of-day summary. */
@@ -318,6 +320,8 @@ export interface DayStats {
   bailout: number
   /** Used cars bought from sellers today: stock, not an expense, so off `netIncome`. */
   bought: BoughtCar[]
+  /** Cars the player washed themselves today. */
+  washes: number
   /** The rank reached when the day was settled, or null if it didn't change. */
   rankUp: RankId | null
   /** How Nazma's lot across the road stood today, or null while it isn't open. */
@@ -353,6 +357,7 @@ export function emptyStats(): DayStats {
     quota: null,
     bailout: 0,
     bought: [],
+    washes: 0,
     rankUp: null,
     rival: null,
     service: emptyServiceStats(),
