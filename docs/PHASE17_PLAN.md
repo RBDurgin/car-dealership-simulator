@@ -200,6 +200,12 @@ Phases 13–16 add their own when built:
 
 ### 17d: Achievements tab, trophy case and title screen
 
+**Built 2026-10-10.** Changes from the plan:
+
+- `mergeCase(case, achievements, records, now)` takes the level from each `EarnedAchievement` (which already keeps it) rather than one `level`, and `now` stamps `first` as a real time (ms), so the case can show when it was first earned on this device.
+- `startTrophyCase` merges whenever the store's `achievements` or `records` change, which covers each unlock, each settled day and a 17c save loading. It writes only when the case changed.
+- The `achievement` tip (Easy) comes with the first unlock and points to the Achievements view and the trophy case.
+
 - The Stats tab gets a second view, **Achievements**: a toggle at the top, no new key.
   - It's grouped by `group`, and each one shows earned (date and a level medal) or not yet earned (greyed, with its text). A hidden one shows "???".
   - A count at the top: "18 of 36".

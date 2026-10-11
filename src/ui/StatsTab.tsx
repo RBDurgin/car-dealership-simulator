@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ACHIEVEMENTS, type AchievementId } from '../sim/achievements'
 import { longDate } from '../sim/calendar'
 import { CAR_MODELS, PLAYER_ID } from '../sim/customers'
 import { carName } from '../sim/interactables'
@@ -17,6 +18,7 @@ import {
   type Metric,
 } from '../sim/stats'
 import { useGame } from '../state/store'
+import { AchievementList, type EarnedView } from './AchievementList'
 import { Chart } from './Chart'
 import { formatMoney } from './format'
 import { metricAxis, METRIC_LABELS, metricValue, RECORD_LABELS, recordValue } from './statsText'
@@ -53,11 +55,61 @@ function Breakdown({ title, rows }: { title: string; rows: [string, number][] })
   )
 }
 
+type View = 'stats' | 'achievements'
+
+const VIEWS: [View, string][] = [
+  ['stats', 'Stats'],
+  ['achievements', 'Achievements'],
+]
+
+/** This game's achievements: "18 of 49", then the grouped list. */
+function AchievementsView() {
+  const achievements = useGame((s) => s.achievements)
+  const byId = useMemo(
+    () =>
+      new Map<AchievementId, EarnedView>(
+        achievements.map((a) => [a.id, { level: a.level, when: longDate(a.day) }]),
+      ),
+    [achievements],
+  )
+  return (
+    <>
+      <p className="achievement-count">
+        <b>{byId.size}</b> of {ACHIEVEMENTS.length} earned
+      </p>
+      <AchievementList earned={(id) => byId.get(id) ?? null} />
+    </>
+  )
+}
+
 /**
- * The dealership's history: lifetime totals, personal records, a chart of
- * the day log, and lifetime sales by model, source and seller.
+ * The dealership's history, with a toggle between the numbers (lifetime
+ * totals, personal records, a chart of the day log, and lifetime sales by
+ * model, source and seller) and this game's achievements.
  */
 export function StatsTab() {
+  const [view, setView] = useState<View>('stats')
+  return (
+    <>
+      <h2>Stats</h2>
+      <div className="panel-tabs stats-pickers" role="group" aria-label="Stats or achievements">
+        {VIEWS.map(([v, label]) => (
+          <button
+            key={v}
+            className={view === v ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            aria-pressed={view === v}
+            onClick={() => setView(v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === 'stats' ? <StatsView /> : <AchievementsView />}
+    </>
+  )
+}
+
+function StatsView() {
   const log = useGame((s) => s.log)
   const lifetime = useGame((s) => s.lifetime)
   const records = useGame((s) => s.records)
@@ -83,7 +135,6 @@ export function StatsTab() {
 
   return (
     <>
-      <h2>Stats</h2>
       {statsFrom > 1 && <p className="muted stats-since">Since day {statsFrom}.</p>}
       <dl className="stock-summary">
         <dt>Cars sold</dt>

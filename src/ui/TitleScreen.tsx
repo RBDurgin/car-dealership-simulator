@@ -7,10 +7,19 @@ import {
   difficultyLabel,
   type Difficulty,
 } from '../sim/difficulty'
+import { ACHIEVEMENTS } from '../sim/achievements'
+import { caseCount } from '../sim/trophyCase'
 import { updatesSince } from '../sim/whatsNew'
-import { clearSave, markNewsSeen, readSave } from '../state/persistence'
+import {
+  clearSave,
+  markNewsSeen,
+  readSave,
+  readTrophyCase,
+  resetTrophyCase,
+} from '../state/persistence'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
+import { TrophyCase } from './TrophyCase'
 import { WhatsNew } from './WhatsNew'
 
 /**
@@ -28,9 +37,24 @@ export function TitleScreen() {
     // Stamped now, so it doesn't come back on a reload before the day ends.
     markNewsSeen()
   }, [])
+  // The device's trophy case: read on load, and again as the case opens.
+  const [trophies, setTrophies] = useState(readTrophyCase)
+  const [trophiesOpen, setTrophiesOpen] = useState(false)
+  const closeTrophies = useCallback(() => setTrophiesOpen(false), [])
+  const resetTrophies = useCallback(() => {
+    resetTrophyCase()
+    setTrophies(readTrophyCase())
+  }, [])
   if (!open) return null
   // The title screen's buttons stay hidden behind it, so Enter can't Continue.
   if (newsOpen) return <WhatsNew save={save} onClose={closeNews} />
+  if (trophiesOpen) {
+    return <TrophyCase trophies={trophies} onClose={closeTrophies} onReset={resetTrophies} />
+  }
+  const openTrophies = () => {
+    setTrophies(readTrophyCase())
+    setTrophiesOpen(true)
+  }
 
   const newGame = (difficulty: Difficulty) => {
     if (save && !window.confirm(`Start over? Your day ${save.day + 1} save will be lost.`)) return
@@ -90,6 +114,12 @@ export function TitleScreen() {
             </button>
             <button className="btn" onClick={() => useGame.getState().toggleHelp(true)}>
               How to play
+            </button>
+            <button className="btn" onClick={openTrophies}>
+              Trophies
+              <span className="title-save">
+                {caseCount(trophies)} / {ACHIEVEMENTS.length}
+              </span>
             </button>
             <button className="btn" onClick={() => setNewsOpen(true)}>
               What&apos;s new

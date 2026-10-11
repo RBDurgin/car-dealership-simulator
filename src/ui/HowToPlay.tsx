@@ -188,7 +188,10 @@ function BasicsTab({ touch, click }: TabProps) {
           off the lot, a month that meets the quota and more, with a few kept secret. Each pops up
           with a 🏆 and a chime as you earn it, and those the end of a day earns are listed in the
           day summary. They&apos;re a record only, the same on every level, and each game keeps its
-          own.
+          own: the office computer&apos;s <b>Stats</b> tab (P) lists them under <b>Achievements</b>,
+          with a medal for the level you earned each on. <b>Trophies</b> on the title screen keeps
+          every achievement earned on this device across games, at the hardest level, with your
+          best-ever records; a new game doesn&apos;t clear it.
         </p>
         <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent

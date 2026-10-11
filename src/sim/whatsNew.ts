@@ -335,6 +335,16 @@ export const UPDATES: readonly Update[] = [
       'They’re a record only, and count the same on every level. Each game keeps its own.',
     ],
   },
+  {
+    id: 31,
+    phase: '17',
+    title: 'Achievements view and trophy case',
+    items: [
+      'The Stats tab has an Achievements view: each one by group, with the day you earned it and a medal for the level.',
+      'Trophies on the title screen keeps every achievement earned on this device, at the hardest level, and your best records.',
+      'Starting a new game keeps the trophy case. Reset trophies at the bottom of it empties it.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

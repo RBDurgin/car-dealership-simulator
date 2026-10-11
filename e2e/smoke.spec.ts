@@ -142,6 +142,33 @@ test('an old save shows what’s new once, then continues', async ({ page }) => 
   expect(errors).toEqual([])
 })
 
+test('shows achievements in the Stats tab and the trophy case on the title screen', async ({
+  page,
+}) => {
+  const errors = watchErrors(page)
+  await startGame(page)
+  await inStore(page, (_, g) => g().earnAchievements(['first-sale']))
+  const panel = page.getByRole('dialog', { name: 'Office computer' })
+  await page.keyboard.press('KeyP')
+  await panel.getByRole('button', { name: 'Achievements' }).click()
+  await expect(panel.getByText(/^1$/)).toBeVisible()
+  await expect(panel.getByText('First Sale')).toBeVisible()
+  await expect(panel.getByText('???').first()).toBeVisible()
+
+  // The case outlives the game: back on the title screen it holds the unlock.
+  await page.reload()
+  await page.getByRole('button', { name: /Trophies/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Trophies' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('img', { name: 'Earned on Medium' })).toHaveCount(1)
+  page.once('dialog', (d) => d.accept())
+  await dialog.getByRole('button', { name: 'Reset trophies' }).click()
+  await expect(dialog.getByRole('img', { name: /Earned on/ })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(page.getByRole('button', { name: /Trophies\s*0 \// })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('a new player never sees what’s new', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'New game' })).toBeVisible()

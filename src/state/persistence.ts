@@ -1,6 +1,7 @@
 import { parseAudioSettings } from '../sim/audioSettings'
 import { isClosed } from '../sim/clock'
 import { createSave, parseSave, type SaveData } from '../sim/save'
+import { emptyCase, mergeCase, parseCase, type TrophyCase } from '../sim/trophyCase'
 import { LATEST_NEWS } from '../sim/whatsNew'
 import { useGame } from './store'
 
@@ -118,6 +119,47 @@ export function startAudioPref(): () => void {
       localStorage.setItem(AUDIO_KEY, JSON.stringify(s.audio))
     } catch {
       // Not remembered; the change still applies.
+    }
+  })
+}
+
+const TROPHY_KEY = 'dealership.trophies'
+
+/** This device's trophy case, or an empty one when there's none (or no storage). */
+export function readTrophyCase(): TrophyCase {
+  try {
+    const json = localStorage.getItem(TROPHY_KEY)
+    return json ? parseCase(JSON.parse(json)) : emptyCase()
+  } catch {
+    return emptyCase()
+  }
+}
+
+/** Empties the trophy case (the title screen's Reset trophies). The save is left alone. */
+export function resetTrophyCase(): void {
+  try {
+    localStorage.removeItem(TROPHY_KEY)
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/**
+ * Keeps the device-wide trophy case: each achievement as it's earned (and
+ * those a loaded save already holds) and each day's records as it's settled
+ * are merged in and written back. Like the audio settings, it's kept apart
+ * from the save slot, so a new game or a cleared save keeps it.
+ */
+export function startTrophyCase(): () => void {
+  return useGame.subscribe((s, prev) => {
+    if (s.achievements === prev.achievements && s.records === prev.records) return
+    const before = readTrophyCase()
+    const after = mergeCase(before, s.achievements, s.records, Date.now())
+    if (after === before) return
+    try {
+      localStorage.setItem(TROPHY_KEY, JSON.stringify(after))
+    } catch {
+      // Not kept; the game carries on.
     }
   })
 }

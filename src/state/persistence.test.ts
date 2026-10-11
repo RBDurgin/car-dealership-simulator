@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_AUDIO_SETTINGS } from '../sim/audioSettings'
-import { startAudioPref, startControlsPref } from './persistence'
+import { createSave } from '../sim/save'
+import {
+  clearSave,
+  readTrophyCase,
+  resetTrophyCase,
+  startAudioPref,
+  startControlsPref,
+  startTrophyCase,
+} from './persistence'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -94,5 +102,57 @@ describe('sound settings', () => {
     stop = startAudioPref()
     game().toggleMute()
     expect(localStorage.getItem('car-dealership-simulator.save')).toBeNull()
+  })
+})
+
+describe('trophy case', () => {
+  let stop: () => void = () => {}
+  beforeEach(() => useGame.setState(initial, true))
+  afterEach(() => {
+    stop()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps each achievement as it is earned, at the level it was earned on', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startTrophyCase()
+    game().newGame('hard')
+    game().earnAchievements(['first-sale'])
+    expect(readTrophyCase().earned['first-sale']).toMatchObject({ level: 'hard' })
+  })
+
+  it('outlives a new game and a cleared save, until reset', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startTrophyCase()
+    game().newGame('easy')
+    game().earnAchievements(['first-sale'])
+    clearSave()
+    game().newGame('medium')
+    expect(readTrophyCase().earned['first-sale']).toMatchObject({ level: 'easy' })
+    resetTrophyCase()
+    expect(readTrophyCase().earned).toEqual({})
+  })
+
+  it('takes in the achievements and records of a save that loads', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    game().newGame('medium')
+    useGame.setState({
+      achievements: [{ id: 'closer', day: 4, level: 'medium' }],
+      records: { ...game().records, bestDay: { value: 9_000, day: 4 } },
+    })
+    const save = createSave(game(), Date.now())
+    useGame.setState(initial, true)
+    stop = startTrophyCase()
+    game().loadGame(save)
+    const c = readTrophyCase()
+    expect(c.earned.closer).toMatchObject({ level: 'medium' })
+    expect(c.best.day).toBe(9_000)
+  })
+
+  it('is just empty without storage', () => {
+    stop = startTrophyCase()
+    game().newGame('medium')
+    game().earnAchievements(['first-sale'])
+    expect(readTrophyCase().earned).toEqual({})
   })
 })

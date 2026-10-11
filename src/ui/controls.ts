@@ -12,7 +12,7 @@ export const CONTROLS: [string, string][] = [
   ['K', 'Rival (Nazma’s lot across the road)'],
   ['B', 'Service (the garage)'],
   ['L', 'Clients (the client book)'],
-  ['P', 'Stats (totals, records and charts)'],
+  ['P', 'Stats (totals, records, charts and achievements)'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away'],

@@ -131,6 +131,10 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
   stats: [{ dayStats: { missed: {}, quota: null, newRecords: ['bestDay'] } }, {}],
+  achievement: [
+    { achievements: [{ id: 'first-sale', day: 1, level: 'easy' }] },
+    { achievements: [] },
+  ],
   csi: [
     {
       dayStats: {

@@ -52,6 +52,7 @@ export type TipId =
   | 'appreciation'
   | 'csi'
   | 'stats'
+  | 'achievement'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -107,6 +108,8 @@ export const TIPS: Record<TipId, string> = {
   csi: `This month's CSI came in under ${CSI_FLOOR}, so the manufacturer cut the holdback by a quarter. Every new-car buyer's visit counts: keep waits short, haggle less, and hand over clean cars at a fair price.`,
   stats:
     'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
+  achievement:
+    'You earned an achievement. See them all in the office computer’s Stats tab (P) under Achievements, and every game’s in the trophy case on the title screen.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -125,6 +128,7 @@ export interface TipState {
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
   dayStats: Pick<DayStats, 'missed' | 'quota'> & { newRecords?: readonly RecordKey[] }
+  achievements?: readonly unknown[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
   franchise: FranchiseTier
@@ -283,6 +287,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     }
     case 'stats':
       return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
+    case 'achievement':
+      return (next.achievements?.length ?? 0) > 0 && !prev.achievements?.length
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }
