@@ -102,6 +102,28 @@ Listeners go through `subscribeTo` (`state/subscribe.ts`), components select onl
 - SwiftShader's frame rate is CPU-bound, so less React work shows up as frames. Draw calls are unchanged (616), as 18c doesn't touch rendering.
 - Sets per second are the same; the frame loops' repeated calls changed nothing, so they never counted as sets (the probe found 1 in about 100 calls over 40 s at 4×). `report` keeps it that way when a claim or a lead fails and would otherwise be retried every frame.
 
+### Desktop, Chrome, busy day (Medium, rain, local preview, full window)
+
+| When        | Speed | fps  | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` | Heap  |
+| ----------- | ----- | ---- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- | ----- |
+| 18a         | 1×    | 30.0 | 45 ms     | 738 / 828               | 252k      | 662        | 128      | 2.2    | 0.16          | 20     | 15       | 91 MB |
+| 18c (10-11) | 1×    | 28.8 | 47 ms     | 758 / 899               | 250k      | 972        | 131      | 2.8    | 0.16          | 20     | 15       | 92 MB |
+
+- No change, within the run-to-run noise, as expected: full-window on the desktop is bound by fill (18a's 800×600 reading), and 18c cut only CPU work (React renders and store calls). 18e's DPR and shadow-map steps are what should move it.
+- In an 800×600 window (loaded at that size, 6.0 minutes): 56.1 fps, 21 ms p95, 542 / 659 draw calls, 198k triangles, 3.3 sets/s, 0.15 listener ms/s, 92 MB, against 18a's 57.2 fps, 21 ms, 505 / 625, 193k, 4.0, 0.15 and 101 MB. Also unchanged: even with fewer pixels, the CPU work 18c saved (a few ms of renders a game minute) is too small to show at 1×. Geometries 129 → 1153 (18a 130 → 1289).
+- Geometries climbed from 180 to 972 over 6.2 minutes of readings (662 in 18a's run), textures 72 → 131. The climb is still there and still unexplained; 18e looks for it first.
+
+### iPhone, Chrome, busy day (rain, local preview)
+
+| When                | Speed | fps  | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` |
+| ------------------- | ----- | ---- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- |
+| 18a (Hard)          | 1×    | 59.6 | 18 ms     | 593 / 755               | 198k      | 505        | 124      | 2.6    | 0.31          | 20     | 14       |
+| 18c (10-11, Medium) | 1×    | 59.4 | 18 ms     | 491 / 585               | 174k      | 381        | 130      | 2.2    | 0.25          | 20     | 14       |
+
+- Still a steady 60 fps (the display's cap), so the phone had headroom before and still does; 18c can't show here.
+- The draw calls and triangles are lower, but 18c doesn't change what's drawn: it's how much of the lot was in view (the camera wasn't fixed between runs). The level doesn't change the scene.
+- Geometries climbed 126 → 381 over 6.0 minutes (114 → 505 in 18a), textures 65 → 130: the same climb as on the desktop.
+
 ### Listeners (sim bench, 200 Medium days, 324 sets a day)
 
 | Run    | ms per set | ms per day |
