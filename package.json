@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test",
+    "e2e": "playwright test --grep-invert @perf",
+    "e2e:perf": "playwright test --grep @perf",
+    "bench": "vitest bench --run --reporter verbose",
     "lint": "oxlint",
     "format": "prettier --write ."
   },

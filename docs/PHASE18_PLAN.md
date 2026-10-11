@@ -62,6 +62,14 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18a: Baseline, profiling tools and CI
 
+**Built 2026-10-10.** The baseline is in `docs/PERF.md`. Changes from the plan:
+
+- The overlay is `scene/PerfOverlay.tsx`, not `ui/`, because it reads the renderer in `useFrame`. Its counts live in `state/perf.ts` (`instrumentStore`, installed in `main.tsx` before anything subscribes; `perfReading` for the e2e scenario). `?fps` still turns it on. The listener time covers the listeners added through `useGame.subscribe`; components' selectors subscribe to zustand's inner store and aren't timed.
+- The bench is `src/state/bench/longGame.bench.ts`, not `sim/bench/`, since it drives the store. A headless player, `state/bench/bot.ts`, stands in for the scene and the player. Vitest 5's `bench` comes from the test context, so each level's game is one test (`npm run bench`), which prints its run as JSON and benches `createSave`/`parseSave` on the day-500 save.
+- `e2e/perf.spec.ts` also saves a screenshot to `test-results/perf-busy.png` for 18e's before-and-after comparisons. `startGame` takes an optional path.
+- `prettier --check` failed on two older plan docs (`PHASE7_PLAN.md`, `PHASE8_PLAN.md`), so they were formatted for CI to pass.
+- The real-device rows in `docs/PERF.md` are left for Robert to measure with `?perf`.
+
 - **`?perf` overlay** (`ui/PerfOverlay.tsx`, lazy-loaded only with the flag). It replaces the `?fps` `Stats` and shows:
   - fps and frame time (p50/p95);
   - `renderer.info.render.calls`, `triangles` and `geometries`/`textures`;

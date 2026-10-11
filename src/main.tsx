@@ -17,8 +17,11 @@ import {
 } from './state/persistence'
 import { useGame } from './state/store'
 import { startAchievements } from './state/achievements'
+import { instrumentStore, PERF } from './state/perf'
 import { startTips } from './state/tips'
 
+// Before anything subscribes, so every listener is timed.
+if (PERF) instrumentStore(useGame)
 startAutosave()
 // The controls hint starts collapsed on phones and touch screens.
 startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))

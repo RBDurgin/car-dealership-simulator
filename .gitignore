@@ -26,3 +26,6 @@ dist-ssr
 # Playwright
 /test-results/
 /playwright-report/
+
+# Perf runs (see docs/PERF.md)
+/e2e/perf-results.json

@@ -1,12 +1,11 @@
-import { Stats } from '@react-three/drei'
-import { Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
+import { PERF } from '../state/perf'
 import { CameraRig } from './CameraRig'
 import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
-import { DrawCalls } from './DrawCalls'
 import { DrivenCars } from './DrivenCar'
 import { Floors } from './Floors'
 import { Garage } from './Garage'
@@ -31,8 +30,8 @@ import { WeatherEffects, WeatherLights } from './Weather'
  */
 const SHADOW_MAP_SIZE = matchesMedia(COMPACT) || matchesMedia(COARSE) ? 2048 : 4096
 
-/** `?fps` in the URL shows a frame rate meter and the draw calls, for checking phones without a console. */
-const SHOW_FPS = new URLSearchParams(window.location.search).has('fps')
+/** The `?perf` overlay, loaded only with the flag. */
+const PerfOverlay = lazy(() => import('./PerfOverlay'))
 
 export function Scene() {
   return (
@@ -61,8 +60,11 @@ export function Scene() {
       <Nazma />
       <Chatter />
       <WeatherEffects />
-      {SHOW_FPS && <Stats className="fps-stats" />}
-      {SHOW_FPS && <DrawCalls />}
+      {PERF && (
+        <Suspense fallback={null}>
+          <PerfOverlay />
+        </Suspense>
+      )}
     </>
   )
 }
