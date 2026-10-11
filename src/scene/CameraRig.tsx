@@ -11,6 +11,8 @@ const PITCH = Math.atan(1 / Math.SQRT2)
 const MIN_ZOOM = 20
 const MAX_ZOOM = 90
 const START_ZOOM = 40
+/** A zoom this close to its target is put on it, so the easing ends. */
+const ZOOM_SNAP = 1e-3
 
 export function CameraRig() {
   const camera = useRef<OrthoCamera>(null)
@@ -54,8 +56,14 @@ export function CameraRig() {
     const { focus } = cameraState
     focus.x = MathUtils.damp(focus.x, playerPos.x, 6, dt)
     focus.z = MathUtils.damp(focus.z, playerPos.z, 6, dt)
-    cam.zoom = MathUtils.damp(cam.zoom, zoomTarget.current, 10, dt)
-    cam.updateProjectionMatrix()
+    // The projection only changes with the zoom (R3F and drei redo it when the
+    // viewport does), so it's left alone once the zoom has settled.
+    const eased = MathUtils.damp(cam.zoom, zoomTarget.current, 10, dt)
+    const zoom = Math.abs(eased - zoomTarget.current) < ZOOM_SNAP ? zoomTarget.current : eased
+    if (zoom !== cam.zoom) {
+      cam.zoom = zoom
+      cam.updateProjectionMatrix()
+    }
 
     const { yaw } = cameraState
     const horizontal = DISTANCE * Math.cos(PITCH)

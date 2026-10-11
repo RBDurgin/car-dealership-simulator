@@ -107,6 +107,9 @@ function syncTalks(s: ChatterState): void {
   }
 }
 
+/** Lines due this frame, emptied and refilled each frame instead of made anew. */
+const due: Queued[] = []
+
 /**
  * Gibberish voices (`sim/chatter`, `audio/voice`): salespeople pitching,
  * customers answering, murmurs at the desk, couples chatting, greetings and
@@ -130,7 +133,7 @@ export function Chatter() {
     now += frameSeconds(rawDelta, 1).realSeconds
     syncTalks(game)
 
-    const due: Queued[] = []
+    due.length = 0
     for (const t of talks.values()) {
       if (t.nextAt > now) continue
       const [a, b] = t.conv.speakers

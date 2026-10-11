@@ -598,6 +598,10 @@ const CustomerFigure = memo(function CustomerFigure({
   )
 })
 
+/** The frame loop's sets, cleared and refilled each frame instead of made anew. */
+const ready = new Set<string>()
+const live = new Set<string>()
+
 /**
  * Every customer in the world, moved by one `useFrame`: they walk in from the
  * sidewalk (a passer-by who wandered in picks up from where they were), with a
@@ -620,10 +624,10 @@ export function Customers() {
       closingDeal: game.activeAction?.action === 'closeDeal',
     }
     // Service clients whose car is done.
-    const ready = new Set(
-      game.serviceJobs.flatMap((j) => (j.status === 'ready' && j.customerId ? [j.customerId] : [])),
-    )
-    const live = new Set<string>()
+    ready.clear()
+    for (const j of game.serviceJobs)
+      if (j.status === 'ready' && j.customerId) ready.add(j.customerId)
+    live.clear()
     for (const c of game.customers) {
       if (inCar(c)) continue
       live.add(c.id)

@@ -145,7 +145,8 @@ export function Pedestrians() {
       if (due.length > 0) changed = true
     }
     const { seconds } = frameSeconds(rawDelta, game.timeScale)
-    for (const w of [...walkers.values()]) if (!update(w, seconds)) changed = true
+    // Only the walker being updated is ever removed, which a Map's iteration allows.
+    for (const w of walkers.values()) if (!update(w, seconds)) changed = true
     syncGroups(groups, walkers)
     if (changed) setIds([...walkers.keys()])
   })

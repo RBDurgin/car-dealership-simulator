@@ -11,7 +11,7 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
   - people in the world (player included), visitors' cars and `<Html>` badges.
   - At the end of each day, the day summary shows the day's readings (only those taken while the day was played) as rows for the device table below, one per game speed played, with a **Copy** button. Under them it shows the renderer's geometries and textures at the day's first and last readings, to show whether they climb. On the first day played, the first reading comes while models are still loading.
 - **`?perf=busy`**: a new game jumps straight to the busy late-game day (`state/perfScenario.ts`, the same scene the `@perf` e2e scenario measures): every expansion, 44 cars, 12 staff, 12 customers at once, rain and Nazma on his way. Such a game is never saved and leaves the trophy case alone, so it's safe on the deployed site. Continuing a save with the flag on isn't changed, but isn't saved either.
-- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, store sets per `tickClock` and per `startNextDay` (each set runs every listener; added in 18b), what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. A third run (added in 18c) plays 200 Medium days with the game's listeners subscribed (autosave, the preferences, tips, achievements, the trophy case and the sound ones, with the browser stubbed out; Chatter's live in a scene component) and reports their ms per set, per clock step and per day. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs.
+- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, store sets per `tickClock` and per `startNextDay` (each set runs every listener; added in 18b), what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. A third run (added in 18c) plays 200 Medium days with the game's listeners subscribed (autosave, the preferences, tips, achievements, the trophy case and the sound ones, with the browser stubbed out; Chatter's live in a scene component) and reports their ms per set, per clock step and per day. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs. It also runs 18d's micro-benches, which print µs per frame or search: `src/sim/crowd.bench.ts` (one frame of 60 walkers) and `src/sim/pathfinding.bench.ts` (A* on the full map).
 - **Browser perf scenario**: `npm run e2e:perf` (tagged `@perf`, left out of `npm run e2e` and CI). `e2e/perf.spec.ts` starts a game with `?perf=busy` and reads the overlay once a second for 30 s at 1× and at 4×. It writes `e2e/perf-results.json`, with React's commits, components rendered and render ms per game minute (added in 18c, counted through the hook React DevTools uses, so dev builds only), then closes the day and checks the summary's report. Screenshots go to `test-results/perf-busy.png` and `test-results/perf-report.png`. Under SwiftShader the fps measures the CPU, not a GPU; the draw calls, triangles, store sets, walkers and React's renders are what to compare there. Counted per game minute, the renders don't depend on the frame rate.
 
 ## Baseline (18a)
@@ -134,6 +134,81 @@ Listeners go through `subscribeTo` (`state/subscribe.ts`), components select onl
 - Same-machine runs, back to back; earlier runs of the "before" code read 2.7–3.4 ms a day, so the difference is about the run-to-run noise. Either way the listeners take under 10 µs a set, far under the 1 ms per step target, and in the browser a set comes a few times a second.
 - The plan gated `sfxFor`, `reactionsFor`, `tipFor` and `achievementsFor` on the fields they read. Measured, that cost more than it saved: sets touch sfx's fields 86% of the time, chatter's 72%, tips' 53% and achievements' 29%, and each diff already returns early on what it doesn't need. Comparing their fields on every set first made them 1.5–4× slower (picking the fields into an object for `shallow`, up to 20×), so they run on every set as before, through `subscribeDiff`.
 - What did stay gated is where the work is real in the browser: music touches its Web Audio nodes only when the track or the muffle changes (before, on every clock step and customer change), the trophy case reads and parses localStorage only when achievements or records change, autosave does nothing until the day is settled, and `scene/runtime`'s grid syncs only on their own fields.
+
+## 18d: simulation and frame-loop hot paths (2026-10-11)
+
+The crowd is gathered and bucketed once a frame, walkers step without allocating, an unreachable goal is turned down without a search, and the one replay left is remembered.
+
+### Crowd, one frame of 60 walkers (`src/sim/crowd.bench.ts`, µs per frame at 60 fps and 1×)
+
+| Run                                         | µs per frame |
+| ------------------------------------------- | ------------ |
+| Before (18c's code, three runs)             | 256–360      |
+| 18c's way on 18d's step (a list per walker) | 213–223      |
+| After: gathered once, `SpatialHash`         | **67–69**    |
+
+- 60 walkers mill about the front lot and showroom, each taking its substep among the others, as `moveAlong` does. Before, every walker gathered its own list of everyone (60 new objects and a tile each) and checked all 60; after, the crowd is gathered once a frame into reused objects, hashed into 1-tile cells, and each walker checks only the cells within `SEP_RADIUS` plus how far anyone could walk in the frame.
+- The middle row is the old gathering with 18d's allocation-free step (`canStand` no longer makes arrays and tiles, `stepAlongPath`, `separation` and `moveWithCollision` write into out parameters): about 15% of the cut is the step, the rest is the hash and gathering once.
+- About 0.2 ms a frame saved on this machine at 60 walkers, more on a phone. The busy day has about 30.
+
+### A* on the full map, every expansion up (`src/sim/pathfinding.bench.ts`, µs per search)
+
+| Search                                | Before  | After       |
+| ------------------------------------- | ------- | ----------- |
+| Across the front lot                  | 19–22   | 18–23       |
+| Sidewalk to the east lot's far corner | 159–168 | 163–168     |
+| A walled-in goal                      | 476–487 | **0.2–0.3** |
+| A walled-in goal, after a grid change |         | **23–25**   |
+
+- 13c's heap A* holds up at 60 × 30: a cross-map path is about 0.16 ms. No path spikes showed besides the unreachable goal, which searched every tile it could reach first; `pathTo` can try four goal lists in a row, so a walker with nowhere to go cost up to 2 ms on this machine. Now `Grid.area` labels connected areas once per grid change (about 24 µs on the full map) and `findPathToAny` turns down a goal in another area at once. No path cache: nothing left to cache.
+
+### Replays
+
+`lastTheftNight` (behind `isTheftNight`, the tests and the v18 save upgrade) replayed every night from day 6; it's remembered now, like `weatherOn`. The game itself hasn't replayed since 14d (`theftNightAfter` with `Rival.lastTheftDay`). The tests' 2,000-day `isTheftNight` check went from 236 ms to 3 ms. No other function replays from day 1.
+
+### Sim bench
+
+| Level  | ms/day first 50 | middle 50 | last 50 | ms/tick mean | Sales | Save at day 500 |
+| ------ | --------------- | --------- | ------- | ------------ | ----- | --------------- |
+| Medium | 6.9             | 6.9       | 4.3     | 0.067        | 2,954 | 163 KB          |
+| Hard   | 3.9             | 2.2       | 1.9     | 0.038        | 771   | 126 KB          |
+
+- Flat from day 1 to day 500, and both levels play out exactly as after 18b (the same sales and save sizes): 18d changed no behaviour the bench can see.
+
+### `@perf` overlay, busy day (SwiftShader)
+
+| Speed | fps, 18c | 18d | p95 frame, 18c | 18d    | Draw calls | Sets/s | Listener ms/s |
+| ----- | -------- | --- | -------------- | ------ | ---------- | ------ | ------------- |
+| 1×    | 3.3      | 3.2 | 778 ms         | 781 ms | 616        | 0.47   | 0.03          |
+| 4×    | 2.5      | 2.4 | 806 ms         | 837 ms | 618        | 3.15   | 0.35          |
+
+- No change, as expected: SwiftShader's frames take about 300 ms of rendering, and 18d saves a fraction of a millisecond of script. The readings that can show it are a real device's frame time on a busy day at 4×, where the crowd steps the most.
+- `CameraRig` now calls `updateProjectionMatrix` only while the zoom eases (R3F and drei redo it when the viewport changes). It's microseconds a frame, too small for any reading here; it's kept because it costs nothing.
+
+### Desktop, Chrome, busy day (Medium, rain, local preview, full window)
+
+| When        | Speed | fps  | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` | Heap  |
+| ----------- | ----- | ---- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- | ----- |
+| 18a         | 1×    | 30.0 | 45 ms     | 738 / 828               | 252k      | 662        | 128      | 2.2    | 0.16          | 20     | 15       | 91 MB |
+| 18c (10-11) | 1×    | 28.8 | 47 ms     | 758 / 899               | 250k      | 972        | 131      | 2.8    | 0.16          | 20     | 15       | 92 MB |
+| 18d (10-11) | 1×    | 28.4 | 45 ms     | 798 / 891               | 258k      | 539        | 129      | 1.8    | 0.14          | 20     | 15       | 79 MB |
+
+- No change in frame rate, within the run-to-run noise, as with 18c: full-window on the desktop is bound by fill (18a's 800×600 reading), and 18d cut only script. The draw calls are a little higher because more of the lot was in view (the camera isn't fixed between runs); 18d doesn't change what's drawn.
+- The heap read 79 MB against 91–92 MB before. That fits 18d's frame loops no longer making garbage each frame, but it's one run and the heap moves with collection timing, so it's a hint, not a finding.
+- Geometries climbed 180 → 539 and textures 70 → 129 over 6.3 minutes of readings: the same unexplained climb, still for 18e to find first.
+- Only 1× was played: the local preview is a production build, which has no speed-up.
+
+### iPhone, Chrome, busy day (rain, local preview)
+
+| When                | Speed | fps  | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` |
+| ------------------- | ----- | ---- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- |
+| 18a (Hard)          | 1×    | 59.6 | 18 ms     | 593 / 755               | 198k      | 505        | 124      | 2.6    | 0.31          | 20     | 14       |
+| 18c (10-11, Medium) | 1×    | 59.4 | 18 ms     | 491 / 585               | 174k      | 381        | 130      | 2.2    | 0.25          | 20     | 14       |
+| 18d (10-11)         | 1×    | 59.4 | 20 ms     | 495 / 560               | 177k      | 440        | 127      | 2.7    | 0.30          | 20     | 15       |
+
+- Still a steady 60 fps, the display's cap, so 18d's saving can't show as frames at 1×. The p95 of 20 ms against 18 ms is one run, within the noise (a few slow frames move it).
+- Geometries climbed 126 → 440 and textures 65 → 127 over 6.0 minutes of readings: the same climb, for 18e.
+- Neither device shows 18d: the desktop is bound by fill, and the phone has headroom at 1×. Its gain is in the benches (the crowd's frame 3–4× cheaper, no unreachable-goal searches), and in less garbage, which the desktop's lower heap hints at.
 
 ## CI
 

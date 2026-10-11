@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect } from 'react'
 import { advance, CLOCK_STEP_MINUTES } from '../sim/clock'
 import { isPaused, useGame } from '../state/store'
-import { gameTime } from './runtime'
+import { gameTime, nextFrame } from './runtime'
 
 const MAX_FRAME_S = 0.25
 
@@ -22,6 +22,9 @@ export function GameClock() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Before anything else each frame, so the frame's crowd is gathered afresh.
+  useFrame(nextFrame, -1)
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()

@@ -13,6 +13,7 @@ import {
   Reservations,
   SEP_RADIUS,
   separation,
+  SpatialHash,
   watchProgress,
   type Agent,
   type StuckGuard,
@@ -20,6 +21,7 @@ import {
 import { Grid, type Tile, type Vec2 } from './grid'
 import { buildLayout, createGrid } from './layout'
 import { findPathToAny } from './pathfinding'
+import { createRng } from './rng'
 
 const at = (id: string, x: number, z: number): Agent => ({ id, pos: { x, z } })
 
@@ -33,6 +35,53 @@ describe('occupancy', () => {
     const cost = occupiedCost(occ, 5)
     expect(cost(grid.index(2, 3))).toBe(5)
     expect(cost(grid.index(1, 1))).toBe(0)
+  })
+})
+
+describe('SpatialHash', () => {
+  it('finds the same neighbours as checking everyone, on random crowds', () => {
+    const rng = createRng(18)
+    const hash = new SpatialHash()
+    const out: Agent[] = []
+    for (let round = 0; round < 50; round++) {
+      // Some crowds spread over a lot, some packed tight, some off on negative ground.
+      const span = 2 + rng.next() * 30
+      const shift = (rng.next() - 0.5) * 40
+      const agents = Array.from({ length: 1 + Math.floor(rng.next() * 60) }, (_, i) =>
+        at(`a${i}`, shift + rng.next() * span, shift + rng.next() * span),
+      )
+      hash.build(agents)
+      for (const self of agents) {
+        const reach = rng.next() * 2.5
+        const found = new Set(hash.near(self.pos, reach, out))
+        for (const other of agents) {
+          const d = Math.hypot(other.pos.x - self.pos.x, other.pos.z - self.pos.z)
+          if (d <= reach) expect(found.has(other), `${other.id} at ${d}`).toBe(true)
+        }
+        expect(found.size).toBe(out.length)
+      }
+    }
+  })
+
+  it('forgets the last crowd when built again', () => {
+    const hash = new SpatialHash()
+    hash.build([at('a', 0.5, 0.5)])
+    hash.build([at('b', 5.5, 5.5)])
+    expect(hash.near({ x: 0.5, z: 0.5 }, 1, []).map((a) => a.id)).toEqual([])
+    expect(hash.near({ x: 5.5, z: 5.5 }, 1, []).map((a) => a.id)).toEqual(['b'])
+  })
+
+  it('gives separation the same push as everyone would', () => {
+    const rng = createRng(7)
+    const agents = Array.from({ length: 40 }, (_, i) => at(`a${i}`, rng.next() * 6, rng.next() * 6))
+    const hash = new SpatialHash()
+    hash.build(agents)
+    for (const self of agents) {
+      const all = separation(self, agents, { x: 1, z: 0 })
+      const near = separation(self, hash.near(self.pos, SEP_RADIUS, []), { x: 1, z: 0 })
+      expect(near.x).toBeCloseTo(all.x, 9)
+      expect(near.z).toBeCloseTo(all.z, 9)
+    }
   })
 })
 

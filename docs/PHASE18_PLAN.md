@@ -147,6 +147,17 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18d: Simulation and frame-loop hot paths
 
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and the 500-day bench plays out as after 18b. Changes from the plan:
+
+- **Frame number.** `GameClock` bumps `runtime`'s frame count (`nextFrame`, a `useFrame` at priority -1, so before every other loop). `crowdAgents()` gathers the crowd on its first call in a frame into reused objects, each holding the walker's own position (so it moves with them through the frame; a moving car's points stay where the car was at gathering), and hashes it. Walkers read their neighbours through `crowdNear(pos, reach, out)`.
+- **The hash's reach.** It's built once a frame, so `moveAlong` looks `SEP_RADIUS` plus how far it and anyone else (`CROWD_SPEED`, the guard's chase) may walk in the frame: at 60 fps and 1× that's the 3 × 3 cells around them, and the push is the same as checking everyone.
+- **More of the step allocates nothing.** `canStand` (several calls per walker per substep) no longer makes arrays and tiles; `stepAlongPath`, `moveWithCollision`, `separation` and `crowdStep` take out parameters, and `moveAlong` returns a reused result.
+- **Allocations.** The frame loops' sets and maps (Customers' `ready` and `live`, Staff's `live`, `washesBesides` and `jobsBesides`, DrivenCars' lookups and `obstacles`, Chatter's `due`) are module-level and cleared each frame; Pedestrians and DrivenCars iterate their maps directly, as only the one being updated is removed.
+- **Pathfinding.** The heap A* takes 0.16 ms across the full map; the only spike was an unreachable goal, which searched everything first. `Grid.area` labels connected areas (side-by-side steps: without corner cutting, diagonals connect nothing more), again on the first call after the blocked tiles change (`Grid` counts its changes; a `setBlocked` that changes nothing doesn't count), and `findPathToAny` turns down goals outside the start's area, or a blocked start's open neighbours' areas, before searching. The search itself is unchanged, so paths are the same. No path cache: with that, nothing was slow enough to cache.
+- **Replays.** Only `lastTheftNight` replayed, and the game hasn't called it since 14d (just the tests, `isTheftNight` and the v18 save upgrade). It keeps a chain per chance, like `weatherOn`.
+- Benches: `src/sim/crowd.bench.ts` (60 walkers, one frame) and `src/sim/pathfinding.bench.ts`, run by `npm run bench`. Vitest 5 has no `bench()`, so they time themselves like the long-game bench.
+- Tests: `SpatialHash` against checking everyone (`crowd.test.ts`), `Grid.area` against a flood fill and after changes (`grid.test.ts`), a blocked start and a wall taken down (`pathfinding.test.ts`), and `lastTheftNight` asked in any order and at many chances (`nazma.test.ts`).
+
 - **Crowd.**
   - `crowdAgents()` is built once per frame into a reused array, with the frame number as a cache key in `scene/runtime.ts`. Walkers and `DrivenCar` read the cached array.
   - `separation` uses a uniform spatial hash with 1-tile cells, rebuilt once per frame, so each agent checks only its own and nearby cells. Results go into a reused scratch vector.

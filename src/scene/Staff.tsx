@@ -386,9 +386,13 @@ function planSales(e: Employee, w: StaffWalker, task: SalesTask, key: string): v
 
 const WASH_PREFIX = 'wash:'
 
-/** The cars porters other than `id` are washing. */
+/** `washesBesides`' set, refilled by each call. */
+const washing = new Set<string>()
+
+/** The cars porters other than `id` are washing, in a set the next call reuses. */
 function washesBesides(id: string): Set<string> {
-  const cars = new Set<string>()
+  const cars = washing
+  cars.clear()
   for (const [other, w] of walkers) {
     if (other !== id && w.task?.startsWith(WASH_PREFIX)) cars.add(w.task.slice(WASH_PREFIX.length))
   }
@@ -434,9 +438,16 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
 
 const JOB_PREFIX = 'job:'
 
-/** The jobs mechanics other than `id` are on their way to, and the bay each is headed for. */
+/** `jobsBesides`' map, refilled by each call. */
+const headedFor = new Map<string, number>()
+
+/**
+ * The jobs mechanics other than `id` are on their way to, and the bay each is
+ * headed for, in a map the next call reuses.
+ */
 function jobsBesides(id: string): Map<string, number> {
-  const jobs = new Map<string, number>()
+  const jobs = headedFor
+  jobs.clear()
   for (const [other, w] of walkers) {
     if (other === id || !w.task?.startsWith(JOB_PREFIX)) continue
     const [jobId, bay] = w.task.slice(JOB_PREFIX.length).split('@')
@@ -608,6 +619,9 @@ const StaffFigure = memo(function StaffFigure({
 /** Staff who are on the lot: on their way in, at work, or walking home. */
 const onLot = (e: Employee) => e.status !== 'off'
 
+/** Who's on the lot this frame, cleared and refilled each frame instead of made anew. */
+const live = new Set<string>()
+
 /**
  * Every employee in the world, moved by one `useFrame` (like Customers): they
  * walk in from the sidewalk at opening (or when hired), work from their post
@@ -624,7 +638,7 @@ export function Staff() {
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
     const { seconds } = frameSeconds(rawDelta, game.timeScale)
-    const live = new Set<string>()
+    live.clear()
     for (const e of game.roster) {
       if (!onLot(e)) continue
       live.add(e.id)

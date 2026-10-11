@@ -200,4 +200,24 @@ describe('findPathToAny', () => {
     // Generous, so a slow CI machine doesn't fail it; the old linear open list took far longer.
     expect(performance.now() - t0).toBeLessThan(500)
   })
+
+  it('walks off a blocked start (a chair) when an open tile beside it reaches the goal', () => {
+    const grid = new Grid(6, 5)
+    grid.blockRect(2, 0, 1, 5)
+    grid.setBlocked(1, 2)
+    // The chair at (1, 2) is in the west half; only the east half's goal is out of reach.
+    expect(findPath(grid, { tx: 1, tz: 2 }, { tx: 0, tz: 4 })).not.toBeNull()
+    expect(findPath(grid, { tx: 1, tz: 2 }, { tx: 5, tz: 4 })).toBeNull()
+    // Standing in the wall itself, with both halves beside it, either goal can be reached.
+    expect(findPath(grid, { tx: 2, tz: 1 }, { tx: 5, tz: 4 })).not.toBeNull()
+    expect(findPath(grid, { tx: 2, tz: 1 }, { tx: 0, tz: 4 })).not.toBeNull()
+  })
+
+  it('finds a goal again once a wall in the way is taken down', () => {
+    const grid = new Grid(6, 5)
+    grid.blockRect(2, 0, 1, 5)
+    expect(findPath(grid, { tx: 0, tz: 0 }, { tx: 5, tz: 4 })).toBeNull()
+    grid.setBlocked(2, 3, false)
+    expect(findPath(grid, { tx: 0, tz: 0 }, { tx: 5, tz: 4 })).not.toBeNull()
+  })
 })

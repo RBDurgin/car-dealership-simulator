@@ -1,5 +1,5 @@
 import { COOKOUT, isAppreciationDay } from '../sim/appreciation'
-import { Reservations, type Agent } from '../sim/crowd'
+import { Reservations, SpatialHash, type Agent } from '../sim/crowd'
 import { PLAYER_ID } from '../sim/customers'
 import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
@@ -256,16 +256,42 @@ export const ambientPos = new Map<string, Vec2>()
  */
 export const walkInSpawns = new Map<string, { pos: Vec2; heading: number; exit: Tile }>()
 
+/** Counts frames (GameClock bumps it first thing each frame), so the crowd is gathered once a frame. */
+let frameNo = 0
+export function nextFrame(): void {
+  frameNo++
+}
+
+/** The crowd as last gathered, its frame, and the objects reused to gather it. */
+const crowd: Agent[] = []
+let crowdFrame = -1
+const agentPool: Agent[] = []
+const carPoints: Vec2[] = []
+const carIds = new Map<string, string[]>()
+const crowdHash = new SpatialHash()
+
 /**
  * Everyone standing in the world (customers, staff, passers-by, the player), for walkers to
  * keep their distance from. Anyone seated is left out: chairs block their tile,
- * so nobody can walk into them anyway.
+ * so nobody can walk into them anyway. Gathered once a frame, into an array
+ * that's reused: each entry holds the walker's own position, so it moves with
+ * them through the frame, while a moving car's points stay where the car was
+ * when the frame's crowd was gathered.
  */
-export function crowdAgents(): Agent[] {
-  const agents: Agent[] = []
+export function crowdAgents(): readonly Agent[] {
+  if (crowdFrame === frameNo) return crowd
+  crowdFrame = frameNo
+  crowd.length = 0
+  let points = 0
   const add = (id: string, pos: Vec2) => {
-    const t = grid.worldToTile(pos.x, pos.z)
-    if (grid.isWalkable(t.tx, t.tz)) agents.push({ id, pos })
+    // As `grid.worldToTile`, without making a tile.
+    const tx = Math.floor(pos.x + grid.width / 2)
+    const tz = Math.floor(pos.z + grid.height / 2)
+    if (!grid.isWalkable(tx, tz)) return
+    const a = (agentPool[crowd.length] ??= { id, pos })
+    a.id = id
+    a.pos = pos
+    crowd.push(a)
   }
   add(PLAYER_ID, playerPos)
   for (const [id, pos] of customerPos) add(id, pos)
@@ -275,11 +301,27 @@ export function crowdAgents(): Agent[] {
     if (!car.moving) continue
     const fx = Math.sin(car.heading)
     const fz = Math.cos(car.heading)
-    CAR_BODY_OFFSETS.forEach((d, i) =>
-      add(`${id}:car${i}`, { x: car.pos.x + fx * d, z: car.pos.z + fz * d }),
-    )
+    const ids = carIds.get(id) ?? CAR_BODY_OFFSETS.map((_, i) => `${id}:car${i}`)
+    carIds.set(id, ids)
+    CAR_BODY_OFFSETS.forEach((d, i) => {
+      const p = (carPoints[points++] ??= { x: 0, z: 0 })
+      p.x = car.pos.x + fx * d
+      p.z = car.pos.z + fz * d
+      add(ids[i], p)
+    })
   }
-  return agents
+  for (const id of carIds.keys()) if (!vehiclePos.has(id)) carIds.delete(id)
+  crowdHash.build(crowd)
+  return crowd
+}
+
+/**
+ * Those in the crowd who might be within `reach` of `pos`, into `out`: the
+ * frame's crowd, looked up by cell (see `SpatialHash`).
+ */
+export function crowdNear(pos: Vec2, reach: number, out: Agent[]): Agent[] {
+  crowdAgents()
+  return crowdHash.near(pos, reach, out)
 }
 
 /** Goal tiles walkers have claimed, so they spread out around a car instead of stacking. */

@@ -238,17 +238,34 @@ export function isTheftNight(day: number, chance = 1): boolean {
 }
 
 /**
+ * `lastTheftNight`'s replays so far, by `chance`: entry `d - FIRST_THEFT_DAY`
+ * is his last try up to night `d`. Pure, like `weatherOn`'s chain: every entry
+ * follows from the day number and the chance. Only a handful of chances are
+ * ever asked for (one per level); past `THEFT_CHAINS` they're started afresh.
+ */
+const theftChains = new Map<number, number[]>()
+const THEFT_CHAINS = 8
+
+/**
  * The last night up to and including the one before `day`'s morning that
  * Nazma tried to steal a car, replayed as in `isTheftNight`, or 0 if he never
  * has.
  */
 export function lastTheftNight(day: number, chance = 1): number {
-  let last = 0
-  for (let d = FIRST_THEFT_DAY; d <= day; d++) {
-    if (last > 0 && d - last < THEFT_GAP_DAYS) continue
-    if (createRng(THEFT_SEED + d).next() < THEFT_CHANCE * chance) last = d
+  const d = Math.floor(day)
+  if (d < FIRST_THEFT_DAY) return 0
+  let chain = theftChains.get(chance)
+  if (!chain) {
+    if (theftChains.size >= THEFT_CHAINS) theftChains.clear()
+    chain = []
+    theftChains.set(chance, chain)
   }
-  return last
+  while (chain.length <= d - FIRST_THEFT_DAY) {
+    const night = FIRST_THEFT_DAY + chain.length
+    const last = chain.length > 0 ? chain[chain.length - 1] : 0
+    chain.push(theftNightAfter(night, last, chance) ? night : last)
+  }
+  return chain[d - FIRST_THEFT_DAY]
 }
 
 /** The seed for picking which car goes, apart from the roll in `isTheftNight`. */
