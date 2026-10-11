@@ -1,5 +1,6 @@
 import { parseAudioSettings } from '../sim/audioSettings'
 import { isClosed } from '../sim/clock'
+import { parseGraphics, startQuality } from '../sim/graphics'
 import { createSave, parseSave, type SaveData } from '../sim/save'
 import { emptyCase, mergeCase, parseCase, type TrophyCase } from '../sim/trophyCase'
 import { LATEST_NEWS } from '../sim/whatsNew'
@@ -21,13 +22,20 @@ export function readSave(): SaveData | null {
   }
 }
 
-export function writeSave(save: SaveData): void {
+/** Writes the save; false when the browser refused it (storage full or blocked). */
+export function writeSave(save: SaveData): boolean {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save))
+    return true
   } catch {
     // Not saved; the game carries on.
+    return false
   }
 }
+
+/** Shown when the end-of-day save is refused, most likely for a full storage quota. */
+export const SAVE_FAILED_NOTICE =
+  "Couldn't save today: this browser's storage is full or blocked. The game carries on."
 
 /**
  * Marks the save as having seen every update, keeping everything else, once
@@ -79,7 +87,9 @@ export function startAutosave(): () => void {
   return subscribeTo(
     (s) => s,
     (s) => {
-      if (settledDay(s)) writeSave(createSave(s, Date.now()))
+      if (settledDay(s) && !writeSave(createSave(s, Date.now()))) {
+        useGame.getState().showNotice(SAVE_FAILED_NOTICE)
+      }
     },
     (a, b) => {
       const settled = settledDay(a)
@@ -136,6 +146,36 @@ export function startAudioPref(): () => void {
     (audio) => {
       try {
         localStorage.setItem(AUDIO_KEY, JSON.stringify(audio))
+      } catch {
+        // Not remembered; the change still applies.
+      }
+    },
+  )
+}
+
+const GRAPHICS_KEY = 'car-dealership-simulator.graphics'
+
+/**
+ * Loads this device's Graphics setting (Auto on a first visit) and starts the
+ * scene on its tier (a step down on Auto on a `compact` screen), then
+ * remembers each change and starts the new setting's tier. Like the sound
+ * settings, it's kept apart from the save slot.
+ */
+export function startGraphicsPref(compact: boolean): () => void {
+  let saved: unknown = null
+  try {
+    saved = localStorage.getItem(GRAPHICS_KEY)
+  } catch {
+    // No storage: Auto.
+  }
+  const setting = parseGraphics(saved)
+  useGame.setState({ graphics: setting, qualityTier: startQuality(setting, compact).tier })
+  return subscribeTo(
+    (s) => s.graphics,
+    (graphics) => {
+      useGame.getState().setQualityTier(startQuality(graphics, compact).tier)
+      try {
+        localStorage.setItem(GRAPHICS_KEY, graphics)
       } catch {
         // Not remembered; the change still applies.
       }

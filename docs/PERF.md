@@ -6,6 +6,7 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
 
 - **`?perf` overlay** (`scene/PerfOverlay.tsx`, lazy-loaded only with the flag; `?fps` still works). Add `?perf` to the game's URL. It shows:
   - fps and frame time (p50/p95 over the last couple of seconds);
+  - the Graphics setting and the quality tier drawn at (added in 18e);
   - the last frame's draw calls and triangles (shadow passes included), and the geometries and textures the renderer holds;
   - store `set()` calls per second and ms per second spent in `useGame.subscribe` listeners (`state/perf.ts`; components' selectors aren't timed);
   - people in the world (player included), visitors' cars and `<Html>` badges.
@@ -218,3 +219,63 @@ The crowd is gathered and bucketed once a frame, walkers step without allocating
 - `e2e`: the Playwright smoke tests, run after `check` passes, with the browsers cached.
 
 A newer push cancels a run still going on the same branch. The bench and the `@perf` scenario aren't run in CI, because shared runners are too noisy to time on.
+
+## 18e: rendering, loading and storage (2026-10-11)
+
+### The geometry climb, found
+
+The geometries that climbed all day in 18a–18d (to 500–1,300 on the real devices) were the hover outlines. drei's `Outlines` draws each outline from a creased copy of the mesh's geometry and means to free it on unmount, but its cleanup reads a ref that React 19 has already cleared by then, so every hover (or tap) leaked one geometry per mesh outlined. The headless e2e run never hovers, which is why it never climbed. A probe that swept the mouse over the busy lot took the geometries from 149 to 202 in one sweep, and they stayed there. `MeshOutline` (`scene/Interactable.tsx`) now frees the copy and its material itself: three sweeps later the count held at 114.
+
+### `@perf` overlay, busy day (SwiftShader, same session, before on 18d's commit)
+
+| Speed | fps, before | after | p95 frame, before | after  | Draw calls, before (mean / max) | after (mean / max) | Triangles, before | after | Geometries, before | after  | Heap, before | after |
+| ----- | ----------- | ----- | ----------------- | ------ | ------------------------------- | ------------------ | ----------------- | ----- | ------------------ | ------ | ------------ | ----- |
+| 1×    | 3.2         | 3.4   | 845 ms            | 808 ms | 615 / 630                       | **270 / 287**      | 229k              | 228k  | 149                | **67** | 93 MB        | 82 MB |
+| 4×    | 2.0         | 2.6   | 912 ms            | 800 ms | 617 / 632                       | **274 / 287**      | 230k              | 223k  | 149                | **67** | 93 MB        | 82 MB |
+
+- **Draw calls down 56%**, against a target of a third. Most of it is the cars: each was 5–6 meshes (body and wheels, one material), drawn again in the shadow pass, so 44 cars cost about 500 calls; `scripts/compress-models.mjs` joins each into one mesh. The floors, parking stripes and road dashes went from about a hundred meshes to one per colour (`mergePlanes`), the lit sign's bulbs are one instanced mesh, and small furniture (`SMALL`) and the desk phone no longer cast shadows.
+- Geometries halved: each car is one geometry, the floors a dozen. Cars now share one material per source material, dirt step and wear step (`tintedMaterial`) instead of a copy each.
+- SwiftShader's fps measures the CPU, and Auto quality stepped down to the lowest tier within the first seconds here (its frame rate is far under the bounds), so the fps and p95 aren't comparable with the before column. The draw calls are: drawing at a lower tier changes the pixels and the shadow map's size, not the meshes drawn.
+- React's commits per game minute at 1× read 2.15 against 0.6: the two steps down early in the run (each re-renders the lights and remounts the rain). At 4× they read 1.35 against 1.45.
+- Screenshots at High and Low (`graphics` set before loading) against 18d's: the cars, floors, stripes and dashes look the same at game zoom. Low has softer shadows and a third of the rain.
+
+### Loading (`npm run build`)
+
+| What                                   | 18a                     | 18e                                                       |
+| -------------------------------------- | ----------------------- | --------------------------------------------------------- |
+| JS loaded before the title screen (gz) | 483 KB, one chunk       | **457 KB**: the game 122 KB and `vendor-three` 334 KB     |
+| JS loaded later (gz)                   |                         | Guide 13.5 KB, office computer 12.3 KB, summary 3.7 KB, … |
+| Models in `public/models`              | 4.5 MB (4.07 MB of GLB) | **1.50 MB** (meshopt, quantized, unused clips dropped)    |
+| Models fetched before the title screen | all, 4.07 MB            | **1.09 MB**: day one's 15 furniture, 5 cars, 8 characters |
+| **First load** (JS and models)         | **about 4.7 MB**        | **about 1.6 MB, 67% less** (target: 40%)                  |
+
+- `HowToPlay`, `AudioPanel`, `StockPanel` (with its tabs) and `DaySummary` load in their own chunks, fetched when the browser is idle after the title screen is up, so none waits on the network when opened. three.js, R3F and drei are the `vendor-three` chunk, cached apart from the game's code, which changes every release.
+- Models load with drei's meshopt decoder. Luxury cars, the wing's and the improvements' furniture, and staff and Nazma's characters load the first time they're drawn, each in its own Suspense.
+- Audio: the music's `.mp3` copies are gone (8.9 MB), leaving `public/audio` at 6.6 MB (16 MB before). Every current browser plays OGG Vorbis, Safari since iOS 18.4 and macOS 15.4; the sound effects were already OGG only. An older iPhone plays the game silent. The music was never part of the first load (each track streams when it first plays), so this saves hosting, not load time.
+
+### Quality tiers and idle frames
+
+- Graphics **Auto / High / Low** (the 🔊 panel; a device preference). Tiers: DPR 2 / 4096 shadow map / 1,400 drops, then 1.5 / 2048 / 900, then 1 / 1024 / 450. Auto starts at the top on a desktop and a step down on a phone, steps down after about 5 s under 45 fps, steps up after about 5 s over 57 fps at most once a minute, and never climbs back to a tier it fell from, so it can't flicker. The bounds are fixed: drei's default guesses the refresh rate from the best fps seen, so a desktop stuck at 30 would never have stepped down.
+- The canvas draws only on demand while nothing moves: the title screen, the guide, the rotate prompt and the day summary.
+- Desktop Chrome, busy day (2026-10-11, Medium, rain, local preview, full window, Auto, 6.4 minutes of readings): it read tier 1 early on and stepped down to tier 2 (DPR 1, 1024 shadow map) around 9:40 in the game, and the frame rate stayed high from there:
+
+| When      | Speed | fps      | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` | Heap  |
+| --------- | ----- | -------- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- | ----- |
+| 18d       | 1×    | 28.4     | 45 ms     | 798 / 891               | 258k      | 539        | 129      | 1.8    | 0.14          | 20     | 15       | 79 MB |
+| 18e, Auto | 1×    | **55.1** | **26 ms** | **337 / 453**           | 244k      | **117**    | 117      | 3.6    | 0.21          | 20     | 15       | 68 MB |
+
+- Nearly twice the frame rate, as 18a's 800×600 reading predicted: full-window was bound by fill, and Auto's lowest tier draws a quarter of tier 0's pixels. The draw calls are 58% lower.
+- Geometries went from 79 to 117 over the day, against 180 to 539–972 before: the climb is gone. What's left is models loading as they're first drawn (staff, Nazma, luxury cars), which levels off. Textures did the same, 51 to 117: each compressed model carries its own copy of its kit's small colour map.
+- iPhone, Chrome, busy day (2026-10-11, rain, local preview, Auto, 6.1 minutes of readings): it started a step down, on tier 1, and stepped up to tier 0 around 10:40 in the game, as Auto allows once it holds the frame rate:
+
+| When      | Speed | fps  | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` |
+| --------- | ----- | ---- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- |
+| 18d       | 1×    | 59.4 | 20 ms     | 495 / 560               | 177k      | 440        | 127      | 2.7    | 0.30          | 20     | 15       |
+| 18e, Auto | 1×    | 58.6 | 20 ms     | **232 / 311**           | 193k      | **102**    | 117      | 2.2    | 0.44          | 21     | 15       |
+
+- Still at the display's cap (the 58.6 includes the tier-1 start and the step up), now with less than half the draw calls. Geometries went from 62 to 102 and level off, as on the desktop: the climb is gone on both devices.
+- Both devices found their own tier: the desktop full-window settled on the lowest (fill-bound), the phone climbed to the top. That's what Auto is for.
+
+### Storage
+
+At day 500 (`npm run bench`, Medium): the save is 163 KB, `createSave` 0.9 ms and `parseSave` 1.4 ms (Hard: 126 KB, 0.6 and 1.0 ms), well inside the 500 KB and 20 ms targets and far from the 1 MB that would have called for delta-encoded day logs, so the save format is unchanged. If the browser refuses the end-of-day write (a full quota or blocked storage), the game now shows "Couldn't save today" and plays on. Why there's no server, and what would reopen it: `docs/ARCHITECTURE.md`.

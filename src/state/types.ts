@@ -1,6 +1,7 @@
 import type { ActiveAction } from '../sim/actions'
 import type { AchievementId, EarnedAchievement } from '../sim/achievements'
 import type { AudioBus, AudioSettings } from '../sim/audioSettings'
+import type { GraphicsSetting } from '../sim/graphics'
 import type { CallKind, ClientVisit } from '../sim/calls'
 import type { CustomerVariant } from '../sim/characters'
 import type { Appreciation, Client, ClientPerks, MonthCsi } from '../sim/clients'
@@ -199,6 +200,10 @@ export interface GameState {
   audio: AudioSettings
   /** The sound settings panel is open. */
   audioOpen: boolean
+  /** Graphics: Auto, High or Low; a per-device preference kept apart from the save, like `audio`. */
+  graphics: GraphicsSetting
+  /** The `QUALITY_TIERS` tier the scene draws at now (scene/Quality picks it). */
+  qualityTier: number
   /** Game speed multiplier for the clock and customers (dev only; always 1 otherwise). */
   timeScale: number
   issueMoveOrder: (tx: number, tz: number) => void
@@ -354,6 +359,8 @@ export interface GameState {
   setVolume: (bus: AudioBus, volume: number) => void
   toggleMute: (muted?: boolean) => void
   toggleAudioPanel: (open?: boolean) => void
+  setGraphics: (setting: GraphicsSetting) => void
+  setQualityTier: (tier: number) => void
   cycleTimeScale: () => void
   /** From the title screen: plays a fresh day 1 at `difficulty` (Medium if not given). */
   newGame: (difficulty?: Difficulty) => void

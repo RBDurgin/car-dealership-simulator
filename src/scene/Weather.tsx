@@ -10,15 +10,14 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
-import { COARSE, COMPACT, matchesMedia } from '../input/useMediaQuery'
 import { isIndoor } from '../sim/layout'
+import { QUALITY_TIERS } from '../sim/graphics'
 import type { Weather } from '../sim/weather'
+import { useGame } from '../state/store'
 import { cameraState, grid, layout, playerPos } from './runtime'
 import { snappedSunTarget } from './sunFollow'
 import { useWeather } from './useWeather'
 
-/** Phones and small screens get a third of the drops (decided once, like the shadow map). */
-const DROPS = matchesMedia(COMPACT) || matchesMedia(COARSE) ? 450 : 1400
 /** Drops fall in a square this far either side of the player, from up to this high. */
 const SPREAD = 28
 const HEIGHT = 14
@@ -50,12 +49,23 @@ const SHADOW_REACH = 30
 /**
  * The sun and sky, tinted by the day's weather. The sun follows the camera, so
  * shadows fall wherever the player is on a map wider than its shadow camera.
+ * Its shadow map's size is the graphics tier's, reallocated when the tier changes.
  */
-export function WeatherLights({ shadowMapSize }: { shadowMapSize: number }) {
+export function WeatherLights() {
   const weather = useWeather()
   const l = LIGHT[weather]
   const sun = useRef<DirectionalLight>(null)
+  const shadowMapSize = useGame((s) => QUALITY_TIERS[s.qualityTier].shadowMap)
   const texel = (2 * SHADOW_REACH) / shadowMapSize
+
+  // three.js allocates the map once at its first size: free it, and the next
+  // frame makes one at the new size.
+  useEffect(() => {
+    const shadow = sun.current?.shadow
+    if (!shadow?.map) return
+    shadow.map.dispose()
+    shadow.map = null
+  }, [shadowMapSize])
 
   useFrame(() => {
     const light = sun.current
@@ -110,10 +120,10 @@ interface Drops {
 }
 
 /** Drops spread through the air around the player, at any height. */
-function scatterDrops(): Drops {
-  const pos = new Float32Array(DROPS * 3)
-  const speed = new Float32Array(DROPS)
-  for (let i = 0; i < DROPS; i++) {
+function scatterDrops(count: number): Drops {
+  const pos = new Float32Array(count * 3)
+  const speed = new Float32Array(count)
+  for (let i = 0; i < count; i++) {
     const spot = spawnSpot()
     pos[i * 3] = spot?.x ?? 0
     pos[i * 3 + 1] = spot ? Math.random() * HEIGHT : -1
@@ -129,7 +139,7 @@ function scatterDrops(): Drops {
  * Positions live in typed arrays and are written straight into the instance
  * matrices each frame.
  */
-function Rain() {
+function Rain({ count }: { count: number }) {
   const mesh = useRef<InstancedMesh>(null)
   // Made on the first frame, so render stays pure.
   const drops = useRef<Drops | null>(null)
@@ -165,9 +175,9 @@ function Rain() {
     const m = mesh.current
     if (!m) return
     const dt = Math.min(rawDelta, 0.05)
-    drops.current ??= scatterDrops()
+    drops.current ??= scatterDrops(count)
     const { pos, speed } = drops.current
-    for (let i = 0; i < DROPS; i++) {
+    for (let i = 0; i < count; i++) {
       const j = i * 3
       pos[j + 1] -= speed[i] * dt
       pos[j] += speed[i] * WIND * dt
@@ -186,10 +196,12 @@ function Rain() {
     m.instanceMatrix.needsUpdate = true
   })
 
-  return <instancedMesh ref={mesh} args={[geometry, material, DROPS]} frustumCulled={false} />
+  return <instancedMesh ref={mesh} args={[geometry, material, count]} frustumCulled={false} />
 }
 
-/** What the sky is doing: rain on rainy days, nothing otherwise. */
+/** What the sky is doing: rain on rainy days (as many drops as the graphics tier has), nothing otherwise. */
 export function WeatherEffects() {
-  return useWeather() === 'rain' ? <Rain /> : null
+  const count = useGame((s) => QUALITY_TIERS[s.qualityTier].rain)
+  // A new count starts the rain afresh, with its own drops and instance buffer.
+  return useWeather() === 'rain' ? <Rain key={count} count={count} /> : null
 }

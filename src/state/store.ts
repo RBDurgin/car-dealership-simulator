@@ -28,6 +28,7 @@ export {
   orderInvoice,
   reconBook,
   repScale,
+  sceneIdle,
   sellerBonusFor,
   STARTING_CASH,
   winShowing,

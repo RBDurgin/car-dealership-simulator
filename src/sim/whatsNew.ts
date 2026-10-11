@@ -345,6 +345,16 @@ export const UPDATES: readonly Update[] = [
       'Starting a new game keeps the trophy case. Reset trophies at the bottom of it empties it.',
     ],
   },
+  {
+    id: 32,
+    phase: '18',
+    title: 'Smoother play and a Graphics setting',
+    items: [
+      'The game draws far less each frame, loads faster, and no longer piles up memory as you point at things.',
+      'Graphics in the 🔊 panel: Auto lowers the detail when the game stutters and raises it again when it runs smoothly.',
+      'If the browser refuses the end-of-day save, the game now tells you.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

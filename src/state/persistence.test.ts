@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_AUDIO_SETTINGS } from '../sim/audioSettings'
+import { CLOSE_MINUTE } from '../sim/clock'
 import { createSave } from '../sim/save'
 import {
   clearSave,
   readTrophyCase,
   resetTrophyCase,
+  SAVE_FAILED_NOTICE,
   startAudioPref,
+  startAutosave,
   startControlsPref,
+  startGraphicsPref,
   startTrophyCase,
+  writeSave,
 } from './persistence'
 import { useGame } from './store'
 
@@ -154,5 +159,100 @@ describe('trophy case', () => {
     game().newGame('medium')
     game().earnAchievements(['first-sale'])
     expect(readTrophyCase().earned).toEqual({})
+  })
+})
+
+describe('graphics preference', () => {
+  let stop: () => void = () => {}
+  beforeEach(() => useGame.setState(initial, true))
+  afterEach(() => {
+    stop()
+    vi.unstubAllGlobals()
+  })
+
+  it('starts on Auto, and remembers a change for next time', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startGraphicsPref(false)
+    expect(game().graphics).toBe('auto')
+    game().setGraphics('low')
+    stop()
+
+    useGame.setState(initial, true)
+    stop = startGraphicsPref(false)
+    expect(game().graphics).toBe('low')
+    expect(game().qualityTier).toBe(2)
+  })
+
+  it('starts Auto a step down on a small screen, and a new setting on its own tier', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startGraphicsPref(true)
+    expect(game().qualityTier).toBe(1)
+    game().setGraphics('high')
+    expect(game().qualityTier).toBe(0)
+    game().setGraphics('auto')
+    expect(game().qualityTier).toBe(1)
+  })
+
+  it('ignores junk in storage, and works without storage', () => {
+    const storage = fakeStorage()
+    storage.setItem('car-dealership-simulator.graphics', 'ultra')
+    vi.stubGlobal('localStorage', storage)
+    stop = startGraphicsPref(false)
+    expect(game().graphics).toBe('auto')
+    stop()
+    vi.unstubAllGlobals()
+    stop = startGraphicsPref(false)
+    game().setGraphics('high')
+    expect(game().graphics).toBe('high')
+  })
+})
+
+describe('end-of-day save', () => {
+  let stop: () => void = () => {}
+  beforeEach(() => useGame.setState(initial, true))
+  afterEach(() => {
+    stop()
+    vi.unstubAllGlobals()
+  })
+
+  /** A full quota: every write is refused, as browsers do. */
+  function fullStorage() {
+    return {
+      ...fakeStorage(),
+      setItem: () => {
+        throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+      },
+    }
+  }
+
+  const settle = () =>
+    useGame.setState((s) => ({
+      screen: 'playing',
+      clock: { ...s.clock, minute: CLOSE_MINUTE },
+      customers: [],
+      dayStats: { ...s.dayStats, settled: true },
+    }))
+
+  it('reports a refused write', () => {
+    vi.stubGlobal('localStorage', fullStorage())
+    expect(writeSave(createSave(game(), 0))).toBe(false)
+    vi.stubGlobal('localStorage', fakeStorage())
+    expect(writeSave(createSave(game(), 0))).toBe(true)
+  })
+
+  it('saves once the day is settled', () => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    stop = startAutosave()
+    settle()
+    expect(localStorage.getItem('car-dealership-simulator.save')).not.toBeNull()
+    expect(game().notice).toBeNull()
+  })
+
+  it("tells the player when the browser won't take the save, and plays on", () => {
+    vi.stubGlobal('localStorage', fullStorage())
+    stop = startAutosave()
+    settle()
+    expect(game().notice?.text).toBe(SAVE_FAILED_NOTICE)
+    expect(game().screen).toBe('playing')
   })
 })

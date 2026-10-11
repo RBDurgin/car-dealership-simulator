@@ -6,15 +6,13 @@ import { ACTIONS } from '../sim/interactables'
 import { findInteractable } from '../scene/runtime'
 import { useGame, winShowing } from '../state/store'
 import { ActionMenu } from './ActionMenu'
-import { AudioPanel } from './AudioPanel'
 import { ControlsHint } from './ControlsHint'
 import { CustomerPanel } from './CustomerPanel'
-import { DaySummary } from './DaySummary'
-import { HowToPlay } from './HowToPlay'
 import { InfoPanel } from './InfoPanel'
+import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
+import { prefetchPanels } from './panelChunks'
 import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
-import { StockPanel } from './StockPanel'
 import { TitleScreen } from './TitleScreen'
 import { WinScreen } from './WinScreen'
 import { TopBar } from './TopBar'
@@ -86,6 +84,7 @@ function NoticeToast() {
 }
 
 export function HUD() {
+  useEffect(prefetchPanels, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const game = useGame.getState()

@@ -32,6 +32,16 @@ export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePromp
 }
 
 /**
+ * Nothing in the scene moves: paused, or the day is over and its summary up.
+ * The canvas draws only on demand then, and Auto graphics stop measuring.
+ */
+export function sceneIdle(
+  s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt' | 'clock' | 'customers'>,
+): boolean {
+  return isPaused(s) || dayOver(s)
+}
+
+/**
  * The win screen shows over the day summary once the top rank is reached,
  * until the player picks Keep playing.
  */

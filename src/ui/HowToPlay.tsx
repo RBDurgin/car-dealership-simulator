@@ -928,6 +928,15 @@ function ControlsTab({ touch }: TabProps) {
           questioning counter, a happy yes or a grumble. You only hear the people near you.
         </p>
       </section>
+      <section>
+        <h3>Graphics</h3>
+        <p>
+          The same 🔊 panel has a Graphics setting. On Auto, the game lowers the detail (sharpness,
+          shadow quality and rain) when it stutters, and raises it again a minute later if it runs
+          smoothly. High and Low hold the detail where you put it. It&apos;s kept on this device
+          too.
+        </p>
+      </section>
     </>
   )
 }

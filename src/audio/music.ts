@@ -32,11 +32,6 @@ let muffle: { filter: BiquadFilterNode; gain: GainNode } | null = null
 let blocked = false
 let muffled = false
 
-/** OGG where the browser plays it, MP3 elsewhere (older Safari). */
-function extension(): string {
-  return new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3'
-}
-
 function muffleNode(ctx: AudioContext): AudioNode {
   if (!muffle) {
     const filter = ctx.createBiquadFilter()
@@ -52,7 +47,7 @@ function muffleNode(ctx: AudioContext): AudioNode {
 function deckFor(ctx: AudioContext, track: TrackId): Deck {
   let deck = decks.get(track)
   if (!deck) {
-    const el = new Audio(`${BASE}${track}.${extension()}`)
+    const el = new Audio(`${BASE}${track}.ogg`)
     el.loop = true
     el.preload = 'none'
     const fade = ctx.createGain()

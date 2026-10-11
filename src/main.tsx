@@ -13,6 +13,7 @@ import {
   startAudioPref,
   startAutosave,
   startControlsPref,
+  startGraphicsPref,
   startTrophyCase,
 } from './state/persistence'
 import { useGame } from './state/store'
@@ -24,9 +25,12 @@ import { startTips } from './state/tips'
 if (PERF) instrumentStore(useGame)
 // A ?perf=busy game is a test bench: it never saves, or touches the trophy case.
 if (!PERF_BUSY) startAutosave()
+const smallScreen = matchesMedia(COMPACT) || matchesMedia(COARSE)
 // The controls hint starts collapsed on phones and touch screens.
-startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
+startControlsPref(!smallScreen)
 startAudioPref()
+// Auto graphics start a step down there.
+startGraphicsPref(smallScreen)
 startTips()
 // After the tips, so neither shows over the other's notice.
 startAchievements()

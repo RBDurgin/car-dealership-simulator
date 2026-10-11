@@ -42,7 +42,7 @@ download the pack, copy the file across and register it in `src/audio/samples.ts
 The tracks in `music/` are from [OpenGameArt](https://opengameart.org), all released under
 [CC0](http://creativecommons.org/publicdomain/zero/1.0/). Credit isn't required, but the
 authors asked for it kindly, so here it is. Each was loudness-matched (about −16 LUFS) and
-re-encoded as OGG Vorbis and 128 kbps MP3 (for browsers without OGG); nothing else was changed.
+re-encoded as OGG Vorbis; nothing else was changed.
 
 - `music/title`: [Buy Something!](https://opengameart.org/content/shop-theme) by Cleyton Kauffman
 - `music/morning`: [Which Brand Of Mustard Shall I Buy](https://opengameart.org/content/which-brand-of-mustard-shall-i-buy) by congusbongus
@@ -50,5 +50,5 @@ re-encoded as OGG Vorbis and 128 kbps MP3 (for browsers without OGG); nothing el
 - `music/closing`: [Jazz n' brass loop](https://opengameart.org/content/jazz-n-brass-loop) by Emma_MA
 - `music/summary`: [Slow Stride](https://opengameart.org/content/slow-stride) by isaiah658
 
-To swap a track, keep its name (both `.ogg` and `.mp3`); `src/audio/music.ts` picks the
-format the browser plays.
+To swap a track, keep its name, as OGG Vorbis. There's no MP3 copy: every current browser
+plays OGG (Safari since iOS 18.4 and macOS 15.4), and 18e dropped them.

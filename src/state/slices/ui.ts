@@ -1,4 +1,5 @@
 import { DEFAULT_AUDIO_SETTINGS, withVolume } from '../../sim/audioSettings'
+import { DEFAULT_GRAPHICS } from '../../sim/graphics'
 import {
   CONVERSATION_PHASES,
   DEAL_PHASES,
@@ -35,6 +36,8 @@ type UiKeys =
   | 'rotatePrompt'
   | 'audio'
   | 'audioOpen'
+  | 'graphics'
+  | 'qualityTier'
   | 'timeScale'
   | 'issueMoveOrder'
   | 'clearMoveOrder'
@@ -62,6 +65,8 @@ type UiKeys =
   | 'setVolume'
   | 'toggleMute'
   | 'toggleAudioPanel'
+  | 'setGraphics'
+  | 'setQualityTier'
   | 'cycleTimeScale'
 
 /** The player's moves and actions, the menus, panels and notices, and the settings. */
@@ -86,6 +91,8 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
     rotatePrompt: false,
     audio: DEFAULT_AUDIO_SETTINGS,
     audioOpen: false,
+    graphics: DEFAULT_GRAPHICS,
+    qualityTier: 0,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
       dispatch(k, { type: 'cancel' })
@@ -183,6 +190,8 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
     setVolume: (bus, volume) => set((s) => ({ audio: withVolume(s.audio, bus, volume) })),
     toggleMute: (muted) => set((s) => ({ audio: { ...s.audio, muted: muted ?? !s.audio.muted } })),
     toggleAudioPanel: (open) => set((s) => ({ audioOpen: open ?? !s.audioOpen })),
+    setGraphics: (graphics) => set({ graphics }),
+    setQualityTier: (qualityTier) => set({ qualityTier }),
     cycleTimeScale: () =>
       set((s) => {
         const i = DEV_TIME_SCALES.indexOf(s.timeScale as (typeof DEV_TIME_SCALES)[number])

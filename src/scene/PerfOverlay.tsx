@@ -90,6 +90,7 @@ export default function PerfOverlay() {
       `${s.geometries} geo · ${s.textures} tex`,
       `${s.setsPerSecond.toFixed(1)} sets/s · ${s.listenerMs.toFixed(2)} ms/s in ${s.listeners} listeners`,
       `${s.walkers} walkers · ${s.vehicles} cars · ${s.html} html`,
+      `graphics ${game.graphics}, tier ${game.qualityTier}`,
     ].join('\n')
   })
 

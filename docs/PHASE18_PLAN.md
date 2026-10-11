@@ -174,6 +174,19 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18e: Rendering, loading and storage
 
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`: on Auto, the desktop full-window went from 28 to 55 fps (settling on the lowest tier) and the iPhone held 60 (climbing to the top tier), both with about half the draw calls and no geometry climb. Changes from the plan:
+
+- **The geometry climb came first, as planned.** It was drei's `Outlines`: its unmount cleanup reads a ref React 19 has already cleared, so every hover or tap leaked the creased copy of each outlined mesh's geometry (the e2e run never hovers, so never climbed). `MeshOutline` in `scene/Interactable.tsx` frees it.
+- **Cars joined into one mesh.** Not on the plan's list, and the biggest cut: each car model was 5–6 meshes with one material, so 44 cars cost about 500 calls with their shadow pass. The compression script flattens and joins cars and furniture. Characters keep their two named meshes and only the clips in `CharacterAnim`; the unused `female-a` isn't shipped.
+- **Shared car materials** are one per source material, dirt step (10) and wear step (5), cached and never freed. A shared material doesn't save draw calls; it replaces a cloned set per car.
+- **Bulbs** are one `InstancedMesh` with unlit per-instance colours, recoloured only when the chase steps.
+- **Quality tiers.** Auto starts at the top on a desktop and a step down on `COMPACT`/`COARSE`, never climbs back to a tier it fell from (so it can't flicker), and waits 6 s after any step before stepping down again (drei's samples keep rolling after a step). The `PerformanceMonitor` bounds are fixed at 45 and 57 fps: drei's default guesses the refresh rate from the best fps seen, which kept a 30 fps desktop from ever stepping down. The tier is the store's `qualityTier` (with `graphics`); `startGraphicsPref(compact)` sets both at load and on a change of setting. The `?perf` overlay shows them.
+- **Idle frames** use `sceneIdle`: `isPaused` or `dayOver`.
+- **Lazy panels.** `ui/lazyPanels.tsx` gates each on its open flag; the office computer is one chunk with all its tabs. `prefetchPanels` fetches them once the browser is idle.
+- **Audio.** The `.mp3` copies are dropped: Safari plays OGG Vorbis from iOS 18.4 and macOS 15.4 (not 17, as the plan had it), which Robert took as the floor, and the sound effects were already OGG only. It saves 8.9 MB of hosting, not first load: the music streams on first play.
+- **Storage.** The save is 163 KB at day 500, so no delta encoding and no save change. The notice shows for any refused write, not only `QuotaExceededError`: blocked storage loses the day too.
+- Tests: `sim/graphics.test.ts`, `scene/mergePlanes.test.ts`, `scene/characterPool.test.ts`, and the graphics preference and the refused save in `state/persistence.test.ts`.
+
 - **Adaptive quality.**
   - drei `PerformanceMonitor` steps through three tiers: DPR 2 → 1.5 → 1, shadow map 4096 → 2048 → 1024, and the rain count.
   - It starts from the `COMPACT`/`COARSE` tier.

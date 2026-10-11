@@ -99,7 +99,7 @@ const PedestrianFigure = memo(function PedestrianFigure({
       }}
     >
       <Suspense fallback={null}>
-        <Character variant={variant} anim={anim} moveSpeed={speed} />
+        <Character variant={variant} anim={anim} moveSpeed={speed} pooled />
       </Suspense>
     </group>
   )

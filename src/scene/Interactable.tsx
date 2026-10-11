@@ -1,7 +1,7 @@
 import { Outlines, useCursor } from '@react-three/drei'
 import { createPortal, type ThreeEvent } from '@react-three/fiber'
-import { Fragment, useState, type ReactNode } from 'react'
-import type { Mesh, Object3D } from 'three'
+import { useEffect, useState, type ReactNode } from 'react'
+import type { BufferGeometry, Material, Mesh, Object3D } from 'three'
 import { isTap, isTouch } from '../input/touch'
 import { useGame } from '../state/store'
 
@@ -71,13 +71,28 @@ export function Interactable({
       onPointerUp={disabled ? undefined : onUp}
     >
       {children}
-      {highlighted &&
-        !disabled &&
-        meshes?.map((m) => (
-          <Fragment key={m.uuid}>
-            {createPortal(<Outlines color={HOVER_COLOR} thickness={OUTLINE_PX} />, m)}
-          </Fragment>
-        ))}
+      {highlighted && !disabled && meshes?.map((m) => <MeshOutline key={m.uuid} mesh={m} />)}
     </group>
   )
+}
+
+/**
+ * The hover outline round one mesh. drei's `Outlines` draws it from a creased
+ * copy of the mesh's geometry, and means to free it on unmount, but by then
+ * React has cleared the ref it reads, so every hover or tap leaked a geometry
+ * per mesh (the geometries that climbed all day in 18a–18d). This finds the
+ * copy and its material once they're made and frees them itself.
+ */
+function MeshOutline({ mesh }: { mesh: Mesh }) {
+  useEffect(() => {
+    const made: (BufferGeometry | Material)[] = []
+    for (const group of mesh.children) {
+      const outline = group.children[0] as Mesh | undefined
+      if (!outline?.isMesh || !('isShaderMaterial' in outline.material)) continue
+      if (outline.geometry !== mesh.geometry) made.push(outline.geometry)
+      made.push(outline.material as Material)
+    }
+    return () => made.forEach((m) => m.dispose())
+  }, [mesh])
+  return createPortal(<Outlines color={HOVER_COLOR} thickness={OUTLINE_PX} />, mesh)
 }

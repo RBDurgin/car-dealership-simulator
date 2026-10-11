@@ -1,15 +1,17 @@
 import { useAnimations, useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef, type RefObject } from 'react'
-import type { AnimationAction, Group, Mesh, MeshStandardMaterial } from 'three'
+import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import type { AnimationAction, Group, Mesh, MeshStandardMaterial, Object3D } from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
 import {
   CUSTOMER_VARIANTS,
+  OWNER_VARIANT,
   STAFF_VARIANTS,
   type CharacterAnim,
   type CharacterVariant,
 } from '../sim/characters'
 import { SEAT_HEIGHT } from '../sim/layout'
+import { claimRig, releaseRig, takeRig } from './characterPool'
 
 const BASE = `${import.meta.env.BASE_URL}models/characters`
 /** The Kenney Mini Characters are ~0.67 units tall; this brings them to ~1.2. */
@@ -33,46 +35,66 @@ const FILES: Record<CharacterVariant, string> = {
 
 const urlFor = (variant: CharacterVariant) => `${BASE}/${FILES[variant]}.glb`
 
-for (const v of Object.keys(FILES) as CharacterVariant[]) useGLTF.preload(urlFor(v))
+// The player, customers and passers-by, and the owner, load with the page. Staff
+// and Nazma load the first time one is drawn (each figure has its own Suspense).
+for (const v of ['salesperson', ...CUSTOMER_VARIANTS, OWNER_VARIANT] as const) {
+  useGLTF.preload(urlFor(v))
+}
 
 /** The Kenney characters' clothes and hands; the head is a separate mesh. */
 const BODY_MESH = 'body-mesh'
+
+function castShadows(root: Object3D): void {
+  root.traverse((o) => {
+    if (!(o as Mesh).isMesh) return
+    o.castShadow = true
+    o.receiveShadow = true
+  })
+}
 
 /**
  * An animated, skinned character facing +z. The clip is read from `anim` every frame
  * and crossfaded on change, so callers drive it from `useFrame` without re-rendering.
  * `moveSpeed` (units/s) speeds up walk/sprint so the feet don't slide. `bodyTint`
  * multiplies the colour of their clothes (on this copy only), e.g. for a dark suit.
+ * A `pooled` one (a passer-by) borrows its rig from `characterPool` and gives it
+ * back on unmount, instead of cloning its own.
  */
 export function Character({
   variant,
   anim,
   moveSpeed,
   bodyTint,
+  pooled = false,
 }: {
   variant: CharacterVariant
   anim: RefObject<CharacterAnim>
   moveSpeed?: number
   bodyTint?: string
+  pooled?: boolean
 }) {
   const { scene, animations } = useGLTF(urlFor(variant))
   // Skinned meshes need SkeletonUtils.clone so each copy gets its own skeleton.
   const object = useMemo(() => {
+    if (pooled) return takeRig(scene, castShadows)
     const root = clone(scene)
+    castShadows(root)
     root.traverse((o) => {
-      if (!(o as Mesh).isMesh) return
       const mesh = o as Mesh
-      mesh.castShadow = true
-      mesh.receiveShadow = true
       // Clones share materials, so tint a copy of this one's.
-      if (bodyTint && mesh.name === BODY_MESH) {
+      if (bodyTint && mesh.isMesh && mesh.name === BODY_MESH) {
         const material = (mesh.material as MeshStandardMaterial).clone()
         material.color.set(bodyTint)
         mesh.material = material
       }
     })
     return root
-  }, [scene, bodyTint])
+  }, [scene, bodyTint, pooled])
+  useEffect(() => {
+    if (!pooled) return
+    claimRig(scene, object)
+    return () => releaseRig(scene, object)
+  }, [scene, object, pooled])
   const root = useRef<Group>(null)
   const { actions } = useAnimations(animations, root)
   const playing = useRef<AnimationAction | null>(null)
