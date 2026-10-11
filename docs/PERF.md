@@ -29,18 +29,19 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
 
 ### Browser, busy late-game day (`npm run e2e:perf`)
 
-| Where                       | Speed | fps                       | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` | Heap  |
-| --------------------------- | ----- | ------------------------- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- | ----- |
-| SwiftShader (e2e, headless) | 1×    | 2.9                       | 947 ms    | 615 / 632               | 229k      | 149        | 72       | 0.8    | 0.43          | 27     | 13       | 98 MB |
-| SwiftShader (e2e, headless) | 4×    | 2.0                       | 803 ms    | 616 / 632               | 230k      | 149        | 78       | 4.0    | 0.55          | 29     | 18       | 98 MB |
-| Desktop Chrome              | 1×    | _to measure with `?perf`_ |           |                         |           |            |          |        |               |        |          |       |
-| Mid-range Android           | 1×    | _to measure with `?perf`_ |           |                         |           |            |          |        |               |        |          |       |
-| iPhone, Chrome, quiet day   | 1×    | 60                        | 17 ms     | 372                     | 104k      | 438        | 129      |        |               |        |          |       |
-| iPhone, busy day            | 1×    | _to measure with `?perf`_ |           |                         |           |            |          |        |               |        |          |       |
+| Where                                     | Speed | fps                       | p95 frame | Draw calls (mean / max) | Triangles | Geometries | Textures | Sets/s | Listener ms/s | People | `<Html>` | Heap  |
+| ----------------------------------------- | ----- | ------------------------- | --------- | ----------------------- | --------- | ---------- | -------- | ------ | ------------- | ------ | -------- | ----- |
+| SwiftShader (e2e, headless)               | 1×    | 2.9                       | 947 ms    | 615 / 632               | 229k      | 149        | 72       | 0.8    | 0.43          | 27     | 13       | 98 MB |
+| SwiftShader (e2e, headless)               | 4×    | 2.0                       | 803 ms    | 616 / 632               | 230k      | 149        | 78       | 4.0    | 0.55          | 29     | 18       | 98 MB |
+| Desktop Chrome                            | 1×    | _to measure with `?perf`_ |           |                         |           |            |          |        |               |        |          |       |
+| Mid-range Android                         | 1×    | _to measure with `?perf`_ |           |                         |           |            |          |        |               |        |          |       |
+| iPhone, Chrome, quiet day                 | 1×    | 60                        | 17 ms     | 372                     | 104k      | 438        | 129      |        |               |        |          |       |
+| iPhone, busy day (one reading at closing) | 1×    | 60                        | 17 ms     | 603                     | 196k      | 462        | 122      |        |               | 15     | 13       |       |
 
 - The draw calls (about 615 on a busy day) fall at the top of the planning estimate of 300–600. 18e's target is at least a third fewer.
 - The real-device rows are for Robert to fill: open the game with `?perf=busy`, start a new game, play the day out at 1× (or at 1× then 4×), and copy the rows from the day summary.
 - iPhone, quiet day (2026-10-10): a steady 60 fps (p50 and p95 both 17 ms), the display's cap, so there's headroom that this reading can't show. Chrome on iOS runs on WebKit, so it stands in for Safari. A busy day is still to measure.
+- iPhone, busy day (2026-10-11, local preview): one overlay reading at closing, not the day's average: still a steady 60 fps (17 ms p50 and p95) at 603 draw calls, about the e2e busy day's. The day's averaged row from the summary's report is still to come.
 - The iPhone held 438 geometries and 129 textures on a quiet day, against 149 and 72–87 on the e2e busy day, which had more on screen. It may be the longer session: characters are cloned on every spawn (see 18e). 18e should check whether these counts keep climbing over a long session.
 
 ### Bundle and assets (`npm run build`)

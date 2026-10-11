@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PERF_BUSY, perfDay } from '../state/perf'
 import { deviceLabel, perfReportText } from './perfText'
 
@@ -9,6 +9,13 @@ import { deviceLabel, perfReportText } from './perfText'
  */
 export default function PerfReport() {
   const [copied, setCopied] = useState(false)
+  const box = useRef<HTMLDivElement | null>(null)
+  // The summary's button takes focus, which scrolls it to the bottom on a
+  // short screen; this loads after that, so it can bring itself back in view.
+  // (In braces: newer browsers return a Promise, which React would take for a cleanup.)
+  useEffect(() => {
+    box.current?.scrollIntoView({ block: 'nearest' })
+  }, [])
   const day = perfDay.current
   if (!day || day.bySpeed.length === 0) return null
   const where = `${deviceLabel()}, ${PERF_BUSY ? 'busy day' : `day ${day.day}`}`
@@ -20,7 +27,7 @@ export default function PerfReport() {
     )
   }
   return (
-    <div className="perf-report">
+    <div className="perf-report" ref={box}>
       <div className="info-kicker">Perf readings for docs/PERF.md</div>
       <pre>{text}</pre>
       <button type="button" className="btn btn-small" onClick={copy}>

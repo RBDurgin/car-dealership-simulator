@@ -99,6 +99,8 @@ test('a busy late-game day', { tag: '@perf' }, async ({ page }) => {
   console.log(JSON.stringify(result, null, 2))
 
   // Closing: the summary shows the day's readings, ready for docs/PERF.md.
+  // On a landscape phone's screen, where it must be in view without scrolling.
+  await page.setViewportSize({ width: 844, height: 390 })
   // The scene's clock is set too, or its next step would set the store's back.
   await inStore(page, async (useGame) => {
     const { CLOSE_MINUTE } = await import('/src/sim/clock.ts')
@@ -124,11 +126,11 @@ test('a busy late-game day', { tag: '@perf' }, async ({ page }) => {
     )
     .toBe(true)
   const report = page.locator('.perf-report pre')
+  await expect(report).toBeInViewport({ ratio: 1 })
   await expect(report).toContainText(/\| Desktop, Chrome, busy day \| 1× \|/)
   await expect(report).toContainText(/\| 4× \|/)
   await expect(report).toContainText(/Geometries \d+ → \d+/)
   await expect(page.getByText('Not saved: a ?perf=busy game never is.')).toBeVisible()
-  await report.scrollIntoViewIfNeeded()
   await page.screenshot({ path: 'test-results/perf-report.png' })
   // A busy game is never saved.
   const keys = await page.evaluate(() => Object.keys(localStorage))
