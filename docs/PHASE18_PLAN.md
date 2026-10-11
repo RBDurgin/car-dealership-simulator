@@ -91,7 +91,17 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18b: Store split and layering
 
-No behaviour change. Every existing store test passes untouched, and that is the proof.
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and Medium's 500-day bench plays out identically. Changes from the plan:
+
+- `GameState` and the small types live in `state/types.ts`, the pure reads that were exported from the store (`isPaused`, `winShowing`, `levelTuning`, `sellerBonusFor`, `reconBook`, …) in `state/derived.ts`, and the morning notices' text in `state/notices.ts`. `store.ts` re-exports them all, so no import elsewhere changed. Keeping them out of `store.ts` means no slice imports it, so there's no runtime import cycle through the store.
+- Two more slices than planned: `service.ts` and `clients.ts`, as each is as big as the others put together. `reputation` sits in `career.ts`. Fields that `dayOne` sets (cash, the career, the book, …) start there, and each slice gives only the rest.
+- Helpers are module functions taking a `Kit` (`get`, `set`, `batch`), not closures. Those more than one slice uses are in `core.ts` (`commit`, `dispatch`, `endDeal`, `setRoster`, `notify`, `tuning`, `arrivalOpts`, …); the rest live in their slice and are exported where another needs them (`sign` for staff, `closeShop` for the day, …).
+- **One `set()` per step** comes from `transactional` in `core.ts`: inside `k.batch(fn)` every `set` goes into a draft that `get` reads back, and the draft is stored with one `set` at the end (a nested batch joins). `tickClock`, `startNextDay` and `loadGame` batch, and so does `beginDay`. Actions outside a clock step still make their own sets; 18c looks at those.
+- `commit`'s steps: `closeStep`, then `callNextBuyer`, then (if the list changed) browse dirt, `departuresStep`, `cleanupStep` and `announceWaiting`, then `settleDay` (always, so it is the only call), then `cancelBlockedStep`. `startNextDay` settles by committing the unchanged list.
+- `patienceDrain(minutes, reception, saved)` takes the `patienceFactor` rather than the roster, and `saleRecord(c, car, terms)` takes a `SaleTerms`.
+- `resetRng()` takes no seed: it seeds day 1's streams and restarts customer ids (which seed voices and some rolls). Action, move-order and notice ids keep counting, as timers may still hold an old one. The test helper is a Vitest setup file, `state/testSetup.ts`, run before every test. Shuffled runs of `src/state` passed before and after; the order dependence was latent.
+- The layering rule is oxlint `overrides` in `.oxlintrc.json`. Tests under `state/` are exempt, as `perf.test.ts` tests `ui/perfText`.
+- The bench now also reports store sets per tick and per morning.
 
 - **Split `state/store.ts` into slices** (zustand slice pattern, one `GameState` type):
   - The slices live in `state/slices/`: `clock.ts`, `economy.ts` (cash, orders, floor plan, quota, purchases), `customers.ts`, `staff.ts`, `world.ts` (improvements, expansions, weather, Nazma, rival), `day.ts` (`beginDay`, `settleDay`, `dayOne`), `career.ts` (rank, log, lifetime, achievements, clients) and `ui.ts` (menus, panels, `computerTab`, `timeScale`, dev flags).

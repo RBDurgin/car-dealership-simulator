@@ -3,6 +3,81 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/sim/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "sim/ is pure TypeScript: no React."
+              },
+              {
+                "name": "three",
+                "message": "sim/ is pure TypeScript: no three.js."
+              },
+              {
+                "name": "zustand",
+                "message": "sim/ is pure TypeScript: no store."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "react/*",
+                  "react-dom",
+                  "react-dom/*",
+                  "three/*",
+                  "@react-three/*",
+                  "../ui",
+                  "../ui/*",
+                  "../scene",
+                  "../scene/*",
+                  "../state",
+                  "../state/*",
+                  "../audio",
+                  "../audio/*",
+                  "../input",
+                  "../input/*"
+                ],
+                "message": "sim/ is pure TypeScript: it imports only from sim/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/state/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../ui", "../ui/*", "../../ui", "../../ui/*"],
+                "message": "state/ doesn't import from ui/: move what it needs into sim/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/state/**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

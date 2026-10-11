@@ -1,5 +1,5 @@
 import { GUARD_VARIANT, STAFF_VARIANTS, type StaffVariant } from './characters'
-import { randomName } from './customers'
+import { randomName, reduceCustomers, type Customer, type CustomerPhase } from './customers'
 import type { Sale } from './deal'
 import {
   DESK_CHAIR_ID,
@@ -356,6 +356,24 @@ export function patienceFactor(roster: readonly Employee[]): number {
   return roster.some((e) => e.role === 'receptionist' && e.status === 'atPost')
     ? RECEPTION_PATIENCE_FACTOR
     : 1
+}
+
+/** Phases in which a salesperson let go stops working on their customer. */
+const LET_GO_PHASES: readonly CustomerPhase[] = ['browsing', 'waiting', 'talking', 'considering']
+
+/**
+ * `customers` once employee `employeeId` is let go: anyone they were still
+ * talking round goes back to waiting. Buyers they're signing stay with them.
+ * The same array when there's nobody.
+ */
+export function departingOnFire(customers: Customer[], employeeId: string): Customer[] {
+  let out = customers
+  for (const c of customers) {
+    if (c.handlerId === employeeId && LET_GO_PHASES.includes(c.phase)) {
+      out = reduceCustomers(out, { type: 'cancel', id: c.id })
+    }
+  }
+  return out
 }
 
 export type StaffEvent =

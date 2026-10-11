@@ -1,18 +1,23 @@
 import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
+import { weekdayTraffic } from './calendar'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import type { Client } from './clients'
+import type { Tuning } from './difficulty'
 import type { Vehicle } from './driving'
+import type { SaleEvent } from './events'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
+import { visitorScale } from './reputation'
 import type { Rng } from './rng'
 import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
 import type { ServiceVisit } from './serviceClients'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
+import { WEATHER_EFFECTS, type Weather } from './weather'
 
 /**
  * A customer's visit. The world (2d) moves them and reports progress as events;
@@ -883,4 +888,34 @@ export function reduceCustomers(customers: Customer[], ev: CustomerEvent): Custo
     if (n) next.push(n)
   }
   return changed ? next : customers
+}
+
+/**
+ * How many of the usual visitors come on `day`: more or fewer with
+ * reputation, the weekday, the weather, any sale weekend and the level.
+ * (The rival's share and a bust boost are applied on top, in `beginDay`.)
+ */
+export function arrivalScale(
+  day: number,
+  weather: Weather,
+  event: Pick<SaleEvent, 'traffic'> | null,
+  tuning: Pick<Tuning, 'traffic'>,
+  reputation: number,
+): number {
+  return (
+    visitorScale(reputation) *
+    weekdayTraffic(day) *
+    WEATHER_EFFECTS[weather].traffic *
+    (event?.traffic ?? 1) *
+    tuning.traffic
+  )
+}
+
+/**
+ * The patience waiting customers lose over `minutes` of the clock: less with
+ * a receptionist keeping them company (`reception`, see `patienceFactor`)
+ * and a comfy waiting area (`saved`, the improvements' `patienceSaved`).
+ */
+export function patienceDrain(minutes: number, reception: number, saved: number): number {
+  return minutes * reception * (1 - saved)
 }

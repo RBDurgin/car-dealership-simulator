@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import type { Difficulty } from '../../sim/difficulty'
 import { createSave, parseSave } from '../../sim/save'
 import { useGame } from '../store'
-import { playDay } from './bot'
+import { nextDay, playDay } from './bot'
 
 /**
  * The long-game bench (`npm run bench`, not part of `npm test`): plays 500
@@ -39,6 +39,9 @@ interface Run {
     slowestDay: number
   }
   msPerTick: { mean: number; p95: number; max: number }
+  /** Store sets (each runs every listener) per `tickClock` and per `startNextDay`. */
+  setsPerTick: { mean: number; max: number }
+  setsPerMorning: { mean: number; max: number }
   /** What the bot got done, so a run that stalled shows. */
   played: {
     sales: number
@@ -67,11 +70,16 @@ function playGame(level: Difficulty): { run: Run; state: State; saveText: string
   game().newGame(level)
   const dayMs: number[] = []
   const tickMs: number[] = []
+  const tickSets: number[] = []
+  const morningSets: number[] = []
   const start = performance.now()
   for (let d = 0; d < DAYS; d++) {
     const t = performance.now()
-    playDay((ms) => tickMs.push(ms))
-    game().startNextDay()
+    playDay((ms, sets) => {
+      tickMs.push(ms)
+      tickSets.push(sets)
+    })
+    morningSets.push(nextDay())
     dayMs.push(performance.now() - t)
   }
   const totalSeconds = (performance.now() - start) / 1000
@@ -98,6 +106,8 @@ function playGame(level: Difficulty): { run: Run; state: State; saveText: string
         p95: round(pct(tickMs, 0.95)),
         max: round(Math.max(...tickMs)),
       },
+      setsPerTick: { mean: round(avg(tickSets), 2), max: Math.max(...tickSets) },
+      setsPerMorning: { mean: round(avg(morningSets), 2), max: Math.max(...morningSets) },
       played: {
         sales: s.lifetime.sales,
         visitors: s.lifetime.visitors,

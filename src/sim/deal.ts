@@ -1,3 +1,4 @@
+import { ARCHETYPES } from './archetypes'
 import {
   PLAYER_ID,
   reduceCustomers,
@@ -6,7 +7,7 @@ import {
   type CustomerPhase,
 } from './customers'
 import { washBlocker } from './cleanliness'
-import { emptyClientStats, type ClientStats } from './clients'
+import { emptyClientStats, type Client, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
 import {
   approachTilesFor,
@@ -19,6 +20,7 @@ import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
+import { roundOf } from './negotiation'
 import type { RivalStats } from './rival'
 import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
@@ -26,8 +28,8 @@ import type { RecordKey } from './stats'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
-import { financeOnDuty, type Employee } from './staff'
-import { tradeOver, type TradeRecord } from './tradeIns'
+import { financeOnDuty, FINANCE_FEE, salesCommission, type Employee } from './staff'
+import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 
 /**
  * Selling to a customer: who is dealing with whom, which actions a customer
@@ -272,6 +274,52 @@ export interface Sale {
   returning?: boolean
   /** Closed after the buyer's last counter, when they had no rounds left. */
   lastRound?: boolean
+}
+
+/** What `saleRecord` needs to know besides the buyer and the car. */
+export interface SaleTerms {
+  price: number
+  /** The day and minute the paperwork was signed. */
+  day: number
+  minute: number
+  /** Today's payroll, to name the salesperson who made the sale. */
+  roster: readonly Employee[]
+  /** The employee at the desk (finance, or the salesperson), null for the player. */
+  signer: Employee | null
+  /** The client book, to mark a sale to a returning client. */
+  book: readonly Client[]
+  /** What we allowed for their trade-in, or null without one in the deal. */
+  tradePrice: number | null
+}
+
+/** The record of `c` buying `car`: who sold and signed it, the commission and what went with it. */
+export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
+  // Who made the sale. A salesperson let go since is no longer on the roster.
+  const seller =
+    c.sellerId && c.sellerId !== PLAYER_ID
+      ? (t.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
+      : null
+  const finance = t.signer?.role === 'finance' ? t.signer : null
+  const sale: Sale = {
+    customerName: c.name,
+    carId: car.id,
+    model: car.model,
+    price: t.price,
+    msrp: car.msrp,
+    cost: car.cost,
+    minute: t.minute,
+    soldBy: seller,
+    ...(seller && { sellerId: c.sellerId as string }),
+    signedBy: finance?.name ?? null,
+    commission: (seller ? salesCommission(t.price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
+    source: c.source,
+  }
+  const trade = t.tradePrice !== null && tradeRecord(c, t.tradePrice, t.day)
+  if (trade) sale.trade = trade
+  if (car.used) sale.used = true
+  if (c.haggle && roundOf(c) >= ARCHETYPES[c.archetype].haggle.rounds) sale.lastRound = true
+  if (t.book.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
+  return sale
 }
 
 /** One day's results, for the end-of-day summary. */

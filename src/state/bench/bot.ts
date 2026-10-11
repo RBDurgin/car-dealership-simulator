@@ -18,6 +18,12 @@ import { useGame } from '../store'
 
 const game = () => useGame.getState()
 
+/** Store sets that ran the listeners, counted to report sets per clock step. */
+let sets = 0
+useGame.subscribe(() => {
+  sets++
+})
+
 /** Cash the bot keeps before it pays for an ad. */
 const AD_CASH = 20_000
 
@@ -134,13 +140,14 @@ function morning(): void {
 }
 
 /** Steps the clock to closing time, then sees everyone and everyone's staff out. */
-export function playDay(onTick?: (ms: number) => void): void {
+export function playDay(onTick?: (ms: number, sets: number) => void): void {
   const day = game().clock.day
   morning()
   for (let minute = OPEN_MINUTE + CLOCK_STEP_MINUTES; minute <= CLOSE_MINUTE;) {
+    const before = sets
     const t = performance.now()
     game().tickClock({ day, minute })
-    onTick?.(performance.now() - t)
+    onTick?.(performance.now() - t, sets - before)
     serveCustomers()
     minute += CLOCK_STEP_MINUTES
   }
@@ -150,4 +157,11 @@ export function playDay(onTick?: (ms: number) => void): void {
     game().dispatchCustomer({ type: c.vehicle || c.service ? 'droveOff' : 'despawn', id: c.id })
   }
   for (const e of game().roster) game().dispatchStaff({ type: 'left', id: e.id })
+}
+
+/** Opens the next day, and gives the store sets it took. */
+export function nextDay(): number {
+  const before = sets
+  game().startNextDay()
+  return sets - before
 }

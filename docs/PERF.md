@@ -11,7 +11,7 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
   - people in the world (player included), visitors' cars and `<Html>` badges.
   - At the end of each day, the day summary shows the day's readings (only those taken while the day was played) as rows for the device table below, one per game speed played, with a **Copy** button. Under them it shows the renderer's geometries and textures at the day's first and last readings, to show whether they climb. On the first day played, the first reading comes while models are still loading.
 - **`?perf=busy`**: a new game jumps straight to the busy late-game day (`state/perfScenario.ts`, the same scene the `@perf` e2e scenario measures): every expansion, 44 cars, 12 staff, 12 customers at once, rain and Nazma on his way. Such a game is never saved and leaves the trophy case alone, so it's safe on the deployed site. Continuing a save with the flag on isn't changed, but isn't saved either.
-- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs.
+- **Sim bench**: `npm run bench` (not part of `npm test`). `src/state/bench/longGame.bench.ts` plays 500 days headless on Medium and Hard with `bench/bot.ts`, a busy but simple player: it serves one deal at a time (taking each counter), orders stock and ads each morning, and buys expansions when its rank allows. It prints ms per day (first, middle and last 50 days, which should stay flat), ms per `tickClock`, store sets per `tickClock` and per `startNextDay` (each set runs every listener; added in 18b), what got played, and the day-500 save's size and times, then benches `createSave` and `parseSave` on that save. The store's rngs are seeded by the day, so a run plays the same each time; the timings are noisy run to run (±30% on a day window), so compare a few runs.
 - **Browser perf scenario**: `npm run e2e:perf` (tagged `@perf`, left out of `npm run e2e` and CI). `e2e/perf.spec.ts` starts a game with `?perf=busy` and reads the overlay once a second for 30 s at 1× and at 4×. It writes `e2e/perf-results.json`, then closes the day and checks the summary's report. Screenshots go to `test-results/perf-busy.png` and `test-results/perf-report.png`. Under SwiftShader the fps measures the CPU, not a GPU; the draw calls, triangles, store sets and walkers are what to compare there.
 
 ## Baseline (18a)
@@ -58,6 +58,24 @@ Phase 18 measures before it optimises: every change in 18b–18e needs a before 
 | Audio (`public/audio`)                  | 16 MB (music in both `.ogg` and `.mp3`) |        |
 
 18a moved drei's `Stats` out of the main chunk, which saves about 1 KB. Most of the bundle is three.js, R3F and drei, which 18e splits into a vendor chunk.
+
+## 18b: store split (2026-10-11)
+
+The store is split into slices, with every change in one clock step, and in one morning, stored by a single `set()`.
+
+### Sim bench
+
+| Level          | Sets per tick (mean / max) | Sets per morning (mean / max) | ms/day first 50 | middle 50 | last 50 | ms/tick mean | Sales | Save at day 500 |
+| -------------- | -------------------------- | ----------------------------- | --------------- | --------- | ------- | ------------ | ----- | --------------- |
+| Medium, before | 2.08 / 3                   | 1.98 / 2                      | 7.8             | 8.0       | 4.3     | 0.067        | 2,954 | 163 KB          |
+| Medium, after  | **1 / 1**                  | **1 / 1**                     | 7.8             | 8.7       | 5.4     | 0.081        | 2,954 | 163 KB          |
+| Hard, before   | 2.03 / 3                   | 1.37 / 2                      | 3.8             | 1.8       | 1.7     | 0.034        | 762   | 131 KB          |
+| Hard, after    | **1 / 1**                  | **1 / 1**                     | 4.6             | 2.9       | 2.1     | 0.046        | 771   | 126 KB          |
+
+- The bot's day is light (staff stand idle and walkers arrive at once), so it makes about 2 sets a tick. In the browser a step also carries notices, staff calls and the scene's reports; those still make their own sets outside `tickClock` (18c looks at them).
+- Ms per tick is up about 15% (Medium 0.067 → 0.077–0.086 over four runs; Hard 0.034 → 0.044–0.046), about 11 µs a tick: each `set` inside a batch copies the state, so what `get` handed out stays unchanged. Copying only after a read (copy-on-write) measured 0.074–0.078, within the noise, so it was reverted. In the browser the trade is worth it: each `set` runs every listener and selector, and 18a measured the listeners alone at 0.07–0.5 ms a set (desktop to SwiftShader), so the set saved per tick is worth several times the copy. 18c's overlay readings will show it.
+- **Medium plays out identically** (every played total and the save size match), which shows the split changed no behaviour.
+- Hard differs only because the bench plays Hard after Medium in one process: before 18b, Hard's customer ids carried on from Medium's game (ids seed some rolls), and now `newGame` resets them (`resetRng`). With the old carry-over put back for a check, Hard matched the baseline exactly (762 sales, cash −$5,427).
 
 ## CI
 
