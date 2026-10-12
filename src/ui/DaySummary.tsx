@@ -118,6 +118,7 @@ function SummaryPanel() {
   const quota = useGame((s) => s.quota)
   const monthCsi = useGame((s) => csiOf(s.monthCsi))
   const difficulty = useGame((s) => s.difficulty)
+  const dealershipName = useGame((s) => s.dealershipName)
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const rankScale = useGame((s) => levelTuning(s).rankScale)
@@ -135,7 +136,7 @@ function SummaryPanel() {
     <div className="modal-backdrop">
       <div className="panel day-summary" role="dialog" aria-label={`${longDate(day)} summary`}>
         <div className="info-kicker">
-          End of day {day} · {WEATHER_ICONS[weather]} {WEATHER_LABELS[weather]}
+          {dealershipName} · End of day {day} · {WEATHER_ICONS[weather]} {WEATHER_LABELS[weather]}
           {event && ` · ${event.label} sale`} · {difficultyLabel(difficulty)}
         </div>
         <h2>{longDate(day)}</h2>

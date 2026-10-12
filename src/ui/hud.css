@@ -1335,6 +1335,26 @@ kbd {
 .title-trophy {
   margin-left: 6px;
 }
+.title-name {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS zooming in on focus */
+  text-align: center;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+}
+.title-name:focus {
+  outline: 2px solid #e8c547;
+  outline-offset: 1px;
+}
+.title-level {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
 
 .title-save {
   display: block;

@@ -25,7 +25,6 @@ import { CAR_MODELS } from '../sim/customers'
 import { MODEL_TIER } from '../sim/franchise'
 import {
   buildLayout,
-  DEALERSHIP_NAME,
   FURNITURE_SCALE,
   platformOpen,
   PLATFORMS,
@@ -234,8 +233,10 @@ function LoadedModel({ def, footprint, cleanliness, condition }: ModelProps) {
   )
 }
 
+/** The sign's board, with the dealership's name picked at New game. */
 function useSignTexture(): CanvasTexture {
-  return useMemo(() => {
+  const name = useGame((s) => s.dealershipName)
+  const texture = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 768
     canvas.height = 256
@@ -250,7 +251,7 @@ function useSignTexture(): CanvasTexture {
     ctx.textBaseline = 'middle'
     const maxWidth = canvas.width - 80
     ctx.font = 'bold 92px system-ui, sans-serif'
-    ctx.fillText(DEALERSHIP_NAME.toUpperCase(), canvas.width / 2, 108, maxWidth)
+    ctx.fillText(name.toUpperCase(), canvas.width / 2, 108, maxWidth)
     ctx.fillStyle = '#e8c547'
     ctx.font = '600 40px system-ui, sans-serif'
     ctx.fillText('NEW  ·  USED  ·  SERVICE', canvas.width / 2, 192, maxWidth)
@@ -258,7 +259,9 @@ function useSignTexture(): CanvasTexture {
     tex.colorSpace = SRGBColorSpace
     tex.anisotropy = 8
     return tex
-  }, [])
+  }, [name])
+  useEffect(() => () => texture.dispose(), [texture])
+  return texture
 }
 
 /** The For Sale board out front of the parcel: red on white, like an estate agent's. */

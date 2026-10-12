@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_AUDIO_SETTINGS } from '../sim/audioSettings'
 import { CLOSE_MINUTE } from '../sim/clock'
+import { DEFAULT_DEALERSHIP_NAME } from '../sim/dealershipName'
 import { createSave } from '../sim/save'
 import {
   clearSave,
@@ -254,5 +255,19 @@ describe('end-of-day save', () => {
     settle()
     expect(game().notice?.text).toBe(SAVE_FAILED_NOTICE)
     expect(game().screen).toBe('playing')
+  })
+})
+
+describe('dealership name', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  it('is the one picked at New game, tidied, and comes back with the save', () => {
+    game().newGame('medium', "  Robert's   Rides ")
+    expect(game().dealershipName).toBe("Robert's Rides")
+    const save = createSave(game(), Date.now())
+    game().newGame('medium')
+    expect(game().dealershipName).toBe(DEFAULT_DEALERSHIP_NAME)
+    game().loadGame(save)
+    expect(game().dealershipName).toBe("Robert's Rides")
   })
 })

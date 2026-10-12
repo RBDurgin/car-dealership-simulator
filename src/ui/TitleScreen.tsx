@@ -8,6 +8,7 @@ import {
   type Difficulty,
 } from '../sim/difficulty'
 import { ACHIEVEMENTS } from '../sim/achievements'
+import { DEFAULT_DEALERSHIP_NAME, MAX_NAME_LENGTH } from '../sim/dealershipName'
 import { caseCount } from '../sim/trophyCase'
 import { updatesSince } from '../sim/whatsNew'
 import {
@@ -24,13 +25,14 @@ import { WhatsNew } from './WhatsNew'
 
 /**
  * Shown on load: continue the saved game, if there is one, or start a new one
- * at a level picked in a second step. A save from before the latest update
- * opens What's new first.
+ * named and at a level picked in a second step. A save from before the latest
+ * update opens What's new first.
  */
 export function TitleScreen() {
   const open = useGame((s) => s.screen === 'title')
   const [save] = useState(readSave)
   const [picking, setPicking] = useState(false)
+  const [name, setName] = useState(DEFAULT_DEALERSHIP_NAME)
   const [newsOpen, setNewsOpen] = useState(() => !!save && updatesSince(save.news).length > 0)
   const closeNews = useCallback(() => {
     setNewsOpen(false)
@@ -59,7 +61,7 @@ export function TitleScreen() {
   const newGame = (difficulty: Difficulty) => {
     if (save && !window.confirm(`Start over? Your day ${save.day + 1} save will be lost.`)) return
     clearSave()
-    useGame.getState().newGame(difficulty)
+    useGame.getState().newGame(difficulty, name)
   }
 
   return (
@@ -68,12 +70,26 @@ export function TitleScreen() {
         <div className="info-kicker">Car dealership simulator</div>
         {picking ? (
           <>
-            <h1>Pick a level</h1>
+            <h1>Name your dealership</h1>
+            <input
+              className="title-name"
+              aria-label="Dealership name"
+              value={name}
+              maxLength={MAX_NAME_LENGTH}
+              autoFocus
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                // Typing a name mustn't reach the game's keys (N mutes from anywhere).
+                e.stopPropagation()
+                if (e.key === 'Enter') newGame(DEFAULT_DIFFICULTY)
+              }}
+            />
+            <h2 className="title-level">Pick a level</h2>
             {DIFFICULTIES.map((d) => (
               <button
                 key={d}
                 className={d === DEFAULT_DIFFICULTY ? 'btn btn-primary' : 'btn'}
-                autoFocus={d === DEFAULT_DIFFICULTY}
                 onClick={() => newGame(d)}
               >
                 {difficultyLabel(d)}
@@ -99,6 +115,7 @@ export function TitleScreen() {
                     🏆
                   </span>
                 )}
+                <span className="title-save">{save.dealershipName}</span>
                 <span className="title-save">
                   {longDate(save.day + 1)} · {formatMoney(save.cash)} ·{' '}
                   {difficultyLabel(save.difficulty)}

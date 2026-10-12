@@ -82,6 +82,8 @@ export interface GameState {
   screen: Screen
   /** Picked at New game and kept with the save. Never changes mid-game. */
   difficulty: Difficulty
+  /** The dealership's name, picked at New game and kept with the save (see `sim/dealershipName.ts`). */
+  dealershipName: string
   moveOrder: MoveOrder | null
   showGrid: boolean
   wallMode: WallMode
@@ -377,8 +379,11 @@ export interface GameState {
   setGraphics: (setting: GraphicsSetting) => void
   setQualityTier: (tier: number) => void
   cycleTimeScale: () => void
-  /** From the title screen: plays a fresh day 1 at `difficulty` (Medium if not given). */
-  newGame: (difficulty?: Difficulty) => void
+  /**
+   * From the title screen: plays a fresh day 1 at `difficulty` (Medium if not
+   * given) as the dealership `name` (tidied by `cleanName`).
+   */
+  newGame: (difficulty?: Difficulty, name?: string) => void
   /** From the title screen: resumes a saved game on the morning after its last day. */
   loadGame: (save: SaveData) => void
   /** From the win screen: play goes on, and the win screen won't show again. */

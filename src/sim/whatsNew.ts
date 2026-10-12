@@ -367,6 +367,15 @@ export const UPDATES: readonly Update[] = [
       'The day summary shows your F&I gross, and it counts toward ranks and the owner’s goals.',
     ],
   },
+  {
+    id: 34,
+    phase: '19',
+    title: 'Name your dealership',
+    items: [
+      'Starting a new game asks for your dealership’s name, and it goes up on the sign out front.',
+      'The title screen, the day summary and the Dealer of the Year screen show it too. Games from before keep the old name.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

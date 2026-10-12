@@ -14,6 +14,7 @@ import {
 } from './clients'
 import type { GameTime } from './clock'
 import { isAchievementId, type EarnedAchievement } from './achievements'
+import { cleanName, DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
@@ -54,7 +55,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 27
+export const SAVE_VERSION = 28
 
 export interface SaveData {
   version: number
@@ -81,6 +82,8 @@ export interface SaveData {
   quota: number
   /** The level picked at New game. */
   difficulty: Difficulty
+  /** The name picked at New game (see `sim/dealershipName.ts`). */
+  dealershipName: string
   /** The bank's one-time safety net (Easy) has been used. */
   bailoutUsed: boolean
   /** Guided tips already shown (Easy), so a resumed game doesn't repeat them. */
@@ -132,6 +135,7 @@ export interface SaveSource {
   monthSales: MonthSales
   quota: number
   difficulty: Difficulty
+  dealershipName: string
   bailoutUsed: boolean
   tipsSeen: TipId[]
   career: Career
@@ -173,6 +177,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     monthSales: s.monthSales,
     quota: s.quota,
     difficulty: s.difficulty,
+    dealershipName: s.dealershipName,
     bailoutUsed: s.bailoutUsed,
     tipsSeen: s.tipsSeen,
     career: s.career,
@@ -357,6 +362,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   }),
   // v27: achievements, none earned yet.
   26: (raw) => ({ ...raw, achievements: [] }),
+  // v28: the dealership's name. Every game before it had the default.
+  27: (raw) => ({ ...raw, dealershipName: DEFAULT_DEALERSHIP_NAME }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -431,6 +438,8 @@ export function parseSave(input: unknown): SaveData | null {
   return {
     ...raw,
     news: Math.min(news as number, LATEST_NEWS),
+    // A hand-edited name is tidied rather than losing the save.
+    dealershipName: cleanName(raw.dealershipName),
     // One this build no longer has is dropped.
     achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
   } as unknown as SaveData

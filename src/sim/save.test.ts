@@ -25,6 +25,7 @@ import { BASE_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
 import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
+import { DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
 import {
@@ -93,6 +94,8 @@ const source = () => ({
   statsFrom: 4,
   // As a v26 save upgrades, so the older upgrades compare equal.
   achievements: [] as EarnedAchievement[],
+  // As a v27 save upgrades.
+  dealershipName: DEFAULT_DEALERSHIP_NAME,
 })
 
 const record = (day: number, extra: Partial<DayRecord> = {}): DayRecord => ({
@@ -555,6 +558,20 @@ describe('save data', () => {
       parseSave({ ...save, achievements: [{ id: 'first-sale', day: 1, level: 'insane' }] }),
     ).toBeNull()
     expect(parseSave({ ...save, achievements: undefined })).toBeNull()
+  })
+
+  it('keeps the dealership’s name, and tidies a bad one', () => {
+    const save = createSave({ ...source(), dealershipName: "Robert's Rides" }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.dealershipName).toBe("Robert's Rides")
+    expect(parseSave({ ...save, dealershipName: '  Big\n Al  ' })?.dealershipName).toBe('Big Al')
+    expect(parseSave({ ...save, dealershipName: 7 })?.dealershipName).toBe(DEFAULT_DEALERSHIP_NAME)
+  })
+
+  it('upgrades a version 27 save with the default name', () => {
+    const { dealershipName: _, ...v27 } = createSave(source(), 123)
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v27, version: 27 })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.dealershipName).toBe(DEFAULT_DEALERSHIP_NAME)
   })
 
   it('upgrades a version 26 save with no achievements', () => {

@@ -126,6 +126,10 @@ function BasicsTab({ touch, click }: TabProps) {
           Sell cars, build a loyal client base and grow your cash. You start with{' '}
           {formatMoney(startingCash)} and a lot full of cars.
         </p>
+        <p>
+          A new game asks for your dealership&apos;s name, which goes up on the sign out front. It
+          stays for that game.
+        </p>
       </section>
       <section>
         <h3>Difficulty</h3>

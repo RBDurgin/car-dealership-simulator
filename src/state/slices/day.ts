@@ -19,6 +19,7 @@ import { dirtyOvernight } from '../../sim/cleanliness'
 import { csiFactor, csiOf } from '../../sim/csi'
 import { arrivalScale, type Customer } from '../../sim/customers'
 import { emptyStats, type DayStats } from '../../sim/deal'
+import { cleanName, DEFAULT_DEALERSHIP_NAME } from '../../sim/dealershipName'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty } from '../../sim/difficulty'
 import { eventNotice, eventOn } from '../../sim/events'
 import { installedExpansions, type OwnedExpansion } from '../../sim/expansions'
@@ -110,14 +111,16 @@ import { tallyNazma } from './world'
 type DayKeys = 'dayStats' | 'missedYesterday' | 'startNextDay' | 'newGame' | 'loadGame'
 
 /**
- * What a new game's day 1 starts with at `difficulty`. The day's rng streams
- * start afresh, so day 1 plays out the same however often it's built.
+ * What a new game's day 1 starts with at `difficulty`, as the dealership
+ * `name`. The day's rng streams start afresh, so day 1 plays out the same
+ * however often it's built.
  */
-export function dayOne(difficulty: Difficulty) {
+export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP_NAME) {
   seedDay(1)
   const tuning = TUNING[difficulty]
   return {
     difficulty,
+    dealershipName: cleanName(name),
     cash: tuning.startingCash,
     bailoutUsed: false,
     career: emptyCareer(),
@@ -172,9 +175,9 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
         beginDay(k, s.clock.day + 1)
       }),
     // A new player gets the guide before day 1 starts.
-    newGame: (difficulty = DEFAULT_DIFFICULTY) => {
+    newGame: (difficulty = DEFAULT_DIFFICULTY, name) => {
       resetRng()
-      set({ screen: 'playing', helpOpen: true, ...dayOne(difficulty) })
+      set({ screen: 'playing', helpOpen: true, ...dayOne(difficulty, name) })
     },
     loadGame: (save) =>
       k.batch(() => {
@@ -183,6 +186,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
         set({
           screen: 'playing',
           difficulty: save.difficulty,
+          dealershipName: save.dealershipName,
           cash: save.cash,
           inventory: save.inventory,
           roster: save.roster,

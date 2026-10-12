@@ -20,6 +20,7 @@ function WinPanel() {
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const difficulty = useGame((s) => s.difficulty)
+  const dealershipName = useGame((s) => s.dealershipName)
   const rivalOpened = useGame((s) => s.rival.generation > 0)
   const clients = useGame((s) => s.clients)
   const book = useMemo(() => bookSummary(clients), [clients])
@@ -30,10 +31,13 @@ function WinPanel() {
         <div className="win-trophy" aria-hidden="true">
           🏆
         </div>
-        <div className="info-kicker">{difficultyLabel(difficulty)}</div>
+        <div className="info-kicker">
+          {dealershipName} · {difficultyLabel(difficulty)}
+        </div>
         <h2>{TOP_RANK.name}!</h2>
         <p>
-          The whole region knows your name. You built a corner lot into the best dealership around.
+          The whole region knows your name. You built {dealershipName} from a corner lot into the
+          best dealership around.
         </p>
         <dl className="summary-stats">
           <dt>Days played</dt>
