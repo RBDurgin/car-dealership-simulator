@@ -87,3 +87,7 @@ Test drives. A shopper can ask to drive the car they're looking at, or you can o
 ## Phase 21
 
 Staff growth and morale. Staff learn on the job: their work earns experience, skill rises slowly up to each hire's potential, and a level-up comes with a request for a raise. Each employee has a morale that moves with pay, workload and how they're treated. Happy staff work a little faster, and unhappy ones work slower, are easier for Nazma to poach and, if nothing changes, hand in their notice. A weekly rota gives everyone days off while keeping each role covered, and you can change it. Pay for training courses, promote your best to a Senior title, praise people, hold a morning huddle, build a break room and name an Employee of the Month. Each employee has a page with their record.
+
+## Phase 22
+
+Dealer auctions and wholesale. Once you reach Main Street, a dealer auction runs every Wednesday. Preview the week's run list from the office computer, then bid live against other dealers while the floor keeps running. Each lot shows a grade and its miles, but a car can come in worse than it looked, so inspect what you can and send the rough ones to the garage. Hire a used-car manager to inspect the list, bid up to your limits while you're busy and suggest what to sell off. Consign stale or rough used cars to the auction to wholesale them for what the trade will pay. Nazma bids against you while his lot is open, a car you wholesale can end up on his lot, and a car he stole can turn up in the run for you to buy back.
