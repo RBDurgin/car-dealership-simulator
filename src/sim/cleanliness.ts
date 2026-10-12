@@ -19,8 +19,11 @@ export const SMUDGE_DIRT = 0.5
 export const MAX_CLEAN_BONUS = 0.08
 /** Clean enough that washing it again would make no difference. */
 export const SPOTLESS = 0.95
-/** The porter washes cars dirtier than this. */
-export const WASH_BELOW = 0.8
+/**
+ * The porter washes cars dirtier than this: a lot car after one night's dust
+ * (1 − `NIGHTLY_DIRT.lot`), but not a showroom car after one night.
+ */
+export const WASH_BELOW = 0.85
 
 export type Condition = 'Clean' | 'Dusty' | 'Dirty'
 

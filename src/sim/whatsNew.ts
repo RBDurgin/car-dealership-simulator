@@ -376,6 +376,15 @@ export const UPDATES: readonly Update[] = [
       'The title screen, the day summary and the Dealer of the Year screen show it too. Games from before keep the old name.',
     ],
   },
+  {
+    id: 35,
+    phase: '19',
+    title: 'Porters wash the morning dust',
+    items: [
+      'Lot porters now wash a car after one night’s dust on the lot, instead of standing idle.',
+      'A lot they’d kept clean used to be just clean enough each morning for them to skip it.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */
