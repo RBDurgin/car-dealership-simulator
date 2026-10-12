@@ -1,8 +1,8 @@
 # Phase 20 Plan: Test Drives
 
-**Status:** planned 2026-10-10. Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map) and 15 (the garage, for fixing dings).
+**Status:** planned 2026-10-10. Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map), 15 (the garage, for fixing dings), 16 (the visit score) and 18 (the store slices, the bench and CI).
 
-- 20d's satisfaction hook needs Phase 16's visit score. If 16 isn't built when 20d is, that part waits for it.
+- Phase 19 (F&I) isn't built. Nothing here depends on it, and if it lands first, a drive happens before the F&I menu and doesn't change it.
 - Only 20c touches the save. It takes the next free save version (`SAVE_VERSION` + 1).
 - As in earlier phases, we do one sub-phase per session and stop for Robert's review after each.
 
@@ -34,22 +34,22 @@ Scale: a day is 6 real minutes, about 1.5 game minutes per real second. A drive 
 
 ## Levers that already exist
 
-| Lever                                                                                                                                                  | Where                                                      | Phase 20 use                                                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inboundRoute`/`outboundRoute`, `Leg`, `smoothCorners`, `LANE`, `ROAD_WEST`/`ROAD_EAST`, `GATE_IN_X`/`GATE_OUT_X`, `AISLE_Z`, `blockedAhead`, `poseIn` | `sim/driving.ts`                                           | New `stockOutbound(space, to)`/`stockInbound(space, from)` leave and return to a stock `PARKING_SPACES` pose, joined to the existing gate and road legs |
-| `DrivenCar` stages, `drive()`, `CarBody`, `runtime.vehiclePos`, crowd agents for moving cars                                                           | `scene/DrivenCar.tsx`, `scene/Props.tsx`                   | A `testDrive` record drives the stock car's own `CarBody` out and back                                                                                  |
-| `CarStatus` `'recon'` (out of `availableCars`, kept by `freeSlots`/`dropSold`, saved back as available)                                                | `sim/inventory.ts`, `sim/save.ts`                          | A new status `'out'` works the same way                                                                                                                 |
-| `acceptChance(c, car, price, bonus, day)`, `sellerBonusFor`, `dealWarmth`, `expect`                                                                    | `sim/customers.ts`, `state/store.ts`, `sim/negotiation.ts` | `driveBonus` joins the bonus, and `driveExpect` narrows `expect`                                                                                        |
-| `ArchetypeTraits`                                                                                                                                      | `sim/archetypes.ts`                                        | New `drive` (chance to ask) and `topics` (liked talking points)                                                                                         |
-| `cleanliness`, `smudgeCar`, `WEATHER_EFFECTS`                                                                                                          | `sim/cleanliness.ts`, `sim/weather.ts`                     | `driveDirt` (more on a rainy day)                                                                                                                       |
-| `UsedInfo.miles`, `marketValue`                                                                                                                        | `sim/usedCars.ts`                                          | A drive adds `DRIVE_MILES`, so the value drops a little                                                                                                 |
-| `JobKind`, `recondition`, `reconBlocker`, `nextMechanicTask` (`jobPriority`)                                                                           | `sim/service.ts`, `sim/staffAi.ts`, store                  | A `ding` job fixes a dent                                                                                                                               |
-| `nextSalesTask`/`SalesTask`/`SalesContext`, `updateSales`, `skillSeconds`                                                                              | `sim/staffAi.ts`, `scene/Staff.tsx`                        | A new `drive` task, before the pitch                                                                                                                    |
-| `customerActions`, `CUSTOMER_ACTIONS`, `actionBlocker`, `bubbleOf`                                                                                     | `sim/deal.ts`, `sim/customers.ts`                          | The `testDrive` action and a 🔑 bubble                                                                                                                  |
-| Chatter `ConversationKind`, `reactionsFor`                                                                                                             | `sim/chatter.ts`                                           | A short `drive` exchange as they leave and return                                                                                                       |
-| `sfxFor` cues `engine` and `door`                                                                                                                      | `sim/sfxEvents.ts`                                         | Played for the car leaving and coming back                                                                                                              |
-| Phase 16 `visitScore`                                                                                                                                  | `sim/clients.ts` (16a)                                     | "Loved the test drive" or "Never got to drive it"                                                                                                       |
-| `Tuning` / `TUNING`                                                                                                                                    | `sim/difficulty.ts`                                        | New `driveBonus` and `dingChance`, neutral on Medium                                                                                                    |
+| Lever                                                                                                                                                  | Where                                                        | Phase 20 use                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inboundRoute`/`outboundRoute`, `Leg`, `smoothCorners`, `LANE`, `ROAD_WEST`/`ROAD_EAST`, `GATE_IN_X`/`GATE_OUT_X`, `AISLE_Z`, `blockedAhead`, `poseIn` | `sim/driving.ts`                                             | New `stockOutbound(space, to)`/`stockInbound(space, from)` leave and return to a stock `PARKING_SPACES` pose, joined to the existing gate and road legs |
+| `DrivenCar` stages, `drive()`, `CarBody`, `runtime.vehiclePos`, crowd agents for moving cars                                                           | `scene/DrivenCar.tsx`, `scene/Props.tsx`                     | A `testDrive` record drives the stock car's own `CarBody` out and back                                                                                  |
+| `CarStatus` `'recon'` (out of `availableCars`, kept by `freeSlots`/`dropSold`, saved back as available)                                                | `sim/inventory.ts`, `sim/save.ts`                            | A new status `'out'` works the same way                                                                                                                 |
+| `acceptChance(c, car, price, bonus, day)`, `sellerBonusFor`, `dealWarmth`, `expect`                                                                    | `sim/customers.ts`, `state/derived.ts`, `sim/negotiation.ts` | `driveBonus` joins the bonus, and `driveExpect` narrows `expect`                                                                                        |
+| `ArchetypeTraits`                                                                                                                                      | `sim/archetypes.ts`                                          | New `drive` (chance to ask) and `topics` (liked talking points)                                                                                         |
+| `cleanliness`, `smudgeCar`, `WEATHER_EFFECTS`                                                                                                          | `sim/cleanliness.ts`, `sim/weather.ts`                       | `driveDirt` (more on a rainy day)                                                                                                                       |
+| `UsedInfo.miles`, `marketValue`                                                                                                                        | `sim/usedCars.ts`                                            | A drive adds `DRIVE_MILES`, so the value drops a little                                                                                                 |
+| `JobKind`, `recondition`, `reconBlocker`, `nextMechanicTask` (`jobPriority`)                                                                           | `sim/service.ts`, `sim/staffAi.ts`, store                    | A `ding` job fixes a dent                                                                                                                               |
+| `nextSalesTask`/`SalesTask`/`SalesContext`, `updateSales`, `skillSeconds`                                                                              | `sim/staffAi.ts`, `scene/Staff.tsx`                          | A new `drive` task, before the pitch                                                                                                                    |
+| `customerActions`, `CUSTOMER_ACTIONS`, `actionBlocker`, `bubbleOf`                                                                                     | `sim/deal.ts`, `sim/customers.ts`                            | The `testDrive` action and a 🔑 bubble                                                                                                                  |
+| Chatter `ConversationKind`, `reactionsFor`                                                                                                             | `sim/chatter.ts`                                             | A short `drive` exchange as they leave and return                                                                                                       |
+| `sfxFor` cues `engine` and `door`                                                                                                                      | `sim/sfxEvents.ts`                                           | Played for the car leaving and coming back                                                                                                              |
+| Phase 16 `visitScore`                                                                                                                                  | `sim/clients.ts`                                             | "Loved the test drive" or "Never got to drive it"                                                                                                       |
+| `Tuning` / `TUNING`                                                                                                                                    | `sim/difficulty.ts`                                          | New `driveBonus` and `dingChance`, neutral on Medium                                                                                                    |
 
 ## Sub-phases
 
@@ -88,7 +88,7 @@ Customers:
 
 Inventory:
 
-- A new `CarStatus` `'out'`. The store's `takeOut(carId)` and `bringBack(carId)` set it.
+- A new `CarStatus` `'out'`. `takeOut(carId)` and `bringBack(carId)` in the store's world slice (`state/slices/world.ts`) set it.
 - A car that's out:
   - leaves `availableCars`, so it can't be browsed, offered or bought, and its tiles are freed;
   - is kept by `freeSlots` and `dropSold`;
@@ -158,7 +158,7 @@ Salespeople:
 - A new `SalesTask` `drive`.
   - `nextSalesTask` gives it to a salesperson whose claimed shopper `wantsDrive` and has a `drivableCar`. It comes before the pitch.
   - `SalesContext.carsOut` makes sure no car goes out twice.
-- `scene/Staff` walks them to the car and calls the store's `staffTestDrive`.
+- `scene/Staff` walks them to the car and calls `staffTestDrive` (store's staff slice, `state/slices/staff.ts`).
   - Their `staffPos` is cleared while they're out, so they can't be greeted and take no tasks.
   - When they're back, they go straight on to the pitch.
 - `staffTopics(skill, c, car, rng)`: the chance of picking a good topic rises with skill, from about 40% at skill 1 to about 85% at skill 5.
@@ -194,15 +194,14 @@ Tests:
 
 ### 20d: Satisfaction, tips and balance
 
-- **Visit score** (needs Phase 16):
+- **Visit score:**
   - `visitScore` gets the reason "Loved the test drive" (a high `driveScore`).
   - It also gets "Never got to drive it" (a shopper who asked and didn't drive).
-  - If 16 isn't built yet, this item waits for it.
 - **Tips** in `sim/tips.ts`:
   - `testDrive`: the first shopper with 🔑.
   - `ding`: the first car that comes back dinged.
   - `driveStaff`: three drives the player took in one day while a salesperson stood idle.
-- **Balance** with the 18a bench if it's built, or with seeded runs, against the targets below on all three levels. The final constants go in the Status line.
+- **Balance** with the 18a bench (`state/bench/longGame.bench.ts`) and seeded runs against the targets below on all three levels. The final constants go in the Status line.
 
 Tests: `tips.test.ts`, and a balance test in `store.testDrive.test.ts` (a 28-day seeded run lands in the target bands).
 
@@ -236,7 +235,7 @@ Tests: `tips.test.ts`, and a balance test in `store.testDrive.test.ts` (a 28-day
 
 ## Verification (each sub-phase)
 
-- `npm test` (the new test files above), `npm run lint`, `npm run build`, `npm run e2e`, plus CI if 18a has been built.
+- `npm test` (the new test files above), `npm run lint`, `npm run build`, `npm run e2e`, and CI.
 - `npm run dev` (or `/run`), with `T` for speed:
   - **20a:** take a 🔑 shopper out and check that:
     - the car leaves its space, the gate and the map, and comes back to the same space;
@@ -250,7 +249,7 @@ Tests: `tips.test.ts`, and a balance test in `store.testDrive.test.ts` (a 28-day
     - check dirt and miles after a drive on a rainy day;
     - force a ding with the dev rng, then fix it in the garage;
     - save and reload.
-  - **20d:** with Phase 16 built, check the drive reasons in the visit score; check the tips on Easy.
+  - **20d:** check the drive reasons in the visit score; check the tips on Easy.
 
 ## Left out
 
