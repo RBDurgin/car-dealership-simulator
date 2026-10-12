@@ -428,7 +428,7 @@ export function sign(
     ...(chargebacks.length > 0 && { chargebacks: [...get().chargebacks, ...chargebacks] }),
     ...(contract && { contracts: addContracts(get().contracts, [contract]) }),
   })
-  commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
+  commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded, deal }))
   return sale
 }
 

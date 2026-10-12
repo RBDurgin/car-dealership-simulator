@@ -67,6 +67,7 @@ const client = (id: string, extra: Partial<Client> = {}): Client => ({
   friendsSent: 0,
   thanked: false,
   serviceDue: DAY,
+  chargedBack: false,
   ...extra,
 })
 

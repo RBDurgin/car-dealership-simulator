@@ -7,12 +7,14 @@ import { TUNING } from '../sim/difficulty'
 import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
 import {
   DUE_SOON,
+  EARLY_CHARGEBACK_DAYS,
   LAPSE_DAYS,
   LOYAL,
   PROSPECT_DAYS,
   SERVICE_INTERVAL,
   TRADE_UP_DAYS,
 } from '../sim/clients'
+import { FAIR_FI_MARKUP } from '../sim/fi'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import { MAX_MARKUP } from '../sim/lenders'
@@ -317,6 +319,13 @@ function SellingTab({ touch, click }: TabProps) {
           credit (tiers C and D) all make one likelier. The morning notice tells you when one lands.
         </p>
         <p>
+          The menu counts toward how happy the buyer leaves. A fair one, a loan or a product or two
+          at no more than {FAIR_FI_MARKUP} point of markup, adds a little to their visit score. Each
+          markup point over that, and each product turned down past the second, takes points off. A
+          client charged back within {EARLY_CHARGEBACK_DAYS} days of buying comes in sour on their
+          next visit. Cash buyers take products less often than buyers who finance.
+        </p>
+        <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
           more body types, mostly looks at used cars and haggles hard. While you have no used car
           for sale only a few come in, and the summary counts them as missed. Regulars and bargain
@@ -412,9 +421,10 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
         <p>
           Each visit is scored out of 100. Waiting long, haggling many rounds, paying more than they
-          hoped, a dirty car or a low trade-in offer take points off; quick service, a good price, a
-          clean car and a fair trade-in add them. The score is blended into how happy they are with
-          you, so one bad visit hurts without wiping out the good ones.
+          hoped, a dirty car, a low trade-in offer or a pushy F&amp;I menu take points off; quick
+          service, a good price, a clean car, a fair trade-in and fair finance add them. The score
+          is blended into how happy they are with you, so one bad visit hurts without wiping out the
+          good ones.
         </p>
         <p>
           The <b>Clients</b> tab on the office computer (<OfficeKey touch={touch} keyName="L" />)
@@ -893,11 +903,12 @@ function PeopleTab({ touch, click }: TabProps) {
             A <b>finance manager</b> takes the office desk while your own desk stays yours: lead a
             buyer to the office, {click.toLowerCase()} them and choose <b>Hand off to finance</b>,
             and you&apos;re free for the next customer. Buyers wait in the lounge if finance is
-            busy. They run the F&amp;I menu by skill: they pick the lender that pays the best
-            reserve, mark up more the more skilled they are (less for good credit) and present
-            products until a yes gets unlikely, taking a little longer for each. A buyer no lender
-            takes is asked for more down. They earn {formatMoney(FINANCE_FEE)} a deal plus{' '}
-            {Math.round(FI_COMMISSION * 100)}% of its F&amp;I gross.
+            busy. They run the F&amp;I menu by skill, and even an average one pitches products
+            better than you do: they pick the lender that pays the best reserve, mark up more the
+            more skilled they are (less for good credit) and present products until a yes gets
+            unlikely, taking a little longer for each. A buyer no lender takes is asked for more
+            down. They earn {formatMoney(FINANCE_FEE)} a deal plus {Math.round(FI_COMMISSION * 100)}
+            % of its F&amp;I gross.
           </li>
           <li>
             A <b>lot porter</b> washes the dirtiest cars all day.

@@ -702,9 +702,10 @@ export type CustomerEvent =
   | { type: 'declined'; id: string }
   /**
    * Paperwork signed (or, from the menu, the contracts): the sale goes
-   * through. `traded`: we took their car, so they leave on foot.
+   * through. `traded`: we took their car, so they leave on foot. `deal`:
+   * the loan and menu they signed, kept on them for the visit's score.
    */
-  | { type: 'signed'; id: string; traded?: boolean }
+  | { type: 'signed'; id: string; traded?: boolean; deal?: FiDeal | null }
   /** The player looked a seller's (or a trade-in's) car over properly: a closer estimate of its value. */
   | { type: 'appraised'; id: string; estimate: Appraisal }
   /** Their handler walked away mid-conversation or mid-deal. */
@@ -857,7 +858,11 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         : c
     case 'signed':
       if (c.phase !== 'signing' && c.phase !== 'menu') return c
-      return leave(ev.traded ? { ...c, vehicle: null } : c, 'bought')
+      // The deal they signed stays with them, for how the visit left them.
+      return {
+        ...leave(ev.traded ? { ...c, vehicle: null } : c, 'bought'),
+        fi: ev.deal ?? c.fi,
+      }
     case 'appraised': {
       if (c.phase === 'leaving') return c
       const looked = { estimate: ev.estimate, appraised: true }

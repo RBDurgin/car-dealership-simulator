@@ -409,6 +409,20 @@ export const UPDATES: readonly Update[] = [
       'The Finance tab counts the contracts in force and the chargebacks still to come.',
     ],
   },
+  {
+    id: 38,
+    phase: '19',
+    title: 'Fair finance keeps buyers happy',
+    items: [
+      'The F&I menu now counts toward a buyer’s visit score, and so toward your CSI.',
+      'A fair menu adds a little; a big markup, or product after product turned down, takes points off.',
+      'A client whose product is charged back soon after they buy comes in sour on their next visit.',
+      'Cash buyers take products less often than buyers who finance, and warranties sell a little better.',
+      'A finance manager now pitches better than you from the start, and a skilled one better still.',
+      'On Easy, warmth chips show on the markup and on every product.',
+      'New tips explain the menu, declined credit, chargebacks and when to hire a finance manager.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

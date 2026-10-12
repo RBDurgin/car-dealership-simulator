@@ -248,6 +248,7 @@ describe('a client from the book', () => {
     friendsSent: 0,
     thanked: false,
     serviceDue: 17,
+    chargedBack: false,
   }
 
   it('drives in by name, alone, in the car we sold them', () => {

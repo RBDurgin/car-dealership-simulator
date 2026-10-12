@@ -2,6 +2,7 @@ import type { Archetype } from './archetypes'
 import type { CustomerVariant } from './characters'
 import { conditionOf } from './cleanliness'
 import type { Customer } from './customers'
+import { fiSatisfaction, netPrice, saleFi } from './fi'
 import type { InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { hopePrice } from './negotiation'
@@ -67,12 +68,19 @@ export type ReasonKind =
   | 'fairTrade'
   | 'lowTrade'
   | 'loyalty'
+  | 'fairFi'
+  | 'markup'
+  | 'pushed'
+  | 'chargeback'
 
 export interface ScoreReason {
   kind: ReasonKind
   /** What it added to (or took off) the score. */
   points: number
-  /** Minutes waited, haggle rounds, or percent under (over) what they hoped to pay. */
+  /**
+   * Minutes waited, haggle rounds, percent under (over) what they hoped to
+   * pay, markup points (×100) or products turned down.
+   */
   detail: number
 }
 
@@ -119,6 +127,8 @@ export interface Client {
   thanked: boolean
   /** The day their car is due for service, or null without a car from us (see `sim/clientService.ts`). */
   serviceDue: number | null
+  /** Something from their F&I came back soon after they bought: their next visit starts sour. */
+  chargedBack: boolean
 }
 
 /** Days a greeted walk-out stays in the book as a prospect. */
@@ -170,6 +180,10 @@ export const LOW_TRADE_POINTS = -8
 export const LOYALTY_SCORE = 150
 /** × the wait's cost to an appointment's visit score: kept waiting after booking a time. */
 export const APPOINTMENT_WAIT_WEIGHT = 2
+/** Off the next visit of a client whose F&I was charged back soon after they bought. */
+export const CHARGEBACK_SCORE = -15
+/** A chargeback this many days or fewer after the purchase sours the client. */
+export const EARLY_CHARGEBACK_DAYS = 30
 /** Reasons kept per visit. */
 export const REASONS_KEPT = 3
 
@@ -187,6 +201,8 @@ export interface ScoreContext {
   shift?: number
   /** × the wait's cost: an appointment kept waiting minds more (`APPOINTMENT_WAIT_WEIGHT`). */
   waitWeight?: number
+  /** A client whose F&I was charged back soon after they bought (`Client.chargedBack`). */
+  chargedBack?: boolean
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -194,7 +210,9 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 /**
  * How `c`'s visit went, 0–100, and why. The base is set by how they left;
  * waiting, haggling and paying over what they hoped take off, and a price
- * under it, a clean car and a fair trade-in allowance add on.
+ * under it, a clean car and a fair trade-in allowance add on. A buyer's F&I
+ * menu adds a little when fair, and takes off for markup and pushing
+ * (`fiSatisfaction`); an early chargeback sours their next visit.
  */
 export function visitScore(c: Customer, outcome: VisitOutcome, ctx: ScoreContext): VisitScore {
   const reasons: ScoreReason[] = []
@@ -238,7 +256,15 @@ export function visitScore(c: Customer, outcome: VisitOutcome, ctx: ScoreContext
       const points = Math.round(c.loyaltyCut * LOYALTY_SCORE)
       reasons.push({ kind: 'loyalty', points, detail: Math.round(c.loyaltyCut * 100) })
     }
+    if (c.fi) {
+      const feel = fiSatisfaction(saleFi(c, c.fi, netPrice(c.offer)))
+      if (feel.fair) reasons.push({ kind: 'fairFi', points: feel.fair, detail: 0 })
+      const points = Math.round(c.fi.markup * 100)
+      if (feel.markup) reasons.push({ kind: 'markup', points: feel.markup, detail: points })
+      if (feel.pushed) reasons.push({ kind: 'pushed', points: feel.pushed, detail: feel.declined })
+    }
   }
+  if (ctx.chargedBack) reasons.push({ kind: 'chargeback', points: CHARGEBACK_SCORE, detail: 0 })
   const total = reasons.reduce((sum, r) => sum + r.points, BASE_SCORE[outcome] + (ctx.shift ?? 0))
   const top = reasons
     .filter((r) => r.points !== 0)
@@ -270,6 +296,14 @@ export function reasonText(r: ScoreReason): string {
       return 'Low trade-in offer'
     case 'loyalty':
       return 'Loyalty price'
+    case 'fairFi':
+      return 'Fair finance'
+    case 'markup':
+      return `Rate marked up ${(r.detail / 100).toFixed(2)} points`
+    case 'pushed':
+      return `Turned down ${r.detail} products`
+    case 'chargeback':
+      return 'A product was charged back'
   }
 }
 
@@ -364,6 +398,7 @@ export function recordVisit(
     friendsSent: 0,
     thanked: false,
     serviceDue: null,
+    chargedBack: false,
   }
   const seen: Client = {
     ...base,
@@ -375,6 +410,7 @@ export function recordVisit(
     reasons: score.reasons,
     callsThisCycle: 0,
     appointment: null,
+    chargedBack: false,
   }
   let next: Client
   if (outcome === 'bought' && car && c.offer) {
@@ -671,7 +707,13 @@ export function recordClients(
     const before = c.clientId ? out.book.find((x) => x.id === c.clientId) : undefined
     // Kept waiting after booking a time minds more.
     const waitWeight = before?.appointment?.day === ctx.day ? APPOINTMENT_WAIT_WEIGHT : 1
-    const score = visitScore(c, outcome, { car, day: ctx.day, shift: ctx.shift, waitWeight })
+    const score = visitScore(c, outcome, {
+      car,
+      day: ctx.day,
+      shift: ctx.shift,
+      waitWeight,
+      chargedBack: before?.chargedBack,
+    })
     let bookAfter = recordVisit(out.book, { customer: c, outcome, car, score }, ctx.day, ctx.rng)
     // A friend who buys pleases whoever sent them.
     const referred =
@@ -879,6 +921,9 @@ const COST_WORDS: Partial<Record<ReasonKind, (n: number, detail: number) => stri
   highPrice: (n) => `Prices: ${plural(n, 'buyer')} paid more than they hoped`,
   dirtyCar: (n) => `Dirty cars: ${plural(n, 'customer')} saw a dirty car`,
   lowTrade: (n) => `Trade-ins: ${plural(n, 'buyer')} got a low offer`,
+  markup: (n) => `Finance: ${plural(n, 'buyer')} had their rate marked up over a point`,
+  pushed: (n) => `Finance: ${plural(n, 'buyer')} turned down product after product`,
+  chargeback: (n) => `Chargebacks: ${plural(n, 'client')} came back sour`,
 }
 
 /**
@@ -927,4 +972,32 @@ export function pickReturning(
   const pool = book.filter((c) => isActive(c) && !onLot.has(c.id))
   const due = pool.filter((c) => isDue(c, day))
   return due.length > 0 ? rng.pick(due) : pool.length > 0 ? rng.pick(pool) : null
+}
+
+/**
+ * The book after chargebacks landed (see `sim/chargebacks.ts`): a client
+ * whose F&I came back within `EARLY_CHARGEBACK_DAYS` of their last purchase
+ * is marked to start their next visit sour. Matched by name, which is unique
+ * in the book. The same book when nobody's marked.
+ */
+export function markChargedBack(
+  book: Client[],
+  landed: readonly { customerName: string; day: number }[],
+): Client[] {
+  if (landed.length === 0) return book
+  let changed = false
+  const next = book.map((c) => {
+    const bought = c.car?.boughtDay
+    const hit =
+      bought !== undefined &&
+      !c.chargedBack &&
+      landed.some(
+        (x) =>
+          x.customerName === c.name && x.day >= bought && x.day - bought <= EARLY_CHARGEBACK_DAYS,
+      )
+    if (!hit) return c
+    changed = true
+    return { ...c, chargedBack: true }
+  })
+  return changed ? next : book
 }

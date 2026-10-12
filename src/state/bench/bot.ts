@@ -2,7 +2,8 @@ import { CLOCK_STEP_MINUTES, CLOSE_MINUTE, OPEN_MINUTE } from '../../sim/clock'
 import { CAR_MODELS, PLAYER_ID } from '../../sim/customers'
 import { customerActions, dealCustomer } from '../../sim/deal'
 import { EXPANSIONS } from '../../sim/expansions'
-import { loanDeclined, productsFor } from '../../sim/fi'
+import { answerFor, loanDeclined, productsFor } from '../../sim/fi'
+import { MAX_MARKUP } from '../../sim/lenders'
 import type { ActionId } from '../../sim/interactables'
 import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
 import { useGame } from '../store'
@@ -12,8 +13,8 @@ import { useGame } from '../store'
  * the player, so the store runs whole days with no renderer. It isn't a good
  * player, only a busy one: walkers get where they're going at once, the
  * player works one deal at a time, takes every counter and runs a fair F&I
- * menu at their own desk, and stock and ads
- * are bought each morning. Staff stand idle, as their work is the scene's. Every choice
+ * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
+ * ads are bought each morning. Staff stand idle, as their work is the scene's. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
  * level plays the same each time.
  */
@@ -56,9 +57,21 @@ function closeDeal(customerId: string): void {
 }
 
 /**
+ * How the bot runs the F&I menu: `fair` (the default) as below, `hard` at
+ * the most markup with every product presented at its top price, and again
+ * at its low one after a no.
+ */
+export type MenuStyle = 'fair' | 'hard'
+let menuStyle: MenuStyle = 'fair'
+
+export function setMenuStyle(style: MenuStyle): void {
+  menuStyle = style
+}
+
+/**
  * The F&I menu played fairly: a point of markup, then the warranty and (on
  * a loan) GAP at their low prices. A buyer no lender takes puts more down,
- * or goes home.
+ * or goes home. Played hard (see `MenuStyle`), it pushes everything.
  */
 function runMenu(): void {
   const c = dealCustomer(game().customers, PLAYER_ID)
@@ -66,6 +79,15 @@ function runMenu(): void {
   if (loanDeclined(c, c.fi)) game().fiMoreDown()
   const fi = dealCustomer(game().customers, PLAYER_ID)?.fi
   if (!fi || loanDeclined(c, fi)) return game().fiLetGo()
+  if (menuStyle === 'hard') {
+    if (fi.lender) game().fiLender(fi.lender, MAX_MARKUP)
+    for (const p of productsFor(c)) {
+      game().fiPresent(p.id, p.high)
+      const deal = dealCustomer(game().customers, PLAYER_ID)?.fi
+      if (deal && !answerFor(deal, p.id)?.taken) game().fiPresent(p.id, p.low)
+    }
+    return game().fiSign()
+  }
   if (fi.lender) game().fiLender(fi.lender, 1)
   for (const p of productsFor(c)) {
     if (p.id === 'warranty' || p.id === 'gap') game().fiPresent(p.id, p.low)

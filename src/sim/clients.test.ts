@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   BASE_SCORE,
+  CHARGEBACK_SCORE,
+  EARLY_CHARGEBACK_DAYS,
+  markChargedBack,
   blend,
   bookOutcome,
   bookSummary,
@@ -60,6 +63,7 @@ import {
   TRADE_UP_BUDGET,
   type Customer,
 } from './customers'
+import { answered, FAIR_FI_POINTS, MARKUP_POINTS, PUSH_POINTS, type FiDeal } from './fi'
 import { BASE_MSRP, buildInventory, type InventoryCar } from './inventory'
 import { hopePrice } from './negotiation'
 import type { CarModel } from './layout'
@@ -199,6 +203,52 @@ describe('visitScore', () => {
     expect(reasons.length).toBeLessThanOrEqual(3)
     const sizes = reasons.map((r) => Math.abs(r.points))
     expect(sizes).toEqual([...sizes].sort((a, b) => b - a))
+  })
+})
+
+describe('how F&I scores', () => {
+  const loan = (markup: number): FiDeal => ({
+    lender: 'prime',
+    markup,
+    down: 0.1,
+    products: [],
+    presented: 0,
+  })
+  const financed = { tier: 'A' as const, finance: true, down: 0.1 }
+  const base = score(buyer()).score
+
+  it('adds a little for a fair menu, and takes off for markup and pushing', () => {
+    const fair = score(buyer({ credit: financed, fi: loan(1) }))
+    expect(fair.score).toBe(base + FAIR_FI_POINTS)
+    expect(fair.reasons.map(reasonText)).toContain('Fair finance')
+    const marked = score(buyer({ credit: financed, fi: loan(2) }))
+    expect(marked.score).toBe(base - MARKUP_POINTS)
+    expect(marked.reasons.map(reasonText)).toContain('Rate marked up 2.00 points')
+    let pushed = loan(0)
+    for (const id of ['warranty', 'gap', 'protection'] as const) {
+      pushed = answered(pushed, id, 500, false)
+    }
+    expect(score(buyer({ credit: financed, fi: pushed })).score).toBe(base - PUSH_POINTS)
+  })
+
+  it('sours the next visit of a client charged back soon after buying', () => {
+    const [c] = record([], buyer())
+    const due = (day: number) => [{ customerName: c.name, day }]
+    expect(markChargedBack([c], due(DAY + EARLY_CHARGEBACK_DAYS))[0].chargedBack).toBe(true)
+    // Later than that, someone else's, or none: the same book.
+    const book = [c]
+    expect(markChargedBack(book, due(DAY + EARLY_CHARGEBACK_DAYS + 1))).toBe(book)
+    expect(markChargedBack(book, [{ customerName: 'Nobody', day: DAY + 1 }])).toBe(book)
+    expect(markChargedBack(book, [])).toBe(book)
+
+    const [sour] = markChargedBack([c], due(DAY + 10))
+    const ctx = { inventory: [clean], day: DAY + 20, shift: 0, rng: rng() }
+    const back = left('refused', { id: 'z', clientId: sour.id })
+    const { book: after, stats } = recordClients([sour], emptyClientStats(), [], [back], ctx)
+    const plain = visitScore(back, 'refused', { car: clean, day: DAY + 20 })
+    expect(stats.scores[0].score).toBe(plain.score + CHARGEBACK_SCORE)
+    expect(stats.scores[0].reasons.map(reasonText)).toContain('A product was charged back')
+    expect(after[0].chargedBack).toBe(false)
   })
 })
 

@@ -58,7 +58,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 30
+export const SAVE_VERSION = 31
 
 export interface SaveData {
   version: number
@@ -391,6 +391,13 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
       ? { ...raw.monthFi, chargebackCount: 0, chargebacks: 0, clawback: 0 }
       : raw.monthFi,
   }),
+  // v31: a client soured by an early chargeback. None yet.
+  30: (raw) => ({
+    ...raw,
+    clients: Array.isArray(raw.clients)
+      ? raw.clients.map((c) => (isObject(c) ? { ...c, chargedBack: false } : c))
+      : raw.clients,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -634,7 +641,8 @@ function isClient(v: unknown): boolean {
     isNumber(v.referrals) &&
     isNumber(v.friendsSent) &&
     typeof v.thanked === 'boolean' &&
-    isDayOrNull(v.serviceDue)
+    isDayOrNull(v.serviceDue) &&
+    typeof v.chargedBack === 'boolean'
   )
 }
 

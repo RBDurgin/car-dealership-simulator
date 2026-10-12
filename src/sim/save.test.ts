@@ -153,6 +153,7 @@ const client: Client = {
   friendsSent: 0,
   thanked: false,
   serviceDue: 3 + SERVICE_INTERVAL,
+  chargedBack: false,
 }
 
 const order: Order = {
@@ -623,6 +624,17 @@ describe('save data', () => {
     expect(parseSave({ ...save, contracts: undefined })).toBeNull()
     expect(parseSave({ ...save, contracts: [{ ...contracts[0], car: null }] })).toBeNull()
     expect(parseSave({ ...save, chargebacks: [{ ...chargebacks[0], kind: 'hat' }] })).toBeNull()
+  })
+
+  it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {
+    const save = createSave({ ...source(), clients: [{ ...client, chargedBack: true }] }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.clients[0].chargedBack).toBe(true)
+    const { chargedBack: _, ...old } = save.clients[0]
+    const v30 = { ...save, version: 30, clients: [old] }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v30)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.clients).toEqual([client])
+    expect(parseSave({ ...save, clients: [old] })).toBeNull()
   })
 
   it('upgrades a version 29 save with no contracts or chargebacks', () => {

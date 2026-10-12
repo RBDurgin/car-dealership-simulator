@@ -5,12 +5,14 @@ import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
 import type { Client } from './clients'
+import type { FiDeal } from './fi'
 import { createRng } from './rng'
 import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
 import { STALE_DAYS } from './usedCars'
 import {
   APPRECIATION_TIP_CLIENTS,
+  FINANCE_TIP_DEALS,
   LOW_CASH,
   TIP_IDS,
   tipFor,
@@ -114,6 +116,25 @@ const finding: Finding = {
 const clientsOf = (n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `client-1-${i}`, status: 'client' }) as Client)
 
+/** The player's buyer at the menu (`lender` null: nobody will take the loan), or still signing. */
+const fiDeal = (lender: FiDeal['lender']): FiDeal => ({
+  lender,
+  markup: 0,
+  down: 0.1,
+  products: [],
+  presented: 0,
+})
+const atMenu = (lender: FiDeal['lender'], finance = true): Partial<Customer> => ({
+  phase: 'menu',
+  credit: { tier: lender ? 'A' : 'D', finance, down: 0.1 },
+  fi: fiDeal(lender),
+})
+const fiStats = (financed: number, declined = 0, chargebackCount = 0) => ({
+  missed: {},
+  quota: null,
+  fi: { financed, declined, chargebackCount },
+})
+
 const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
 
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
@@ -211,6 +232,19 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
   ],
+  declinedCredit: [
+    { customers: [customer('b1', atMenu(null))] },
+    { customers: [customer('b1', { phase: 'signing' })] },
+  ],
+  fiMenu: [
+    { customers: [customer('b1', atMenu('prime'))] },
+    { customers: [customer('b1', { phase: 'signing' })] },
+  ],
+  chargeback: [{ dayStats: fiStats(0, 0, 1) }, { dayStats: fiStats(0) }],
+  financeManager: [
+    { dayStats: fiStats(FINANCE_TIP_DEALS), roster: [] },
+    { dayStats: fiStats(FINANCE_TIP_DEALS - 1), roster: [] },
+  ],
   referral: [{ customers: [customer('f1', { referredBy: 'client-1-0' })] }, {}],
   appreciation: [
     { clients: clientsOf(APPRECIATION_TIP_CLIENTS) },
@@ -266,6 +300,25 @@ describe('tipFor', () => {
       haggle: { round: 2, lastAsk: 30_000, counter: 28_000 },
     })
     expect(tip({ customers: [staff] })).toBeNull()
+  })
+
+  it('points at the menu only for the player’s financed buyer', () => {
+    const [, prev] = triggers.fiMenu
+    expect(tip({ customers: [customer('b1', atMenu('prime', false))] }, prev)).toBeNull()
+    const staff = customer('b1', { ...atMenu('prime'), handlerId: 'staff-1-1' })
+    expect(tip({ customers: [staff] }, prev)).toBeNull()
+  })
+
+  it('counts a buyer a salesperson’s banks declined too', () => {
+    expect(tip({ dayStats: fiStats(0, 1) }, { dayStats: fiStats(0) })).toBe('declinedCredit')
+  })
+
+  it('suggests a finance manager only when there isn’t one', () => {
+    const [next, prev] = triggers.financeManager
+    const roster = [{ role: 'finance', fired: false }]
+    expect(tip({ ...next, roster }, { ...prev, roster })).toBeNull()
+    const gone = [{ role: 'finance', fired: true }]
+    expect(tip({ ...next, roster: gone }, { ...prev, roster: gone })).toBe('financeManager')
   })
 
   it('gives the first unseen tip when several apply', () => {

@@ -464,11 +464,14 @@ describe('reduceCustomer', () => {
     // No patience lost, and closing time lets them finish.
     expect(run(menu, { type: 'tick', minutes: 30 })).toBe(menu)
     expect(run(menu, { type: 'close' })).toBe(menu)
+    // The deal they signed stays with them, for how the visit left them.
     expect(run(menu, { type: 'signed', id: 'c1' })).toMatchObject({
       phase: 'leaving',
       leaveReason: 'bought',
-      fi: null,
+      fi: deal,
     })
+    const staffDeal = { ...deal, lender: 'prime' as const }
+    expect(run(signing, { type: 'signed', id: 'c1', deal: staffDeal })?.fi).toBe(staffDeal)
     expect(run(menu, { type: 'declined', id: 'c1' })).toMatchObject({
       phase: 'leaving',
       leaveReason: 'declined',

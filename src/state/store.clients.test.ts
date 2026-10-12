@@ -226,6 +226,7 @@ function withAlexInBook() {
     friendsSent: 0,
     thanked: false,
     serviceDue: null,
+    chargedBack: false,
   }
   useGame.setState({ clients: [alex] })
 }

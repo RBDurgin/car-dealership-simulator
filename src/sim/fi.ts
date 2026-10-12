@@ -46,7 +46,7 @@ export const PRODUCTS: Record<ProductId, Product> = {
     high: 2500,
     costShare: 0.45,
     financedOnly: false,
-    base: 0.4,
+    base: 0.45,
   },
   gap: {
     id: 'gap',
@@ -94,6 +94,8 @@ export const PRESSURE_DROP = 0.06
 export const MARKUP_PRESSURE = 0.8
 /** Nobody is a sure thing. */
 export const MAX_TAKE = 0.85
+/** Taken off every take chance for a cash buyer: it's a cheque, not a few dollars on the payment. */
+export const CASH_TAKE = 0.15
 
 /** How each kind of buyer leans on each product: families like warranties, bargain hunters say no. */
 const TASTE: Record<Archetype, Partial<Record<ProductId, number>>> = {
@@ -163,9 +165,9 @@ export function pressureOf(deal: FiDeal): number {
 
 /**
  * The chance `c` takes `product` at `price` with `pressure` on them: the
- * product's base, their taste for it, less for a price toward its high end
- * and for every point of pressure, plus `bonus` (`Tuning.productTake`).
- * 0 for a product they aren't offered.
+ * product's base, their taste for it, less for a price toward its high end,
+ * for every point of pressure and for paying cash (`CASH_TAKE`), plus
+ * `bonus` (`Tuning.productTake`). 0 for a product they aren't offered.
  */
 export function productTake(
   c: FiBuyer,
@@ -180,7 +182,8 @@ export function productTake(
     product.base +
     (TASTE[c.archetype][product.id] ?? 0) -
     PRICE_DROP * along -
-    PRESSURE_DROP * pressure +
+    PRESSURE_DROP * pressure -
+    (financing(c) ? 0 : CASH_TAKE) +
     bonus
   return Math.max(0, Math.min(MAX_TAKE, chance))
 }
@@ -474,8 +477,10 @@ export function payLine(stats: FiStats): string {
 
 /** How far the finance manager eases the markup for each tier: good credit shops its rate. */
 export const STAFF_MARKUP_EASE: Record<CreditTier, number> = { A: 0.5, B: 0.75, C: 1, D: 1 }
-/** Added to every take chance per skill level over average: a better pitch. */
+/** Added to every take chance per skill level over `STAFF_PITCH_FROM`: a better pitch. */
 export const STAFF_PITCH = 0.06
+/** The skill whose pitch is the player's: an average finance manager does the menu for a living. */
+export const STAFF_PITCH_FROM = 2
 /** The take chance under which an average (skill 3) finance manager stops presenting. */
 export const STAFF_FLOOR = 0.12
 /** Added to the floor per skill level over average: a good one knows when to stop. */
@@ -503,7 +508,7 @@ export function staffPrice(skill: number, product: Product): number {
 
 /** What a finance manager of `skill` adds to a take chance on top of `bonus`. */
 function staffBonus(skill: number, bonus: number): number {
-  return bonus + (skill - 3) * STAFF_PITCH
+  return bonus + (skill - STAFF_PITCH_FROM) * STAFF_PITCH
 }
 
 /** The loan a finance manager sets up and the products he'll present, in order. */
@@ -586,4 +591,55 @@ export function staffMenu(
 export function deskLoan(c: FiBuyer, net: number): FiDeal | null {
   const deal = openDeal(c, net)
   return loanDeclined(c, deal) ? null : deal
+}
+
+// Satisfaction (19e): how the menu leaves the buyer feeling, for the visit's score.
+
+/** Markup points a buyer takes as fair. */
+export const FAIR_FI_MARKUP = 1
+/** Products a buyer will hear about without feeling pushed. */
+export const FAIR_FI_PRESENTED = 2
+/** Added for a fair menu: a loan or products, at most a point of markup and two products shown. */
+export const FAIR_FI_POINTS = 3
+/** Taken off per markup point over `FAIR_FI_MARKUP`. */
+export const MARKUP_POINTS = 4
+/** Taken off per product turned down past the second. */
+export const PUSH_POINTS = 3
+
+/** What a menu did to the buyer's score: a fair one adds, markup and pushing take off. */
+export interface FiFeeling {
+  /** `FAIR_FI_POINTS` for a fair menu, else 0. */
+  fair: number
+  /** Off for markup over `FAIR_FI_MARKUP` (0 or less), and the points of it. */
+  markup: number
+  /** Off for products turned down past the second (0 or less), and how many. */
+  pushed: number
+  declined: number
+}
+
+/**
+ * How `fi` sat with the buyer. A menu that arranged a loan or showed a
+ * product, with markup up to `FAIR_FI_MARKUP` and no more than
+ * `FAIR_FI_PRESENTED` products shown, adds `FAIR_FI_POINTS`. Every markup
+ * point over it takes `MARKUP_POINTS` off, and every product turned down
+ * past the second (a re-presented one counts again) `PUSH_POINTS`. A cash
+ * buyer shown nothing is left as they were.
+ */
+export function fiSatisfaction(fi: SaleFi): FiFeeling {
+  const declined = Math.max(0, fi.presented - fi.products.length)
+  const overMarkup = Math.max(0, fi.markup - FAIR_FI_MARKUP)
+  const ran = fi.financed || fi.presented > 0
+  const fair = ran && overMarkup === 0 && fi.presented <= FAIR_FI_PRESENTED
+  return {
+    fair: fair ? FAIR_FI_POINTS : 0,
+    // 0 −, so nothing off is 0 and not −0.
+    markup: 0 - Math.round(overMarkup * MARKUP_POINTS),
+    pushed: 0 - PUSH_POINTS * Math.max(0, declined - FAIR_FI_PRESENTED),
+    declined,
+  }
+}
+
+/** Easy's chip on the markup stepper: fair, costing a little goodwill, or steep. */
+export function markupWarmth(markup: number): Warmth {
+  return markup <= FAIR_FI_MARKUP ? 'hot' : markup <= 2 ? 'warm' : 'cold'
 }

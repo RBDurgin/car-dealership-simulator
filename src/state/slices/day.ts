@@ -16,6 +16,7 @@ import {
   emptyClientStats,
   emptyMonthCsi,
   isDue,
+  markChargedBack,
   newlyDefected,
   pruneBook,
   type Appreciation,
@@ -245,7 +246,8 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
  * the day (see `rivalDay`). Used cars bought today go into stock, in the lot
  * spaces held for them, so the save keeps them. Chargebacks due today take
  * back F&I gross, and the finance manager who signed the deal gives back his
- * share of it out of the day's commissions.
+ * share of it out of the day's commissions; a client charged back within
+ * `EARLY_CHARGEBACK_DAYS` of buying starts their next visit sour.
  *
  * Only `commit`'s last step calls this.
  */
@@ -349,6 +351,8 @@ export function settleDay(k: Kit): void {
     ...(s.purchases.length > 0 && { inventory, purchases: [] }),
     ...(due.length > 0 && {
       chargebacks: later,
+      // A client charged back soon after buying comes in sour next time.
+      clients: markChargedBack(s.clients, due),
       monthFi: addFiStats(s.monthFi, { ...emptyFiStats(), ...landed }),
     }),
     dayStats: { ...settled, newRecords: records.broken },
