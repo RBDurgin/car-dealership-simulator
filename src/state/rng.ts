@@ -19,6 +19,7 @@ export const RIVAL_SEED = 21_000
 const QUOTE_SEED = 22_000
 const SERVICE_SEED = 23_000
 const CLIENT_SEED = 24_000
+const CREDIT_SEED = 25_000
 
 /** The rng streams, seeded per day, so a day plays out the same given the same choices. */
 export interface DayRngs {
@@ -38,6 +39,8 @@ export interface DayRngs {
   service: Rng
   /** Everything about the client book. Apart, so a game with an empty book plays as before. */
   client: Rng
+  /** Shoppers' credit. Apart, so the rest of the day plays as before. */
+  credit: Rng
 }
 
 function dayRngs(day: number): DayRngs {
@@ -50,6 +53,7 @@ function dayRngs(day: number): DayRngs {
     quote: createRng(QUOTE_SEED + day),
     service: createRng(SERVICE_SEED + day),
     client: createRng(CLIENT_SEED + day),
+    credit: createRng(CREDIT_SEED + day),
   }
 }
 

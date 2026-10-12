@@ -60,6 +60,7 @@ const base: Customer = {
   loyaltyCut: 0,
   referredBy: null,
   guest: false,
+  credit: null,
   service: null,
 }
 
@@ -756,6 +757,7 @@ describe('salespeople', () => {
       loyaltyCut: 0,
       referredBy: null,
       guest: false,
+      credit: null,
       service: null,
     })
   })

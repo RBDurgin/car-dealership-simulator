@@ -1,3 +1,4 @@
+import type { CreditTraits } from './credit'
 import type { Rng } from './rng'
 
 /**
@@ -39,6 +40,8 @@ export interface ArchetypeTraits {
   usedWeight: number
   /** How many body types they're shopping for, at most. */
   models: number
+  /** Their odds of each credit tier and of financing rather than paying cash (see `rollCredit`). */
+  credit: CreditTraits
   /** What the player learns about them on greeting. */
   hint: string
 }
@@ -57,6 +60,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.04, rounds: 3 },
     usedWeight: 0.5,
     models: 2,
+    credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.65 },
     hint: 'Shopping around',
   },
   'tire-kicker': {
@@ -69,6 +73,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.06, rounds: 2 },
     usedWeight: 0,
     models: 2,
+    credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.55 },
     hint: 'Just looking',
   },
   decisive: {
@@ -81,6 +86,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.02, rounds: 2 },
     usedWeight: 0,
     models: 2,
+    credit: { tiers: { A: 40, B: 35, C: 20, D: 5 }, finance: 0.55 },
     hint: 'Knows what they want',
   },
   bargain: {
@@ -93,6 +99,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.08, rounds: 4 },
     usedWeight: 1,
     models: 2,
+    credit: { tiers: { A: 15, B: 30, C: 35, D: 20 }, finance: 0.5 },
     hint: 'Watching every dollar',
   },
   couple: {
@@ -105,6 +112,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.05, rounds: 3 },
     usedWeight: 0,
     models: 2,
+    credit: { tiers: { A: 30, B: 40, C: 22, D: 8 }, finance: 0.7 },
     hint: 'Shopping together',
   },
   'used-shopper': {
@@ -117,6 +125,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     haggle: { expect: 0.06, rounds: 4 },
     usedWeight: 4,
     models: 3,
+    credit: { tiers: { A: 10, B: 25, C: 40, D: 25 }, finance: 0.6 },
     hint: 'After a good used car',
   },
 }

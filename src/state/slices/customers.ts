@@ -1,6 +1,7 @@
 import { pickArchetype, skewWeights } from '../../sim/archetypes'
 import { isClosed } from '../../sim/clock'
 import { loyalIds } from '../../sim/clients'
+import { assignCredit } from '../../sim/credit'
 import {
   chooseTarget,
   generateCustomer,
@@ -96,14 +97,17 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const picked = pickArchetype(rng.walkIn, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = nextCustomerId()
-      const [c] = withQuotes(k, [
-        generateCustomer(id, availableCars(s.inventory), rng.walkIn, {
-          ...opts,
-          variant,
-          archetype,
-          source: 'walk-in',
-        }),
-      ])
+      const [c] = withCredit(
+        k,
+        withQuotes(k, [
+          generateCustomer(id, availableCars(s.inventory), rng.walkIn, {
+            ...opts,
+            variant,
+            archetype,
+            source: 'walk-in',
+          }),
+        ]),
+      )
       set({ dayStats: tallyMissed(k, recordVisitors(s.dayStats, [c]), [c]) })
       commit(k, [...s.customers, c])
       return id
@@ -112,13 +116,21 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const s = get()
       if (isClosed(s.clock) || n <= 0) return
       const stock = availableCars(s.inventory)
-      const arrived = Array.from({ length: n }, () =>
-        generateCustomer(nextCustomerId(), stock, rng.customer, arrivalOpts(k)),
+      const arrived = withCredit(
+        k,
+        Array.from({ length: n }, () =>
+          generateCustomer(nextCustomerId(), stock, rng.customer, arrivalOpts(k)),
+        ),
       )
       set({ dayStats: tallyMissed(k, recordVisitors(s.dayStats, arrived), arrived) })
       commit(k, [...s.customers, ...arrived])
     },
   }
+}
+
+/** Gives each shopper in `arrived` their credit, on its own rng. */
+export function withCredit(k: Kit, arrived: readonly Customer[]): Customer[] {
+  return assignCredit(arrived, rng.credit, tuning(k).creditMix)
 }
 
 /** Some of `arrived` have been to the rival's lot first and carry his price. */

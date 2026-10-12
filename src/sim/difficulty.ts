@@ -63,6 +63,8 @@ export interface Tuning {
   clientReturn: number
   /** Added to every visit's satisfaction score (see `sim/clients.ts`). */
   satisfactionShift: number
+  /** Leans buyers' credit tiers: above 0 toward A, below toward D (see `rollCredit`). */
+  creditMix: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -101,6 +103,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     comebackScale: 0.5,
     clientReturn: 1.2,
     satisfactionShift: 5,
+    creditMix: 0.3,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -133,6 +136,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     comebackScale: 1,
     clientReturn: 1,
     satisfactionShift: 0,
+    creditMix: 0,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -165,6 +169,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     comebackScale: 1.5,
     clientReturn: 0.8,
     satisfactionShift: -5,
+    creditMix: -0.3,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

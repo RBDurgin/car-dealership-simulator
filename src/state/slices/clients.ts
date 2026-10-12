@@ -21,6 +21,7 @@ import {
 import { canPitch, pitchBooked, pitchChance } from '../../sim/clientService'
 import { clientCarInfo, isDue, pickReturning, type Client } from '../../sim/clients'
 import { formatTime, isClosed } from '../../sim/clock'
+import { assignCredit } from '../../sim/credit'
 import { generateCustomer, PLAYER_ID, type Customer } from '../../sim/customers'
 import { CONVERSATION_PHASES, recordVisitors } from '../../sim/deal'
 import { freeSpot } from '../../sim/driving'
@@ -126,7 +127,12 @@ export function clientsSlice(k: Kit): Pick<GameState, ClientKeys> {
       const onLot = new Set(s.customers.flatMap((c) => (c.clientId ? [c.clientId] : [])))
       const client = pickReturning(s.clients, onLot, createRng(Date.now()), s.clock.day)
       if (!client) return notify(k, 'Nobody in the client book to bring back.')
-      const c = returningVisitor(k, client, s.customers, createRng(Date.now()))
+      const dev = createRng(Date.now())
+      const [c] = assignCredit(
+        [returningVisitor(k, client, s.customers, dev)],
+        dev,
+        tuning(k).creditMix,
+      )
       set({ dayStats: tallyMissed(k, recordVisitors(s.dayStats, [c]), [c]) })
       commit(k, [...get().customers, c])
     },

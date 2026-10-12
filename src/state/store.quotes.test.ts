@@ -48,6 +48,7 @@ const shopper = (price: number): Customer => ({
   loyaltyCut: 0,
   referredBy: null,
   guest: false,
+  credit: null,
   service: null,
 })
 

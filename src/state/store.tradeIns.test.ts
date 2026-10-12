@@ -70,6 +70,7 @@ const buyer = (extra: Partial<Customer> = {}): Customer => ({
   loyaltyCut: 0,
   referredBy: null,
   guest: false,
+  credit: null,
   service: null,
   ...extra,
 })
@@ -269,6 +270,7 @@ describe('salespeople with trade-ins and sellers', () => {
       loyaltyCut: 0,
       referredBy: null,
       guest: false,
+      credit: null,
       service: null,
       selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
     })
@@ -298,6 +300,7 @@ describe('salespeople with trade-ins and sellers', () => {
           loyaltyCut: 0,
           referredBy: null,
           guest: false,
+          credit: null,
           service: null,
           selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
         }),

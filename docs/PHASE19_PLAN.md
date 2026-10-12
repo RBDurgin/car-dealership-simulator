@@ -1,6 +1,6 @@
 # Phase 19 Plan: F&I (Finance and Warranties)
 
-**Status:** planned 2026-10-10, revised 2026-10-11 to give the player their own desk (19b). Phase 19 comes after Phase 18 in the plan. It needs only Phase 15 (service), which is built.
+**Status:** planned 2026-10-10, revised 2026-10-11 to give the player their own desk (19b). 19a built 2026-10-11 (Medium: 60% finance, about 11% of financed buyers declined by every lender, two-thirds of those saveable by more down). Phase 19 comes after Phase 18 in the plan. It needs only Phase 15 (service), which is built.
 
 - 19e's satisfaction hook needs Phase 16's CSI. If 16 isn't built when 19e is, that part waits for it.
 - 19a adds nothing to the save. 19d takes the next free save version (`SAVE_VERSION` + 1).

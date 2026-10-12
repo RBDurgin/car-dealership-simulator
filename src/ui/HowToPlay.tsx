@@ -263,6 +263,11 @@ function SellingTab({ touch, click }: TabProps) {
           off and won&apos;t haggle for long, and neither will someone just looking.
         </p>
         <p>
+          Greeting also tells you how they&apos;d pay: in cash, or financing with a credit tier from
+          A (best) to D and the share they&apos;d put down. Bargain hunters and used-car shoppers
+          tend to have weaker credit.
+        </p>
+        <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
           more body types, mostly looks at used cars and haggles hard. While you have no used car
           for sale only a few come in, and the summary counts them as missed. Regulars and bargain

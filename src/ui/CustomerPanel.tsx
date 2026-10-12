@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { ARCHETYPES } from '../sim/archetypes'
 import { historyLine } from '../sim/clients'
+import { creditLine } from '../sim/credit'
 import { PLAYER_ID, type Customer } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
@@ -439,6 +440,7 @@ export function CustomerPanel() {
         )}
       </h2>
       <div className="customer-type">{ARCHETYPES[c.archetype].hint}</div>
+      {c.credit && <div className="customer-history customer-credit">{creditLine(c.credit)}</div>}
       {client && (
         <div className="customer-history">{historyLine(client, day, carName, formatMoney)}</div>
       )}

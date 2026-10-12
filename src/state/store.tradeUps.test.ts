@@ -158,6 +158,7 @@ describe('trade-ups', () => {
       loyaltyCut: 0.02,
       referredBy: null,
       guest: false,
+      credit: null,
       service: null,
     }
     useGame.setState({ customers: [kim] })

@@ -2,6 +2,7 @@ import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype }
 import { weekdayTraffic } from './calendar'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
+import type { Credit } from './credit'
 import type { Client } from './clients'
 import type { Tuning } from './difficulty'
 import type { Vehicle } from './driving'
@@ -163,6 +164,11 @@ export interface Customer {
   referredBy: string | null
   /** A guest on client appreciation day: one nobody greets leaves as `visited`. */
   guest: boolean
+  /**
+   * How they'd pay: cash or a loan, their credit tier and down payment
+   * (`assignCredit`). Null for sellers and service clients.
+   */
+  credit: Credit | null
 }
 
 const FIRST_NAMES = [
@@ -496,6 +502,7 @@ function shopper(
     service: null,
     loyaltyCut: 0,
     guest: !!opts.guest,
+    credit: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
