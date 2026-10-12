@@ -15,6 +15,7 @@ import {
   grossProfit,
   grossSplit,
   guestChairBusy,
+  guestChairOf,
   hasBuyersInHand,
   inConversation,
   netIncome,
@@ -34,7 +35,7 @@ import {
 import { emptyServiceStats } from './service'
 import { Grid } from './grid'
 import { buildInventory } from './inventory'
-import { GUEST_CHAIR_ID } from './layout'
+import { GUEST_CHAIR_ID, MANAGER_DESK } from './layout'
 import type { Source } from './marketing'
 import { createRng } from './rng'
 import type { Employee } from './staff'
@@ -83,6 +84,7 @@ const base: Customer = {
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
 }
 
@@ -184,6 +186,23 @@ describe('actionBlocker', () => {
     expect(actionBlocker('handOff', 'office-chair', [mine('talking')], [fm], [])).toMatch(/Nobody/)
   })
 
+  it('lets the player close at their own desk with a finance manager on duty', () => {
+    const desk = MANAGER_DESK.chairId
+    const buyer = [mine('following')]
+    expect(actionBlocker('closeDeal', desk, buyer, [fm], [])).toBeNull()
+    expect(actionBlocker('closeDeal', 'office-chair', buyer, [fm], [])).toMatch(/Hand buyers off/)
+    // Finance busy at the office desk doesn't matter there either.
+    const list = [mine('following'), at('queued', { id: 'c2', handlerId: fm.id })]
+    expect(actionBlocker('closeDeal', desk, list, [fm], [])).toBeNull()
+    // There still has to be someone to sign.
+    expect(actionBlocker('closeDeal', desk, [mine('talking')], [fm], [])).toMatch(/Nobody/)
+  })
+
+  it('seats the buyer across the desk the player closes at', () => {
+    expect(guestChairOf(MANAGER_DESK.chairId)).toBe(MANAGER_DESK.guestChairId)
+    expect(guestChairOf('office-chair')).toBe(GUEST_CHAIR_ID)
+  })
+
   it('keeps the player off the desk while a let-go finance manager finishes up', () => {
     const list = [mine('following'), at('queued', { id: 'c2', handlerId: fm.id })]
     const fired = { ...fm, fired: true, status: 'leaving' as const }
@@ -233,6 +252,16 @@ describe('the finance desk', () => {
 
   it("doesn't count the player's follower as holding the chair", () => {
     expect(guestChairBusy([mine('following')])).toBe(false)
+  })
+
+  it("holds the office guest chair while the player's buyer is at the menu there, not at their own desk", () => {
+    expect(guestChairBusy([mine('menu', { chairId: GUEST_CHAIR_ID })])).toBe(true)
+    const atOwn = [
+      mine('menu', { chairId: MANAGER_DESK.guestChairId }),
+      at('queued', { id: 'c2', handlerId: fm.id }),
+    ]
+    expect(guestChairBusy(atOwn)).toBe(false)
+    expect(callNextBuyer(atOwn)[1].phase).toBe('following')
   })
 
   it('knows who has buyers in hand', () => {
@@ -298,8 +327,8 @@ describe('day stats', () => {
       ...emptyStats(),
       sales: [sale(30_000, 27_000), { ...sale(14_000, 11_500), used: true }],
     }
-    expect(grossSplit(stats)).toEqual({ new: 3_000, used: 2_500 })
-    expect(grossSplit(emptyStats())).toEqual({ new: 0, used: 0 })
+    expect(grossSplit(stats)).toEqual({ new: 3_000, used: 2_500, fi: 0 })
+    expect(grossSplit(emptyStats())).toEqual({ new: 0, used: 0, fi: 0 })
   })
 
   it('nets gross profit less staff costs, interest, ads and improvements, plus the owner bonus', () => {

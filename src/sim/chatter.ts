@@ -76,7 +76,8 @@ export function conversationsOf(s: ChatterState): Conversation[] {
       out.push({ key: `checkIn:${c.id}`, kind: 'checkIn', speakers: [c.id, c.handlerId] })
     } else if (c.phase === 'talking' && c.handlerId) {
       out.push({ key: `pitch:${c.id}`, kind: 'pitch', speakers: [c.handlerId, c.id] })
-    } else if (c.phase === 'signing' && c.handlerId) {
+    } else if ((c.phase === 'signing' || c.phase === 'menu') && c.handlerId) {
+      // The F&I menu goes on from the paperwork, as one conversation.
       out.push({ key: `signing:${c.id}`, kind: 'signing', speakers: [c.handlerId, c.id] })
     } else if (c.companion && COUPLE_PHASES.includes(c.phase)) {
       out.push({ key: `couple:${c.id}`, kind: 'couple', speakers: [c.id, companionId(c.id)] })
@@ -196,6 +197,14 @@ export function nextLine(
   }
 }
 
+/** A buyer's answer to the product just presented at the F&I menu, as a line, if there's a new one. */
+function fiAnswer(was: Customer, c: Customer): Omit<Line, 'speaker'> | null {
+  if (was.phase !== 'menu' || c.phase !== 'menu' || !c.fi || !was.fi) return null
+  if (c.fi.presented <= was.fi.presented) return null
+  const last = c.fi.products[c.fi.products.length - 1]
+  return last?.taken ? { tone: 'happy', syllables: 2 } : { tone: 'grumble', syllables: 1 }
+}
+
 /** Gap between the lines of one reaction, ms. */
 export const REACTION_GAP_MS = 250
 
@@ -206,6 +215,7 @@ export const REACTION_GAP_MS = 250
  * - a "hmm" while a customer considers an offer, a question when they counter;
  * - a happy yes (and a happy seller, or a booked service client) on
  *   accepting, a grumble on walking out or turning down a service quote;
+ * - a quick yes or a short no to each product at the F&I menu;
  * - the owner's hello and goal when they reach the office;
  * - Nazma's grumble as he's run off.
  */
@@ -218,6 +228,8 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
     )
     for (const c of next.customers) {
       const was = before.get(c.id)
+      const answer = was && fiAnswer(was, c)
+      if (answer) out.push([{ speaker: c.id, ...answer }])
       if (!was || was.phase === c.phase) continue
       const from = was.phase
       const to = c.phase

@@ -21,6 +21,7 @@ import {
 } from '../sim/deal'
 import { heldByCsi, TIERS, tierName } from '../sim/franchise'
 import { CSI_FLOOR, CSI_TIER_MIN, csiFactor, csiOf } from '../sim/csi'
+import { payLine, soldLine } from '../sim/fi'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
@@ -45,6 +46,14 @@ const PerfReport = lazy(() => import('./PerfReport'))
  * left. Starting the next day resets the clock and the day's arrivals.
  */
 /** "1 late, 2 turned away, 1 declined, 1 came back": service clients who left unhappy. */
+/**
+ * Focuses the Start button for Enter without scrolling to it (as `autoFocus`
+ * would), so a long summary opens at its top.
+ */
+function focusOnce(button: HTMLButtonElement | null): void {
+  button?.focus({ preventScroll: true })
+}
+
 function serviceLetDown(stats: DayStats): string {
   const { late, turnedAway, declined, comebacks } = stats.service
   return [
@@ -158,6 +167,36 @@ function SummaryPanel() {
               <dd className="price summary-sub">{formatMoney(split.new)}</dd>
               <dt className="summary-sub">· on used cars</dt>
               <dd className="price summary-sub">{formatMoney(split.used)}</dd>
+            </>
+          )}
+          {(stats.sales.length > 0 || stats.fi.declined > 0) && (
+            <>
+              <dt>
+                F&amp;I ({stats.fi.menus} menu{stats.fi.menus === 1 ? '' : 's'})
+              </dt>
+              <dd className="price">{formatMoney(split.fi)}</dd>
+              <dt className="summary-sub">· buyers</dt>
+              <dd className="summary-sub">{payLine(stats.fi)}</dd>
+              {stats.fi.reserve > 0 && (
+                <>
+                  <dt className="summary-sub">· lenders' reserve</dt>
+                  <dd className="price summary-sub">{formatMoney(stats.fi.reserve)}</dd>
+                </>
+              )}
+              {stats.fi.fees > 0 && (
+                <>
+                  <dt className="summary-sub">· lenders' fees</dt>
+                  <dd className="price summary-sub">{formatMoney(-stats.fi.fees)}</dd>
+                </>
+              )}
+              {stats.fi.productGross > 0 && (
+                <>
+                  <dt className="summary-sub">· products sold</dt>
+                  <dd className="summary-sub">{soldLine(stats.fi)}</dd>
+                  <dt className="summary-sub">· product gross</dt>
+                  <dd className="price summary-sub">{formatMoney(stats.fi.productGross)}</dd>
+                </>
+              )}
             </>
           )}
           {stats.service.jobs > 0 && (
@@ -541,7 +580,7 @@ function SummaryPanel() {
         </p>
         <button
           className="btn btn-primary"
-          autoFocus
+          ref={focusOnce}
           onClick={() => useGame.getState().startNextDay()}
         >
           Start day {day + 1}

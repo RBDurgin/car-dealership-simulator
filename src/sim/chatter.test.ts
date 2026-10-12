@@ -13,6 +13,7 @@ import {
 } from './chatter'
 import { OWNER_VARIANT } from './characters'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
+import type { FiDeal } from './fi'
 import { buildInventory } from './inventory'
 import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID } from './owner'
@@ -83,6 +84,32 @@ describe('conversationsOf', () => {
   it('murmurs at the desk while signing', () => {
     const s = state({ customers: [customer('c1', { phase: 'signing', handlerId: 'e-fin' })] })
     expect(conversationsOf(s)[0]).toMatchObject({ kind: 'signing', speakers: ['e-fin', 'c1'] })
+  })
+
+  it('carries the signing conversation on through the F&I menu', () => {
+    const deal = { lender: null, markup: 0, down: 0, products: [], presented: 0 }
+    const s = state({
+      customers: [customer('c1', { phase: 'menu', handlerId: PLAYER_ID, fi: deal })],
+    })
+    expect(conversationsOf(s)[0]).toMatchObject({ key: 'signing:c1', kind: 'signing' })
+  })
+
+  it('says a quick yes or a short no to each product', () => {
+    const deal: FiDeal = { lender: null, markup: 0, down: 0, products: [], presented: 0 }
+    const at = (fi: FiDeal) =>
+      state({ customers: [customer('c1', { phase: 'menu', handlerId: PLAYER_ID, fi })] })
+    const answer = (taken: boolean) => ({
+      ...deal,
+      presented: 1,
+      products: [{ id: 'warranty' as const, price: 1500, cost: 675, taken }],
+    })
+    expect(reactionsFor(at(deal), at(answer(true)), createRng(1))).toEqual([
+      [{ speaker: 'c1', tone: 'happy', syllables: 2 }],
+    ])
+    expect(reactionsFor(at(deal), at(answer(false)), createRng(1))).toEqual([
+      [{ speaker: 'c1', tone: 'grumble', syllables: 1 }],
+    ])
+    expect(reactionsFor(at(deal), at({ ...deal, markup: 1 }), createRng(1))).toEqual([])
   })
 
   it('lets a couple chat while they browse or wait, but not once they are being sold to', () => {

@@ -17,7 +17,8 @@ import {
   type InteractableKind,
 } from './interactables'
 import type { InventoryCar } from './inventory'
-import { GUEST_CHAIR_ID, type CarModel } from './layout'
+import { emptyFiStats, fiDayGross, type FiStats, type SaleFi } from './fi'
+import { DESK_CHAIR_ID, GUEST_CHAIR_ID, MANAGER_DESK, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
 import { roundOf } from './negotiation'
@@ -43,9 +44,21 @@ export const DEAL_PHASES: readonly CustomerPhase[] = [
   'considering',
   'following',
   'signing',
+  'menu',
 ]
-/** Phases in which the player is standing with the customer, talking. Walking off ends it. */
-export const CONVERSATION_PHASES: readonly CustomerPhase[] = ['talking', 'considering']
+/**
+ * Phases in which the player is with the customer, talking: standing with
+ * them, or across the desk at the F&I menu. Walking off ends it.
+ */
+export const CONVERSATION_PHASES: readonly CustomerPhase[] = ['talking', 'considering', 'menu']
+
+/**
+ * The guest chair across from the desk chair `deskChairId` the player closes
+ * at: the office's, or their own desk's on the showroom floor.
+ */
+export function guestChairOf(deskChairId: string): string {
+  return deskChairId === MANAGER_DESK.chairId ? MANAGER_DESK.guestChairId : GUEST_CHAIR_ID
+}
 
 /**
  * The customer `handlerId` (the player or a salesperson) is dealing with, from
@@ -71,7 +84,9 @@ export function guestChairBusy(
   chairId: string = GUEST_CHAIR_ID,
 ): boolean {
   return customers.some(
-    (c) => c.chairId === chairId && (c.phase === 'signing' || c.phase === 'following'),
+    (c) =>
+      c.chairId === chairId &&
+      (c.phase === 'signing' || c.phase === 'following' || c.phase === 'menu'),
   )
 }
 
@@ -221,8 +236,11 @@ export function actionBlocker(
   }
   const deal = dealCustomer(customers, PLAYER_ID)
   if (action === 'closeDeal') {
-    if (financeOnDuty(roster)) return 'Your finance manager does the paperwork. Hand buyers off.'
-    if (financeBusy(customers)) return 'Finance is still using the desk.'
+    // The player's own desk is theirs alone: only the office desk is finance's.
+    if (targetId === DESK_CHAIR_ID) {
+      if (financeOnDuty(roster)) return 'Your finance manager does the paperwork. Hand buyers off.'
+      if (financeBusy(customers)) return 'Finance is still using the desk.'
+    }
     if (deal?.phase !== 'following' && deal?.phase !== 'signing') return NOBODY_TO_SIGN
   }
   if (action === 'handOff') {
@@ -274,6 +292,8 @@ export interface Sale {
   returning?: boolean
   /** Closed after the buyer's last counter, when they had no rounds left. */
   lastRound?: boolean
+  /** The F&I menu, when the player ran it: the loan, the products taken and their gross. */
+  fi?: SaleFi
 }
 
 /** What `saleRecord` needs to know besides the buyer and the car. */
@@ -290,6 +310,8 @@ export interface SaleTerms {
   book: readonly Client[]
   /** What we allowed for their trade-in, or null without one in the deal. */
   tradePrice: number | null
+  /** The F&I menu, when the player ran one. */
+  fi?: SaleFi
 }
 
 /** The record of `c` buying `car`: who sold and signed it, the commission and what went with it. */
@@ -317,6 +339,7 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
   const trade = t.tradePrice !== null && tradeRecord(c, t.tradePrice, t.day)
   if (trade) sale.trade = trade
   if (car.used) sale.used = true
+  if (t.fi) sale.fi = t.fi
   if (c.haggle && roundOf(c) >= ARCHETYPES[c.archetype].haggle.rounds) sale.lastRound = true
   if (t.book.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
   return sale
@@ -378,6 +401,8 @@ export interface DayStats {
   service: ServiceStats
   /** What the client book did today (see `sim/clients.ts`). */
   clients: ClientStats
+  /** Loans and the F&I menu today (see `sim/fi.ts`). */
+  fi: FiStats
 }
 
 export function emptyStats(): DayStats {
@@ -410,6 +435,7 @@ export function emptyStats(): DayStats {
     rival: null,
     service: emptyServiceStats(),
     clients: emptyClientStats(),
+    fi: emptyFiStats(),
   }
 }
 
@@ -436,14 +462,14 @@ export function serviceGross(stats: DayStats): number {
   return s.labor + s.parts - s.partsCost + s.warranty - s.overtime
 }
 
-/** Gross profit on car sales and service together, for the career and the owner. */
+/** Gross profit on car sales, F&I and service together, for the career and the owner. */
 export function totalGross(stats: DayStats): number {
-  return grossProfit(stats) + serviceGross(stats)
+  return grossProfit(stats) + fiDayGross(stats.fi) + serviceGross(stats)
 }
 
-/** Gross profit on new cars and on used ones, apart. */
-export function grossSplit(stats: DayStats): { new: number; used: number } {
-  const split = { new: 0, used: 0 }
+/** Gross profit on new cars and on used ones, apart, and the F&I on top of them. */
+export function grossSplit(stats: DayStats): { new: number; used: number; fi: number } {
+  const split = { new: 0, used: 0, fi: fiDayGross(stats.fi) }
   for (const s of stats.sales) split[s.used ? 'used' : 'new'] += s.price - s.cost
   return split
 }
@@ -454,7 +480,7 @@ export function theftLoss(stats: DayStats): number {
 }
 
 /**
- * Gross profit on sales and service less the day's staff costs, floor plan
+ * Gross profit on sales, F&I and service less the day's staff costs, floor plan
  * interest, ad spend, improvements, expansions, referral fees, a client
  * appreciation day and stolen stock, plus any bonus from the owner and the
  * month-end holdback.

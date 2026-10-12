@@ -10,8 +10,10 @@ import type { Customer, CustomerEvent } from '../sim/customers'
 import type { DayStats } from '../sim/deal'
 import type { Difficulty } from '../sim/difficulty'
 import type { OwnedExpansion } from '../sim/expansions'
+import type { ProductId } from '../sim/fi'
 import type { ImprovementId, OwnedImprovement } from '../sim/improvements'
 import type { ActionId } from '../sim/interactables'
+import type { LenderId } from '../sim/lenders'
 import type { InventoryCar } from '../sim/inventory'
 import type { CarModel, ExpansionId } from '../sim/layout'
 import type { Campaign, Channel } from '../sim/marketing'
@@ -290,6 +292,19 @@ export interface GameState {
    * given); the trade is left out when there's no lot space for it.
    */
   ask: (price: number, allowance?: number) => void
+  /**
+   * At the F&I menu: the player's buyer takes their loan from lender `id` at
+   * `markup` points over its buy rate. Only before the first product.
+   */
+  fiLender: (id: LenderId, markup: number) => void
+  /** At the F&I menu: presents product `id` at `price`, and the buyer answers at once. */
+  fiPresent: (id: ProductId, price: number) => void
+  /** At the F&I menu, with no lender willing: the buyer puts down enough for one to approve. */
+  fiMoreDown: () => void
+  /** At the F&I menu, with no lender willing: the buyer goes home without the car. */
+  fiLetGo: () => void
+  /** At the F&I menu: signs the contracts, and the sale goes through. */
+  fiSign: () => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */

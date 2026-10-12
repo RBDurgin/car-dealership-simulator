@@ -11,6 +11,7 @@ import {
   GRID_WIDTH,
   GUEST_CHAIR_ID,
   LOT_ENTRY_TILES,
+  MANAGER_DESK,
   OPENINGS,
   OWNER_OFFICE_TILES,
   PARCEL,
@@ -213,7 +214,7 @@ describe('dealership layout', () => {
       RECEPTION_CHAIR_ID,
       DESK_CHAIR_ID,
       GUEST_CHAIR_ID,
-      ...salesDesks([]).flatMap((d) => [d.chairId, d.guestChairId]),
+      ...[...salesDesks([]), MANAGER_DESK].flatMap((d) => [d.chairId, d.guestChairId]),
     ]
     for (const id of chairs) {
       const chair = PROPS.find((p) => p.id === id)
@@ -222,6 +223,29 @@ describe('dealership layout', () => {
       expect(approach.length, id).toBeGreaterThan(0)
       for (const end of SIDEWALK_ENDS) expect(findPathToAny(grid, end, approach), id).not.toBeNull()
     }
+  })
+
+  it("puts the player's desk on the showroom floor, built like a sales desk", () => {
+    const ids = ['manager-desk', 'manager-monitor', MANAGER_DESK.chairId, MANAGER_DESK.guestChairId]
+    for (const id of ids) {
+      const p = PROPS.find((x) => x.id === id)
+      expect(p, id).toBeDefined()
+      expect(zoneAt(layout, p!.rect.tx, p!.rect.tz), id).toBe('showroom')
+    }
+    const model = (id: string) => PROPS.find((p) => p.id === id)?.model
+    expect(model(MANAGER_DESK.chairId)).toBe(model(SALES_DESKS[0].chairId))
+    expect(model(MANAGER_DESK.guestChairId)).toBe(model(SALES_DESKS[0].guestChairId))
+    // Staff never use it.
+    expect(SALES_DESKS.some((d) => d.chairId === MANAGER_DESK.chairId)).toBe(false)
+  })
+
+  it("keeps the office door reachable past the player's desk", () => {
+    const door = { tx: 29, tz: 5 }
+    for (const end of SIDEWALK_ENDS) expect(findPath(grid, end, door)).not.toBeNull()
+    expect(findPath(grid, SPAWN_TILE, { tx: 31, tz: 5 })).not.toBeNull()
+    // Straight up the side of the showroom, not round the platforms.
+    const path = findPath(grid, { tx: 28, tz: 12 }, door)
+    expect(path!.length).toBeLessThanOrEqual(9)
   })
 
   it('keeps the lounge sofa and every display car reachable around the sales desks', () => {

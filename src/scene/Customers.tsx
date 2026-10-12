@@ -13,7 +13,7 @@ import {
   type Customer,
   type CustomerVariant,
 } from '../sim/customers'
-import { CONVERSATION_PHASES, customerActions } from '../sim/deal'
+import { CONVERSATION_PHASES, customerActions, guestChairOf } from '../sim/deal'
 import { doorTile, serviceDoorTile } from '../sim/driving'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
@@ -97,8 +97,11 @@ const prop = (id: string) => layout.props.find((p) => p.id === id)
 interface PlayerIntent {
   /** Whoever the player's current action is aimed at. */
   targetId: string | null
-  /** Heading to the desk to close a deal: their buyer goes to the guest chair. */
-  closingDeal: boolean
+  /**
+   * Heading to a desk to close a deal: the guest chair their buyer goes to
+   * (the office's, or the player's own desk's). Null otherwise.
+   */
+  closingAt: string | null
 }
 
 /** A customer's body in the world. Positions and timers stay here, never in the store. */
@@ -255,7 +258,7 @@ function taskKey(c: Customer, player: PlayerIntent, ready: ReadonlySet<string>):
       // Sent to a desk by staff, or the player is taking them to sign. A
       // salesperson's buyer waits to be told where to go.
       if (staffHandled(c)) return c.chairId ? `toChair:${c.chairId}` : 'awaitLead'
-      return player.closingDeal ? `toChair:${GUEST_CHAIR_ID}` : 'follow'
+      return player.closingAt ? `toChair:${player.closingAt}` : 'follow'
     case 'queued':
       return 'toSofa'
     case 'leaving':
@@ -286,7 +289,7 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   customersAtCar.delete(c.id)
   w.timer = 0
   w.followTile = null
-  if (c.phase !== 'signing') standUp(w)
+  if (c.phase !== 'signing' && c.phase !== 'menu') standUp(w)
   if (task !== 'toSofa') leaveSofa(w)
   if (task !== 'waitChair') leaveWaitChair(w)
   atCounter.delete(c.id)
@@ -322,8 +325,9 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
         return
       }
       if (task === 'awaitLead') return
-      // To the guest chair, by whichever side is nearest.
-      const chair = guestChair(c.chairId)
+      // To the guest chair, by whichever side is nearest: the one staff sent
+      // them to, or the one across the desk the player closes at.
+      const chair = guestChair(c.chairId ?? task.slice('toChair:'.length))
       if (chair) pathTo(w, approachTilesFor(grid, chair.rect))
       return
     }
@@ -439,7 +443,7 @@ function onArrived(c: Customer, w: CustomerWalker): void {
       if (!w.task?.startsWith('toChair:') || w.seat) break
       const chair = guestChair(w.task.slice('toChair:'.length))
       if (!chair || !sitOn(w, chair)) break
-      game.dispatchCustomer({ type: 'seat', id: c.id })
+      game.dispatchCustomer({ type: 'seat', id: c.id, chairId: chair.id })
       break
     }
     case 'queued':
@@ -619,9 +623,10 @@ export function Customers() {
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
     const { realSeconds, seconds } = frameSeconds(rawDelta, game.timeScale)
+    const a = game.activeAction
     const player: PlayerIntent = {
-      targetId: game.activeAction?.targetId ?? null,
-      closingDeal: game.activeAction?.action === 'closeDeal',
+      targetId: a?.targetId ?? null,
+      closingAt: a?.action === 'closeDeal' ? guestChairOf(a.targetId) : null,
     }
     // Service clients whose car is done.
     ready.clear()

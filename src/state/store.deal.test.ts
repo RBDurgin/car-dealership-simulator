@@ -58,6 +58,7 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
   ...extra,
 })
@@ -152,6 +153,7 @@ describe('selling to a customer', () => {
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     game().arriveAction(id)
     game().completeAction(id)
+    game().fiSign()
     expect(game().cash).toBe(STARTING_CASH + msrp - 2000)
     expect(game().dayStats.sales[0]).toMatchObject({ price: msrp - 2000, msrp })
   })
@@ -179,6 +181,10 @@ describe('selling to a customer', () => {
     expect(customer()?.phase).toBe('signing')
     game().arriveAction(id)
     game().completeAction(id)
+    // On to the F&I menu: a cash buyer, so no lender, and the contracts to sign.
+    expect(customer()).toMatchObject({ phase: 'menu', fi: { lender: null, presented: 0 } })
+    expect(car('lot-car-1').status).toBe('available')
+    game().fiSign()
     expect(car('lot-car-1').status).toBe('sold')
     expect(game().cash).toBe(STARTING_CASH + price)
     expect(customer()).toMatchObject({ phase: 'leaving', leaveReason: 'bought' })
@@ -201,6 +207,7 @@ describe('selling to a customer', () => {
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     game().arriveAction(id)
     game().completeAction(id)
+    game().fiSign()
     expect(car('lot-car-1').status).toBe('sold')
     expect(game().dayStats.sales).toEqual([expect.objectContaining({ used: true })])
     expect(game().monthSales).toEqual({ count: 0, msrp: 0 })
@@ -349,6 +356,9 @@ describe('the day loop', () => {
     game().tickClock({ day: 1, minute: CLOSE_MINUTE })
     game().arriveAction(id)
     game().completeAction(id)
+    // The menu after it is spared too.
+    expect(customer()?.phase).toBe('menu')
+    game().fiSign()
     expect(customer()?.leaveReason).toBe('bought')
     expect(game().dayStats.sales).toHaveLength(1)
   })

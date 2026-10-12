@@ -45,6 +45,7 @@ function sellOne() {
   const action = game().activeAction!.id
   game().arriveAction(action)
   game().completeAction(action)
+  game().fiSign()
   expect(game().dayStats.sales).toHaveLength(1)
 }
 

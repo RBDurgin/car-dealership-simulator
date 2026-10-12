@@ -47,6 +47,7 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
   ...extra,
 })
@@ -167,6 +168,7 @@ describe('handing off to finance', () => {
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     game().arriveAction(id)
     game().completeAction(id)
+    game().fiSign()
     expect(game().dayStats.sales).toEqual([
       expect.objectContaining({ signedBy: null, commission: 0 }),
     ])

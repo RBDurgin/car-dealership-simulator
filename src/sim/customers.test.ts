@@ -61,6 +61,7 @@ const base: Customer = {
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
 }
 
@@ -447,6 +448,42 @@ describe('reduceCustomer', () => {
     expect(reduceCustomer(c, { type: 'despawn', id: 'c1' })).toBeNull()
   })
 
+  it("takes the player's buyer from the paperwork to the F&I menu, and signs from there", () => {
+    const deal = { lender: null, markup: 0, down: 0, products: [], presented: 0 }
+    const following = at('following', { handlerId: PLAYER_ID })
+    const signing = run(following, { type: 'seat', id: 'c1', chairId: 'manager-guest' })!
+    expect(signing).toMatchObject({ phase: 'signing', chairId: 'manager-guest' })
+    // Only from the paperwork.
+    expect(run(following, { type: 'menu', id: 'c1', deal })).toBe(following)
+    const menu = run(signing, { type: 'menu', id: 'c1', deal })!
+    expect(menu).toMatchObject({ phase: 'menu', fi: deal, chairId: 'manager-guest' })
+    expect(moodOf(menu)).toBe('happy')
+    const presented = { ...deal, presented: 1 }
+    expect(run(menu, { type: 'fi', id: 'c1', deal: presented })?.fi).toBe(presented)
+    expect(run(signing, { type: 'fi', id: 'c1', deal: presented })).toBe(signing)
+    // No patience lost, and closing time lets them finish.
+    expect(run(menu, { type: 'tick', minutes: 30 })).toBe(menu)
+    expect(run(menu, { type: 'close' })).toBe(menu)
+    expect(run(menu, { type: 'signed', id: 'c1' })).toMatchObject({
+      phase: 'leaving',
+      leaveReason: 'bought',
+      fi: null,
+    })
+    expect(run(menu, { type: 'declined', id: 'c1' })).toMatchObject({
+      phase: 'leaving',
+      leaveReason: 'declined',
+    })
+    expect(run(menu, { type: 'cancel', id: 'c1' })).toMatchObject({
+      phase: 'waiting',
+      fi: null,
+      chairId: null,
+      handlerId: null,
+    })
+    // A staff buyer signs without the menu.
+    const theirs = at('signing', { handlerId: 'staff-1' })
+    expect(run(theirs, { type: 'menu', id: 'c1', deal })).toBe(theirs)
+  })
+
   it('belongs to whoever greeted them until they leave', () => {
     const talking = run(at('waiting'), { type: 'greet', id: 'c1', carId: 'a', by: 'staff-1' })!
     expect(talking.handlerId).toBe('staff-1')
@@ -758,6 +795,7 @@ describe('salespeople', () => {
       referredBy: null,
       guest: false,
       credit: null,
+      fi: null,
       service: null,
     })
   })

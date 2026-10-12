@@ -71,6 +71,7 @@ const buyer = (extra: Partial<Customer> = {}): Customer => ({
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
   ...extra,
 })
@@ -84,13 +85,14 @@ function perform(targetId: string, action: Parameters<typeof initial.requestActi
   game().completeAction(id)
 }
 
-/** Has the buyer sit down at the office desk and sign. */
+/** Has the buyer sit down at the office desk, then sign at the F&I menu. */
 function closeDeal() {
   game().requestAction('office-chair', 'closeDeal')
   const id = game().activeAction!.id
   game().dispatchCustomer({ type: 'seat', id: 'buyer-a' })
   game().arriveAction(id)
   game().completeAction(id)
+  game().fiSign()
 }
 
 /** Fills every free lot space, so there's no room for a used car. */
@@ -271,6 +273,7 @@ describe('salespeople with trade-ins and sellers', () => {
       referredBy: null,
       guest: false,
       credit: null,
+      fi: null,
       service: null,
       selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
     })
@@ -301,6 +304,7 @@ describe('salespeople with trade-ins and sellers', () => {
           referredBy: null,
           guest: false,
           credit: null,
+          fi: null,
           service: null,
           selling: { hope: 9_000, estimate: { estimate: 9_000, margin: 2_000 }, appraised: false },
         }),

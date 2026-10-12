@@ -303,11 +303,11 @@ describe('a crowd on the move', () => {
       { tx: 30, tz: 6 },
       { tx: 30, tz: 7 },
     ]
-    // From the strip by the sales desk.
+    // From the strip between the sales desks and the office wall.
     const showroom: Tile[] = [
       { tx: 26, tz: 6 },
-      { tx: 26, tz: 7 },
-      { tx: 27, tz: 6 },
+      { tx: 28, tz: 7 },
+      { tx: 28, tz: 6 },
     ]
     for (let i = 0; i < 3; i++) {
       agents.push(spawn(grid, `in${i}`, showroom[i], office[i]))

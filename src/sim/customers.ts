@@ -3,6 +3,7 @@ import { weekdayTraffic } from './calendar'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
 import type { Credit } from './credit'
+import type { FiDeal } from './fi'
 import type { Client } from './clients'
 import type { Tuning } from './difficulty'
 import type { Vehicle } from './driving'
@@ -28,11 +29,11 @@ import { WEATHER_EFFECTS, type Weather } from './weather'
  *                          │                            │                     │
  *                          └───────────greet────────────┤                  cancel
  *                                                       ▼                     │
- *            talking ─offer─► considering ─respond(accept)─► following ─seat─► signing
- *               ▲                  │  │                       │     ▲            │
- *               └─respond(counter)─┘  respond(walk)     handOff│     │call     signed
- *                                     ▼                       ▼     │            ▼
- *                            leaving(refused)                 queued    leaving(bought)
+ *            talking ─offer─► considering ─respond(accept)─► following ─seat─► signing ─menu─► menu
+ *               ▲                  │  │                       │     ▲            │              │
+ *               └─respond(counter)─┘  respond(walk)     handOff│     │call     signed   signed / declined
+ *                                     ▼                       ▼     │            ▼              ▼
+ *                            leaving(refused)                 queued    leaving(bought)  leaving(bought / declined)
  *
  * An offer is haggled over (`sim/negotiation.ts`): a counter sends them back
  * to talking, with `haggle` keeping score, for the seller to ask again.
@@ -40,7 +41,9 @@ import { WEATHER_EFFECTS, type Weather } from './weather'
  * waiting customer first, on their way over, so nobody else takes them.
  * `handOff` passes a buyer to the finance manager, who `call`s them from the
  * lounge when the desk is free; a salesperson `lead`s theirs to their own desk
- * instead. Waiting customers lose patience on `tick` and leave impatient at
+ * instead. The player's buyer goes from the paperwork to the F&I `menu`
+ * (`sim/fi.ts`), signs from there, or leaves `declined` when no lender will
+ * take them. Waiting customers lose patience on `tick` and leave impatient at
  * zero, unless someone is on their way to help. `close` sends everyone home
  * except a customer mid-signature or in staff hands. `cancel` from any deal
  * phase puts them back to waiting, and drops a claim. Service clients take
@@ -54,6 +57,8 @@ export type CustomerPhase =
   | 'considering'
   | 'following'
   | 'signing'
+  /** The player's buyer, past the paperwork: at the F&I menu (see `sim/fi.ts`). */
+  | 'menu'
   /** Handed off to finance: sitting in the lounge until the desk is free. */
   | 'queued'
   /** A service client who took the quote: their car is in the shop (see `sim/serviceClients.ts`). */
@@ -66,7 +71,8 @@ export const PLAYER_ID = 'player'
 /**
  * `sold`: a seller who sold us their car, leaving on foot. `serviced`: a
  * service client who collected their car; `declined`: one who turned the
- * quote down (or couldn't be fitted in). `visited`: a guest on client
+ * quote down (or couldn't be fitted in), or a buyer no lender would take.
+ * `visited`: a guest on client
  * appreciation day nobody got to, who ate, looked around and went home.
  */
 export type LeaveReason =
@@ -169,6 +175,8 @@ export interface Customer {
    * (`assignCredit`). Null for sellers and service clients.
    */
   credit: Credit | null
+  /** The F&I menu so far, while they're in `menu`; null otherwise. */
+  fi: FiDeal | null
 }
 
 const FIRST_NAMES = [
@@ -503,6 +511,7 @@ function shopper(
     loyaltyCut: 0,
     guest: !!opts.guest,
     credit: null,
+    fi: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -597,6 +606,7 @@ export function moodOf(c: Customer): Mood {
   switch (c.phase) {
     case 'following':
     case 'signing':
+    case 'menu':
     case 'queued':
       return 'happy'
     case 'leaving':
@@ -666,15 +676,27 @@ export type CustomerEvent =
       /** Our trade allowance offended them: the counter costs them an extra round. */
       insulted?: boolean
     }
-  /** Sat down to sign: in the guest chair they were sent to, else the office's (the player's buyer). */
-  | { type: 'seat'; id: string }
+  /**
+   * Sat down to sign: in the guest chair they were sent to, else `chairId`
+   * (the desk the player closes at), else the office's.
+   */
+  | { type: 'seat'; id: string; chairId?: string }
   /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
   | { type: 'handOff'; id: string; to: string }
   /** Their salesperson sends them to sit at the desk with guest chair `chairId`. */
   | { type: 'lead'; id: string; chairId: string }
   /** Finance is free: up from the lounge and over to the desk. */
   | { type: 'call'; id: string }
-  /** Paperwork signed: the sale goes through. `traded`: we took their car, so they leave on foot. */
+  /** The player's paperwork is done: on to the F&I menu, opening at `deal`. */
+  | { type: 'menu'; id: string; deal: FiDeal }
+  /** The F&I menu moved on: a lender, a markup, a down payment or a product's answer. */
+  | { type: 'fi'; id: string; deal: FiDeal }
+  /** No lender will take them, and they can't put more down: they leave. */
+  | { type: 'declined'; id: string }
+  /**
+   * Paperwork signed (or, from the menu, the contracts): the sale goes
+   * through. `traded`: we took their car, so they leave on foot.
+   */
   | { type: 'signed'; id: string; traded?: boolean }
   /** The player looked a seller's (or a trade-in's) car over properly: a closer estimate of its value. */
   | { type: 'appraised'; id: string; estimate: Appraisal }
@@ -716,6 +738,7 @@ const leave = (c: Customer, reason: LeaveReason): Customer => ({
   leaveReason: reason,
   handlerId: null,
   chairId: null,
+  fi: null,
 })
 
 /** Being looked after by an employee rather than the player. */
@@ -800,7 +823,7 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       }
     case 'seat':
       if (c.phase !== 'following') return c
-      return { ...c, phase: 'signing', chairId: c.chairId ?? GUEST_CHAIR_ID }
+      return { ...c, phase: 'signing', chairId: c.chairId ?? ev.chairId ?? GUEST_CHAIR_ID }
     case 'handOff':
       // From the player or a salesperson, before they've been sent to a desk.
       if (c.phase !== 'following' || c.handlerId === null || c.handlerId === ev.to) return c
@@ -812,8 +835,15 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'call':
       if (c.phase !== 'queued') return c
       return { ...c, phase: 'following', chairId: GUEST_CHAIR_ID }
+    case 'menu':
+      if (c.phase !== 'signing' || staffHandled(c)) return c
+      return { ...c, phase: 'menu', fi: ev.deal }
+    case 'fi':
+      return c.phase === 'menu' ? { ...c, fi: ev.deal } : c
+    case 'declined':
+      return c.phase === 'menu' ? leave(c, 'declined') : c
     case 'signed':
-      if (c.phase !== 'signing') return c
+      if (c.phase !== 'signing' && c.phase !== 'menu') return c
       return leave(ev.traded ? { ...c, vehicle: null } : c, 'bought')
     case 'appraised': {
       if (c.phase === 'leaving') return c
@@ -827,7 +857,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if ((c.phase === 'browsing' || c.phase === 'waiting') && c.handlerId !== null) {
         return { ...c, handlerId: null }
       }
-      if (!['talking', 'considering', 'following', 'signing', 'queued'].includes(c.phase)) return c
+      if (!['talking', 'considering', 'following', 'signing', 'menu', 'queued'].includes(c.phase))
+        return c
       return {
         ...c,
         phase: 'waiting',
@@ -836,6 +867,7 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         handlerId: null,
         chairId: null,
         sellerId: null,
+        fi: null,
       }
     case 'booked':
       if (c.phase !== 'considering' || !c.service) return c
@@ -874,9 +906,10 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       return leave({ ...c, patienceLeft }, c.guest && !c.sellerId ? 'visited' : 'impatient')
     }
     case 'close':
-      // Let a signature in progress finish, staff finish the buyers they have
-      // in hand and service clients collect their cars; everyone else heads out.
-      if (c.phase === 'leaving' || c.phase === 'signing' || c.phase === 'servicing') return c
+      // Let a signature in progress (or the menu after it) finish, staff finish
+      // the buyers they have in hand and service clients collect their cars;
+      // everyone else heads out.
+      if (['leaving', 'signing', 'menu', 'servicing'].includes(c.phase)) return c
       if (staffHandled(c) && (c.phase === 'queued' || c.phase === 'following')) return c
       return leave({ ...c, offer: null }, 'closing')
   }

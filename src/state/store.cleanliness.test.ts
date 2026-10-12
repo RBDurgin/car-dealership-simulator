@@ -39,6 +39,7 @@ const browser: Customer = {
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
 }
 

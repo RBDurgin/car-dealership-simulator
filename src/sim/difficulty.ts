@@ -65,6 +65,8 @@ export interface Tuning {
   satisfactionShift: number
   /** Leans buyers' credit tiers: above 0 toward A, below toward D (see `rollCredit`). */
   creditMix: number
+  /** Added to every chance a buyer takes an F&I product (see `productTake`). */
+  productTake: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -104,6 +106,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     clientReturn: 1.2,
     satisfactionShift: 5,
     creditMix: 0.3,
+    productTake: 0.05,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -137,6 +140,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     clientReturn: 1,
     satisfactionShift: 0,
     creditMix: 0,
+    productTake: 0,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -170,6 +174,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     clientReturn: 0.8,
     satisfactionShift: -5,
     creditMix: -0.3,
+    productTake: -0.05,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

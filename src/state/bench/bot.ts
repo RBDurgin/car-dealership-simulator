@@ -2,15 +2,17 @@ import { CLOCK_STEP_MINUTES, CLOSE_MINUTE, OPEN_MINUTE } from '../../sim/clock'
 import { CAR_MODELS, PLAYER_ID } from '../../sim/customers'
 import { customerActions, dealCustomer } from '../../sim/deal'
 import { EXPANSIONS } from '../../sim/expansions'
+import { loanDeclined, productsFor } from '../../sim/fi'
 import type { ActionId } from '../../sim/interactables'
-import type { ExpansionId } from '../../sim/layout'
+import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
 import { useGame } from '../store'
 
 /**
  * A headless player for the long-game bench: it stands in for the scene and
  * the player, so the store runs whole days with no renderer. It isn't a good
  * player, only a busy one: walkers get where they're going at once, the
- * player works one deal at a time and takes every counter, and stock and ads
+ * player works one deal at a time, takes every counter and runs a fair F&I
+ * menu at their own desk, and stock and ads
  * are bought each morning. Staff stand idle, as their work is the scene's. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
  * level plays the same each time.
@@ -42,14 +44,33 @@ function perform(targetId: string, action: ActionId): void {
   game().completeAction(id)
 }
 
-/** Takes a buyer to the office desk and signs them. */
+/** Takes a buyer to the player's own desk, and through the F&I menu to sign. */
 function closeDeal(customerId: string): void {
-  game().requestAction('office-chair', 'closeDeal')
+  game().requestAction(MANAGER_DESK.chairId, 'closeDeal')
   const id = game().activeAction?.id
   if (id === undefined) return
   game().dispatchCustomer({ type: 'seat', id: customerId })
   game().arriveAction(id)
   game().completeAction(id)
+  runMenu()
+}
+
+/**
+ * The F&I menu played fairly: a point of markup, then the warranty and (on
+ * a loan) GAP at their low prices. A buyer no lender takes puts more down,
+ * or goes home.
+ */
+function runMenu(): void {
+  const c = dealCustomer(game().customers, PLAYER_ID)
+  if (c?.phase !== 'menu' || !c.fi) return
+  if (loanDeclined(c, c.fi)) game().fiMoreDown()
+  const fi = dealCustomer(game().customers, PLAYER_ID)?.fi
+  if (!fi || loanDeclined(c, fi)) return game().fiLetGo()
+  if (fi.lender) game().fiLender(fi.lender, 1)
+  for (const p of productsFor(c)) {
+    if (p.id === 'warranty' || p.id === 'gap') game().fiPresent(p.id, p.low)
+  }
+  game().fiSign()
 }
 
 /**

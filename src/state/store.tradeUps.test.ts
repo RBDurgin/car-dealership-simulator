@@ -159,6 +159,7 @@ describe('trade-ups', () => {
       referredBy: null,
       guest: false,
       credit: null,
+      fi: null,
       service: null,
     }
     useGame.setState({ customers: [kim] })

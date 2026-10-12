@@ -355,6 +355,18 @@ export const UPDATES: readonly Update[] = [
       'If the browser refuses the end-of-day save, the game now tells you.',
     ],
   },
+  {
+    id: 33,
+    phase: '19',
+    title: 'Your desk and the F&I menu',
+    items: [
+      'You have your own desk on the showroom floor, by the office door. Close deals there, or at the office desk.',
+      'Greeting a buyer tells you whether they pay cash or finance, their credit tier and what they put down.',
+      'After the paperwork comes the F&I menu: pick a lender and a markup, then present warranties and other cover.',
+      'Every product you push makes the next yes less likely. A buyer no lender takes may put more down, or walk.',
+      'The day summary shows your F&I gross, and it counts toward ranks and the owner’s goals.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

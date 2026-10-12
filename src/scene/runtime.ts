@@ -21,6 +21,7 @@ import {
   CUSTOMER_PARKING,
   DESK_CHAIR_ID,
   GUEST_CHAIR_ID,
+  MANAGER_DESK,
   parkedCarRect,
   SALES_DESKS,
   SERVICE_SPOTS,
@@ -330,6 +331,8 @@ export const reservations = new Reservations()
 const SEATS = [
   GUEST_CHAIR_ID,
   DESK_CHAIR_ID,
+  MANAGER_DESK.chairId,
+  MANAGER_DESK.guestChairId,
   ...Object.values(POSTS),
   ...SALES_DESKS.flatMap((d) => [d.chairId, d.guestChairId]),
 ]

@@ -4,6 +4,7 @@ import { DEFAULT_DAY_MS, CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 import {
   DESK_CHAIR_ID,
   DESK_PHONE_ID,
+  MANAGER_DESK,
   OFFICE_COMPUTER_ID,
   type CarModel,
   type Facing,
@@ -268,6 +269,8 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
       out.set(p.id, { ...base, kind: 'car', name, actions: ['inspect', 'wash'], car })
     } else if (p.id === DESK_CHAIR_ID) {
       out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit', 'closeDeal'] })
+    } else if (p.id === MANAGER_DESK.chairId) {
+      out.set(p.id, { ...base, kind: 'chair', name: 'Your desk', actions: ['sit', 'closeDeal'] })
     } else if (p.id === OFFICE_COMPUTER_ID) {
       out.set(p.id, {
         ...base,

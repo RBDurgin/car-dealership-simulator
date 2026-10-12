@@ -281,6 +281,7 @@ function visitorLike(clientId: string) {
     referredBy: null,
     guest: false,
     credit: null,
+    fi: null,
     service: null,
   }
 }

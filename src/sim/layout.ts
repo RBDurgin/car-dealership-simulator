@@ -355,6 +355,12 @@ export const SALES_DESKS: SalesDesk[] = [1, 2, 3, 4].map((n) => ({
   ...(n > 2 && { requires: 'showroom-wing' as const }),
 }))
 
+/**
+ * The player's own desk on the showroom floor, by the office door: always
+ * there, built like a sales desk. Staff never use it (it isn't in `SALES_DESKS`).
+ */
+export const MANAGER_DESK: SalesDesk = { chairId: 'manager-chair', guestChairId: 'manager-guest' }
+
 /** The sales desks standing with the `expansions` that are up. */
 export function salesDesks(expansions: readonly ExpansionId[]): SalesDesk[] {
   return SALES_DESKS.filter((d) => !d.requires || expansions.includes(d.requires))
@@ -374,15 +380,16 @@ const COUNTER_TOP = 0.45 * FURNITURE_SCALE
 export const SEAT_HEIGHT = 0.235 * FURNITURE_SCALE
 
 /**
- * Sales desk `n` with its two-tile desk at `at`, set out like the office desk:
- * the salesperson's chair behind its east half, the buyer's in front of its west half.
+ * A desk on the showroom floor (`desk`'s chairs, and ids for the desk and its
+ * monitor) with its two-tile desk at `at`, set out like the office desk: the
+ * seller's chair behind its east half, the buyer's in front of its west half.
  */
-function salesDesk(n: number, at: Tile): Prop[] {
-  const { chairId, guestChairId } = SALES_DESKS[n - 1]
+function salesDesk(desk: SalesDesk, deskId: string, monitorId: string, at: Tile): Prop[] {
+  const { chairId, guestChairId } = desk
   return [
-    { id: `sales-desk-${n}`, model: 'desk', rect: { ...at, w: 2, h: 1 }, facing: 2 },
+    { id: deskId, model: 'desk', rect: { ...at, w: 2, h: 1 }, facing: 2 },
     {
-      id: `sales-monitor-${n}`,
+      id: monitorId,
       model: 'computerScreen',
       rect: { tx: at.tx + 1, tz: at.tz, w: 1, h: 1 },
       facing: 2,
@@ -414,8 +421,10 @@ const FIXED_PROPS: Prop[] = [
   { id: 'showroom-plant-3', model: 'pottedPlant', rect: { tx: 28, tz: 3, w: 1, h: 1 }, facing: 0 },
 
   // Sales desks: one by the entrance, one in the corner by the office door.
-  ...salesDesk(1, { tx: 21, tz: 10 }),
-  ...salesDesk(2, { tx: 26, tz: 4 }),
+  ...salesDesk(SALES_DESKS[0], 'sales-desk-1', 'sales-monitor-1', { tx: 21, tz: 10 }),
+  ...salesDesk(SALES_DESKS[1], 'sales-desk-2', 'sales-monitor-2', { tx: 26, tz: 4 }),
+  // The player's own desk, south of desk 2, by the office door, clear of the way to it.
+  ...salesDesk(MANAGER_DESK, 'manager-desk', 'manager-monitor', { tx: 26, tz: 7 }),
 
   // Office
   { id: 'office-desk', model: 'desk', rect: { tx: 32, tz: 5, w: 2, h: 1 }, facing: 2 },
@@ -507,8 +516,8 @@ const LOUNGE_PLANT_MOVED: Rect = { tx: 30, tz: 9, w: 1, h: 1 }
  */
 const WING_PROPS: Prop[] = [
   { id: 'wing-sofa', model: 'loungeSofa', rect: { tx: 37, tz: 3, w: 2, h: 1 }, facing: 0 },
-  ...salesDesk(3, { tx: 40, tz: 10 }),
-  ...salesDesk(4, { tx: 45, tz: 10 }),
+  ...salesDesk(SALES_DESKS[2], 'sales-desk-3', 'sales-monitor-3', { tx: 40, tz: 10 }),
+  ...salesDesk(SALES_DESKS[3], 'sales-desk-4', 'sales-monitor-4', { tx: 45, tz: 10 }),
   { id: 'wing-plant-1', model: 'pottedPlant', rect: { tx: 47, tz: 3, w: 1, h: 1 }, facing: 0 },
   { id: 'wing-plant-2', model: 'pottedPlant', rect: { tx: 47, tz: 12, w: 1, h: 1 }, facing: 0 },
 ]

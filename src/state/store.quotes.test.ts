@@ -49,6 +49,7 @@ const shopper = (price: number): Customer => ({
   referredBy: null,
   guest: false,
   credit: null,
+  fi: null,
   service: null,
 })
 
@@ -74,6 +75,7 @@ function closeDeal() {
   game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
   game().arriveAction(id)
   game().completeAction(id)
+  game().fiSign()
 }
 
 describe("customers who know the rival's price", () => {

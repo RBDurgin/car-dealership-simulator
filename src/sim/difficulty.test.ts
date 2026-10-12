@@ -20,6 +20,7 @@ describe('difficulty levels', () => {
       franchiseSlack,
       satisfactionShift,
       creditMix,
+      productTake,
       ...rest
     } = TUNING.medium
     expect(startingCash).toBe(25_000)
@@ -29,6 +30,7 @@ describe('difficulty levels', () => {
     expect(acceptBonus).toBe(0)
     expect(satisfactionShift).toBe(0)
     expect(creditMix).toBe(0)
+    expect(productTake).toBe(0)
     for (const [lever, value] of Object.entries(rest)) {
       expect([lever, value]).toEqual([lever, typeof value === 'boolean' ? false : 1])
     }

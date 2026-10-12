@@ -29,6 +29,7 @@ import { financeOnDuty } from '../sim/staff'
 import { stockValue, usedTag } from '../sim/usedCars'
 import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
+import { FinancePanel } from './FinancePanel'
 import { formatMoney } from './format'
 
 /** Gross on the car at `price`, red when it's a loss. */
@@ -422,6 +423,7 @@ export function CustomerPanel() {
   )
   if (c?.selling) return <SellerPanel c={c} />
   if (c?.service) return <ServicePanel c={c} />
+  if (c?.phase === 'menu') return <FinancePanel c={c} />
   if (!c || !car) return null
 
   const game = useGame.getState()
@@ -507,12 +509,14 @@ export function CustomerPanel() {
         <div className="customer-status">
           {finance ? (
             <>
-              Agreed to buy! {touch ? 'Tap' : 'Click'} your finance manager at the office desk and
-              choose <b>Hand off to finance</b>.
+              Agreed to buy! Take them to your desk and choose <b>Close deal</b>, or{' '}
+              {touch ? 'tap' : 'click'} your finance manager at the office desk and choose{' '}
+              <b>Hand off to finance</b>.
             </>
           ) : (
             <>
-              Agreed to buy! Take them to your desk chair and choose <b>Close deal</b>.
+              Agreed to buy! Take them to your desk (or the office desk) and choose{' '}
+              <b>Close deal</b>.
             </>
           )}
           <div className="customer-actions">

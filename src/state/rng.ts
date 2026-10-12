@@ -20,6 +20,7 @@ const QUOTE_SEED = 22_000
 const SERVICE_SEED = 23_000
 const CLIENT_SEED = 24_000
 const CREDIT_SEED = 25_000
+const FI_SEED = 26_000
 
 /** The rng streams, seeded per day, so a day plays out the same given the same choices. */
 export interface DayRngs {
@@ -41,6 +42,8 @@ export interface DayRngs {
   client: Rng
   /** Shoppers' credit. Apart, so the rest of the day plays as before. */
   credit: Rng
+  /** Buyers' answers at the F&I menu. Apart, so the rest of the day plays as before. */
+  fi: Rng
 }
 
 function dayRngs(day: number): DayRngs {
@@ -54,6 +57,7 @@ function dayRngs(day: number): DayRngs {
     service: createRng(SERVICE_SEED + day),
     client: createRng(CLIENT_SEED + day),
     credit: createRng(CREDIT_SEED + day),
+    fi: createRng(FI_SEED + day),
   }
 }
 

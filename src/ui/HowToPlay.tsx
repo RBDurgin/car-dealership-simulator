@@ -13,6 +13,7 @@ import {
 } from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
+import { MAX_MARKUP } from '../sim/lenders'
 import {
   AREA_LABELS,
   IMPROVEMENT_IDS,
@@ -222,7 +223,8 @@ function BasicsTab({ touch, click }: TabProps) {
         <h3>Making a sale</h3>
         <p>
           {click} a customer to <b>Greet</b> them, name a price for the car they like, and if they
-          accept, <b>Close deal</b> at your desk. Walking away or {touch ? '✕' : 'Esc'} ends the
+          accept, <b>Close deal</b> at your desk: it&apos;s on the showroom floor by the office
+          door, and the office desk works too. Walking away or {touch ? '✕' : 'Esc'} ends the
           conversation.
         </p>
         <p>
@@ -266,6 +268,30 @@ function SellingTab({ touch, click }: TabProps) {
           Greeting also tells you how they&apos;d pay: in cash, or financing with a credit tier from
           A (best) to D and the share they&apos;d put down. Bargain hunters and used-car shoppers
           tend to have weaker credit.
+        </p>
+      </section>
+      <section>
+        <h3>The F&amp;I menu</h3>
+        <p>
+          Once the paperwork is signed, the F&amp;I menu opens at the desk. For a buyer who
+          finances, pick a lender: each lends to some credit tiers, some want a down payment, and
+          the ones that won&apos;t take them are greyed out with why. Add up to {MAX_MARKUP} points
+          of markup to the lender&apos;s rate and the lender pays you a reserve for it. If nobody
+          will lend, ask for more down if their budget allows, or let them go.
+        </p>
+        <p>
+          Then present products one at a time, each at a price you set: an extended warranty, GAP
+          cover (loans only), paint and fabric protection, and tyre and wheel cover. They answer at
+          once. A lower price helps, and families like warranties while bargain hunters say no.
+          Every product you present and every point of markup adds <i>pressure</i>, which makes each
+          later yes less likely. A product they turned down can be presented again for less. The
+          loan is settled once the first product is presented. <b>Sign the contracts</b> to finish:
+          the reserve and the products&apos; margin are your F&amp;I gross, in the day summary
+          beside the gross on the car.
+        </p>
+        <p>
+          With a finance manager on shift you can still close at your own desk and run the menu
+          yourself. They earn nothing on those deals.
         </p>
         <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
@@ -825,10 +851,10 @@ function PeopleTab({ touch, click }: TabProps) {
             books. Turn their calls off in the Clients tab.
           </li>
           <li>
-            A <b>finance manager</b> signs buyers at your office desk for {formatMoney(FINANCE_FEE)}{' '}
-            a deal: lead a buyer there, {click.toLowerCase()} them and choose{' '}
-            <b>Hand off to finance</b>, and you&apos;re free for the next customer. Buyers wait in
-            the lounge if finance is busy.
+            A <b>finance manager</b> signs buyers at the office desk for {formatMoney(FINANCE_FEE)}{' '}
+            a deal, while your own desk stays yours: lead a buyer to the office,{' '}
+            {click.toLowerCase()} them and choose <b>Hand off to finance</b>, and you&apos;re free
+            for the next customer. Buyers wait in the lounge if finance is busy.
           </li>
           <li>
             A <b>lot porter</b> washes the dirtiest cars all day.

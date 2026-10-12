@@ -11,9 +11,25 @@ import {
   type Customer,
 } from '../../sim/customers'
 import { actionBlocker, dealCustomer, recordVisitors, saleRecord, type Sale } from '../../sim/deal'
+import {
+  addFiSale,
+  answered,
+  canPresent,
+  loanDeclined,
+  moreDownFor,
+  netPrice,
+  openDeal,
+  pressureOf,
+  PRODUCTS,
+  productTake,
+  saleFi,
+  withDown,
+  withLoan,
+} from '../../sim/fi'
 import { formatMoney } from '../../sim/format'
 import { carName } from '../../sim/interactables'
 import { availableCars } from '../../sim/inventory'
+import { lenderById } from '../../sim/lenders'
 import { DESK_CHAIR_ID } from '../../sim/layout'
 import {
   clampAllowance,
@@ -49,7 +65,17 @@ import { answerService } from './service'
 import type { GameState } from '../types'
 
 type CustomerKeys =
-  'customers' | 'dispatchCustomer' | 'answerOffer' | 'ask' | 'walkIn' | 'devSpawnCustomers'
+  | 'customers'
+  | 'dispatchCustomer'
+  | 'answerOffer'
+  | 'ask'
+  | 'fiLender'
+  | 'fiPresent'
+  | 'fiMoreDown'
+  | 'fiLetGo'
+  | 'fiSign'
+  | 'walkIn'
+  | 'devSpawnCustomers'
 
 /** Everyone on the lot, and the player's side of the deal. */
 export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
@@ -86,6 +112,49 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
     ask: (price, allowance) => {
       const c = dealCustomer(get().customers, PLAYER_ID)
       if (c?.phase === 'talking') offer(k, c.id, price, allowance)
+    },
+    fiLender: (id, markup) => {
+      const c = menuCustomer(k)
+      if (!c?.fi || !c.offer) return
+      const deal = withLoan(c, c.fi, netPrice(c.offer), id, markup)
+      if (deal !== c.fi) commit(k, reduceCustomers(get().customers, { type: 'fi', id: c.id, deal }))
+    },
+    fiPresent: (id, price) => {
+      const c = menuCustomer(k)
+      if (!c?.fi || !canPresent(c, c.fi, id, price)) return
+      const chance = productTake(c, PRODUCTS[id], price, pressureOf(c.fi), tuning(k).productTake)
+      const deal = answered(c.fi, id, price, rng.fi.next() < chance)
+      commit(k, reduceCustomers(get().customers, { type: 'fi', id: c.id, deal }))
+    },
+    fiMoreDown: () => {
+      const c = menuCustomer(k)
+      if (!c?.fi || !c.offer || !loanDeclined(c, c.fi)) return
+      const net = netPrice(c.offer)
+      const down = moreDownFor(c, net)
+      if (down === null) return
+      const deal = withDown(c, c.fi, net, down)
+      commit(k, reduceCustomers(get().customers, { type: 'fi', id: c.id, deal }))
+      const lender = deal.lender && lenderById(deal.lender).name
+      notify(k, `${c.name} can put ${Math.round(down * 100)}% down. ${lender} will take the loan.`)
+    },
+    fiLetGo: () => {
+      const c = menuCustomer(k)
+      if (c?.fi && loanDeclined(c, c.fi)) declineBuyer(k, c)
+    },
+    fiSign: () => {
+      const c = menuCustomer(k)
+      if (!c?.fi) return
+      if (loanDeclined(c, c.fi)) return notify(k, 'No lender has approved the loan yet.')
+      const sale = sign(k, c, null)
+      if (!sale) {
+        endDeal(k, ['menu'])
+        return notify(k, 'The deal fell through.')
+      }
+      const fi = sale.fi && sale.fi.gross !== 0 ? ` F&I ${formatMoney(sale.fi.gross)}.` : ''
+      notify(
+        k,
+        `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!${fi}${tradeLine(sale)}`,
+      )
     },
     walkIn: (variant) => {
       const s = get()
@@ -286,6 +355,8 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
       : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
   if (allowance !== undefined && !traded) return null
   if (!get().sellCar(car.id, price)) return null
+  // The player's buyer comes from the F&I menu, with the loan and the products taken.
+  const fi = c.phase === 'menu' && c.fi ? saleFi(c, c.fi, netPrice(c.offer)) : undefined
   const quote = quoteFor(c, car)
   if (quote !== null && price <= quote) tallyRival(k, 'matched')
   const sale = saleRecord(c, car, {
@@ -296,6 +367,7 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
     signer,
     book: s.clients,
     tradePrice: traded?.price ?? null,
+    fi,
   })
   // The client who sent them gets the referral fee.
   const fee = s.clients.some((x) => x.id === c.referredBy) ? s.clientPerks.referralFee : 0
@@ -306,32 +378,50 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
       sales: [...stats.sales, sale],
       bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
       clients: { ...stats.clients, referralFees: stats.clients.referralFees + fee },
+      fi: addFiSale(stats.fi, c.credit, fi),
     },
-    ...(fee > 0 && { cash: get().cash - fee }),
+    // Less the referral fee and their trade-in, which we pay for out of the
+    // price, and with the F&I gross (the lender's reserve and the products).
+    cash: get().cash - fee - (traded?.price ?? 0) + (fi?.gross ?? 0),
     // Only new cars count toward the manufacturer's quota.
     monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
-    // We pay for their car out of the price; it goes on the lot tonight.
-    ...(traded && {
-      cash: get().cash - fee - traded.price,
-      purchases: [...get().purchases, traded],
-    }),
+    // Their car goes on the lot tonight.
+    ...(traded && { purchases: [...get().purchases, traded] }),
   })
   commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
   return sale
 }
 
-/** The player, at the desk with their buyer, finished the paperwork. */
+/**
+ * The player, at the desk with their buyer, finished the paperwork: on to
+ * the F&I menu. A buyer no lender will take, who can't put more down, goes home.
+ */
 export function closeDeal(k: Kit): void {
-  const c = dealCustomer(k.get().customers, PLAYER_ID)
-  const sale = c?.phase === 'signing' ? sign(k, c, null) : null
-  if (!sale) {
+  const s = k.get()
+  const c = dealCustomer(s.customers, PLAYER_ID)
+  const car = c?.offer && s.inventory.find((x) => x.id === c.offer!.carId)
+  if (c?.phase !== 'signing' || !c.offer || car?.status !== 'available') {
     endDeal(k, ['signing'])
     return notify(k, 'The deal fell through.')
   }
-  notify(
-    k,
-    `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!${tradeLine(sale)}`,
-  )
+  const net = netPrice(c.offer)
+  const deal = openDeal(c, net)
+  commit(k, reduceCustomers(s.customers, { type: 'menu', id: c.id, deal }))
+  if (loanDeclined(c, deal) && moreDownFor(c, net) === null) declineBuyer(k, c)
+}
+
+/** The player's buyer at the F&I menu, if they have one there. */
+function menuCustomer(k: Kit): Customer | null {
+  const c = dealCustomer(k.get().customers, PLAYER_ID)
+  return c?.phase === 'menu' ? c : null
+}
+
+/** No lender will take `c`, and they can't put more down: they go home without the car. */
+function declineBuyer(k: Kit, c: Customer): void {
+  commit(k, reduceCustomers(k.get().customers, { type: 'declined', id: c.id }))
+  const stats = k.get().dayStats
+  k.set({ dayStats: { ...stats, fi: { ...stats.fi, declined: stats.fi.declined + 1 } } })
+  notify(k, `No lender will take ${c.name}'s loan, and they can't put more down. They went home.`)
 }
 
 /** " Their Summit Sedan goes on the lot tonight." after a sale with a trade-in. */
