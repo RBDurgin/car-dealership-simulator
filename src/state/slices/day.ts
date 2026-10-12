@@ -323,6 +323,8 @@ export function settleDay(k: Kit): void {
       ? [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)]
       : s.inventory
   const franchise = quota?.tier.to ?? s.franchise
+  const monthFi =
+    due.length > 0 ? addFiStats(s.monthFi, { ...emptyFiStats(), ...landed }) : s.monthFi
   // The day's achievements show in the summary, not as notices.
   const earned = dayAchievements(
     {
@@ -334,6 +336,7 @@ export function settleDay(k: Kit): void {
       career,
       franchise,
       inventory,
+      monthFi,
     },
     s.achievements,
   ).map((id) => ({ id, day: s.clock.day, level: s.difficulty }))
@@ -353,7 +356,7 @@ export function settleDay(k: Kit): void {
       chargebacks: later,
       // A client charged back soon after buying comes in sour next time.
       clients: markChargedBack(s.clients, due),
-      monthFi: addFiStats(s.monthFi, { ...emptyFiStats(), ...landed }),
+      monthFi,
     }),
     dayStats: { ...settled, newRecords: records.broken },
   })

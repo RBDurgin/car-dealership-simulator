@@ -3,6 +3,7 @@ import type { Client } from './clients'
 import { netIncome, type DayStats, type Sale } from './deal'
 import type { Difficulty } from './difficulty'
 import { eventOn } from './events'
+import { PRODUCTS, type FiStats, type ProductId } from './fi'
 import { installedExpansions, type OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
 import { IMPROVEMENTS, type ImprovementId, type OwnedImprovement } from './improvements'
@@ -34,6 +35,7 @@ export type AchievementGroup =
   | 'career'
   | 'service'
   | 'clients'
+  | 'finance'
 
 export const GROUP_LABELS: Record<AchievementGroup, string> = {
   selling: 'Selling',
@@ -46,6 +48,7 @@ export const GROUP_LABELS: Record<AchievementGroup, string> = {
   career: 'Career',
   service: 'Service',
   clients: 'Clients',
+  finance: 'Finance',
 }
 
 // Thresholds, at every level.
@@ -69,6 +72,8 @@ export const CAR_WASHES = 5
 export const DONE_RIGHT_JOBS = 5
 export const BOOK_CLIENTS = 50
 export const CSI_TARGET = 90
+export const BACK_END_GROSS = 2_000
+export const CLEAN_BOOKS_DEALS = 10
 const SATURDAY = 5
 
 /** The slice of the store `achievementsFor` compares. */
@@ -103,6 +108,8 @@ export interface DayContext {
   career: Pick<Career, 'rank' | 'bestCsi'>
   franchise: FranchiseTier
   inventory: readonly InventoryCar[]
+  /** The month's F&I so far, with the day's chargebacks in. */
+  monthFi: FiStats
 }
 
 type Check =
@@ -167,6 +174,11 @@ export type AchievementId =
   | 'trade-up'
   | 'referral'
   | 'csi-90'
+  | 'first-loan'
+  | 'the-works'
+  | 'back-end'
+  | 'clean-books'
+  | 'covered'
   | 'car-wash'
   | 'tube-man-fan'
 
@@ -258,6 +270,11 @@ function weekendSales(log: readonly DayRecord[], day: number): number {
     )
     .reduce((sum, r) => sum + r.sales, 0)
 }
+
+const PRODUCT_IDS = Object.keys(PRODUCTS) as ProductId[]
+
+/** A sale closed at your own desk: nobody sold it and no finance manager signed it. */
+const yours = (s: Sale) => s.soldBy === null && s.signedBy === null
 
 const rankName = (id: RankId) => RANKS.find((r) => r.id === id)!.name
 
@@ -653,6 +670,50 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     group: 'clients',
     when: 'day',
     check: (ctx) => (ctx.career.bestCsi ?? 0) >= CSI_TARGET,
+  },
+  // Finance
+  {
+    id: 'first-loan',
+    title: 'Paper Signed',
+    text: 'closed a financed deal at your own desk',
+    group: 'finance',
+    ...anyNewSale((s) => yours(s) && !!s.fi?.financed && s.fi.lender !== null),
+  },
+  {
+    id: 'the-works',
+    title: 'The Works',
+    text: 'sold every product on the menu in one deal',
+    group: 'finance',
+    ...anyNewSale(
+      (s) => !!s.fi && PRODUCT_IDS.every((id) => s.fi!.products.some((p) => p.id === id)),
+    ),
+  },
+  {
+    id: 'back-end',
+    title: 'Back-End Pro',
+    text: `made $${BACK_END_GROSS.toLocaleString('en-US')} or more F&I gross on one deal`,
+    group: 'finance',
+    ...anyNewSale((s) => (s.fi?.gross ?? 0) >= BACK_END_GROSS),
+  },
+  {
+    id: 'clean-books',
+    title: 'Clean Books',
+    text: `finished a month of ${CLEAN_BOOKS_DEALS}+ financed deals with no chargebacks`,
+    group: 'finance',
+    when: 'day',
+    check: (ctx) =>
+      calendarOf(ctx.day).dayOfMonth === DAYS_PER_MONTH &&
+      ctx.monthFi.financed >= CLEAN_BOOKS_DEALS &&
+      ctx.monthFi.chargebackCount === 0,
+  },
+  {
+    id: 'covered',
+    title: 'Covered',
+    text: 'finished a repair an extended warranty paid for',
+    group: 'service',
+    when: 'live',
+    check: (prev, next) =>
+      next.dayStats.service !== prev.dayStats.service && next.dayStats.service.claims > 0,
   },
   // Hidden
   {

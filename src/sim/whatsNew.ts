@@ -423,6 +423,15 @@ export const UPDATES: readonly Update[] = [
       'New tips explain the menu, declined credit, chargebacks and when to hire a finance manager.',
     ],
   },
+  {
+    id: 39,
+    phase: '19',
+    title: 'Finance achievements',
+    items: [
+      'New Finance achievements: your first financed deal at your own desk, every product in one deal, and a big back end.',
+      'Also a month of financed deals with no chargebacks, and a warranty repair finished in your garage.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */
