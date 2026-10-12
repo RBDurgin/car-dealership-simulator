@@ -364,6 +364,11 @@ export interface FiStats {
   fees: number
   /** Products sold, by product. */
   sold: Partial<Record<ProductId, number>>
+  /** Chargebacks that landed (see `sim/chargebacks.ts`): how many, and what they took back. */
+  chargebackCount: number
+  chargebacks: number
+  /** Of those, the finance manager's commission share taken back off the day's commissions. */
+  clawback: number
 }
 
 export function emptyFiStats(): FiStats {
@@ -377,6 +382,9 @@ export function emptyFiStats(): FiStats {
     productGross: 0,
     fees: 0,
     sold: {},
+    chargebackCount: 0,
+    chargebacks: 0,
+    clawback: 0,
   }
 }
 
@@ -426,6 +434,9 @@ export function addFiStats(a: FiStats, b: FiStats): FiStats {
     productGross: a.productGross + b.productGross,
     fees: a.fees + b.fees,
     sold,
+    chargebackCount: a.chargebackCount + b.chargebackCount,
+    chargebacks: a.chargebacks + b.chargebacks,
+    clawback: a.clawback + b.clawback,
   }
 }
 
@@ -435,9 +446,9 @@ export function fiPerDeal(stats: FiStats): number | null {
   return deals > 0 ? fiDayGross(stats) / deals : null
 }
 
-/** The day's F&I gross: reserve and products, less lenders' fees. */
+/** The day's F&I gross: reserve and products, less lenders' fees and chargebacks. */
 export function fiDayGross(stats: FiStats): number {
-  return stats.reserve + stats.productGross - stats.fees
+  return stats.reserve + stats.productGross - stats.fees - stats.chargebacks
 }
 
 /** The share of menus that sold product `id` (GAP: of the financed ones), or null with none. */

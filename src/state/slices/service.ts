@@ -1,5 +1,6 @@
 import { afterService, recallClient, type ServiceOutcome } from '../../sim/clientService'
 import { CLOSE_MINUTE, formatTime, isClosed, type GameTime } from '../../sim/clock'
+import { CONTRACT_UPSELL, holderOf } from '../../sim/contracts'
 import { PLAYER_ID, PLAYER_SKILL, reduceCustomers, type Customer } from '../../sim/customers'
 import { expansionsUp } from '../../sim/expansions'
 import { formatMoney } from '../../sim/format'
@@ -38,6 +39,7 @@ import {
 } from '../../sim/service'
 import {
   bookServiceClient,
+  claimClient,
   comebackClient,
   freeServiceSpot,
   freeServiceSpots,
@@ -97,11 +99,12 @@ export function serviceSlice(k: Kit): Pick<GameState, ServiceKeys> {
       commit(k, reduceCustomers(get().customers, { type: 'collect', id: customerId }))
       const paid = job.labor + job.parts
       const car = carName(c.service!.car.model)
+      const payer = job.contractId ? 'Our warranty company' : 'The manufacturer'
       notify(
         k,
         job.warranty === 0
           ? `${c.name} collected their ${car} and paid ${formatMoney(paid)}.`
-          : `${c.name} collected their ${car}${paid > 0 ? ` and paid ${formatMoney(paid)}` : ''}. The manufacturer pays ${formatMoney(job.warranty)}.`,
+          : `${c.name} collected their ${car}${paid > 0 ? ` and paid ${formatMoney(paid)}` : ''}. ${payer} pays ${formatMoney(job.warranty)}.`,
       )
     },
     serviceWentAway: (customerId) => {
@@ -221,8 +224,9 @@ function addService(k: Kit, change: Partial<Record<keyof ServiceStats, number>>)
 
 /**
  * Client `c` pays for `job`, which is ready: labor and parts come in (and
- * the manufacturer's pay for recall work), the parts' cost goes out, and
- * the job is done. Late if it was ready after the time they were promised.
+ * the manufacturer's pay for recall work, or the warranty company's for a
+ * claim), the parts' cost goes out, and the job is done. Late if it was
+ * ready after the time they were promised.
  */
 function collected(k: Kit, job: ServiceJob, c: Customer): void {
   const s = k.get()
@@ -230,10 +234,13 @@ function collected(k: Kit, job: ServiceJob, c: Customer): void {
     cash: s.cash + job.labor + job.parts - job.partsCost + job.warranty,
     serviceJobs: s.serviceJobs.map((j) => (j === job ? { ...j, status: 'done' as const } : j)),
   })
+  const claim = job.contractId !== null
   addService(k, {
     jobs: job.redo ? 0 : 1,
-    recalls: job.kind === 'recall' && !job.redo ? 1 : 0,
-    warranty: job.warranty,
+    recalls: job.kind === 'recall' && !job.redo && !claim ? 1 : 0,
+    claims: claim && !job.redo ? 1 : 0,
+    warranty: claim ? 0 : job.warranty,
+    contract: claim ? job.warranty : 0,
     labor: job.labor,
     parts: job.parts,
     partsCost: job.partsCost,
@@ -288,7 +295,9 @@ export function offerFinding(k: Kit, jobId: string, by: string): void {
   }
   const f = job.finding!
   const skill = player ? PLAYER_SKILL : (s.roster.find((e) => e.id === by)?.skill ?? MIN_SKILL)
-  const yes = rng.service.next() < upsellChance(s.service.rate, c.archetype, skill)
+  // Someone whose warranty is paying for the job is in a mood to say yes.
+  const covered = c.service.contractId !== null ? CONTRACT_UPSELL : 0
+  const yes = rng.service.next() < upsellChance(s.service.rate, c.archetype, skill) + covered
   const mechanic = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
   const next = yes ? acceptFinding(job, mechanic) : declineFinding(job)
   set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
@@ -355,8 +364,8 @@ export function answerService(k: Kit, c: Customer): void {
         : `The garage can't fit ${c.name}'s car in before closing. They drove off.`,
     )
   }
-  // A redo or recall work is free: nobody turns that down.
-  const free = visit.comeback || visit.kind === 'recall'
+  // A redo, recall work or a warranty claim is free: nobody turns that down.
+  const free = visit.comeback || visit.kind === 'recall' || visit.contractId !== null
   if (!free && rng.service.next() >= quoteAcceptChance(s.service.rate, c.archetype)) {
     addService(k, { declined: 1 })
     serviceBook(k, c, 'turnedAway')
@@ -367,7 +376,15 @@ export function answerService(k: Kit, c: Customer): void {
   const n = s.serviceJobs.filter((j) => j.customerId).length + 1
   const jobId = `client-${s.clock.day}-${n}`
   const client = { name: c.name, model: visit.car.model, condition: visit.car.condition }
-  const job = clientJob(jobId, visit.kind, c.id, visit.quote, client, visit.comeback)
+  const job = clientJob(
+    jobId,
+    visit.kind,
+    c.id,
+    visit.quote,
+    client,
+    visit.comeback,
+    visit.contractId,
+  )
   const dropOff = promised - s.clock.minute > WAIT_LIMIT
   set({ serviceJobs: [...s.serviceJobs, job] })
   const ev = { type: 'booked', id: c.id, jobId, promisedMinute: promised, dropOff } as const
@@ -395,7 +412,11 @@ export function serviceArrivals(k: Kit, step: GameTime, present: readonly Custom
     return { schedule: s.serviceVisits, arrived: [], away: s.serviceAway, comebacks: [] }
   }
   const free = freeServiceSpots(present, s.serviceAway)
-  const { schedule, due, clientIds } = takeDueVisits(s.serviceVisits, step.minute, free)
+  const { schedule, due, clientIds, contractIds } = takeDueVisits(
+    s.serviceVisits,
+    step.minute,
+    free,
+  )
   const arrived: Customer[] = []
   const recalled = recallOn(step.day, bayCount(expansionsUp(s)))?.model ?? null
   // Nobody from the book twice: not those on the lot, away, or just arrived.
@@ -408,6 +429,17 @@ export function serviceArrivals(k: Kit, step: GameTime, present: readonly Custom
     const rate = s.service.rate
     const patience = tuning(k).patience
     const named = clientIds[i]
+    // A warranty claim: the holder from the book if they're in it and free, else by name.
+    if (contractIds[i] !== null) {
+      const contract = s.contracts.find((x) => x.id === contractIds[i])
+      const holder = contract && holderOf(s.clients, contract)
+      if (!contract || (holder && busy.has(holder.id))) return
+      if (holder) busy.add(holder.id)
+      arrived.push(
+        claimClient(contract, holder ?? null, id, spot, rng.service, step.day, rate, patience),
+      )
+      return
+    }
     const client =
       named !== null
         ? s.clients.find((c) => c.id === named && !busy.has(c.id))

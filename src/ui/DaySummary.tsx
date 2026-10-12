@@ -171,7 +171,7 @@ function SummaryPanel() {
               <dd className="price summary-sub">{formatMoney(split.used)}</dd>
             </>
           )}
-          {(stats.sales.length > 0 || stats.fi.declined > 0) && (
+          {(stats.sales.length > 0 || stats.fi.declined > 0 || stats.fi.chargebackCount > 0) && (
             <>
               <dt>
                 F&amp;I ({stats.fi.menus} menu{stats.fi.menus === 1 ? '' : 's'})
@@ -199,6 +199,17 @@ function SummaryPanel() {
                   <dd className="price summary-sub">{formatMoney(stats.fi.productGross)}</dd>
                 </>
               )}
+              {stats.fi.chargebackCount > 0 && (
+                <>
+                  <dt className="summary-sub">
+                    · {stats.fi.chargebackCount} chargeback
+                    {stats.fi.chargebackCount === 1 ? '' : 's'}
+                    {stats.fi.clawback > 0 &&
+                      `, ${formatMoney(stats.fi.clawback)} back from finance`}
+                  </dt>
+                  <dd className="price summary-sub">{formatMoney(-stats.fi.chargebacks)}</dd>
+                </>
+              )}
             </>
           )}
           {stats.service.jobs > 0 && (
@@ -211,7 +222,8 @@ function SummaryPanel() {
                   stats.service.labor +
                     stats.service.parts -
                     stats.service.partsCost +
-                    stats.service.warranty,
+                    stats.service.warranty +
+                    stats.service.contract,
                 )}
               </dd>
             </>
@@ -223,6 +235,15 @@ function SummaryPanel() {
                 by the manufacturer
               </dt>
               <dd className="price summary-sub">{formatMoney(stats.service.warranty)}</dd>
+            </>
+          )}
+          {stats.service.claims > 0 && (
+            <>
+              <dt className="summary-sub">
+                · {stats.service.claims} warranty claim{stats.service.claims === 1 ? '' : 's'}, paid
+                by our warranty company
+              </dt>
+              <dd className="price summary-sub">{formatMoney(stats.service.contract)}</dd>
             </>
           )}
           {stats.service.offered > 0 && (

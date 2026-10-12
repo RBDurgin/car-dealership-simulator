@@ -366,7 +366,9 @@ function ServicePanel({ c }: { c: Customer }) {
       <div className="info-kicker">Service client</div>
       <h2>{c.name}</h2>
       <p className="customer-quote">
-        “My {carName(visit.car.model)} needs {JOB_WANTS[visit.kind]}. How much?”
+        {visit.contractId
+          ? `“My ${carName(visit.car.model)} needs ${JOB_WANTS[visit.kind]}. It’s under the warranty you sold me.”`
+          : `“My ${carName(visit.car.model)} needs ${JOB_WANTS[visit.kind]}. How much?”`}
       </p>
       <dl>
         <dt className="customer-car">Car</dt>
@@ -379,6 +381,12 @@ function ServicePanel({ c }: { c: Customer }) {
         <dd className="price">{formatMoney(visit.quote.parts)}</dd>
         <dt>Quote</dt>
         <dd className="price">{formatMoney(quoteTotal(visit.quote))}</dd>
+        {visit.contractId && (
+          <>
+            <dt>Paid by</dt>
+            <dd>Our extended warranty</dd>
+          </>
+        )}
       </dl>
       <div className="customer-status">Thinking it over…</div>
     </div>

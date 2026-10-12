@@ -1,3 +1,5 @@
+import { chargebackLabel, chargebackTotal } from '../sim/chargebacks'
+import { CLAIM_EVERY, contractSummary } from '../sim/contracts'
 import { CREDIT_TIERS } from '../sim/credit'
 import { fiDayGross, fiPerDeal, penetration, PRODUCT_IDS, PRODUCTS, type FiStats } from '../sim/fi'
 import { formatMoney } from '../sim/format'
@@ -43,6 +45,69 @@ function FiColumn({ stats }: { stats: FiStats }) {
       <td className="price">{formatMoney(stats.productGross)}</td>
       <td className="price">{formatMoney(fiDayGross(stats))}</td>
       <td className="price">{perDeal === null ? '—' : formatMoney(perDeal)}</td>
+    </>
+  )
+}
+
+/** Chargebacks shown by name in the Finance tab, soonest first. */
+const UPCOMING = 5
+
+/** The warranty contracts in force, and the chargebacks still to land. */
+function Contracts() {
+  const contracts = useGame((s) => s.contracts)
+  const chargebacks = useGame((s) => s.chargebacks)
+  const day = useGame((s) => s.clock.day)
+  const month = useGame((s) => s.monthFi)
+  const { live, ending } = contractSummary(contracts, day)
+  const upcoming = [...chargebacks].sort((a, b) => a.day - b.day)
+  return (
+    <>
+      <h3>
+        Warranties and chargebacks <span className="muted">· what comes back after the sale</span>
+      </h3>
+      <dl className="stock-summary">
+        <dt>Warranty contracts in force</dt>
+        <dd>
+          {live}
+          {ending > 0 && <span className="muted"> · {ending} ending within a month</span>}
+        </dd>
+        <dt>Chargebacks this month</dt>
+        <dd className="price">
+          {month.chargebackCount} · {formatMoney(-month.chargebacks)}
+        </dd>
+        <dt>Still to come</dt>
+        <dd className="price">
+          {chargebacks.length} · {formatMoney(-chargebackTotal(chargebacks))}
+        </dd>
+      </dl>
+      {upcoming.length > 0 && (
+        <table className="summary-sellers">
+          <thead>
+            <tr>
+              <th>Due</th>
+              <th>Buyer</th>
+              <th>What</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {upcoming.slice(0, UPCOMING).map((c, i) => (
+              <tr key={i}>
+                <td>{c.day - day <= 0 ? 'Today' : `In ${c.day - day} days`}</td>
+                <td>{c.customerName}</td>
+                <td>{chargebackLabel(c.kind)}</td>
+                <td className="price">{formatMoney(-c.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="muted cal-intro">
+        A car under one of our extended warranties comes to the garage for a repair about every{' '}
+        {CLAIM_EVERY} days, which the warranty company pays for. Products sold under pressure, a big
+        markup and weak credit come back as chargebacks a few weeks later, taking back what they
+        made (and the finance manager&rsquo;s share of it).
+      </p>
     </>
   )
 }
@@ -120,6 +185,7 @@ export function FinanceTab() {
           })}
         </tbody>
       </table>
+      <Contracts />
       <h3>
         Lenders <span className="muted">· markup up to {MAX_MARKUP} points over the buy rate</span>
       </h3>

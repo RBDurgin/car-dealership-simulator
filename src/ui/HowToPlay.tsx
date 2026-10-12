@@ -1,4 +1,6 @@
 import { CSI_FACTORS, CSI_FLOOR, CSI_PAR, CSI_TIER_MIN, CSI_TOP } from '../sim/csi'
+import { CHARGEBACK_DAYS } from '../sim/chargebacks'
+import { CLAIM_EVERY, WARRANTY_DAYS } from '../sim/contracts'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
@@ -300,6 +302,19 @@ function SellingTab({ touch, click }: TabProps) {
           run the menu for you (see <b>Staff</b>). A salesperson closing at their own desk arranges
           the loan at the lender&apos;s rate, with no markup and no products, and sends a buyer no
           lender will take over to finance (or home, with nobody there).
+        </p>
+        <p>
+          An extended warranty is a contract for {WARRANTY_DAYS} days. With a service garage, a
+          covered car comes in for a repair about every {CLAIM_EVERY} days: check it in like any
+          other, the client pays nothing and the warranty company pays for the work (book time at{' '}
+          {formatMoney(WARRANTY_HOURLY)} an hour, the parts at cost). Clients with a warranty say
+          yes to extra work more often.
+        </p>
+        <p>
+          A deal sold hard can come back. {CHARGEBACK_DAYS.min} to {CHARGEBACK_DAYS.max} days after
+          the sale, a product the buyer cancels, or a loan they pay off or refinance, is a{' '}
+          <i>chargeback</i>: you give back what it made. Pressure, a markup over a point and weak
+          credit (tiers C and D) all make one likelier. The morning notice tells you when one lands.
         </p>
         <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
@@ -605,6 +620,11 @@ function BusinessTab({ touch, click }: TabProps) {
           often each product sells. It also lists the lenders, the credit tiers each takes and their
           rates. The day summary&apos;s seller table shows the F&amp;I each seller made at their own
           desk, and the finance manager gets a row for the deals they signed.
+        </p>
+        <p>
+          The tab also counts the warranty contracts in force and the chargebacks still to land. A
+          chargeback comes off the day&apos;s F&amp;I gross and your cash. On a deal the finance
+          manager signed, their share of it comes back out of the day&apos;s commissions.
         </p>
       </section>
       <section>

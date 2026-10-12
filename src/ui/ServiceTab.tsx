@@ -107,7 +107,9 @@ function ClientRow({ job }: { job: ServiceJob }) {
       <div className="stock-who">
         <div className="staff-name">
           {job.client!.name}
-          <span className="stock-badge">{job.redo ? 'Redo' : JOBS[job.kind].label}</span>
+          <span className="stock-badge">
+            {job.redo ? 'Redo' : job.contractId ? 'Warranty repair' : JOBS[job.kind].label}
+          </span>
         </div>
         <div className="staff-meta">
           {carName(job.client!.model)} · {clientStatus(job)}
@@ -120,7 +122,9 @@ function ClientRow({ job }: { job: ServiceJob }) {
         className="staff-wage price"
         title={
           job.warranty > 0
-            ? `The manufacturer pays ${formatMoney(job.warranty)} for the recall work`
+            ? job.contractId
+              ? `Our warranty company pays ${formatMoney(job.warranty)} for the repair`
+              : `The manufacturer pays ${formatMoney(job.warranty)} for the recall work`
             : 'What they pay for labor and parts'
         }
       >
@@ -359,6 +363,16 @@ export function ServiceTab() {
               {stats.service.recalls} ·{' '}
               <span className="price">{formatMoney(stats.service.warranty)}</span> from the
               manufacturer
+            </dd>
+          </>
+        )}
+        {stats.service.claims > 0 && (
+          <>
+            <dt>Warranty claims</dt>
+            <dd>
+              {stats.service.claims} ·{' '}
+              <span className="price">{formatMoney(stats.service.contract)}</span> from our warranty
+              company
             </dd>
           </>
         )}

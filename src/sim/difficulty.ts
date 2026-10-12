@@ -67,6 +67,8 @@ export interface Tuning {
   creditMix: number
   /** Added to every chance a buyer takes an F&I product (see `productTake`). */
   productTake: number
+  /** × the odds an F&I product or reserve is charged back (see `chargebackChance`). */
+  chargebackScale: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -107,6 +109,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     satisfactionShift: 5,
     creditMix: 0.3,
     productTake: 0.05,
+    chargebackScale: 0.6,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -141,6 +144,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     satisfactionShift: 0,
     creditMix: 0,
     productTake: 0,
+    chargebackScale: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -175,6 +179,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     satisfactionShift: -5,
     creditMix: -0.3,
     productTake: -0.05,
+    chargebackScale: 1.4,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

@@ -382,6 +382,7 @@ describe('booking a job', () => {
       minutes: [540, 550, 560],
       kinds: ['oil', 'tires', 'brakes'] as const,
       clientIds: [null, null, null],
+      contractIds: [null, null, null],
       spawned: 0,
     }
     const { schedule: next, due } = takeDueVisits(

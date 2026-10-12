@@ -13,6 +13,8 @@ import {
   type MonthCsi,
 } from './clients'
 import type { GameTime } from './clock'
+import type { Chargeback } from './chargebacks'
+import { liveContracts, MAX_CONTRACTS, type Contract } from './contracts'
 import { isAchievementId, type EarnedAchievement } from './achievements'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
@@ -56,7 +58,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 29
+export const SAVE_VERSION = 30
 
 export interface SaveData {
   version: number
@@ -111,6 +113,10 @@ export interface SaveData {
   monthCsi: MonthCsi
   /** The month's F&I so far (see `sim/fi.ts`). */
   monthFi: FiStats
+  /** Extended warranty contracts still in force (see `sim/contracts.ts`). */
+  contracts: Contract[]
+  /** Chargebacks still to land (see `sim/chargebacks.ts`). */
+  chargebacks: Chargeback[]
   /**
    * A record of each day settled since `statsFrom` (see `sim/stats.ts`), each
    * a tuple in `LOG_FIELDS` order to stay small (`tupleToRecord` reads one).
@@ -151,6 +157,8 @@ export interface SaveSource {
   appreciation: Appreciation | null
   monthCsi: MonthCsi
   monthFi: FiStats
+  contracts: Contract[]
+  chargebacks: Chargeback[]
   log: DayRecord[]
   lifetime: Lifetime
   records: Records
@@ -195,6 +203,9 @@ export function createSave(s: SaveSource, now: number): SaveData {
     appreciation: s.appreciation,
     monthCsi: s.monthCsi,
     monthFi: s.monthFi,
+    // Those that run out tonight are gone by morning.
+    contracts: liveContracts(s.contracts, s.clock.day + 1),
+    chargebacks: s.chargebacks,
     log: s.log.map(recordToTuple),
     lifetime: s.lifetime,
     records: s.records,
@@ -371,6 +382,15 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   27: (raw) => ({ ...raw, dealershipName: DEFAULT_DEALERSHIP_NAME }),
   // v29: the month's F&I, starting from nothing.
   28: (raw) => ({ ...raw, monthFi: emptyFiStats() }),
+  // v30: warranty contracts and chargebacks, none yet; the month's F&I counts chargebacks.
+  29: (raw) => ({
+    ...raw,
+    contracts: [],
+    chargebacks: [],
+    monthFi: isObject(raw.monthFi)
+      ? { ...raw.monthFi, chargebackCount: 0, chargebacks: 0, clawback: 0 }
+      : raw.monthFi,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -435,6 +455,9 @@ export function parseSave(input: unknown): SaveData | null {
   if (appreciation !== null && !isAppreciation(appreciation)) return null
   if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
   if (!isFiStats(raw.monthFi)) return null
+  if (!Array.isArray(raw.contracts) || raw.contracts.length > MAX_CONTRACTS) return null
+  if (!raw.contracts.every(isContract)) return null
+  if (!Array.isArray(raw.chargebacks) || !raw.chargebacks.every(isChargeback)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   if (!isLog(raw.log)) return null
   if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
@@ -466,7 +489,36 @@ const FI_COUNTS = [
   'reserve',
   'productGross',
   'fees',
+  'chargebackCount',
+  'chargebacks',
+  'clawback',
 ] as const satisfies readonly (keyof FiStats)[]
+
+function isContract(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.customerName === 'string' &&
+    isClientCar(v.car) &&
+    isNumber(v.soldDay) &&
+    isNumber(v.endDay) &&
+    isNumber(v.price)
+  )
+}
+
+const CHARGEBACK_KINDS: readonly unknown[] = [...PRODUCT_IDS, 'reserve']
+
+function isChargeback(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.day) &&
+    isNumber(v.amount) &&
+    typeof v.customerName === 'string' &&
+    CHARGEBACK_KINDS.includes(v.kind) &&
+    (v.financeId === null || typeof v.financeId === 'string') &&
+    isNumber(v.clawback)
+  )
+}
 
 function isEarned(v: unknown): boolean {
   return (

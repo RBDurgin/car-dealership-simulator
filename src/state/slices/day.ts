@@ -2,6 +2,13 @@ import { dayAchievements, type EarnedAchievement } from '../../sim/achievements'
 import { appreciationNotice, isAppreciationDay, planGuests } from '../../sim/appreciation'
 import { calendarOf, DAYS_PER_MONTH } from '../../sim/calendar'
 import { appointmentsNotice, planClientVisits, type ClientVisit } from '../../sim/calls'
+import {
+  chargebackNotice,
+  chargebackTotal,
+  clawbackTotal,
+  dueChargebacks,
+  type Chargeback,
+} from '../../sim/chargebacks'
 import { planBookService, recallOwners } from '../../sim/clientService'
 import {
   defaultPerks,
@@ -16,9 +23,10 @@ import {
 } from '../../sim/clients'
 import { isClosed, startOfDay } from '../../sim/clock'
 import { dirtyOvernight } from '../../sim/cleanliness'
+import { contractVisits, liveContracts, type Contract } from '../../sim/contracts'
 import { csiFactor, csiOf } from '../../sim/csi'
 import { arrivalScale, type Customer } from '../../sim/customers'
-import { emptyFiStats } from '../../sim/fi'
+import { addFiStats, emptyFiStats } from '../../sim/fi'
 import { emptyStats, type DayStats } from '../../sim/deal'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from '../../sim/dealershipName'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty } from '../../sim/difficulty'
@@ -147,6 +155,8 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     appreciation: null as Appreciation | null,
     monthCsi: emptyMonthCsi(),
     monthFi: emptyFiStats(),
+    contracts: [] as Contract[],
+    chargebacks: [] as Chargeback[],
     clientVisits: [] as ClientVisit[],
     callsTried: [] as string[],
     playerCall: null as string | null,
@@ -216,6 +226,8 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           appreciation: save.appreciation,
           monthCsi: save.monthCsi,
           monthFi: save.monthFi,
+          contracts: save.contracts,
+          chargebacks: save.chargebacks,
         })
         beginDay(k, save.day + 1)
       }),
@@ -231,24 +243,40 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
  * the month's result moves the tier. The day's gross goes on the
  * career, which may earn a new rank. Nazma's lot across the road takes in
  * the day (see `rivalDay`). Used cars bought today go into stock, in the lot
- * spaces held for them, so the save keeps them.
+ * spaces held for them, so the save keeps them. Chargebacks due today take
+ * back F&I gross, and the finance manager who signed the deal gives back his
+ * share of it out of the day's commissions.
  *
  * Only `commit`'s last step calls this.
  */
 export function settleDay(k: Kit): void {
   const s = k.get()
   if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
-  const { wages, commissions } = payroll(s.roster, s.dayStats.sales)
+  const pay = payroll(s.roster, s.dayStats.sales)
+  // Chargebacks due take back F&I gross, and the finance manager's share of it.
+  const { due, later } = dueChargebacks(s.chargebacks, s.clock.day)
+  const charged = chargebackTotal(due)
+  const clawback = Math.min(
+    pay.commissions,
+    clawbackTotal(due, (id) => s.roster.some((e) => e.id === id && !e.fired)),
+  )
+  const { wages } = pay
+  const commissions = pay.commissions - clawback
+  const landed = { chargebackCount: due.length, chargebacks: charged, clawback }
+  const dayStats =
+    due.length > 0
+      ? { ...s.dayStats, fi: addFiStats(s.dayStats.fi, { ...emptyFiStats(), ...landed }) }
+      : s.dayStats
   const level = tuning(k)
   const interest = dailyInterest(s.inventory, level.interest)
   // A goal the player never heard (the owner didn't make it in) isn't judged.
   const owner = s.owner?.announced
-    ? judgeDay(s.owner.goal, s.dayStats, s.clock.day, level.ownerBonus, repScale(level))
+    ? judgeDay(s.owner.goal, dayStats, s.clock.day, level.ownerBonus, repScale(level))
     : null
-  const reputation = applyChange(s.reputation, reputationChange(s.dayStats, repScale(level)))
+  const reputation = applyChange(s.reputation, reputationChange(dayStats, repScale(level)))
   const monthEnd = calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
   const csi = csiOf(s.monthCsi)
-  const career = addDay(s.career, s.dayStats, reputation, monthEnd, level.rankScale, csi)
+  const career = addDay(s.career, dayStats, reputation, monthEnd, level.rankScale, csi)
   const quota = monthEnd
     ? {
         quota: s.quota,
@@ -270,11 +298,12 @@ export function settleDay(k: Kit): void {
         },
       }
     : null
-  const cash = s.cash - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
+  const cash =
+    s.cash - charged - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
   // On Easy the bank covers the first time the day ends in the red.
   const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
   const settled: DayStats = {
-    ...s.dayStats,
+    ...dayStats,
     wages,
     commissions,
     interest,
@@ -316,8 +345,12 @@ export function settleDay(k: Kit): void {
     records: records.records,
     franchise,
     ...(earned.length > 0 && { achievements: [...s.achievements, ...earned] }),
-    rival: rivalDay(s.rival, s.dayStats, createRng(RIVAL_SEED + s.clock.day), level.rivalStrength),
+    rival: rivalDay(s.rival, dayStats, createRng(RIVAL_SEED + s.clock.day), level.rivalStrength),
     ...(s.purchases.length > 0 && { inventory, purchases: [] }),
+    ...(due.length > 0 && {
+      chargebacks: later,
+      monthFi: addFiStats(s.monthFi, { ...emptyFiStats(), ...landed }),
+    }),
     dayStats: { ...settled, newRecords: records.broken },
   })
 }
@@ -366,7 +399,9 @@ export function closeUp(k: Kit): void {
  * weekly move on Mondays, and the worse he does the more Nazma gets up to:
  * a car he steals goes on his lot. Kept under his bust floor for weeks, he
  * closes: the player's reputation goes up, his buyers come over for a week,
- * and Nazma stays away until he reopens. All stored with one `set`.
+ * and Nazma stays away until he reopens. Warranty contracts that have run
+ * out are dropped, and cars still covered may come in for a claim. All
+ * stored with one `set`.
  */
 export function beginDay(k: Kit, day: number): void {
   k.batch(() => morning(k, day))
@@ -460,8 +495,13 @@ function morning(k: Kit, day: number): void {
     max: bays > 0 ? cap - demand : 0,
     skip: new Set(clientVisits.map((v) => v.clientId)),
   })
-  // Recall visits come on top, within what the bays can take.
+  // Recall visits come on top, within what the bays can take, then warranty claims.
   const recalls = Math.min(recallDemand(day, s.career, bays), cap - demand - bookService.length)
+  const contracts = liveContracts(s.contracts, day)
+  const claims =
+    bays > 0
+      ? contractVisits(contracts, day, rng.contract, cap - demand - bookService.length - recalls)
+      : []
   const returning = clients.filter((c) => isDue(c, day) || c.appointment?.day === day).length
   const owner = isOwnerDay(day)
     ? {
@@ -502,7 +542,12 @@ function morning(k: Kit, day: number): void {
     serviceJobs: [],
     serviceAway: [],
     serviceComebacks: [],
-    serviceVisits: withBookVisits(planServiceVisits(rng.service, demand, recalls), bookService),
+    serviceVisits: withBookVisits(
+      planServiceVisits(rng.service, demand, recalls),
+      bookService,
+      claims,
+    ),
+    contracts,
     clients,
     clientVisits,
     callsTried: [],
@@ -536,6 +581,7 @@ function morning(k: Kit, day: number): void {
     s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
     s.dayStats.quota && heldByCsi(s.dayStats.quota) && heldNotice(s.dayStats.quota),
     s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
+    chargebackNotice(dueChargebacks(s.chargebacks, day).due),
     opening.event && rivalNotice(rival, opening.event),
     eventNotice(day),
     recall &&

@@ -84,6 +84,7 @@ function setUp(clients: Client[], visits: [number, JobKind, string | null][]) {
       minutes: visits.map((v) => v[0]),
       kinds: visits.map((v) => v[1]),
       clientIds: visits.map((v) => v[2]),
+      contractIds: visits.map(() => null),
       spawned: 0,
     },
     helpOpen: false,

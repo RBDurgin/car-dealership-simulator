@@ -397,6 +397,18 @@ export const UPDATES: readonly Update[] = [
       'The day summary’s seller table has an F&I column, and the finance manager gets a row of their own.',
     ],
   },
+  {
+    id: 37,
+    phase: '19',
+    title: 'Warranty work and chargebacks',
+    items: [
+      'Each extended warranty you sell is a contract: covered cars come to your garage for repairs the warranty pays for.',
+      'Clients with one of our warranties say yes to extra work more often.',
+      'Products sold under pressure, with a big markup or on weak credit can come back weeks later as chargebacks.',
+      'On a deal the finance manager signed, their share of a chargeback comes out of their commissions.',
+      'The Finance tab counts the contracts in force and the chargebacks still to come.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

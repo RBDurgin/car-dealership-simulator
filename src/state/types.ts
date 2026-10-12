@@ -3,6 +3,8 @@ import type { AchievementId, EarnedAchievement } from '../sim/achievements'
 import type { AudioBus, AudioSettings } from '../sim/audioSettings'
 import type { GraphicsSetting } from '../sim/graphics'
 import type { CallKind, ClientVisit } from '../sim/calls'
+import type { Chargeback } from '../sim/chargebacks'
+import type { Contract } from '../sim/contracts'
 import type { FiStats } from '../sim/fi'
 import type { CustomerVariant } from '../sim/characters'
 import type { Appreciation, Client, ClientPerks, MonthCsi } from '../sim/clients'
@@ -140,6 +142,10 @@ export interface GameState {
   monthCsi: MonthCsi
   /** The month's F&I so far, for the Finance tab. Saved. */
   monthFi: FiStats
+  /** Extended warranty contracts sold, until they run out (see `sim/contracts.ts`). Saved. */
+  contracts: Contract[]
+  /** Chargebacks still to land (see `sim/chargebacks.ts`). Saved. */
+  chargebacks: Chargeback[]
   /** Clients due in on an appointment today, still to come. Planned each morning, never saved. */
   clientVisits: ClientVisit[]
   /** Clients phoned today who didn't pick up, or did: not called again today. Never saved. */

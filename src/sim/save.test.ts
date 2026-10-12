@@ -26,6 +26,8 @@ import { monthlyQuota } from './quota'
 import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
 import { DEFAULT_DEALERSHIP_NAME } from './dealershipName'
+import type { Chargeback } from './chargebacks'
+import { newContract } from './contracts'
 import { emptyFiStats } from './fi'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
@@ -89,6 +91,8 @@ const source = () => ({
   appreciation: null as Appreciation | null,
   monthCsi: emptyMonthCsi() as MonthCsi,
   monthFi: emptyFiStats(),
+  contracts: [],
+  chargebacks: [],
   // As a v25 save of day 3 upgrades, so the older upgrades compare equal.
   log: [] as DayRecord[],
   lifetime: emptyLifetime() as Lifetime,
@@ -585,6 +589,59 @@ describe('save data', () => {
     expect(parseSave({ ...save, monthFi: undefined })).toBeNull()
     expect(parseSave({ ...save, monthFi: { ...monthFi, reserve: 'lots' } })).toBeNull()
     expect(parseSave({ ...save, monthFi: { ...monthFi, sold: { hat: 1 } } })).toBeNull()
+  })
+
+  it('keeps warranty contracts in force and chargebacks still to land', () => {
+    const car = {
+      model: 'sedan' as const,
+      used: false,
+      price: 30_000,
+      boughtDay: 4,
+      year: 2026,
+      miles: 0,
+      condition: 1,
+    }
+    const contracts = [
+      newContract('contract-4-1', 'Ann K.', car, 4, 1800),
+      // Runs out tonight: gone by morning.
+      { ...newContract('contract-1-1', 'Bo L.', car, 1, 1600), endDay: 3 },
+    ]
+    const chargebacks: Chargeback[] = [
+      {
+        day: 40,
+        amount: 990,
+        customerName: 'Ann K.',
+        kind: 'warranty',
+        financeId: 'fm-1',
+        clawback: 149,
+      },
+    ]
+    const save = createSave({ ...source(), contracts, chargebacks }, 123)
+    const back = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(back?.contracts).toEqual([contracts[0]])
+    expect(back?.chargebacks).toEqual(chargebacks)
+    expect(parseSave({ ...save, contracts: undefined })).toBeNull()
+    expect(parseSave({ ...save, contracts: [{ ...contracts[0], car: null }] })).toBeNull()
+    expect(parseSave({ ...save, chargebacks: [{ ...chargebacks[0], kind: 'hat' }] })).toBeNull()
+  })
+
+  it('upgrades a version 29 save with no contracts or chargebacks', () => {
+    const { contracts: _, chargebacks: __, monthFi, ...rest } = createSave(source(), 123)
+    const {
+      chargebackCount: _c,
+      chargebacks: _a,
+      clawback: _w,
+      ...oldFi
+    } = {
+      ...monthFi,
+      reserve: 500,
+    }
+    const v29 = { ...rest, monthFi: oldFi, version: 29 }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v29)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.contracts).toEqual([])
+    expect(upgraded?.chargebacks).toEqual([])
+    expect(upgraded?.monthFi).toEqual({ ...emptyFiStats(), reserve: 500 })
   })
 
   it('upgrades a version 28 save with no F&I this month', () => {

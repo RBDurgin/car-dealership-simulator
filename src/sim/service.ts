@@ -69,8 +69,13 @@ export interface ServiceJob {
   finding: Finding | null
   /** A free redo of a job that came back (see `comebackChance`): nobody pays for it. */
   redo: boolean
-  /** What the manufacturer pays for recall work (see `warrantyPay`), on top of what the client pays. */
+  /**
+   * What the manufacturer pays for recall work, or the warranty company for a
+   * claim on a contract (see `warrantyPay`), on top of what the client pays.
+   */
   warranty: number
+  /** The extended warranty contract (see `sim/contracts.ts`) paying for the job, or null. */
+  contractId: string | null
   /** A client's name and car, for the Service tab and the lift; null for our own. */
   client: { name: string; model: CarModel; condition: number } | null
   /** The game minute a client's car was ready, or null until it is. */
@@ -134,15 +139,16 @@ export function defaultService(): ServiceSettings {
 /** Parts are sold on at this much over cost. */
 export const PARTS_MARKUP = 0.4
 
-/** The manufacturer pays recall labor at this rate, $ an hour: below any shop rate. */
+/** The manufacturer (and a warranty company) pays labor at this rate, $ an hour: below any shop rate. */
 export const WARRANTY_HOURLY = 80
 
 /**
- * What the manufacturer pays for a recall job whose parts cost us
- * `partsCost`: the book time at `WARRANTY_HOURLY`, and the parts at cost.
+ * What the manufacturer pays for a recall job (or the warranty company for a
+ * `kind` claim) whose parts cost us `partsCost`: the book time at
+ * `WARRANTY_HOURLY`, and the parts at cost.
  */
-export function warrantyPay(partsCost: number): number {
-  return Math.round((JOBS.recall.minutes / 60) * WARRANTY_HOURLY) + partsCost
+export function warrantyPay(partsCost: number, kind: JobKind = 'recall'): number {
+  return Math.round((JOBS[kind].minutes / 60) * WARRANTY_HOURLY) + partsCost
 }
 
 /** A recall's quote: the client pays nothing, and the parts' cost is rolled like any quote's. */
@@ -230,11 +236,13 @@ export interface ServiceSchedule {
   kinds: JobKind[]
   /** The client from the book each visit is, or null for a stranger, by index into `minutes`. */
   clientIds: (string | null)[]
+  /** The warranty contract each visit claims on, or null, by index into `minutes`. */
+  contractIds: (string | null)[]
   spawned: number
 }
 
 export function emptySchedule(): ServiceSchedule {
-  return { minutes: [], kinds: [], clientIds: [], spawned: 0 }
+  return { minutes: [], kinds: [], clientIds: [], contractIds: [], spawned: 0 }
 }
 
 /**
@@ -260,6 +268,7 @@ export function planServiceVisits(rng: Rng, expected: number, recalls = 0): Serv
     minutes: visits.map((v) => v.minute),
     kinds: visits.map((v) => v.kind),
     clientIds: visits.map(() => null),
+    contractIds: visits.map(() => null),
     spawned: 0,
   }
 }
@@ -271,24 +280,42 @@ export interface BookServiceVisit {
   kind: JobKind
 }
 
-/** `schedule` (not started yet) with the book's `visits` merged in by minute. */
+/** A warranty claim due in today (see `contractVisits`): a repair the contract pays for. */
+export interface ClaimVisit {
+  contractId: string
+  minute: number
+}
+
+/**
+ * `schedule` (not started yet) with the book's `visits` and the warranty
+ * `claims` (repairs) merged in by minute.
+ */
 export function withBookVisits(
   schedule: ServiceSchedule,
   visits: readonly BookServiceVisit[],
+  claims: readonly ClaimVisit[] = [],
 ): ServiceSchedule {
-  if (visits.length === 0) return schedule
+  if (visits.length === 0 && claims.length === 0) return schedule
   const all = [
     ...schedule.minutes.map((minute, i) => ({
       minute,
       kind: schedule.kinds[i],
       clientId: schedule.clientIds[i],
+      contractId: schedule.contractIds[i],
     })),
-    ...visits,
+    ...visits.map((v) => ({ ...v, contractId: null })),
+    ...claims.map((v) => ({
+      minute: v.minute,
+      kind: 'repair' as const,
+      clientId: null,
+      contractId: v.contractId,
+    })),
   ].sort((a, b) => a.minute - b.minute)
   return {
     minutes: all.map((v) => v.minute),
     kinds: all.map((v) => v.kind),
     clientIds: all.map((v) => v.clientId),
+    contractIds: all.map((v) => v.contractId),
     spawned: 0,
   }
 }
@@ -312,7 +339,12 @@ export function takeDueVisits(
   schedule: ServiceSchedule,
   minute: number,
   max = Infinity,
-): { schedule: ServiceSchedule; due: JobKind[]; clientIds: (string | null)[] } {
+): {
+  schedule: ServiceSchedule
+  due: JobKind[]
+  clientIds: (string | null)[]
+  contractIds: (string | null)[]
+} {
   let spawned = schedule.spawned
   while (
     spawned < schedule.minutes.length &&
@@ -323,7 +355,13 @@ export function takeDueVisits(
   }
   const due = schedule.kinds.slice(schedule.spawned, spawned)
   const clientIds = schedule.clientIds.slice(schedule.spawned, spawned)
-  return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due, clientIds }
+  const contractIds = schedule.contractIds.slice(schedule.spawned, spawned)
+  return {
+    schedule: due.length > 0 ? { ...schedule, spawned } : schedule,
+    due,
+    clientIds,
+    contractIds,
+  }
 }
 
 /** The odds a mechanic starting on a client's car finds something else it needs. */
@@ -482,6 +520,9 @@ export interface ServiceStats {
   partsCost: number
   /** What the manufacturer paid for recall work. */
   warranty: number
+  /** Warranty claims on our contracts finished, and what the warranty company paid for them. */
+  claims: number
+  contract: number
   /** Paid to mechanics for work finished after closing. */
   overtime: number
   /** Clients sent away for lack of time, who declined the quote, collected late, or came back. */
@@ -503,6 +544,8 @@ export function emptyServiceStats(): ServiceStats {
     parts: 0,
     partsCost: 0,
     warranty: 0,
+    claims: 0,
+    contract: 0,
     overtime: 0,
     turnedAway: 0,
     declined: 0,
@@ -618,6 +661,7 @@ export function reconJob(id: string, carId: string, partsCost: number): ServiceJ
     finding: null,
     redo: false,
     warranty: 0,
+    contractId: null,
     client: null,
     readyMinute: null,
   }
@@ -689,7 +733,8 @@ export function finishedLate(job: ServiceJob): ServiceJob {
 
 /**
  * A client's job, at the `quote` they took. Its time is set again by whoever
- * starts it. The manufacturer pays for recall work, except a redo.
+ * starts it. The manufacturer pays for recall work, and the warranty company
+ * for a claim on `contractId`, except on a redo.
  */
 export function clientJob(
   id: string,
@@ -698,7 +743,9 @@ export function clientJob(
   q: Quote,
   client: NonNullable<ServiceJob['client']>,
   redo = false,
+  contractId: string | null = null,
 ): ServiceJob {
+  const paid = !redo && (kind === 'recall' || contractId !== null)
   return {
     id,
     kind,
@@ -714,7 +761,8 @@ export function clientJob(
     partsCost: q.partsCost,
     finding: null,
     redo,
-    warranty: kind === 'recall' && !redo ? warrantyPay(q.partsCost) : 0,
+    warranty: paid ? warrantyPay(q.partsCost, kind) : 0,
+    contractId,
     client,
     readyMinute: null,
   }

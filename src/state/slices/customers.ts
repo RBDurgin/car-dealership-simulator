@@ -1,6 +1,8 @@
 import { pickArchetype, skewWeights } from '../../sim/archetypes'
 import { isClosed } from '../../sim/clock'
-import { loyalIds } from '../../sim/clients'
+import { rollChargebacks } from '../../sim/chargebacks'
+import { clientCarOf, loyalIds } from '../../sim/clients'
+import { addContracts, newContract } from '../../sim/contracts'
 import { assignCredit } from '../../sim/credit'
 import {
   chooseTarget,
@@ -343,7 +345,8 @@ export function appraiseCar(k: Kit, targetId: string): void {
  * Signs `c`'s paperwork: sells the car at the offer price, logs the sale and
  * sends them home happy. `signer` is the employee at the desk (finance, or
  * the salesperson), null for the player. `deal` is the loan and the F&I
- * menu, when they had them. Returns the sale, or null if the car can't be sold.
+ * menu, when they had them: an extended warranty taken becomes a contract,
+ * and its chargebacks are rolled. Returns the sale, or null if the car can't be sold.
  */
 export function sign(
   k: Kit,
@@ -380,6 +383,31 @@ export function sign(
   })
   // The client who sent them gets the referral fee.
   const fee = s.clients.some((x) => x.id === c.referredBy) ? s.clientPerks.referralFee : 0
+  // Some of the F&I will come back as chargebacks, the harder sold the likelier.
+  const chargebacks = fi
+    ? rollChargebacks(
+        fi,
+        {
+          day: s.clock.day,
+          customerName: c.name,
+          tier: c.credit?.finance ? c.credit.tier : null,
+          financeId: signer?.role === 'finance' ? signer.id : null,
+          scale: tuning(k).chargebackScale,
+        },
+        rng.chargeback,
+      )
+    : []
+  // An extended warranty is a contract: the car comes back for repairs it pays for.
+  const warranty = fi?.products.find((p) => p.id === 'warranty')
+  const contract =
+    warranty &&
+    newContract(
+      `contract-${s.clock.day}-${s.contracts.filter((x) => x.soldDay === s.clock.day).length + 1}`,
+      c.name,
+      clientCarOf(car, price, s.clock.day),
+      s.clock.day,
+      warranty.price,
+    )
   const stats = get().dayStats
   set({
     dayStats: {
@@ -397,6 +425,8 @@ export function sign(
     monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
     // Their car goes on the lot tonight.
     ...(traded && { purchases: [...get().purchases, traded] }),
+    ...(chargebacks.length > 0 && { chargebacks: [...get().chargebacks, ...chargebacks] }),
+    ...(contract && { contracts: addContracts(get().contracts, [contract]) }),
   })
   commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
   return sale

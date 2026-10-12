@@ -462,11 +462,11 @@ export function grossProfit(stats: DayStats): number {
 
 /**
  * The service department's gross: labor and parts billed less what the parts
- * cost, plus the manufacturer's warranty pay, less overtime.
+ * cost, plus the manufacturer's and warranty company's pay, less overtime.
  */
 export function serviceGross(stats: DayStats): number {
   const s = stats.service
-  return s.labor + s.parts - s.partsCost + s.warranty - s.overtime
+  return s.labor + s.parts - s.partsCost + s.warranty + s.contract - s.overtime
 }
 
 /** Gross profit on car sales, F&I and service together, for the career and the owner. */
