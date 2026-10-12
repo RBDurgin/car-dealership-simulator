@@ -122,7 +122,13 @@ describe('trade-ups', () => {
   it('makes a happy client keener to say yes', () => {
     useGame.setState({ clients: [due('a', { satisfaction: 100 }), due('b', { satisfaction: 0 })] })
     const bonus = (clientId: string | null) =>
-      sellerBonusFor(game(), { handlerId: 'player', clientId })
+      sellerBonusFor(game(), {
+        handlerId: 'player',
+        clientId,
+        wantsDrive: false,
+        drive: null,
+        targetCarId: null,
+      })
     expect(bonus('a') - bonus(null)).toBeCloseTo(LOYALTY_ACCEPT)
     expect(bonus('b') - bonus(null)).toBeCloseTo(-LOYALTY_ACCEPT)
   })
@@ -161,6 +167,8 @@ describe('trade-ups', () => {
       guest: false,
       credit: null,
       fi: null,
+      wantsDrive: false,
+      drive: null,
       service: null,
     }
     useGame.setState({ customers: [kim] })

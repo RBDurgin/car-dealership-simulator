@@ -42,6 +42,8 @@ export interface ArchetypeTraits {
   models: number
   /** Their odds of each credit tier and of financing rather than paying cash (see `rollCredit`). */
   credit: CreditTraits
+  /** Their chance of asking to drive the car (see `assignDriveAsk`). */
+  drive: number
   /** What the player learns about them on greeting. */
   hint: string
 }
@@ -61,6 +63,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 0.5,
     models: 2,
     credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.65 },
+    drive: 0.35,
     hint: 'Shopping around',
   },
   'tire-kicker': {
@@ -74,6 +77,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 0,
     models: 2,
     credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.55 },
+    drive: 0.6,
     hint: 'Just looking',
   },
   decisive: {
@@ -87,6 +91,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 0,
     models: 2,
     credit: { tiers: { A: 40, B: 35, C: 20, D: 5 }, finance: 0.55 },
+    drive: 0.15,
     hint: 'Knows what they want',
   },
   bargain: {
@@ -100,6 +105,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 1,
     models: 2,
     credit: { tiers: { A: 15, B: 30, C: 35, D: 20 }, finance: 0.5 },
+    drive: 0.3,
     hint: 'Watching every dollar',
   },
   couple: {
@@ -113,6 +119,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 0,
     models: 2,
     credit: { tiers: { A: 30, B: 40, C: 22, D: 8 }, finance: 0.7 },
+    drive: 0.5,
     hint: 'Shopping together',
   },
   'used-shopper': {
@@ -126,6 +133,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     usedWeight: 4,
     models: 3,
     credit: { tiers: { A: 10, B: 25, C: 40, D: 25 }, finance: 0.6 },
+    drive: 0.3,
     hint: 'After a good used car',
   },
 }

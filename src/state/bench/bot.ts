@@ -6,13 +6,15 @@ import { answerFor, loanDeclined, productsFor } from '../../sim/fi'
 import { MAX_MARKUP } from '../../sim/lenders'
 import type { ActionId } from '../../sim/interactables'
 import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
+import { driveBlocker } from '../../sim/testDrive'
 import { useGame } from '../store'
 
 /**
  * A headless player for the long-game bench: it stands in for the scene and
  * the player, so the store runs whole days with no renderer. It isn't a good
  * player, only a busy one: walkers get where they're going at once, the
- * player works one deal at a time, takes every counter and runs a fair F&I
+ * player works one deal at a time, gives a test drive to anyone who asks (back
+ * at once), takes every counter and runs a fair F&I
  * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
  * ads are bought each morning. Staff stand idle, as their work is the scene's. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
@@ -43,6 +45,16 @@ function perform(targetId: string, action: ActionId): void {
   if (id === undefined) return
   game().arriveAction(id)
   game().completeAction(id)
+}
+
+/** Takes `c` for the test drive they asked for: in the car, round the block and back at once. */
+function testDrive(customerId: string): void {
+  game().testDrive(customerId)
+  const id = game().activeAction?.id
+  if (id === undefined) return
+  game().arriveAction(id)
+  game().completeAction(id)
+  game().driveBack(customerId)
 }
 
 /** Takes a buyer to the player's own desk, and through the F&I menu to sign. */
@@ -128,6 +140,10 @@ function workDeal(): boolean {
   if (!c) return false
   if (c.phase === 'following') closeDeal(c.id)
   else if (c.phase === 'talking') {
+    if (c.wantsDrive && !driveBlocker(c, game().inventory)) {
+      testDrive(c.id)
+      return true
+    }
     const h = c.haggle
     if (h) game().ask(h.counter + (h.allowance ?? 0), h.allowance)
     else perform(c.id, 'offer')

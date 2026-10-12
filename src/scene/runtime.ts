@@ -94,6 +94,20 @@ function syncWorld(inventory: readonly InventoryCar[], improvements: Improvement
 const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
 export const playerPos = { x: spawn.x, z: spawn.z }
 
+/**
+ * The player is in a test drive car (or off the map in it): hidden, and out
+ * of the crowd. Set by scene/Player each frame. `playerPos` stays by the
+ * car's door, so the camera waits on the lot.
+ */
+export const riding = { player: false }
+
+/**
+ * Test drives on the road, by their customer's id: game minutes left until
+ * the car is back, and the drive's length. Kept by scene/DrivenCar for the
+ * HUD's drive bar.
+ */
+export const driveClock = new Map<string, { left: number; total: number }>()
+
 /** Builds the layout again if the expansions up have changed. True if it did. */
 function regrounded(ground: ExpansionId[]): boolean {
   if (ground.length === groundNow.length && ground.every((id) => groundNow.includes(id))) {
@@ -294,7 +308,7 @@ export function crowdAgents(): readonly Agent[] {
     a.pos = pos
     crowd.push(a)
   }
-  add(PLAYER_ID, playerPos)
+  if (!riding.player) add(PLAYER_ID, playerPos)
   for (const [id, pos] of customerPos) add(id, pos)
   for (const [id, pos] of staffPos) add(id, pos)
   for (const [id, pos] of ambientPos) add(id, pos)
@@ -391,6 +405,19 @@ export function findInteractable(id: string): Interactable | undefined {
       facing: CUSTOMER_PARKING[owner.vehicle.spot].facing,
       approachTiles: approachTilesFor(grid, rect),
       actions: owner.selling || owner.trade ? ['appraise'] : [],
+    }
+  }
+  // A car out for a test drive, standing in its space while they walk to it.
+  const out = game.inventory.find((c) => c.id === id && c.status === 'out')
+  if (out) {
+    return {
+      id,
+      kind: 'car',
+      name: `The ${carName(out.model)}`,
+      rect: out.rect,
+      facing: out.facing,
+      approachTiles: approachTilesFor(grid, out.rect),
+      actions: ['ride'],
     }
   }
   const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined

@@ -26,6 +26,7 @@ import { estimateRange, SELLER_HINTS } from '../sim/sellers'
 import { quoteTotal } from '../sim/service'
 import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
+import { driveBlocker, drivePending } from '../sim/testDrive'
 import { stockValue, usedTag } from '../sim/usedCars'
 import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
@@ -412,6 +413,60 @@ function TradeFigures({ c }: { c: Customer }) {
 }
 
 /**
+ * The test drive, while talking: a button to take them out (greyed with the
+ * reason when there's no car to drive), on the way to the car a way to get
+ * in, and once they've driven how it went.
+ */
+function TestDrive({ c }: { c: Customer }) {
+  const blocker = useGame((s) => driveBlocker(c, s.inventory))
+  const carModel = useGame((s) => s.inventory.find((x) => x.id === c.drive?.carId)?.model)
+  const game = useGame.getState()
+  if (c.drive?.back) {
+    return (
+      <div className="customer-history drive-note">
+        Took the {carModel ? carName(carModel) : 'car'} for a drive
+        {c.drive.cut ? ' (cut short)' : ''}.
+      </div>
+    )
+  }
+  if (drivePending(c)) {
+    return (
+      <div className="customer-status">
+        Walking to the {carModel ? carName(carModel) : 'car'} for a test drive…
+        <div className="customer-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => game.requestAction(c.drive!.carId, 'ride')}
+          >
+            Get in
+          </button>
+          <button className="btn btn-small" onClick={() => game.walkAway()}>
+            Never mind
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="customer-actions test-drive">
+      <button
+        className={c.wantsDrive ? 'btn btn-primary' : 'btn'}
+        disabled={!!blocker}
+        title={blocker ?? undefined}
+        onClick={() => game.testDrive(c.id)}
+      >
+        🔑 Test drive
+      </button>
+      {blocker ? (
+        <span className="status-hint">{blocker}</span>
+      ) : (
+        c.wantsDrive && <span className="status-hint">They&apos;d like to drive it first.</span>
+      )}
+    </div>
+  )
+}
+
+/**
  * The customer the player is dealing with: what kind of shopper they are, the
  * car they want, its price, roughly what they want to spend, and where the
  * deal stands. The haggle is played from here; the customer's menu offers the
@@ -496,7 +551,11 @@ export function CustomerPanel() {
           {touch ? 'Tap' : 'Click'} their car and choose <b>Appraise</b> for a closer estimate.
         </div>
       )}
-      {c.phase === 'talking' && <Haggle key={c.haggle?.round ?? 1} c={c} car={car} />}
+      {c.phase === 'talking' && <TestDrive c={c} />}
+      {c.phase === 'talking' && !drivePending(c) && (
+        <Haggle key={c.haggle?.round ?? 1} c={c} car={car} />
+      )}
+      {c.phase === 'driving' && <div className="customer-status">Out on a test drive…</div>}
       {c.phase === 'considering' && c.offer && (
         <>
           <dl className="haggle-figures">

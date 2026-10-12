@@ -15,12 +15,13 @@ const ICONS: Record<Bubble, string> = {
   helped: '✓',
   bought: '$',
   upset: '☹',
+  drive: '🔑',
 }
 
 /**
  * The icon over a customer's head: `!` when they want help (a star for someone
  * from the client book, red `!` once impatient),
- * a tick while a salesperson is helping them, `…` while considering an offer, `$?`
+ * a key when they'd like a test drive, a tick while a salesperson is helping them, `…` while considering an offer, `$?`
  * after they counter, `$` after buying, a frown when they leave upset.
  * Re-renders only when the icon changes.
  */

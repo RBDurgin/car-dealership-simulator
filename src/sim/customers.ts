@@ -17,6 +17,7 @@ import type { Rng } from './rng'
 import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
 import type { ServiceVisit } from './serviceClients'
+import type { TestDrive } from './testDrive'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
 import { WEATHER_EFFECTS, type Weather } from './weather'
@@ -35,6 +36,8 @@ import { WEATHER_EFFECTS, type Weather } from './weather'
  *                                     ▼                       ▼     │            ▼              ▼
  *                            leaving(refused)                 queued    leaving(bought)  leaving(bought / declined)
  *
+ *            talking ─testDrive─► talking (to the car) ─boarded─► driving ─droveBack─► talking
+ *
  * An offer is haggled over (`sim/negotiation.ts`): a counter sends them back
  * to talking, with `haggle` keeping score, for the seller to ask again.
  * `greet` makes the greeter their handler; a salesperson `claim`s a browsing or
@@ -43,10 +46,15 @@ import { WEATHER_EFFECTS, type Weather } from './weather'
  * lounge when the desk is free; a salesperson `lead`s theirs to their own desk
  * instead. The player's buyer goes from the paperwork to the F&I `menu`
  * (`sim/fi.ts`), signs from there, or leaves `declined` when no lender will
- * take them. Waiting customers lose patience on `tick` and leave impatient at
- * zero, unless someone is on their way to help. `close` sends everyone home
- * except a customer mid-signature or in staff hands. `cancel` from any deal
- * phase puts them back to waiting, and drops a claim. Service clients take
+ * take them. A shopper may take the car for a test drive first
+ * (`sim/testDrive.ts`): `testDrive` sets them off to the car, still talking,
+ * `boarded` has them out on the road (`driving`, which drains no patience)
+ * and `droveBack` brings them back to talking, once a visit. Waiting
+ * customers lose patience on `tick` and leave impatient at zero, unless
+ * someone is on their way to help. `close` sends everyone home except a
+ * customer mid-signature or in staff hands (one out on a drive comes back at
+ * once). `cancel` from any deal phase but a drive puts them back to
+ * waiting, and drops a claim. Service clients take
  * their own way through (see `sim/serviceClients.ts`).
  */
 export type CustomerPhase =
@@ -54,6 +62,8 @@ export type CustomerPhase =
   | 'browsing'
   | 'waiting'
   | 'talking'
+  /** Out on a test drive (see `sim/testDrive.ts`): off the lot, in the car. */
+  | 'driving'
   | 'considering'
   | 'following'
   | 'signing'
@@ -177,6 +187,10 @@ export interface Customer {
   credit: Credit | null
   /** The F&I menu so far, while they're in `menu`; null otherwise. */
   fi: FiDeal | null
+  /** They'll ask to drive the car (`assignDriveAsk`). False for sellers and service clients. */
+  wantsDrive: boolean
+  /** Their test drive, from setting off to the car on; null until then (see `sim/testDrive.ts`). */
+  drive: TestDrive | null
 }
 
 const FIRST_NAMES = [
@@ -512,6 +526,8 @@ function shopper(
     guest: !!opts.guest,
     credit: null,
     fi: null,
+    wantsDrive: false,
+    drive: null,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -608,6 +624,7 @@ export function moodOf(c: Customer): Mood {
     case 'signing':
     case 'menu':
     case 'queued':
+    case 'driving':
       return 'happy'
     case 'leaving':
       if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'happy'
@@ -623,7 +640,19 @@ export function moodOf(c: Customer): Mood {
 
 /** The icon above a customer's head, if any. */
 export type Bubble =
-  'waiting' | 'client' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
+  | 'waiting'
+  | 'client'
+  | 'impatient'
+  | 'considering'
+  | 'counter'
+  | 'helped'
+  | 'bought'
+  | 'upset'
+  /** They'd like to drive the car and haven't yet. */
+  | 'drive'
+
+/** Wants a test drive and hasn't had one. */
+const wantsKeys = (c: Customer) => c.wantsDrive && !c.drive
 
 export function bubbleOf(c: Customer): Bubble | null {
   // They've named their price and wait for the seller's answer.
@@ -631,8 +660,11 @@ export function bubbleOf(c: Customer): Bubble | null {
   // A salesperson is on their way over, or talking with them.
   if (staffHandled(c) && ['browsing', 'waiting', 'talking'].includes(c.phase)) return 'helped'
   switch (c.phase) {
+    case 'talking':
+      return wantsKeys(c) ? 'drive' : null
     case 'waiting':
       if (moodOf(c) === 'impatient') return 'impatient'
+      if (wantsKeys(c)) return 'drive'
       // Someone from the client book: a star, so they can be spotted.
       return c.clientId ? 'client' : 'waiting'
     case 'considering':
@@ -663,6 +695,14 @@ export type CustomerEvent =
   /** `by` greeted them. `carId` is what they ask about (see `chooseTarget`). */
   | { type: 'greet'; id: string; carId: string | null; by: string }
   | { type: 'offer'; id: string; carId: string; price: number; allowance?: number }
+  /** `by` takes them for a test drive in car `carId`, `minutes` long: they head for the car. */
+  | { type: 'testDrive'; id: string; carId: string; by: string; minutes: number }
+  /** In the car: off on the drive. */
+  | { type: 'boarded'; id: string }
+  /** Head back: the drive is cut short. */
+  | { type: 'cutDrive'; id: string }
+  /** Back in the space, out of the car and talking again: how it went, and the discount they now hope for. */
+  | { type: 'droveBack'; id: string; drive: TestDrive; expect: number }
   /**
    * Their answer to the offer (see `respondToAsk`, or `respondToBuyOffer` for
    * a seller), with their price if they counter. A seller who accepts has sold
@@ -794,7 +834,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (ev.carId === null && !c.selling && !c.service) return leave(c, 'refused')
       return { ...c, phase: 'talking', targetCarId: ev.carId, handlerId: ev.by, sellerId: ev.by }
     case 'offer':
-      if (c.phase !== 'talking') return c
+      // Not on the way to a test drive.
+      if (c.phase !== 'talking' || (c.drive && !c.drive.back)) return c
       return {
         ...c,
         phase: 'considering',
@@ -829,6 +870,30 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
           ...(allowance !== undefined && { allowance }),
         },
       }
+    case 'testDrive':
+      if (c.phase !== 'talking' || c.drive || c.offer || c.handlerId !== ev.by) return c
+      return {
+        ...c,
+        drive: {
+          carId: ev.carId,
+          by: ev.by,
+          minutes: ev.minutes,
+          points: [],
+          cut: false,
+          ding: false,
+          back: false,
+          score: 0,
+        },
+      }
+    case 'boarded':
+      if (c.phase !== 'talking' || !c.drive || c.drive.back) return c
+      return { ...c, phase: 'driving' }
+    case 'cutDrive':
+      if (c.phase !== 'driving' || !c.drive || c.drive.cut) return c
+      return { ...c, drive: { ...c.drive, cut: true } }
+    case 'droveBack':
+      if (c.phase !== 'driving') return c
+      return { ...c, phase: 'talking', drive: ev.drive, expect: ev.expect }
     case 'seat':
       if (c.phase !== 'following') return c
       return { ...c, phase: 'signing', chairId: c.chairId ?? ev.chairId ?? GUEST_CHAIR_ID }
@@ -886,6 +951,8 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
         chairId: null,
         sellerId: null,
         fi: null,
+        // A drive they hadn't set off on is off; one they've had stays had.
+        drive: c.drive?.back ? c.drive : null,
       }
     case 'booked':
       if (c.phase !== 'considering' || !c.service) return c

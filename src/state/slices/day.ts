@@ -424,9 +424,10 @@ function morning(k: Kit, day: number): void {
   const s = get()
   const delivered = deliver(s.orders, createRng(DELIVERY_SEED + day), day)
   const campaigns = unfinished(s.campaigns, day)
-  // The shop hands every car back at closing; this is in case one wasn't.
+  // The shop hands every car back at closing, and every test drive is back
+  // by then; this is in case one wasn't.
   const kept = dropSold(s.inventory).map((c) =>
-    c.status === 'recon' ? { ...c, status: 'available' as const } : c,
+    c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' as const } : c,
   )
   const level = tuning(k)
   const guarded = isGuarded(s.roster)

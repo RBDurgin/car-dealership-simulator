@@ -56,6 +56,8 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 })
 

@@ -179,7 +179,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     day: s.clock.day,
     cash: s.cash,
     // The shop hands every car back at closing; this is in case one wasn't.
-    inventory: s.inventory.map((c) => (c.status === 'recon' ? { ...c, status: 'available' } : c)),
+    // A car in the shop or out on a test drive is saved as back on the lot.
+    inventory: s.inventory.map((c) =>
+      c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' } : c,
+    ),
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off', quitting: false })),
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),

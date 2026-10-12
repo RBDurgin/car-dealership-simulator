@@ -1,3 +1,4 @@
+import { newDrive } from './testDrive'
 import { describe, expect, it } from 'vitest'
 import { PLAYER_ID, type Customer } from './customers'
 import {
@@ -86,6 +87,8 @@ const base: Customer = {
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 }
 
@@ -99,17 +102,24 @@ const mine = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer
   at(phase, { handlerId: PLAYER_ID, ...extra })
 
 describe('customerActions', () => {
-  it('offers a greeting while browsing or waiting, an offer while talking', () => {
+  it('offers a greeting while browsing or waiting, an offer or a test drive while talking', () => {
     expect(customerActions(at('browsing'))).toEqual(['greet'])
     expect(customerActions(at('waiting'))).toEqual(['greet'])
-    expect(customerActions(at('talking'))).toEqual(['offer'])
+    expect(customerActions(at('talking'))).toEqual(['offer', 'testDrive'])
+  })
+
+  it('offers only the offer once they’ve driven, and nothing on the way to the car', () => {
+    const drive = newDrive('lot-car-1', PLAYER_ID, 25)
+    expect(customerActions(mine('talking', { drive }))).toEqual([])
+    expect(customerActions(mine('talking', { drive: { ...drive, back: true } }))).toEqual(['offer'])
+    expect(customerActions(mine('driving', { drive }))).toEqual([])
   })
 
   it('offers nothing while a salesperson has them, so the player can’t ask into their deal', () => {
     for (const phase of ['browsing', 'waiting', 'talking'] as const) {
       expect(customerActions(at(phase, { handlerId: 'emp-1' })), phase).toEqual([])
     }
-    expect(customerActions(mine('talking'))).toEqual(['offer'])
+    expect(customerActions(mine('talking'))).toEqual(['offer', 'testDrive'])
   })
 
   it('offers nothing while arriving, mid-deal or leaving', () => {

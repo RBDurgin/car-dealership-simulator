@@ -324,6 +324,12 @@ export interface GameState {
   fiLetGo: () => void
   /** At the F&I menu: signs the contracts, and the sale goes through. */
   fiSign: () => void
+  /** The player takes customer `id`, whom they're talking to, for a test drive (see `sim/testDrive.ts`). */
+  testDrive: (id: string) => void
+  /** Out on a test drive with the player: turn back for the lot now (the drive counts as cut short). */
+  headBack: () => void
+  /** The world: customer `id`'s test drive car is back in its space, and they get out. */
+  driveBack: (id: string) => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */

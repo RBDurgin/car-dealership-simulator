@@ -280,6 +280,24 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Test drives</h3>
+        <p>
+          Some shoppers want to drive the car first: a key (🔑) over their head. While you&apos;re
+          talking, <b>Test drive</b> in the customer panel (or the customer&apos;s menu) walks you
+          both to the car, and you ride along while they drive it out of the gate and down the road.
+          A showroom car stays on its platform, so they drive one of the same model off the lot;
+          with none there, the button says why.
+        </p>
+        <p>
+          A drive takes 20–35 game minutes, shown by a bar at the top. You&apos;re off the floor
+          until it&apos;s back, and the car can&apos;t be looked at or sold while it&apos;s out.{' '}
+          <b>Head back</b> ({touch ? '✕' : '✕ or Esc'}) turns round early, for a smaller lift. Back
+          on the lot they&apos;re keener to buy and hope for less off, more so in a clean car (or a
+          used one in good shape). Name a price to someone who wanted a drive without giving them
+          one and they&apos;re a little less keen.
+        </p>
+      </section>
+      <section>
         <h3>The F&amp;I menu</h3>
         <p>
           Once the paperwork is signed, the F&amp;I menu opens at the desk. For a buyer who

@@ -11,6 +11,7 @@ import type { RepScale } from '../sim/reputation'
 import { bayCount, type ReconBook } from '../sim/service'
 import { financeSeconds, type Employee } from '../sim/staff'
 import { netPrice, staffPlan } from '../sim/fi'
+import { driveBonusFor } from '../sim/testDrive'
 import type { GameState } from './types'
 
 /**
@@ -87,9 +88,26 @@ export function orderInvoice(s: Pick<GameState, 'difficulty' | 'franchise'>): nu
 
 /**
  * What `c`'s seller adds to the odds of a yes: their skill bonus, plus what
- * the showroom improvements up today and the level add.
+ * the showroom improvements up today and the level add, and what a test
+ * drive did (or not having one they wanted, see `driveBonusFor`).
  */
 export function sellerBonusFor(
+  s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster' | 'clients' | 'inventory'>,
+  c: Pick<Customer, 'handlerId' | 'clientId' | 'drive' | 'wantsDrive' | 'targetCarId'>,
+): number {
+  return baseSellerBonus(s, c) + testDriveBonus(s, c)
+}
+
+/** What the test drive does to `c`'s odds of a yes, at the level's scale. */
+export function testDriveBonus(
+  s: Pick<GameState, 'difficulty' | 'inventory'>,
+  c: Pick<Customer, 'drive' | 'wantsDrive' | 'targetCarId'>,
+): number {
+  return driveBonusFor(c, s.inventory, levelTuning(s).driveBonus)
+}
+
+/** `sellerBonusFor` without the test drive: the seller, the showroom, the level and the book. */
+export function baseSellerBonus(
   s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster' | 'clients'>,
   c: Pick<Customer, 'handlerId' | 'clientId'>,
 ): number {

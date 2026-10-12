@@ -14,7 +14,7 @@ import { arrivalOpts, commit, tallyMissed, tuning, upEffects, type Kit } from '.
 import { nextCustomerId, rng } from '../rng'
 import type { GameState } from '../types'
 import { clientArrivals, receptionCalls } from './clients'
-import { withCredit, withQuotes } from './customers'
+import { withQuotes, withShopperRolls } from './customers'
 import { closeUp } from './day'
 import { jobsDone, serviceArrivals } from './service'
 
@@ -57,13 +57,13 @@ function tick(k: Kit, step: ReturnType<typeof toStep>): void {
   const { schedule, due } = takeDue(s.arrivals, step.minute)
   // Clients on an appointment come first, and get first pick of the parking.
   // Loyal clients come straight to us; the rest may have seen Nazma's prices.
-  const booked = withCredit(k, withQuotes(k, clientArrivals(k, step.minute, customers)))
+  const booked = withShopperRolls(k, withQuotes(k, clientArrivals(k, step.minute, customers)))
   customers = [...customers, ...booked]
   const stock = availableCars(s.inventory)
   // Some drive in, while there's room in customer parking. Some of those
   // are sellers, and some of the rest bring a car to trade.
   const level = tuning(k)
-  const arrived = withCredit(
+  const arrived = withShopperRolls(
     k,
     withQuotes(
       k,

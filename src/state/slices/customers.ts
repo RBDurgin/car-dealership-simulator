@@ -62,10 +62,28 @@ import {
 } from '../../sim/sellers'
 import { LAST_ARRIVAL_MINUTE } from '../../sim/spawner'
 import { financeOnDuty, type Employee } from '../../sim/staff'
+import {
+  assignDriveAsk,
+  drivableCar,
+  driveBlocker,
+  driveExpect,
+  driveLine,
+  driveMinutes,
+  driveScore,
+} from '../../sim/testDrive'
 import { nextUsedId } from '../../sim/usedCars'
-import { arrivalOpts, commit, endDeal, notify, tallyMissed, tuning, type Kit } from '../core'
+import {
+  arrivalOpts,
+  commit,
+  dispatch,
+  endDeal,
+  notify,
+  tallyMissed,
+  tuning,
+  type Kit,
+} from '../core'
 import { sellerBonusFor } from '../derived'
-import { nextCustomerId, rng } from '../rng'
+import { nextActionId, nextCustomerId, rng } from '../rng'
 import { answerService } from './service'
 import type { GameState } from '../types'
 
@@ -81,6 +99,9 @@ type CustomerKeys =
   | 'fiSign'
   | 'walkIn'
   | 'devSpawnCustomers'
+  | 'testDrive'
+  | 'headBack'
+  | 'driveBack'
 
 /** Everyone on the lot, and the player's side of the deal. */
 export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
@@ -161,6 +182,31 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
         `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!${fi}${tradeLine(sale)}`,
       )
     },
+    testDrive: (id) => startDrive(k, id),
+    headBack: () => {
+      const c = dealCustomer(get().customers, PLAYER_ID)
+      if (c?.phase !== 'driving' || c.drive?.cut) return
+      commit(k, reduceCustomers(get().customers, { type: 'cutDrive', id: c.id }))
+      notify(k, `Heading back to the lot with ${c.name}`)
+    },
+    driveBack: (id) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === id)
+      const car = c?.drive && s.inventory.find((x) => x.id === c.drive!.carId)
+      if (c?.phase !== 'driving' || !c.drive || !car) return
+      const score = driveScore(c.drive, c, car)
+      const drive = { ...c.drive, back: true, score }
+      const ev = { type: 'droveBack', id, drive, expect: driveExpect(c, score) } as const
+      const { drives } = s.dayStats
+      set({
+        dayStats: {
+          ...s.dayStats,
+          drives: { ...drives, taken: drives.taken + 1, cut: drives.cut + (drive.cut ? 1 : 0) },
+        },
+      })
+      commit(k, reduceCustomers(s.customers, ev))
+      if (c.handlerId === PLAYER_ID) notify(k, `${c.name}: "${driveLine(score, drive.cut)}"`)
+    },
     walkIn: (variant) => {
       const s = get()
       if (s.screen !== 'playing' || isClosed(s.clock) || s.clock.minute > LAST_ARRIVAL_MINUTE) {
@@ -171,7 +217,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const picked = pickArchetype(rng.walkIn, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = nextCustomerId()
-      const [c] = withCredit(
+      const [c] = withShopperRolls(
         k,
         withQuotes(k, [
           generateCustomer(id, availableCars(s.inventory), rng.walkIn, {
@@ -190,7 +236,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const s = get()
       if (isClosed(s.clock) || n <= 0) return
       const stock = availableCars(s.inventory)
-      const arrived = withCredit(
+      const arrived = withShopperRolls(
         k,
         Array.from({ length: n }, () =>
           generateCustomer(nextCustomerId(), stock, rng.customer, arrivalOpts(k)),
@@ -205,6 +251,14 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
 /** Gives each shopper in `arrived` their credit, on its own rng. */
 export function withCredit(k: Kit, arrived: readonly Customer[]): Customer[] {
   return assignCredit(arrived, rng.credit, tuning(k).creditMix)
+}
+
+/**
+ * What every new shopper gets rolled on arrival, each on its own rng: their
+ * credit, and whether they'll ask for a test drive.
+ */
+export function withShopperRolls(k: Kit, arrived: readonly Customer[]): Customer[] {
+  return assignDriveAsk(withCredit(k, arrived), rng.driveAsk)
 }
 
 /** Some of `arrived` have been to the rival's lot first and carry his price. */
@@ -409,10 +463,12 @@ export function sign(
       warranty.price,
     )
   const stats = get().dayStats
+  const drove = c.drive?.back ? 1 : 0
   set({
     dayStats: {
       ...stats,
       sales: [...stats.sales, sale],
+      drives: { ...stats.drives, bought: stats.drives.bought + drove },
       bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
       clients: { ...stats.clients, referralFees: stats.clients.referralFees + fee },
       fi: addFiSale(stats.fi, c.credit, fi, menu),
@@ -488,6 +544,37 @@ export function staffDeal(k: Kit, c: Customer, e: Employee): FiDeal | null {
 /** " Their Summit Sedan goes on the lot tonight." after a sale with a trade-in. */
 export function tradeLine(sale: Sale): string {
   return sale.trade ? ` Their ${carName(sale.trade.model)} goes on the lot tonight.` : ''
+}
+
+/**
+ * The player takes customer `id`, whom they're talking to, for a test drive:
+ * the drive's length is rolled, the car goes out (see `syncCarsOut`) and the
+ * player heads for it, the shopper walking along.
+ */
+export function startDrive(k: Kit, id: string): void {
+  const s = k.get()
+  const c = s.customers.find((x) => x.id === id)
+  if (!c) return
+  const blocker = c.handlerId === PLAYER_ID ? driveBlocker(c, s.inventory) : `${c.name} is busy.`
+  const car = drivableCar(c, s.inventory).car
+  if (blocker || !car) return notify(k, blocker ?? "There's nothing to drive.")
+  const minutes = driveMinutes(rng.testDrive)
+  commit(
+    k,
+    reduceCustomers(s.customers, { type: 'testDrive', id, carId: car.id, by: PLAYER_ID, minutes }),
+  )
+  k.set({ moveOrder: null, menu: null, inspectedId: null })
+  dispatch(k, { type: 'request', id: nextActionId(), targetId: car.id, action: 'ride' })
+  // A showroom car stays on its platform: they drive its twin off the lot.
+  const twin = car.id !== c.targetCarId ? ' The one on the lot, then.' : ''
+  notify(k, `${c.name}: "Let's take the ${carName(car.model)} out!${twin}"`)
+}
+
+/** The player got in the test drive car `carId`: their shopper gets in and they're off. */
+export function board(k: Kit, carId: string): void {
+  const c = dealCustomer(k.get().customers, PLAYER_ID)
+  if (c?.phase !== 'talking' || c.drive?.carId !== carId || c.drive.back) return
+  commit(k, reduceCustomers(k.get().customers, { type: 'boarded', id: c.id }))
 }
 
 /** At the desk with a buyer: the finance manager takes them from here. */

@@ -13,8 +13,11 @@ import {
 import type { Rng } from './rng'
 import type { UsedInfo } from './usedCars'
 
-/** For sale, sold (gone overnight), or in the service garage being reconditioned. */
-export type CarStatus = 'available' | 'sold' | 'recon'
+/**
+ * For sale, sold (gone overnight), in the service garage being
+ * reconditioned, or out on a test drive (see `sim/testDrive.ts`).
+ */
+export type CarStatus = 'available' | 'sold' | 'recon' | 'out'
 export type CarLocation = 'showroom' | 'lot'
 
 export interface InventoryCar {
@@ -126,9 +129,14 @@ export function carProp(car: InventoryCar): Prop {
   }
 }
 
-/** Blocks the footprints of cars in stock and frees those of sold cars. */
+/**
+ * Blocks the footprints of cars in stock and frees those of sold cars (and
+ * of cars in the shop). A car out on a test drive keeps its space blocked,
+ * so nobody is standing in it when the car comes back.
+ */
 export function applyToGrid(grid: Grid, inventory: readonly InventoryCar[]): void {
-  for (const c of inventory) grid.setRectBlocked(c.rect, c.status === 'available')
+  for (const c of inventory)
+    grid.setRectBlocked(c.rect, c.status === 'available' || c.status === 'out')
 }
 
 /**

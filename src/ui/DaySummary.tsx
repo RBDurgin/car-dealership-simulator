@@ -359,6 +359,15 @@ function SummaryPanel() {
               </dd>
             </>
           )}
+          {stats.drives.taken > 0 && (
+            <>
+              <dt>Test drives</dt>
+              <dd>
+                {stats.drives.taken} ({stats.drives.bought} bought
+                {stats.drives.cut > 0 && `, ${stats.drives.cut} cut short`})
+              </dd>
+            </>
+          )}
           <dt>Walk-outs</dt>
           <dd>
             {walkOuts(stats)}

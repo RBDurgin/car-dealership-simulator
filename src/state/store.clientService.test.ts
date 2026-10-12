@@ -284,6 +284,8 @@ function visitorLike(clientId: string) {
     guest: false,
     credit: null,
     fi: null,
+    wantsDrive: false,
+    drive: null,
     service: null,
   }
 }

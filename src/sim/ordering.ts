@@ -125,7 +125,7 @@ export function freeSlots(
   reserved: readonly Slot[] = [],
   expansions: readonly ExpansionId[] = [],
 ): Slot[] {
-  // A car in the shop for reconditioning keeps its space.
+  // A car in the shop for reconditioning, or out on a test drive, keeps its space.
   const stocked = inventory.filter((c) => c.status !== 'sold').map((c) => c.rect)
   return openSlots(expansions).filter((slot) => {
     if (orders.some((o) => sameSlot(o.slot, slot))) return false

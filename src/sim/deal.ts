@@ -30,6 +30,7 @@ import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
 import { financeCommission, financeOnDuty, salesCommission, type Employee } from './staff'
+import { driveBlocker, drivePending } from './testDrive'
 import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 
 /**
@@ -41,6 +42,7 @@ import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 /** Phases in which a customer is dealing with their handler. */
 export const DEAL_PHASES: readonly CustomerPhase[] = [
   'talking',
+  'driving',
   'considering',
   'following',
   'signing',
@@ -157,7 +159,9 @@ export function customerActions(c: Customer, jobs: readonly ServiceJob[] = []): 
     case 'waiting':
       return c.selling ? ['makeOffer'] : ['greet']
     case 'talking':
-      return ['offer']
+      // On the way to a test drive, there's only the car to get to.
+      if (drivePending(c)) return []
+      return c.selling || c.drive ? ['offer'] : ['offer', 'testDrive']
     default:
       return []
   }
@@ -202,6 +206,7 @@ const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set([
   'checkIn',
   'recommend',
   'pitch',
+  'testDrive',
 ])
 
 export function isCustomerAction(action: ActionId): boolean {
@@ -229,12 +234,18 @@ export function actionBlocker(
       const by = roster.find((e) => e.id === c.handlerId)
       return by ? `${by.name} is helping ${c.name}.` : `${c.name} is being helped.`
     }
+    if (action === 'testDrive') return driveBlocker(c, inventory)
     if (action === 'recommend' && !customerActions(c, jobs).includes(action)) {
       return `There's nothing more to offer ${c.name}.`
     }
     return customerActions(c, jobs).includes(action) ? null : `${c.name} is busy.`
   }
   const deal = dealCustomer(customers, PLAYER_ID)
+  if (action === 'ride') {
+    return deal?.phase === 'talking' && deal.drive?.carId === targetId && !deal.drive.back
+      ? null
+      : 'Nobody is waiting to drive it.'
+  }
   if (action === 'closeDeal') {
     // The player's own desk is theirs alone: only the office desk is finance's.
     if (targetId === DESK_CHAIR_ID) {
@@ -410,6 +421,15 @@ export interface DayStats {
   clients: ClientStats
   /** Loans and the F&I menu today (see `sim/fi.ts`). */
   fi: FiStats
+  /** Test drives today: back from the road, of those how many bought, and how many were cut short. */
+  drives: DriveStats
+}
+
+/** A day's test drives (see `sim/testDrive.ts`). */
+export interface DriveStats {
+  taken: number
+  bought: number
+  cut: number
 }
 
 export function emptyStats(): DayStats {
@@ -443,6 +463,7 @@ export function emptyStats(): DayStats {
     service: emptyServiceStats(),
     clients: emptyClientStats(),
     fi: emptyFiStats(),
+    drives: { taken: 0, bought: 0, cut: 0 },
   }
 }
 

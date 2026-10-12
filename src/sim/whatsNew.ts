@@ -432,6 +432,21 @@ export const UPDATES: readonly Update[] = [
       'Also a month of financed deals with no chargebacks, and a warranty repair finished in your garage.',
     ],
   },
+  {
+    id: 40,
+    phase: '20',
+    title: 'Test drives',
+    items: [
+      'Some shoppers ask to drive the car first: look for a key over their head.',
+      'While you’re talking, Test drive takes them out in the car, with you riding along.',
+      'A showroom car stays on its platform, so they drive one of its model from the lot.',
+      'A drive makes them keener to buy, and they hope for less off.',
+      'Head back (✕ or Esc) brings you back early, for less of a lift.',
+      'You’re off the floor while you’re out, and the car can’t be sold until it’s back.',
+      'A shopper who wanted a drive and got a price instead is a little less keen.',
+      'The day summary counts the day’s test drives and how many of them bought.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

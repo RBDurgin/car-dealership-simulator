@@ -61,6 +61,8 @@ const buyer = (handlerId: string, chairId: string, extra: Partial<Customer> = {}
   guest: false,
   credit: loan(),
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
   ...extra,
 })

@@ -11,6 +11,7 @@ import { PLAYER_ID } from '../../sim/customers'
 import { confrontBlocker } from '../../sim/nazma'
 import { reconBlocker } from '../../sim/service'
 import { vehicleOwnerId } from '../../sim/sellers'
+import { playerRiding } from '../../sim/testDrive'
 import { WALL_MODES } from '../../sim/walls'
 import { dispatch, endDeal, notify, type Kit } from '../core'
 import { DEV_TIME_SCALES, reconBook } from '../derived'
@@ -95,6 +96,8 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
     qualityTier: 0,
     timeScale: 1,
     issueMoveOrder: (tx, tz) => {
+      // Out on a test drive: the floor will have to wait.
+      if (playerRiding(get().customers)) return
       dispatch(k, { type: 'cancel' })
       set({ moveOrder: { id: nextOrderId(), tx, tz }, menu: null })
       // Walking off mid-conversation; someone following just keeps following.
@@ -113,6 +116,10 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
     openMenu: (targetId, x, y) => set({ menu: { targetId, x, y } }),
     closeMenu: () => set({ menu: null }),
     requestAction: (targetId, action) => {
+      if (playerRiding(get().customers)) {
+        set({ menu: null })
+        return notify(k, "You're out on a test drive.")
+      }
       if (action === 'call') return void get().phoneClient()
       const s = get()
       const blocker =
@@ -128,8 +135,10 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
       // Turning to someone else ends the conversation; greeting someone else also
       // drops a customer who was following.
       const deal = dealCustomer(get().customers, PLAYER_ID)
-      // Looking over the car of the seller they're talking to doesn't end the talk.
-      if (deal && deal.id !== targetId && deal.id !== vehicleOwnerId(targetId)) {
+      // Looking over the car of the seller they're talking to, or getting in
+      // the car they're taking for a drive, doesn't end the talk.
+      const ours = deal?.id === vehicleOwnerId(targetId) || deal?.drive?.carId === targetId
+      if (deal && deal.id !== targetId && !ours) {
         endDeal(k, isCustomerAction(action) ? DEAL_PHASES : CONVERSATION_PHASES)
       }
       set({ moveOrder: null, menu: null, inspectedId: null })
@@ -145,6 +154,8 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
       if (s.menu) return set({ menu: null })
       if (s.staffOpen) return set({ staffOpen: false })
       if (s.stockOpen) return set({ stockOpen: false })
+      // Out on a test drive, Esc heads back.
+      if (playerRiding(s.customers)) return s.headBack()
       const busy = s.activeAction || s.moveOrder || s.inspectedId
       dispatch(k, { type: 'cancel' })
       set({ moveOrder: null, inspectedId: null })
@@ -154,6 +165,7 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
       else endDeal(k, DEAL_PHASES, (name) => `${name} will wait for you.`)
     },
     walkAway: () => {
+      if (playerRiding(get().customers)) return
       dispatch(k, { type: 'cancel' })
       set({ moveOrder: null })
       endDeal(k, CONVERSATION_PHASES)

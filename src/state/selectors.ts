@@ -3,7 +3,7 @@ import { installedExpansions } from '../sim/expansions'
 import { installed, type ImprovementId } from '../sim/improvements'
 import type { ExpansionId } from '../sim/layout'
 import { buyBlocker, lotSlotFor } from '../sim/sellers'
-import { sellerBonusFor } from './derived'
+import { baseSellerBonus, testDriveBonus } from './derived'
 import type { GameState } from './types'
 
 /**
@@ -63,15 +63,19 @@ const bonusOf = memoLast(
     handlerId: Customer['handlerId'],
     clientId: Customer['clientId'],
   ) =>
-    sellerBonusFor(
+    baseSellerBonus(
       { improvements, clock: { day } as GameState['clock'], difficulty, roster, clients },
       { handlerId, clientId },
     ),
 )
 
 /** `sellerBonusFor`, recomputed only when what it reads changes. */
-export const sellerBonusOf = (s: GameState, c: Pick<Customer, 'handlerId' | 'clientId'>): number =>
-  bonusOf(s.improvements, s.clock.day, s.difficulty, s.roster, s.clients, c.handlerId, c.clientId)
+export const sellerBonusOf = (
+  s: GameState,
+  c: Pick<Customer, 'handlerId' | 'clientId' | 'drive' | 'wantsDrive' | 'targetCarId'>,
+): number =>
+  bonusOf(s.improvements, s.clock.day, s.difficulty, s.roster, s.clients, c.handlerId, c.clientId) +
+  testDriveBonus(s, c)
 
 const lotRoomOf = memoLast(
   (
