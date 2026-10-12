@@ -1,16 +1,13 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { Color, MathUtils, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three'
-import { isCutaway, wallPieces, type WallMode, type WallPiece } from '../sim/walls'
+import { MathUtils, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three'
+import { isCutaway, wallPieces, type WallPiece } from '../sim/walls'
 import { useGame } from '../state/store'
 import { grid, layout } from './runtime'
 import { useGround } from './useUpNow'
+import { CAP, CAP_COLORS, THICKNESS, WALL_COLOR, WALL_HEIGHT } from './wallStyle'
 
-const WALL_HEIGHT: Record<WallMode, number> = { up: 2.4, cutaway: 0.35, down: 0.1 }
-const THICKNESS = { solid: 0.16, glass: 0.08, fence: 0.05 }
-const CAP = 0.05
 const FENCE_HEIGHT = 0.8
-const CAP_COLORS = { solid: new Color('#5b5f66'), glass: new Color('#2f3338') }
 
 /** Footprint of one instanced box; `piece` indexes the animated height it follows. */
 interface Slab {
@@ -177,7 +174,7 @@ function BuildingWalls() {
         onPointerUp={swallowClick}
       >
         <boxGeometry />
-        <meshStandardMaterial color="#ece7dd" />
+        <meshStandardMaterial color={WALL_COLOR} />
       </instancedMesh>
       <instancedMesh
         ref={glassRef}

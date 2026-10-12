@@ -1,17 +1,23 @@
 import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
+import { weekdayTraffic } from './calendar'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
 import { cleanlinessBonus } from './cleanliness'
+import type { Client } from './clients'
+import type { Tuning } from './difficulty'
 import type { Vehicle } from './driving'
+import type { SaleEvent } from './events'
 import { BASE_MSRP, type InventoryCar } from './inventory'
 import { sourceWeights, type Source } from './marketing'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Haggle } from './negotiation'
+import { visitorScale } from './reputation'
 import type { Rng } from './rng'
 import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
 import type { ServiceVisit } from './serviceClients'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
+import { WEATHER_EFFECTS, type Weather } from './weather'
 
 /**
  * A customer's visit. The world (2d) moves them and reports progress as events;
@@ -59,10 +65,11 @@ export const PLAYER_ID = 'player'
 /**
  * `sold`: a seller who sold us their car, leaving on foot. `serviced`: a
  * service client who collected their car; `declined`: one who turned the
- * quote down (or couldn't be fitted in).
+ * quote down (or couldn't be fitted in). `visited`: a guest on client
+ * appreciation day nobody got to, who ate, looked around and went home.
  */
 export type LeaveReason =
-  'bought' | 'sold' | 'refused' | 'impatient' | 'closing' | 'serviced' | 'declined'
+  'bought' | 'sold' | 'refused' | 'impatient' | 'closing' | 'serviced' | 'declined' | 'visited'
 
 export type { CustomerVariant }
 
@@ -145,6 +152,17 @@ export interface Customer {
    * shoppers and sellers. Their car isn't a `vehicle`: it parks in a service space.
    */
   service: ServiceVisit | null
+  /** Their entry in the client book when they've been before (see `sim/clients.ts`), else null. */
+  clientId: string | null
+  /**
+   * The loyalty discount a returning client is priced from: the sticker is
+   * `msrp × (1 − loyaltyCut)` (see `stickerOf`). 0 for everyone else.
+   */
+  loyaltyCut: number
+  /** The client from the book who sent them (see `sim/referrals.ts`), else null. */
+  referredBy: string | null
+  /** A guest on client appreciation day: one nobody greets leaves as `visited`. */
+  guest: boolean
 }
 
 const FIRST_NAMES = [
@@ -164,12 +182,44 @@ const FIRST_NAMES = [
   'Dana',
   'Kim',
   'Pat',
+  'Reese',
+  'Rowan',
+  'Charlie',
+  'Emery',
+  'Finley',
+  'Hayden',
+  'Kai',
+  'Logan',
+  'Marley',
+  'Parker',
+  'Peyton',
+  'Remy',
+  'Sage',
+  'Shawn',
+  'Toni',
+  'Blair',
 ]
 const LAST_INITIALS = 'ABCDEFGHJKLMNPRSTW'
 
-/** A random first name and last initial, e.g. "Alex B.". */
-export function randomName(rng: Rng): string {
-  return `${rng.pick(FIRST_NAMES)} ${rng.pick([...LAST_INITIALS])}.`
+const nameAt = (i: number) =>
+  `${FIRST_NAMES[Math.floor(i / LAST_INITIALS.length)]} ${LAST_INITIALS[i % LAST_INITIALS.length]}.`
+
+/**
+ * A random first name and last initial, e.g. "Alex B.". One in `taken` (the
+ * client book's) steps on to the next free name instead of re-rolling, so the
+ * rng is drawn the same either way.
+ */
+export function randomName(rng: Rng, taken?: ReadonlySet<string>): string {
+  const first = Math.floor(rng.next() * FIRST_NAMES.length)
+  const last = Math.floor(rng.next() * LAST_INITIALS.length)
+  const rolled = first * LAST_INITIALS.length + last
+  const total = FIRST_NAMES.length * LAST_INITIALS.length
+  if (!taken) return nameAt(rolled)
+  for (let k = 0; k < total; k++) {
+    const name = nameAt((rolled + k) % total)
+    if (!taken.has(name)) return name
+  }
+  return nameAt(rolled)
 }
 
 export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
@@ -178,6 +228,25 @@ export const CAR_MODELS = Object.keys(BASE_MSRP) as CarModel[]
 export const PATIENCE_MINUTES = { min: 45, max: 120 }
 /** Nobody waits less than this many game minutes, however impatient. */
 export const MIN_PATIENCE = 15
+/** × the budget of a client back to trade up the car we sold them. */
+export const TRADE_UP_BUDGET = 1.15
+/** Body types a client trades up through, smallest first. */
+export const UPGRADE_PATH: readonly CarModel[] = ['hatchback-sports', 'sedan', 'suv', 'suv-luxury']
+/** Chance a client trading up looks at the next model up `UPGRADE_PATH` as well as their old one. */
+export const UPGRADE_CHANCE = 0.35
+/** Share of the discount they hope for that a client at satisfaction 100 lets go. */
+export const LOYAL_EXPECT_CUT = 0.3
+
+/** The model after `model` up `UPGRADE_PATH`, or null at the top or off it. */
+export function nextModelUp(model: CarModel): CarModel | null {
+  const i = UPGRADE_PATH.indexOf(model)
+  return i >= 0 && i < UPGRADE_PATH.length - 1 ? UPGRADE_PATH[i + 1] : null
+}
+
+/** Share of their hoped-for discount a client of `satisfaction` lets go: none at 50 or under. */
+export function loyalExpectCut(satisfaction: number): number {
+  return Math.min(1, Math.max(0, (satisfaction - 50) / 50)) * LOYAL_EXPECT_CUT
+}
 
 /** How much a customer likes a car: preferred body type first, then whether it's affordable. */
 function carScore(c: Customer, car: InventoryCar): number {
@@ -236,6 +305,25 @@ export interface CustomerOptions {
   patienceFactor?: number
   /** Added to the discount they hope for, from the difficulty level (`Tuning.expect`). */
   expectShift?: number
+  /** Names in the client book, which a stranger's name steps past (see `randomName`). */
+  taken?: ReadonlySet<string>
+  /**
+   * A client back from the book: their name, look, archetype and taste come
+   * from the record, and they come as `'client'` unless `source` says otherwise.
+   */
+  client?: Client
+  /**
+   * The client is back to trade up the car we sold them: their budget is
+   * `TRADE_UP_BUDGET` higher, and they shop that model (and, `UPGRADE_CHANCE`
+   * of the time, the next one up).
+   */
+  tradeUp?: boolean
+  /** A returning client's loyalty discount (`ClientPerks.loyaltyDiscount`). */
+  loyaltyCut?: number
+  /** The client who sent this stranger in. */
+  referredBy?: string
+  /** A client back as a guest on client appreciation day. */
+  guest?: boolean
 }
 
 /**
@@ -248,12 +336,14 @@ export function generateCustomer(
   rng: Rng,
   opts: CustomerOptions = {},
 ): Customer {
+  const client = opts.client
+  if (client) return returningCustomer(id, client, available, rng, opts)
   const source = opts.source ?? 'regular'
   const weights = sourceWeights(source)
   const archetype =
     opts.archetype ?? pickArchetype(rng, opts.skew ? skewWeights(opts.skew, weights) : weights)
   const traits = ARCHETYPES[archetype]
-  const name = randomName(rng)
+  const name = randomName(rng, opts.taken)
   const variant = opts.variant ?? rng.pick(CUSTOMER_VARIANTS)
   const companion =
     archetype === 'couple' ? rng.pick(CUSTOMER_VARIANTS.filter((v) => v !== variant)) : null
@@ -277,7 +367,107 @@ export function generateCustomer(
   const top = Math.max(...preferredModels.map((m) => BASE_MSRP[m]))
   const factor = traits.budget.min + rng.next() * (traits.budget.max - traits.budget.min)
   const budget = Math.round((top * factor) / 500) * 500
+  return shopper(
+    {
+      id,
+      name,
+      variant,
+      archetype,
+      source,
+      companion,
+      budget,
+      preferredModels,
+      clientId: null,
+      referredBy: opts.referredBy ?? null,
+    },
+    available,
+    rng,
+    opts,
+  )
+}
 
+/**
+ * A client back from the book, as they were last time. Trading up the car we
+ * sold them, they shop its model (or the next one up), with the budget for
+ * it. A client (not a prospect) is priced at the loyalty discount, and the
+ * happier they are the less of a discount they hope for.
+ */
+function returningCustomer(
+  id: string,
+  client: Client,
+  available: readonly InventoryCar[],
+  rng: Rng,
+  opts: CustomerOptions,
+): Customer {
+  const old = opts.tradeUp ? (client.car?.model ?? null) : null
+  const up = old && nextModelUp(old)
+  const models = !old
+    ? client.preferredModels
+    : up && rng.next() < UPGRADE_CHANCE
+      ? [old, up]
+      : [old]
+  const raised = opts.tradeUp ? client.budget * TRADE_UP_BUDGET : client.budget
+  // Looking a size up, they come able to afford its sticker. A prospect's
+  // models are just the ones they liked, however many.
+  const lookingUp = up && models.includes(up)
+  const budget = Math.round(Math.max(raised, lookingUp ? BASE_MSRP[up] : 0) / 500) * 500
+  const c = shopper(
+    {
+      id,
+      name: client.name,
+      variant: client.variant,
+      archetype: client.archetype,
+      source: opts.source ?? 'client',
+      companion: client.companion,
+      budget,
+      preferredModels: [...models],
+      clientId: client.id,
+      referredBy: null,
+    },
+    available,
+    rng,
+    opts,
+  )
+  // A be-back comes back ready to deal: hoping for about their last counter.
+  const deal = client.status === 'prospect' ? client.lastDeal : null
+  if (deal?.counter) return { ...c, expect: beBackExpect(deal.model, deal.counter) }
+  if (client.status !== 'client') return c
+  const expect = Math.round(c.expect * (1 - loyalExpectCut(client.satisfaction)) * 1000) / 1000
+  return { ...c, expect, loyaltyCut: opts.loyaltyCut ?? 0 }
+}
+
+/** Most a be-back hopes off the sticker, however low their last counter. */
+export const MAX_BE_BACK_EXPECT = 0.25
+
+/** The discount that puts a be-back's hope on a new `model` at their last `counter`. */
+export function beBackExpect(model: CarModel, counter: number): number {
+  const off = 1 - counter / BASE_MSRP[model]
+  return Math.round(Math.min(MAX_BE_BACK_EXPECT, Math.max(0, off)) * 1000) / 1000
+}
+
+/** Who a customer is, before their patience, browse and hopes are rolled. */
+type Identity = Pick<
+  Customer,
+  | 'id'
+  | 'name'
+  | 'variant'
+  | 'archetype'
+  | 'source'
+  | 'companion'
+  | 'budget'
+  | 'preferredModels'
+  | 'clientId'
+  | 'referredBy'
+>
+
+/** `who`, arriving now: their patience, the cars they'll look at and the discount they hope for. */
+function shopper(
+  who: Identity,
+  available: readonly InventoryCar[],
+  rng: Rng,
+  opts: CustomerOptions,
+): Customer {
+  const traits = ARCHETYPES[who.archetype]
   const rolled = rng.int(PATIENCE_MINUTES.min / 5, PATIENCE_MINUTES.max / 5) * 5
   const patience = Math.max(
     MIN_PATIENCE,
@@ -285,14 +475,7 @@ export function generateCustomer(
   )
 
   const customer: Customer = {
-    id,
-    name,
-    variant,
-    archetype,
-    source,
-    companion,
-    budget,
-    preferredModels,
+    ...who,
     patience,
     patienceLeft: patience,
     browseCarIds: [],
@@ -311,6 +494,8 @@ export function generateCustomer(
     trade: null,
     rivalQuote: null,
     service: null,
+    loyaltyCut: 0,
+    guest: !!opts.guest,
   }
 
   // They end their browse at the car they like best, which becomes the target.
@@ -409,7 +594,7 @@ export function moodOf(c: Customer): Mood {
       return 'happy'
     case 'leaving':
       if (c.leaveReason === 'bought' || c.leaveReason === 'sold') return 'happy'
-      if (c.leaveReason === 'serviced') return 'happy'
+      if (c.leaveReason === 'serviced' || c.leaveReason === 'visited') return 'happy'
       if (c.leaveReason === 'closing' || c.leaveReason === 'declined') return 'neutral'
       return 'unhappy'
     case 'waiting':
@@ -421,7 +606,7 @@ export function moodOf(c: Customer): Mood {
 
 /** The icon above a customer's head, if any. */
 export type Bubble =
-  'waiting' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
+  'waiting' | 'client' | 'impatient' | 'considering' | 'counter' | 'helped' | 'bought' | 'upset'
 
 export function bubbleOf(c: Customer): Bubble | null {
   // They've named their price and wait for the seller's answer.
@@ -430,7 +615,9 @@ export function bubbleOf(c: Customer): Bubble | null {
   if (staffHandled(c) && ['browsing', 'waiting', 'talking'].includes(c.phase)) return 'helped'
   switch (c.phase) {
     case 'waiting':
-      return moodOf(c) === 'impatient' ? 'impatient' : 'waiting'
+      if (moodOf(c) === 'impatient') return 'impatient'
+      // Someone from the client book: a star, so they can be spotted.
+      return c.clientId ? 'client' : 'waiting'
     case 'considering':
       return 'considering'
     case 'leaving':
@@ -675,9 +862,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.handlerId !== null) return c
       const factor = ev.outside?.has(c.id) ? (ev.outsideFactor ?? 1) : 1
       const patienceLeft = Math.max(0, c.patienceLeft - ev.minutes * factor)
-      return patienceLeft === 0
-        ? leave({ ...c, patienceLeft }, 'impatient')
-        : { ...c, patienceLeft }
+      if (patienceLeft > 0) return { ...c, patienceLeft }
+      // A guest nobody got to has still had lunch.
+      return leave({ ...c, patienceLeft }, c.guest && !c.sellerId ? 'visited' : 'impatient')
     }
     case 'close':
       // Let a signature in progress finish, staff finish the buyers they have
@@ -701,4 +888,34 @@ export function reduceCustomers(customers: Customer[], ev: CustomerEvent): Custo
     if (n) next.push(n)
   }
   return changed ? next : customers
+}
+
+/**
+ * How many of the usual visitors come on `day`: more or fewer with
+ * reputation, the weekday, the weather, any sale weekend and the level.
+ * (The rival's share and a bust boost are applied on top, in `beginDay`.)
+ */
+export function arrivalScale(
+  day: number,
+  weather: Weather,
+  event: Pick<SaleEvent, 'traffic'> | null,
+  tuning: Pick<Tuning, 'traffic'>,
+  reputation: number,
+): number {
+  return (
+    visitorScale(reputation) *
+    weekdayTraffic(day) *
+    WEATHER_EFFECTS[weather].traffic *
+    (event?.traffic ?? 1) *
+    tuning.traffic
+  )
+}
+
+/**
+ * The patience waiting customers lose over `minutes` of the clock: less with
+ * a receptionist keeping them company (`reception`, see `patienceFactor`)
+ * and a comfy waiting area (`saved`, the improvements' `patienceSaved`).
+ */
+export function patienceDrain(minutes: number, reception: number, saved: number): number {
+  return minutes * reception * (1 - saved)
 }

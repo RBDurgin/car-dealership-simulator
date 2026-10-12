@@ -264,6 +264,20 @@ describe('lastTheftNight', () => {
     const hard = days(200).filter((d) => isTheftNight(d, 1.5))
     expect(lastTheftNight(200, 1.5)).toBe(hard[hard.length - 1])
   })
+
+  it('gives the same answer whatever was asked before, and at any chance', () => {
+    // Replayed by hand, as it was before it was remembered.
+    const replay = (day: number, chance: number) => {
+      let last = 0
+      for (let d = FIRST_THEFT_DAY; d <= day; d++) if (theftNightAfter(d, last, chance)) last = d
+      return last
+    }
+    for (const chance of [0.7, 1.3, 2.9, 0.4, 1.1, 3.3, 0.9, 1.7, 2.2, 0.6]) {
+      for (const d of [300, 40, 41, 299, 5, 120.5]) {
+        expect(lastTheftNight(d, chance), `${d} at ${chance}`).toBe(replay(d, chance))
+      }
+    }
+  })
 })
 
 describe('planTheft', () => {

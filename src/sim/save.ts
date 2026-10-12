@@ -1,11 +1,25 @@
+import { ARCHETYPES } from './archetypes'
 import { calendarOf } from './calendar'
+import { CUSTOMER_VARIANTS } from './characters'
+import {
+  defaultPerks,
+  emptyMonthCsi,
+  SERVICE_INTERVAL,
+  LOYALTY_DISCOUNTS,
+  REFERRAL_FEES,
+  type Appreciation,
+  type Client,
+  type ClientPerks,
+  type MonthCsi,
+} from './clients'
 import type { GameTime } from './clock'
+import { isAchievementId, type EarnedAchievement } from './achievements'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { CAR_MODELS } from './customers'
-import { COST_FRACTION, type InventoryCar } from './inventory'
+import { BASE_MSRP, COST_FRACTION, type InventoryCar } from './inventory'
 import { PARKING_SPACES, PLATFORMS, type CarModel } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
 import { lastTheftNight } from './nazma'
@@ -16,6 +30,17 @@ import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { dressFor, ROLES, type Employee } from './staff'
+import {
+  emptyLifetime,
+  emptyRecords,
+  LOG_FIELDS,
+  RECORD_KEYS,
+  recordToTuple,
+  tupleToRecord,
+  type DayRecord,
+  type Lifetime,
+  type Records,
+} from './stats'
 import { isTipId, type TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 
@@ -29,7 +54,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 22
+export const SAVE_VERSION = 27
 
 export interface SaveData {
   version: number
@@ -72,6 +97,26 @@ export interface SaveData {
   rival: Rival
   /** The service department's settings (see `sim/service.ts`). */
   service: ServiceSettings
+  /** The client book (see `sim/clients.ts`). */
+  clients: Client[]
+  /** The loyalty levers set in the Clients tab. */
+  clientPerks: ClientPerks
+  /** A client appreciation day booked, or null. */
+  appreciation: Appreciation | null
+  /** The month's new-car buyers' visit scores so far, for the CSI. */
+  monthCsi: MonthCsi
+  /**
+   * A record of each day settled since `statsFrom` (see `sim/stats.ts`), each
+   * a tuple in `LOG_FIELDS` order to stay small (`tupleToRecord` reads one).
+   */
+  log: number[][]
+  /** Totals over every day settled, and personal records. */
+  lifetime: Lifetime
+  records: Records
+  /** The first day the log and lifetime totals cover. */
+  statsFrom: number
+  /** Achievements earned this game (see `sim/achievements.ts`). */
+  achievements: EarnedAchievement[]
 }
 
 export interface SaveSource {
@@ -94,6 +139,15 @@ export interface SaveSource {
   won: boolean
   rival: Rival
   service: ServiceSettings
+  clients: Client[]
+  clientPerks: ClientPerks
+  appreciation: Appreciation | null
+  monthCsi: MonthCsi
+  log: DayRecord[]
+  lifetime: Lifetime
+  records: Records
+  statsFrom: number
+  achievements: EarnedAchievement[]
 }
 
 /**
@@ -127,6 +181,15 @@ export function createSave(s: SaveSource, now: number): SaveData {
     news: LATEST_NEWS,
     rival: s.rival,
     service: s.service,
+    clients: s.clients,
+    clientPerks: s.clientPerks,
+    appreciation: s.appreciation,
+    monthCsi: s.monthCsi,
+    log: s.log.map(recordToTuple),
+    lifetime: s.lifetime,
+    records: s.records,
+    statsFrom: s.statsFrom,
+    achievements: s.achievements,
   }
 }
 
@@ -256,6 +319,44 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         }
       : raw.career,
   }),
+  // v23: the client book. No sale history was saved, so it starts empty.
+  22: (raw) => ({
+    ...raw,
+    clients: [],
+    clientPerks: defaultPerks(),
+    appreciation: null,
+    monthCsi: emptyMonthCsi(),
+  }),
+  // v24: friends sent and thank-you calls, per purchase. Nobody has sent any yet.
+  23: (raw) => ({
+    ...raw,
+    clients: Array.isArray(raw.clients)
+      ? raw.clients.map((c) => (isObject(c) ? { ...c, friendsSent: 0, thanked: false } : c))
+      : raw.clients,
+  }),
+  // v25: the best month's CSI (none yet), and clients with a car from us due
+  // for service a service interval after they bought it.
+  24: (raw) => ({
+    ...raw,
+    career: isObject(raw.career) ? { ...raw.career, bestCsi: null } : raw.career,
+    clients: Array.isArray(raw.clients)
+      ? raw.clients.map((c) =>
+          isObject(c) && c.status === 'client' && isObject(c.car) && isNumber(c.car.boughtDay)
+            ? { ...c, serviceDue: c.car.boughtDay + SERVICE_INTERVAL }
+            : c,
+        )
+      : raw.clients,
+  }),
+  // v26: the day log, lifetime totals and records, kept from the next day on.
+  25: (raw) => ({
+    ...raw,
+    log: [],
+    lifetime: emptyLifetime(),
+    records: emptyRecords(),
+    statsFrom: isNumber(raw.day) ? raw.day + 1 : 1,
+  }),
+  // v27: achievements, none earned yet.
+  26: (raw) => ({ ...raw, achievements: [] }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -292,7 +393,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!raw) return null
   const { savedAt, day, cash, inventory, roster, orders, campaigns, improvements, reputation } = raw
   const { monthSales, quota, difficulty, bailoutUsed, tipsSeen, career, franchise, news } = raw
-  const { expansions, won, rival, service } = raw
+  const { expansions, won, rival, service, clients, clientPerks, appreciation, monthCsi } = raw
   if (!isNumber(savedAt) || !isNumber(day) || day < 1 || !isNumber(cash)) return null
   if (!Array.isArray(inventory) || !inventory.every(isCar)) return null
   if (!Array.isArray(roster) || !roster.every(isEmployee)) return null
@@ -313,11 +414,78 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isRival(rival)) return null
   if (!isObject(service) || !isRateLevel(service.rate) || typeof service.autoRecon !== 'boolean')
     return null
+  if (!Array.isArray(clients)) return null
+  clients.forEach(mendBudget)
+  if (!clients.every(isClient)) return null
+  if (!isPerks(clientPerks)) return null
+  if (appreciation !== null && !isAppreciation(appreciation)) return null
+  if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
+  if (!isLog(raw.log)) return null
+  if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
+  if (!Number.isInteger(raw.statsFrom) || (raw.statsFrom as number) < 1) return null
+  if (!Array.isArray(raw.achievements) || !raw.achievements.every(isEarned)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
-  return { ...raw, news: Math.min(news as number, LATEST_NEWS) } as unknown as SaveData
+  return {
+    ...raw,
+    news: Math.min(news as number, LATEST_NEWS),
+    // One this build no longer has is dropped.
+    achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
+  } as unknown as SaveData
+}
+
+function isEarned(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    Number.isInteger(v.day) &&
+    (v.day as number) >= 1 &&
+    isDifficulty(v.level)
+  )
+}
+
+/** Each of the log's records is a tuple of `LOG_FIELDS.length` numbers, its days counting up. */
+function isLog(v: unknown): boolean {
+  if (!Array.isArray(v)) return false
+  let last = -Infinity
+  for (const t of v) {
+    if (!Array.isArray(t) || t.length !== LOG_FIELDS.length || !t.every(isNumber)) return false
+    const { day } = tupleToRecord(t)
+    if (day <= last) return false
+    last = day
+  }
+  return true
+}
+
+const isCounts = (v: unknown, keys?: readonly unknown[]) =>
+  isObject(v) && Object.entries(v).every(([k, n]) => (!keys || keys.includes(k)) && isNumber(n))
+
+function isLifetime(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    ['sales', 'usedSales', 'gross', 'net', 'visitors', 'trades', 'bought'].every((k) =>
+      isNumber(v[k]),
+    ) &&
+    isNumber(v.nazmaRunOffs) &&
+    isNumber(v.theftsFoiled) &&
+    isCounts(v.byModel, CAR_MODELS) &&
+    isCounts(v.bySource) &&
+    isObject(v.bySeller) &&
+    Object.values(v.bySeller).every((t) => isObject(t) && isNumber(t.sales) && isNumber(t.gross))
+  )
+}
+
+const isBest = (v: unknown) => v === null || (isObject(v) && isNumber(v.value) && isNumber(v.day))
+
+function isRecords(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.streak) &&
+    RECORD_KEYS.every((k) => isBest(v[k])) &&
+    (v.biggestDeal === null || (isObject(v.biggestDeal) && isModel(v.biggestDeal.model)))
+  )
 }
 
 function isCar(v: unknown): boolean {
@@ -336,6 +504,92 @@ function isCar(v: unknown): boolean {
   )
 }
 
+const CLIENT_STATUSES: readonly unknown[] = ['prospect', 'client', 'lapsed', 'defected']
+const isModel = (v: unknown) => (CAR_MODELS as readonly unknown[]).includes(v)
+const isVariant = (v: unknown) => (CUSTOMER_VARIANTS as readonly unknown[]).includes(v)
+const isDayOrNull = (v: unknown) => v === null || isNumber(v)
+
+function isClient(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    isVariant(v.variant) &&
+    (v.companion === null || isVariant(v.companion)) &&
+    typeof v.archetype === 'string' &&
+    v.archetype in ARCHETYPES &&
+    CLIENT_STATUSES.includes(v.status) &&
+    isNumber(v.since) &&
+    isNumber(v.lastVisit) &&
+    isNumber(v.visits) &&
+    isNumber(v.bought) &&
+    (v.car === null || isClientCar(v.car)) &&
+    isNumber(v.budget) &&
+    Array.isArray(v.preferredModels) &&
+    v.preferredModels.every(isModel) &&
+    (v.lastDeal === null ||
+      (isObject(v.lastDeal) &&
+        isModel(v.lastDeal.model) &&
+        isDayOrNull(v.lastDeal.ask) &&
+        isDayOrNull(v.lastDeal.counter))) &&
+    isNumber(v.satisfaction) &&
+    v.satisfaction >= 0 &&
+    v.satisfaction <= 100 &&
+    Array.isArray(v.reasons) &&
+    v.reasons.every((r) => isObject(r) && typeof r.kind === 'string' && isNumber(r.points)) &&
+    isDayOrNull(v.dueDay) &&
+    isDayOrNull(v.expires) &&
+    isDayOrNull(v.lastCall) &&
+    isNumber(v.callsThisCycle) &&
+    (v.appointment === null ||
+      (isObject(v.appointment) &&
+        isNumber(v.appointment.day) &&
+        isNumber(v.appointment.minute) &&
+        typeof v.appointment.reason === 'string')) &&
+    (v.referredBy === null || typeof v.referredBy === 'string') &&
+    isNumber(v.referrals) &&
+    isNumber(v.friendsSent) &&
+    typeof v.thanked === 'boolean' &&
+    isDayOrNull(v.serviceDue)
+  )
+}
+
+/**
+ * A prospect back with two models in mind once came with a NaN budget, saved
+ * as null. Give them the priciest of their models' base price instead.
+ */
+function mendBudget(v: unknown): void {
+  if (!isObject(v) || isNumber(v.budget) || !Array.isArray(v.preferredModels)) return
+  const prices = v.preferredModels.filter(isModel).map((m) => BASE_MSRP[m as CarModel])
+  if (prices.length > 0) v.budget = Math.round(Math.max(...prices) / 500) * 500
+}
+
+function isClientCar(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isModel(v.model) &&
+    typeof v.used === 'boolean' &&
+    isNumber(v.price) &&
+    isNumber(v.boughtDay) &&
+    isNumber(v.year) &&
+    isNumber(v.miles) &&
+    isNumber(v.condition)
+  )
+}
+
+function isAppreciation(v: unknown): boolean {
+  return isObject(v) && isNumber(v.day) && isNumber(v.month)
+}
+
+function isPerks(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    (LOYALTY_DISCOUNTS as readonly unknown[]).includes(v.loyaltyDiscount) &&
+    (REFERRAL_FEES as readonly unknown[]).includes(v.referralFee) &&
+    typeof v.receptionCalls === 'boolean'
+  )
+}
+
 function isCareer(v: unknown): boolean {
   return (
     isObject(v) &&
@@ -346,6 +600,7 @@ function isCareer(v: unknown): boolean {
     isNumber(v.bestMonth) &&
     isRankId(v.rank) &&
     isNumber(v.rivalsBeaten) &&
+    (v.bestCsi === null || isNumber(v.bestCsi)) &&
     isObject(v.soldByModel) &&
     Object.entries(v.soldByModel).every(
       ([model, n]) => (CAR_MODELS as readonly string[]).includes(model) && isNumber(n),

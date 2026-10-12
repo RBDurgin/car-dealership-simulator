@@ -193,14 +193,21 @@ function legLeft(car: DrivenCar): number {
   return routeLength([car.at.pos, ...points.slice(car.next)])
 }
 
-/** Anyone a car should stop for: people standing about, and the other cars. */
+/** The frame loop's lookups, cleared and refilled each frame instead of made anew. */
+const byId = new Map<string, Customer>()
+const bought = new Set<string>()
+const jobs = new Map<string, ServiceJob>()
+
+/** `obstacles`' list, kept between calls. */
+const ahead: Vec2[] = []
+
+/** Anyone a car should stop for: people standing about, and the other cars. Reused by the next call. */
 function obstacles(self: string): Vec2[] {
   const own = `${self}:car`
-  const people = crowdAgents()
-    .filter((a) => !a.id.startsWith(own))
-    .map((a) => a.pos)
-  const others = [...cars.values()].filter((c) => c.id !== self && c.stage !== 'parked')
-  return [...people, ...others.map((c) => c.at.pos)]
+  ahead.length = 0
+  for (const a of crowdAgents()) if (!a.id.startsWith(own)) ahead.push(a.pos)
+  for (const c of cars.values()) if (c.id !== self && c.stage !== 'parked') ahead.push(c.at.pos)
+  return ahead
 }
 
 /**
@@ -381,11 +388,12 @@ export function DrivenCars() {
       carsDay = game.clock.day
       changed = true
     }
-    const byId = new Map(game.customers.map((c) => [c.id, c]))
-    const bought = new Set(game.purchases.map((p) => p.customerId))
-    const jobs = new Map(
-      game.serviceJobs.flatMap((j) => (j.customerId ? [[j.customerId, j] as const] : [])),
-    )
+    byId.clear()
+    for (const c of game.customers) byId.set(c.id, c)
+    bought.clear()
+    for (const p of game.purchases) bought.add(p.customerId)
+    jobs.clear()
+    for (const j of game.serviceJobs) if (j.customerId) jobs.set(j.customerId, j)
     for (const c of game.customers) {
       if (c.vehicle && !cars.has(c.id)) {
         createCar(c)
@@ -396,7 +404,8 @@ export function DrivenCars() {
       }
     }
     const { seconds } = frameSeconds(rawDelta, game.timeScale)
-    for (const car of [...cars.values()]) {
+    // Only the car being updated is ever removed, which a Map's iteration allows.
+    for (const car of cars.values()) {
       const c = byId.get(car.id)
       const going = car.service
         ? updateService(car, c, jobs.get(car.id), seconds)

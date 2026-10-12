@@ -5,27 +5,37 @@ export const PLAYER_SPEED = 5 // tiles per second
 
 /** True if a square of half-width `radius` centered at (x, z) overlaps no blocked tile. */
 export function canStand(grid: Grid, x: number, z: number, radius = PLAYER_RADIUS): boolean {
-  for (const ox of [-radius, radius]) {
-    for (const oz of [-radius, radius]) {
-      const { tx, tz } = grid.worldToTile(x + ox, z + oz)
-      if (!grid.isWalkable(tx, tz)) return false
-    }
-  }
-  return true
+  // Its four corners' tiles, as `grid.worldToTile` finds them, without allocating:
+  // this runs several times per walker per frame.
+  const hw = grid.width / 2
+  const hh = grid.height / 2
+  const x0 = Math.floor(x - radius + hw)
+  const x1 = Math.floor(x + radius + hw)
+  const z0 = Math.floor(z - radius + hh)
+  const z1 = Math.floor(z + radius + hh)
+  return (
+    grid.isWalkable(x0, z0) &&
+    grid.isWalkable(x0, z1) &&
+    grid.isWalkable(x1, z0) &&
+    grid.isWalkable(x1, z1)
+  )
 }
 
-/** Applies (dx, dz) one axis at a time so the mover slides along walls. */
+/** Applies (dx, dz) one axis at a time so the mover slides along walls. Writes into `out` (which may be `pos`). */
 export function moveWithCollision(
   grid: Grid,
   pos: Vec2,
   dx: number,
   dz: number,
   radius = PLAYER_RADIUS,
+  out: Vec2 = { x: 0, z: 0 },
 ): Vec2 {
   let { x, z } = pos
   if (dx !== 0 && canStand(grid, x + dx, z, radius)) x += dx
   if (dz !== 0 && canStand(grid, x, z + dz, radius)) z += dz
-  return { x, z }
+  out.x = x
+  out.z = z
+  return out
 }
 
 /** Samples the segment a→b; true if the mover could walk it without touching a blocked tile. */

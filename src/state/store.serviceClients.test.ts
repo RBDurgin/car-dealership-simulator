@@ -43,7 +43,12 @@ function setUp(visits: [number, JobKind][], roster: Employee[] = [mechanic]) {
     roster,
     cash: 50_000,
     arrivals: { minutes: [], sources: [], spawned: 0 },
-    serviceVisits: { minutes: visits.map((v) => v[0]), kinds: visits.map((v) => v[1]), spawned: 0 },
+    serviceVisits: {
+      minutes: visits.map((v) => v[0]),
+      kinds: visits.map((v) => v[1]),
+      clientIds: visits.map(() => null),
+      spawned: 0,
+    },
     helpOpen: false,
   })
 }

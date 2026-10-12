@@ -1,5 +1,6 @@
 import { rainPlays } from '../sim/musicPlan'
 import { useGame } from '../state/store'
+import { subscribeTo } from '../state/subscribe'
 import { audioContext, busNode } from './engine'
 
 /** Seconds of noise in the loop; long enough that its repeat isn't heard. */
@@ -69,7 +70,5 @@ export function syncRain(): void {
  * the store's weather and screen. Call `syncRain` once audio is unlocked to start it.
  */
 export function startRain(): () => void {
-  return useGame.subscribe((s, prev) => {
-    if (s.weather !== prev.weather || s.screen !== prev.screen) syncRain()
-  })
+  return subscribeTo(rainPlays, syncRain)
 }

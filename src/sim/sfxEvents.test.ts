@@ -51,6 +51,22 @@ const cues = (next: Partial<SfxState>, prev: Partial<SfxState> = {}) =>
   sfxFor({ ...base, ...prev }, { ...base, ...next }).map((e) => e.cue)
 
 describe('sfxFor', () => {
+  it('rings once a call goes through, the player’s or the receptionist’s', () => {
+    const call = (phase: string) => ({ id: 3, action: 'call', phase })
+    expect(
+      cues({ activeAction: call('performing') }, { activeAction: call('approaching') }),
+    ).toEqual(['ring'])
+    expect(
+      cues({ activeAction: call('performing') }, { activeAction: call('performing') }),
+    ).toEqual([])
+    const ring = sfxFor(base, { ...base, receptionCall: { employeeId: 'e1', clientId: 'a' } })
+    expect(ring).toEqual([{ cue: 'ring', subject: { kind: 'employee', id: 'e1' } }])
+    const same = { ...base, receptionCall: { employeeId: 'e1', clientId: 'a' } }
+    expect(sfxFor(same, { ...same, receptionCall: { employeeId: 'e1', clientId: 'a' } })).toEqual(
+      [],
+    )
+  })
+
   const car = { model: 'suv' as const, year: 2018, miles: 90_000, condition: 0.5, acquiredDay: 1 }
   const driving = customer('d1', { phase: 'arriving', vehicle: { car, spot: 2, parked: false } })
   const parked = { ...driving, phase: 'browsing' as const, vehicle: { car, spot: 2, parked: true } }
@@ -123,6 +139,13 @@ describe('sfxFor', () => {
     const before = { ...emptyCareer(), rank: 'regional-name' as const }
     expect(cues({ career: top }, { career: before })).toEqual(['fanfare'])
     expect(cues({ career: top }, { career: top })).toEqual([])
+  })
+
+  it('plays the trophy when an achievement is earned', () => {
+    expect(cues({ achievements: [1, 2] }, { achievements: [1] })).toEqual(['trophy'])
+    expect(cues({ achievements: [1] }, { achievements: [1] })).toEqual([])
+    // A new game starting with none is quiet.
+    expect(cues({ achievements: [] }, { achievements: [1] })).toEqual([])
   })
 
   it('turns the page when the day summary comes up', () => {

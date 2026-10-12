@@ -8,13 +8,17 @@ import {
   occupancy,
   occupiedCost,
   rearm,
+  SEP_RADIUS,
   watchProgress,
+  type Agent,
   type StuckGuard,
 } from '../sim/crowd'
+import type { PathStep } from '../sim/agent'
 import type { Tile, Vec2 } from '../sim/grid'
 import type { Prop } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
-import { crowdAgents, grid, rectBounds, reservations } from './runtime'
+import { useGame } from '../state/store'
+import { crowdAgents, crowdNear, grid, rectBounds, reservations } from './runtime'
 
 /**
  * The body of anyone walking around the world under the game's control
@@ -126,27 +130,42 @@ function replan(w: Walker): void {
 }
 
 /**
+ * How fast anyone else in the crowd may walk (the guard chasing Nazma), so a
+ * walker looks far enough around them for anyone who could come within
+ * `SEP_RADIUS` during the frame. The player is quicker, but moves before
+ * the crowd is gathered.
+ */
+const CROWD_SPEED = 3
+
+/** Kept between calls, so moving walkers allocates nothing each frame. */
+const neighbours: Agent[] = []
+const step: PathStep = { x: 0, z: 0, dx: 0, dz: 0, moved: 0 }
+const moveResult = { moved: 0, dx: 0, dz: 0 }
+
+/**
  * Walks along the path for `seconds` in small substeps, kept apart from the
  * crowd. Walkers stood still get nudged too, so people spread out. Returns the
- * distance walked (pushes not included) and its direction.
+ * distance walked (pushes not included) and its direction, in an object
+ * that's reused by the next call.
  */
 export function moveAlong(w: Walker, speed: number, seconds: number) {
-  let moved = 0
-  let dx = 0
-  let dz = 0
+  const out = moveResult
+  out.moved = 0
+  out.dx = 0
+  out.dz = 0
   const push = !w.seat
-  if (!push && w.waypoints.length === 0) return { moved, dx, dz }
-  const neighbours = crowdAgents()
+  if (!push && w.waypoints.length === 0) return out
+  crowdNear(w.pos, SEP_RADIUS + (speed + CROWD_SPEED) * seconds, neighbours)
   for (let left = seconds; left > 1e-9; left -= MAX_STEP_S) {
     const dt = Math.min(left, MAX_STEP_S)
-    const s = crowdStep(grid, w, w.waypoints, speed, dt, neighbours, push && !w.stuck.ghost)
-    moved += s.moved
-    dx += s.dx
-    dz += s.dz
+    const s = crowdStep(grid, w, w.waypoints, speed, dt, neighbours, push && !w.stuck.ghost, step)
+    out.moved += s.moved
+    out.dx += s.dx
+    out.dz += s.dz
     if (!push && w.waypoints.length === 0) break
   }
   if (watchProgress(w.stuck, w.pos, w.waypoints, seconds) === 'replan') replan(w)
-  return { moved, dx, dz }
+  return out
 }
 
 /**
@@ -201,4 +220,25 @@ export function syncGroups(groups: Map<string, Group>, walkers: Map<string, Walk
     g.position.set(w.pos.x, w.seat ? SEAT_HEIGHT : 0, w.pos.z)
     g.rotation.y = w.heading
   }
+}
+
+/** Each walker's last report that changed nothing, and the store state it was made on. */
+const noOps = new WeakMap<object, { key: string; state: object }>()
+
+/**
+ * Makes a report to the store from a frame loop (`send`: a dispatch, a claim,
+ * Nazma's progress), unless `who` made the same one (`key`) on this very store
+ * state and it changed nothing. Store actions depend only on the state and
+ * what they're given, so it would change nothing again: this saves calling it
+ * every frame while someone stands still, or retrying a failed claim until
+ * something has changed. Gives what `send` returned, or undefined if skipped.
+ */
+export function report<T>(who: object, key: string, send: () => T): T | undefined {
+  const state = useGame.getState()
+  const last = noOps.get(who)
+  if (last && last.key === key && last.state === state) return undefined
+  const result = send()
+  if (useGame.getState() === state) noOps.set(who, { key, state })
+  else noOps.delete(who)
+  return result
 }

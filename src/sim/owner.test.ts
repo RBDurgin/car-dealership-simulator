@@ -11,6 +11,8 @@ import {
   judgeDay,
   OWNER_BONUS,
   OWNER_GAP_DAYS,
+  RETURNING_GOAL,
+  RETURNING_MIN,
   type OwnerGoal,
 } from './owner'
 import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from './reputation'
@@ -101,6 +103,28 @@ describe('generateGoal', () => {
     const counts = goals(2).flatMap((g) => (g.kind === 'serviced' ? [g.count] : []))
     expect(counts.length).toBeGreaterThan(0)
     expect(new Set(counts)).toEqual(new Set([3, 4]))
+  })
+
+  it('asks for sales to returning clients only with enough of them due or booked', () => {
+    const goals = (due: number) =>
+      Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 1, false, 0, due))
+    expect(goals(RETURNING_MIN - 1).some((g) => g.kind === 'returning')).toBe(false)
+    // Without enough due, the goal rolls as it always did.
+    expect(goals(RETURNING_MIN - 1)).toEqual(
+      Array.from({ length: 200 }, (_, i) => generateGoal(createRng(i), inventory, 1)),
+    )
+    const asked = goals(RETURNING_MIN).filter((g) => g.kind === 'returning')
+    expect(asked.length).toBeGreaterThan(0)
+    for (const g of asked) expect(g).toEqual({ kind: 'returning', count: RETURNING_GOAL })
+    const goal = { kind: 'returning', count: 2 } as const
+    expect(goalLabel(goal, formatMoney)).toBe('Sell to 2 returning clients')
+    const back = (returning: boolean): Sale => ({ ...sale('sedan', 25_000), returning })
+    expect(goalProgress(goal, withSales(back(true), back(false)))).toEqual({
+      current: 1,
+      target: 2,
+      met: false,
+    })
+    expect(goalProgress(goal, withSales(back(true), back(true))).met).toBe(true)
   })
 
   it("never asks for a body type that isn't for sale", () => {

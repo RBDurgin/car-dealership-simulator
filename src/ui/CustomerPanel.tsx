@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { ARCHETYPES } from '../sim/archetypes'
+import { historyLine } from '../sim/clients'
 import { PLAYER_ID, type Customer } from '../sim/customers'
 import { budgetHint, dealCustomer } from '../sim/deal'
 import { carName } from '../sim/interactables'
@@ -14,17 +15,19 @@ import {
   dealWarmth,
   matchAsk,
   quoteFor,
+  stickerOf,
   suggestedAllowance,
   suggestedAsk,
   suggestedBuy,
   type Warmth,
 } from '../sim/negotiation'
-import { buyBlocker, estimateRange, lotSlotFor, SELLER_HINTS } from '../sim/sellers'
+import { estimateRange, SELLER_HINTS } from '../sim/sellers'
 import { quoteTotal } from '../sim/service'
 import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
 import { stockValue, usedTag } from '../sim/usedCars'
-import { levelTuning, sellerBonusFor, useGame } from '../state/store'
+import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /** Gross on the car at `price`, red when it's a loss. */
@@ -56,7 +59,7 @@ function WarmthChip({
   price: number
   allowance?: number
 }) {
-  const bonus = useGame((s) => sellerBonusFor(s, c))
+  const bonus = useGame((s) => sellerBonusOf(s, c))
   const day = useGame((s) => s.clock.day)
   const warmth = dealWarmth(c, car, price, bonus, allowance, day)
   return (
@@ -88,7 +91,7 @@ function TradeMargin({ c, allowance }: { c: Customer; allowance: number }) {
  * rival's quote on this car, **Match his price** sets the stepper to it.
  */
 function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
-  const room = useGame((s) => !!lotSlotFor(s))
+  const room = useGame(lotRoom)
   const trading = !!c.trade && room
   const [allowance, setAllowance] = useState(() => suggestedAllowance(c))
   const allow = trading ? allowance : undefined
@@ -97,6 +100,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
   const hint = useGame((s) => levelTuning(s).dealHint)
   const game = useGame.getState()
   const ask = (p: number) => game.ask(p, allow)
+  const sticker = stickerOf(c, car)
   const step = (d: number) => setPrice(clampAsk(c, car, price + d, allow))
   const match = matchAsk(c, car, allow)
   const stepAllowance = (d: number) => setAllowance((a) => clampAllowance(c, a + d))
@@ -148,10 +152,10 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           </>
         ) : (
           <>
-            <button className="btn btn-primary" onClick={() => ask(car.msrp)}>
-              Ask MSRP
+            <button className="btn btn-primary" onClick={() => ask(sticker)}>
+              {c.loyaltyCut > 0 ? 'Ask loyalty price' : 'Ask MSRP'}
             </button>
-            <button className="btn" onClick={() => ask(Math.round((car.msrp * 0.97) / 100) * 100)}>
+            <button className="btn" onClick={() => ask(Math.round((sticker * 0.97) / 100) * 100)}>
               Offer −3%
             </button>
           </>
@@ -239,7 +243,7 @@ function BuyMargin({ c, price }: { c: Customer; price: number }) {
 function BuyHaggle({ c }: { c: Customer }) {
   const [price, setPrice] = useState(() => suggestedBuy(c))
   const hint = useGame((s) => levelTuning(s).dealHint)
-  const blocker = useGame((s) => buyBlocker(s, price))
+  const blocker = useGame((s) => buyBlockerFor(s, price))
   const game = useGame.getState()
   const offer = (p: number) => game.ask(p)
   const step = (d: number) => setPrice((p) => clampBuy(c, p + d))
@@ -410,6 +414,11 @@ export function CustomerPanel() {
   const touch = useMediaQuery(COARSE)
   const day = useGame((s) => s.clock.day)
   const rivalName = useGame((s) => s.rival.name)
+  const client = useGame((s) => (c?.clientId ? s.clients.find((x) => x.id === c.clientId) : null))
+  // A friend sent in by someone from the book.
+  const referrer = useGame((s) =>
+    c?.referredBy ? (s.clients.find((x) => x.id === c.referredBy)?.name ?? null) : null,
+  )
   if (c?.selling) return <SellerPanel c={c} />
   if (c?.service) return <ServicePanel c={c} />
   if (!c || !car) return null
@@ -421,8 +430,20 @@ export function CustomerPanel() {
   return (
     <div className={haggling ? 'panel customer-panel haggling' : 'panel customer-panel'}>
       <div className="info-kicker">Customer</div>
-      <h2>{c.name}</h2>
+      <h2>
+        {c.name}
+        {client && (
+          <span className="stock-badge client-badge">
+            {client.status === 'prospect' ? 'Prospect' : 'Client'}
+          </span>
+        )}
+      </h2>
       <div className="customer-type">{ARCHETYPES[c.archetype].hint}</div>
+      {client && (
+        <div className="customer-history">{historyLine(client, day, carName, formatMoney)}</div>
+      )}
+      {referrer && <div className="customer-history">Sent by {referrer}</div>}
+      {c.guest && <div className="customer-history">Here for client appreciation day</div>}
       <p className="customer-quote">
         “I'm interested in the {carName(car.model)}. I'm hoping to spend around{' '}
         {formatMoney(budgetHint(c))}.”
@@ -440,6 +461,14 @@ export function CustomerPanel() {
         </dd>
         <dt>{car.used ? 'Used price' : 'MSRP'}</dt>
         <dd className="price">{formatMoney(car.msrp)}</dd>
+        {c.loyaltyCut > 0 && (
+          <>
+            <dt>Loyalty price</dt>
+            <dd className="price">
+              {formatMoney(stickerOf(c, car))} (−{Math.round(c.loyaltyCut * 100)}%)
+            </dd>
+          </>
+        )}
         {worth !== null && (
           <>
             <dt>Worth today</dt>

@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react'
 import { calendarOf, longDate } from '../sim/calendar'
+import { buyerScore, costliestReason, type ClientStats } from '../sim/clients'
 import { difficultyLabel } from '../sim/difficulty'
 import { eventOn } from '../sim/events'
 import { WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
@@ -17,7 +19,8 @@ import {
   walkOuts,
   type DayStats,
 } from '../sim/deal'
-import { TIERS, tierName } from '../sim/franchise'
+import { heldByCsi, TIERS, tierName } from '../sim/franchise'
+import { CSI_FLOOR, CSI_TIER_MIN, csiFactor, csiOf } from '../sim/csi'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
@@ -27,8 +30,15 @@ import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
 import { levelTuning, useGame } from '../state/store'
+import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
 import { rankLine } from './rankText'
+import { newRecordLine } from './statsText'
+import { achievementOf } from '../sim/achievements'
+import { PERF, PERF_BUSY } from '../state/perf'
+
+/** The `?perf` readings for the day, loaded only with the flag. */
+const PerfReport = lazy(() => import('./PerfReport'))
 
 /**
  * End of the day: shown once the doors are closed and the last customer has
@@ -47,21 +57,61 @@ function serviceLetDown(stats: DayStats): string {
     .join(', ')
 }
 
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** The client book today: who went in it, the buyers' average score and what cost the most. */
+function ClientsBlock({ stats }: { stats: ClientStats }) {
+  if (stats.scores.length === 0) return null
+  const score = buyerScore(stats.scores)
+  const worst = costliestReason(stats.scores)
+  return (
+    <>
+      <dt>Clients</dt>
+      <dd>
+        {count(stats.added, 'new client')}, {count(stats.prospects, 'new prospect')}
+        {stats.returned > 0 && `, ${count(stats.returned, 'returning buyer')}`}
+        {stats.referrals > 0 && `, ${count(stats.referrals, 'friend')} of clients bought`}
+      </dd>
+      {score !== null && (
+        <>
+          <dt className="summary-sub">· buyers&apos; score</dt>
+          <dd className="summary-sub">
+            <SatisfactionChip score={score} />
+          </dd>
+        </>
+      )}
+      {worst && (
+        <>
+          <dt className="summary-sub">· cost the most</dt>
+          <dd className="summary-sub">{worst}</dd>
+        </>
+      )}
+    </>
+  )
+}
+
+/** The end-of-day summary: selects nothing else until the day is over. */
 export function DaySummary() {
   const open = useGame(dayOver)
+  return open ? <SummaryPanel /> : null
+}
+
+function SummaryPanel() {
   const day = useGame((s) => s.clock.day)
   const stats = useGame((s) => s.dayStats)
+  const records = useGame((s) => s.records)
+  const achievements = useGame((s) => s.achievements)
   const cash = useGame((s) => s.cash)
   const arriving = useGame((s) => s.orders.length)
   const reputation = useGame((s) => s.reputation)
   const weather = useGame((s) => s.weather)
   const monthSold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
+  const monthCsi = useGame((s) => csiOf(s.monthCsi))
   const difficulty = useGame((s) => s.difficulty)
   const career = useGame((s) => s.career)
   const franchise = useGame((s) => s.franchise)
   const rankScale = useGame((s) => levelTuning(s).rankScale)
-  if (!open) return null
   const progress = rankProgress(career, reputation, rankScale)
   const event = eventOn(day)
   const missed = missedSummary(stats.missed)
@@ -80,6 +130,11 @@ export function DaySummary() {
           {event && ` · ${event.label} sale`} · {difficultyLabel(difficulty)}
         </div>
         <h2>{longDate(day)}</h2>
+        {PERF && (
+          <Suspense fallback={null}>
+            <PerfReport />
+          </Suspense>
+        )}
         <dl className="summary-stats">
           <dt>Visitors</dt>
           <dd>
@@ -189,6 +244,18 @@ export function DaySummary() {
               <dd className="price">{formatMoney(-stats.expansions)}</dd>
             </>
           )}
+          {stats.clients.referralFees > 0 && (
+            <>
+              <dt>Referral fees</dt>
+              <dd className="price">{formatMoney(-stats.clients.referralFees)}</dd>
+            </>
+          )}
+          {stats.clients.appreciation > 0 && (
+            <>
+              <dt>Appreciation day</dt>
+              <dd className="price">{formatMoney(-stats.clients.appreciation)}</dd>
+            </>
+          )}
           {theftLoss(stats) > 0 && (
             <>
               <dt>Stolen stock</dt>
@@ -240,6 +307,7 @@ export function DaySummary() {
               </span>
             )}
           </dd>
+          <ClientsBlock stats={stats.clients} />
           {nazma && (
             <>
               <dt>Nazma</dt>
@@ -286,9 +354,37 @@ export function DaySummary() {
               quotaLine(monthSold, quota, daysLeft(calendarOf(day).dayOfMonth))
             )}
           </dd>
+          <dt title="The manufacturer's survey of the month's new-car buyers">CSI</dt>
+          <dd>
+            {stats.quota ? (
+              stats.quota.csi === null ? (
+                <span className="muted">No new-car buyers this month</span>
+              ) : (
+                <>
+                  {stats.quota.csi}{' '}
+                  <span className="muted">
+                    (holdback ×{csiFactor(stats.quota.csi).toFixed(2)}
+                    {stats.quota.csi < CSI_FLOOR && `, under ${CSI_FLOOR}`})
+                  </span>
+                </>
+              )
+            ) : monthCsi === null ? (
+              <span className="muted">No new-car buyers yet this month</span>
+            ) : (
+              <>
+                {monthCsi} <span className="muted">so far this month</span>
+              </>
+            )}
+          </dd>
           <dt>Franchise</dt>
           <dd>
             {tierName(franchise)}
+            {stats.quota && heldByCsi(stats.quota) && (
+              <span className="muted">
+                {' '}
+                (quota met, but a CSI under {CSI_TIER_MIN} kept you from moving up)
+              </span>
+            )}
             {stats.quota && stats.quota.tier.from !== stats.quota.tier.to && (
               <span className="muted">
                 {' '}
@@ -329,6 +425,27 @@ export function DaySummary() {
         {stats.rankUp && (
           <div className="summary-rank-up">
             ★ Your dealership is now a <b>{rankById(stats.rankUp).name}</b>.
+          </div>
+        )}
+        {stats.newRecords.length > 0 && (
+          <div className="summary-records">
+            {stats.newRecords.map((key) => (
+              <div key={key}>🏆 {newRecordLine(key, records)}</div>
+            ))}
+          </div>
+        )}
+        {achievements.some((a) => a.day === day) && (
+          <div className="summary-achievements">
+            {achievements
+              .filter((a) => a.day === day)
+              .map(({ id }) => {
+                const a = achievementOf(id)
+                return (
+                  <div key={id}>
+                    🏆 <b>{a.title}</b>: {a.text}
+                  </div>
+                )
+              })}
           </div>
         )}
         {stats.bailout > 0 && (
@@ -419,7 +536,9 @@ export function DaySummary() {
             ))}
           </ul>
         )}
-        <p className="muted summary-saved">Progress saved.</p>
+        <p className="muted summary-saved">
+          {PERF_BUSY ? 'Not saved: a ?perf=busy game never is.' : 'Progress saved.'}
+        </p>
         <button
           className="btn btn-primary"
           autoFocus

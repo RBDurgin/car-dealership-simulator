@@ -6,8 +6,8 @@ import type { DayStats } from './deal'
  * settled: happy buyers and service clients spread the word, and customers
  * who walk out unhappy, give up waiting, can't find what they want or get
  * their car back late (or back again) do the opposite. A good name
- * brings more of the usual visitors, sends friends of past buyers in as
- * referrals and makes every ad work harder; a bad one does the reverse.
+ * brings more of the usual visitors, has clients send more friends in (see
+ * `referralScale`) and makes every ad work harder; a bad one does the reverse.
  */
 
 export const START_REPUTATION = 50
@@ -40,9 +40,6 @@ export const MAX_DAILY_CHANGE = 8
 const VISITOR_SLOPE = 0.006
 /** How far ads' extra visitors stray per point away from the start: ±50% at the ends. */
 const CAMPAIGN_SLOPE = 0.01
-/** Referrals a day at the top; none at or below the start. */
-export const MAX_REFERRALS = 2
-
 /** Multipliers on the usual archetype weights for referrals: a friend sent them, ready to buy. */
 export const REFERRAL_SKEW: Partial<Record<Archetype, number>> = {
   decisive: 2,
@@ -91,12 +88,6 @@ export function visitorScale(reputation: number): number {
 /** Multiplier on the extra visitors ads bring: 0.5 at 0, 1 at the start, 1.5 at 100. */
 export function campaignScale(reputation: number): number {
   return 1 + (reputation - START_REPUTATION) * CAMPAIGN_SLOPE
-}
-
-/** Referral visitors expected a day: none up to the start, rising to `MAX_REFERRALS` at 100. */
-export function referralVisitors(reputation: number): number {
-  const above = Math.max(0, reputation - START_REPUTATION)
-  return (above / (MAX_REPUTATION - START_REPUTATION)) * MAX_REFERRALS
 }
 
 /** "Poor", "Fair", "Good", "Great" or "Excellent". */

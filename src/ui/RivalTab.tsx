@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { longDate, weekdayLabel, calendarOf } from '../sim/calendar'
 import { CAR_MODELS } from '../sim/customers'
 import { carName } from '../sim/interactables'
@@ -55,6 +56,9 @@ function PriceList({ rival }: { rival: Rival }) {
   )
 }
 
+/** Clients lost to him named before "and more". */
+const LOST_NAMES = 8
+
 /** How he stands while open: today's share, the last days' and weeks', his strength and prices. */
 function OpenRival({ rival }: { rival: Rival }) {
   const day = useGame((s) => s.clock.day)
@@ -62,6 +66,8 @@ function OpenRival({ rival }: { rival: Rival }) {
   const lastWeek = rival.weeks[rival.weeks.length - 1]
   const move = activeMove(rival)
   const desperate = desperation(rival) >= 0.5
+  const clients = useGame((s) => s.clients)
+  const lost = useMemo(() => clients.filter((c) => c.status === 'defected'), [clients])
   return (
     <>
       <dl className="stock-summary">
@@ -113,6 +119,17 @@ function OpenRival({ rival }: { rival: Rival }) {
       {rival.stolen.length > 0 && (
         <p className="muted cal-intro">
           For sale on his lot, taken from yours: {rival.stolen.map(carName).join(', ')}.
+        </p>
+      )}
+      {lost.length > 0 && (
+        <p className="muted cal-intro">
+          Clients lost to him ({lost.length}):{' '}
+          {lost
+            .slice(0, LOST_NAMES)
+            .map((c) => c.name)
+            .join(', ')}
+          {lost.length > LOST_NAMES && ' and more'}. Call them from the Clients tab to win them
+          back.
         </p>
       )}
       {desperate && (

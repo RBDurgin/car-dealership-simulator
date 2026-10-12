@@ -11,6 +11,8 @@ import {
   type RateLevel,
 } from './service'
 import { rollUsedCar, type UsedInfo } from './usedCars'
+import { clientCarInfo, type Client } from './clients'
+import { canPitch } from './clientService'
 
 /**
  * Service clients (Phase 15c): people who drive their own car in for a job.
@@ -52,6 +54,8 @@ export interface ServiceVisit {
   returned: boolean
   /** Back because the last job didn't hold: the redo is free. */
   comeback: boolean
+  /** A client from the book due to trade up soon, not pitched yet (see `canPitch`). */
+  pitch: boolean
 }
 
 /** What a client drove in for, in a sentence: "for an oil change". */
@@ -112,7 +116,36 @@ export function serviceClient(
       dropOff: false,
       returned: false,
       comeback: false,
+      pitch: false,
     },
+  }
+}
+
+/**
+ * Client `client` from the book driving in on `day` for a `kind` job, in the
+ * car we sold them (aged by `clientCarInfo`): a service client like any other
+ * (see `serviceClient`), but by name, and pitchable when they're due to trade
+ * up soon.
+ */
+export function bookServiceClient(
+  client: Client,
+  id: string,
+  kind: JobKind,
+  spot: number,
+  rng: Rng,
+  day: number,
+  rate: RateLevel,
+  patienceFactor = 1,
+): Customer {
+  const c = serviceClient(id, kind, spot, rng, day, rate, patienceFactor, client.car?.model ?? null)
+  const car = client.car ? { model: client.car.model, ...clientCarInfo(client.car, day) } : null
+  return {
+    ...c,
+    name: client.name,
+    variant: client.variant,
+    archetype: client.archetype === 'couple' ? 'regular' : client.archetype,
+    clientId: client.id,
+    service: { ...c.service!, ...(car && { car }), pitch: canPitch(client, day) },
   }
 }
 
@@ -145,6 +178,7 @@ export function comebackClient(c: Customer, id: string, spot: number): Customer 
       dropOff: false,
       returned: false,
       comeback: true,
+      pitch: false,
     },
   }
 }

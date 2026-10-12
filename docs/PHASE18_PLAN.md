@@ -62,6 +62,15 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18a: Baseline, profiling tools and CI
 
+**Built 2026-10-10.** The baseline is in `docs/PERF.md`. Changes from the plan:
+
+- The overlay is `scene/PerfOverlay.tsx`, not `ui/`, because it reads the renderer in `useFrame`. Its counts live in `state/perf.ts` (`instrumentStore`, installed in `main.tsx` before anything subscribes; `perfReading` for the e2e scenario). `?fps` still turns it on. The listener time covers the listeners added through `useGame.subscribe`; components' selectors subscribe to zustand's inner store and aren't timed.
+- The bench is `src/state/bench/longGame.bench.ts`, not `sim/bench/`, since it drives the store. A headless player, `state/bench/bot.ts`, stands in for the scene and the player. Vitest 5's `bench` comes from the test context, so each level's game is one test (`npm run bench`), which prints its run as JSON and benches `createSave`/`parseSave` on the day-500 save.
+- `e2e/perf.spec.ts` also saves a screenshot to `test-results/perf-busy.png` for 18e's before-and-after comparisons. `startGame` takes an optional path.
+- `prettier --check` failed on two older plan docs (`PHASE7_PLAN.md`, `PHASE8_PLAN.md`), so they were formatted for CI to pass.
+- The real-device rows in `docs/PERF.md` are left for Robert to measure with `?perf`.
+- Added after review (2026-10-11), so a phone can be measured without a console: `?perf=busy` starts a new game on the busy day (`state/perfScenario.ts`, which the `@perf` scenario now uses too), never saving; and the day summary shows the day's readings as rows ready to paste into `docs/PERF.md` (`ui/PerfReport.tsx`).
+
 - **`?perf` overlay** (`ui/PerfOverlay.tsx`, lazy-loaded only with the flag). It replaces the `?fps` `Stats` and shows:
   - fps and frame time (p50/p95);
   - `renderer.info.render.calls`, `triangles` and `geometries`/`textures`;
@@ -72,7 +81,7 @@ Seventeen phases have each added one more slice to the game, and the structure h
   - ms per `tickClock`;
   - `createSave`/`parseSave` time and save size in bytes at day 500.
 - **Browser perf scenario.** `e2e/perf.spec.ts` is tagged `@perf` and left out of the default `npm run e2e`. Run it with `npm run e2e:perf`. It loads a busy late-game state through `useGame.setState` with a full lot, full staff, 12 customers, rain and Nazma. It runs 30 s at 1× and 4×, then writes fps, draw calls and heap size to `e2e/perf-results.json`.
-- **`docs/PERF.md`**: the baseline table (desktop Chrome, SwiftShader e2e, mid-range Android, iPhone if one is available) and the bundle sizes from `vite build`. Each later sub-phase adds its after numbers.
+- **`docs/PERF.md`**: the baseline table (desktop Chrome, SwiftShader e2e and an iPhone) and the bundle sizes from `vite build`. Each later sub-phase adds its after numbers.
 - **CI.** `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`:
   - job `check`: Node from `.nvmrc` (added), `npm ci`, `npm run lint`, `npx prettier --check .`, `npm test`, `npm run build`;
   - job `e2e` (needs `check`): Playwright Chromium with `npm run e2e`, uploading the report when it fails.
@@ -82,7 +91,17 @@ Seventeen phases have each added one more slice to the game, and the structure h
 
 ### 18b: Store split and layering
 
-No behaviour change. Every existing store test passes untouched, and that is the proof.
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and Medium's 500-day bench plays out identically. Changes from the plan:
+
+- `GameState` and the small types live in `state/types.ts`, the pure reads that were exported from the store (`isPaused`, `winShowing`, `levelTuning`, `sellerBonusFor`, `reconBook`, …) in `state/derived.ts`, and the morning notices' text in `state/notices.ts`. `store.ts` re-exports them all, so no import elsewhere changed. Keeping them out of `store.ts` means no slice imports it, so there's no runtime import cycle through the store.
+- Two more slices than planned: `service.ts` and `clients.ts`, as each is as big as the others put together. `reputation` sits in `career.ts`. Fields that `dayOne` sets (cash, the career, the book, …) start there, and each slice gives only the rest.
+- Helpers are module functions taking a `Kit` (`get`, `set`, `batch`), not closures. Those more than one slice uses are in `core.ts` (`commit`, `dispatch`, `endDeal`, `setRoster`, `notify`, `tuning`, `arrivalOpts`, …); the rest live in their slice and are exported where another needs them (`sign` for staff, `closeShop` for the day, …).
+- **One `set()` per step** comes from `transactional` in `core.ts`: inside `k.batch(fn)` every `set` goes into a draft that `get` reads back, and the draft is stored with one `set` at the end (a nested batch joins). `tickClock`, `startNextDay` and `loadGame` batch, and so does `beginDay`. Actions outside a clock step still make their own sets; 18c looks at those.
+- `commit`'s steps: `closeStep`, then `callNextBuyer`, then (if the list changed) browse dirt, `departuresStep`, `cleanupStep` and `announceWaiting`, then `settleDay` (always, so it is the only call), then `cancelBlockedStep`. `startNextDay` settles by committing the unchanged list.
+- `patienceDrain(minutes, reception, saved)` takes the `patienceFactor` rather than the roster, and `saleRecord(c, car, terms)` takes a `SaleTerms`.
+- `resetRng()` takes no seed: it seeds day 1's streams and restarts customer ids (which seed voices and some rolls). Action, move-order and notice ids keep counting, as timers may still hold an old one. The test helper is a Vitest setup file, `state/testSetup.ts`, run before every test. Shuffled runs of `src/state` passed before and after; the order dependence was latent.
+- The layering rule is oxlint `overrides` in `.oxlintrc.json`. Tests under `state/` are exempt, as `perf.test.ts` tests `ui/perfText`.
+- The bench now also reports store sets per tick and per morning.
 
 - **Split `state/store.ts` into slices** (zustand slice pattern, one `GameState` type):
   - The slices live in `state/slices/`: `clock.ts`, `economy.ts` (cash, orders, floor plan, quota, purchases), `customers.ts`, `staff.ts`, `world.ts` (improvements, expansions, weather, Nazma, rival), `day.ts` (`beginDay`, `settleDay`, `dayOne`), `career.ts` (rank, log, lifetime, achievements, clients) and `ui.ts` (menus, panels, `computerTab`, `timeScale`, dev flags).
@@ -101,6 +120,19 @@ No behaviour change. Every existing store test passes untouched, and that is the
 
 ### 18c: Subscriptions and selectors
 
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and the 500-day bench plays out as after 18b. Changes from the plan:
+
+- **Measured first, so one part was dropped.** `sfxFor`, `reactionsFor`, `tipFor` and `achievementsFor` aren't gated on the fields they read: sets touch those fields 29–86% of the time and each diff already returns early, so checking the fields first cost more than it saved. They run through `subscribeDiff` (in `state/subscribe.ts`, with `subscribeTo` and `sameFields`), which diffs against the state the listener last saw. Every other listener moved onto `subscribeTo`: music on its track and muffle, rain on `rainPlays`, the mixer on the audio settings and the pause, autosave once the day is settled (and then on what the summary can change), the preferences, the trophy case, `scene/runtime`'s grid syncs and `?perf=busy`'s start. Watching several fields selects the state and compares them in `equal`, so nothing is allocated per set.
+- `subscribeTo` skips a set overtaken by a newer one made inside another listener (which reaches every listener first), so a listener never sees the states out of order.
+- `ActionMenu` selects nothing while closed; open, it selects its buttons as text (name, label, blocked), not one `useShallow` of the target, as the office desk's actions read the whole deal and the roster.
+- `scene/Customers` selects the ids of those on foot (`useShallow`), and `CustomerFigure` and `CustomerBubble` look themselves up through `customerById`, an index built once per `customers` change.
+- `DaySummary`, `WinScreen` and `StaffPanel` select only whether they're open, and mount a body that selects the rest; `GoalBanner` selects the goal's progress, not `dayStats`. `StockPanel`'s tabs already only mount open.
+- `state/selectors.ts`: `memoLast` and `upNow`, `groundUp`, `customerById`, `sellerBonusOf`, `lotRoom` and `buyBlockerFor`. `useUpNow`/`useGround`, `Props`' sign, `TubeMan`, `StaffPanel`, `CustomerPanel` and `scene/runtime` read them.
+- Not in the plan, found by measuring: `PropView` is memoised (every stock change redrew all ~45 cars), and `serviceArrivals` keeps `serviceAway` and `serviceComebacks` when nobody moved (they were new arrays every clock step).
+- **Frame-loop store calls** go through `report(who, key, send)` in `scene/walker.ts`: a walker's call that changed nothing isn't made again on the same store state. It covers customers' `arrive` and `browsed`, staff's `atPost`, `staffClaim` and `staffLead` (which waits while no chair is free) and Nazma's reports. Waiting for any store change, not only `customers`, as a claim also depends on the roster and the player's action.
+- The `@perf` scenario also counts React's commits, components rendered and render ms per game minute (`countRenders`, through the DevTools hook), and the sim bench times the listeners over 200 days.
+- Tests: `selectors.test.ts`, `subscribe.test.ts` and `scene/walker.test.ts` (`report`).
+
 - **Selector fixes.** Each component takes only what it renders:
   - `ActionMenu` selects nothing while `menu` is null, then only the menu target's customer, employee or car through one `useShallow` selector.
   - `scene/Customers` selects the customer id list with `useShallow`, and each `CustomerView` selects its own customer by id. This removes the O(n²) `find` in each bubble.
@@ -114,6 +146,17 @@ No behaviour change. Every existing store test passes untouched, and that is the
 - Tests: `selectors.test.ts` (each memoised selector returns the same reference for unchanged inputs) and `subscribe.test.ts`. The perf overlay's sets/s and listener time before and after go in `docs/PERF.md`.
 
 ### 18d: Simulation and frame-loop hot paths
+
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`. Every existing test passes untouched, and the 500-day bench plays out as after 18b. Changes from the plan:
+
+- **Frame number.** `GameClock` bumps `runtime`'s frame count (`nextFrame`, a `useFrame` at priority -1, so before every other loop). `crowdAgents()` gathers the crowd on its first call in a frame into reused objects, each holding the walker's own position (so it moves with them through the frame; a moving car's points stay where the car was at gathering), and hashes it. Walkers read their neighbours through `crowdNear(pos, reach, out)`.
+- **The hash's reach.** It's built once a frame, so `moveAlong` looks `SEP_RADIUS` plus how far it and anyone else (`CROWD_SPEED`, the guard's chase) may walk in the frame: at 60 fps and 1× that's the 3 × 3 cells around them, and the push is the same as checking everyone.
+- **More of the step allocates nothing.** `canStand` (several calls per walker per substep) no longer makes arrays and tiles; `stepAlongPath`, `moveWithCollision`, `separation` and `crowdStep` take out parameters, and `moveAlong` returns a reused result.
+- **Allocations.** The frame loops' sets and maps (Customers' `ready` and `live`, Staff's `live`, `washesBesides` and `jobsBesides`, DrivenCars' lookups and `obstacles`, Chatter's `due`) are module-level and cleared each frame; Pedestrians and DrivenCars iterate their maps directly, as only the one being updated is removed.
+- **Pathfinding.** The heap A* takes 0.16 ms across the full map; the only spike was an unreachable goal, which searched everything first. `Grid.area` labels connected areas (side-by-side steps: without corner cutting, diagonals connect nothing more), again on the first call after the blocked tiles change (`Grid` counts its changes; a `setBlocked` that changes nothing doesn't count), and `findPathToAny` turns down goals outside the start's area, or a blocked start's open neighbours' areas, before searching. The search itself is unchanged, so paths are the same. No path cache: with that, nothing was slow enough to cache.
+- **Replays.** Only `lastTheftNight` replayed, and the game hasn't called it since 14d (just the tests, `isTheftNight` and the v18 save upgrade). It keeps a chain per chance, like `weatherOn`.
+- Benches: `src/sim/crowd.bench.ts` (60 walkers, one frame) and `src/sim/pathfinding.bench.ts`, run by `npm run bench`. Vitest 5 has no `bench()`, so they time themselves like the long-game bench.
+- Tests: `SpatialHash` against checking everyone (`crowd.test.ts`), `Grid.area` against a flood fill and after changes (`grid.test.ts`), a blocked start and a wall taken down (`pathfinding.test.ts`), and `lastTheftNight` asked in any order and at many chances (`nazma.test.ts`).
 
 - **Crowd.**
   - `crowdAgents()` is built once per frame into a reused array, with the frame number as a cache key in `scene/runtime.ts`. Walkers and `DrivenCar` read the cached array.
@@ -130,6 +173,19 @@ No behaviour change. Every existing store test passes untouched, and that is the
 - Tests: the existing `crowd`, `pathfinding` and `nazma` tests, plus new tests for the spatial hash (same neighbours as brute force on random layouts) and the connected-component labels. Any path cache is invalidated when the grid changes.
 
 ### 18e: Rendering, loading and storage
+
+**Built 2026-10-11.** The numbers are in `docs/PERF.md`: on Auto, the desktop full-window went from 28 to 55 fps (settling on the lowest tier) and the iPhone held 60 (climbing to the top tier), both with about half the draw calls and no geometry climb. Changes from the plan:
+
+- **The geometry climb came first, as planned.** It was drei's `Outlines`: its unmount cleanup reads a ref React 19 has already cleared, so every hover or tap leaked the creased copy of each outlined mesh's geometry (the e2e run never hovers, so never climbed). `MeshOutline` in `scene/Interactable.tsx` frees it.
+- **Cars joined into one mesh.** Not on the plan's list, and the biggest cut: each car model was 5–6 meshes with one material, so 44 cars cost about 500 calls with their shadow pass. The compression script flattens and joins cars and furniture. Characters keep their two named meshes and only the clips in `CharacterAnim`; the unused `female-a` isn't shipped.
+- **Shared car materials** are one per source material, dirt step (10) and wear step (5), cached and never freed. A shared material doesn't save draw calls; it replaces a cloned set per car.
+- **Bulbs** are one `InstancedMesh` with unlit per-instance colours, recoloured only when the chase steps.
+- **Quality tiers.** Auto starts at the top on a desktop and a step down on `COMPACT`/`COARSE`, never climbs back to a tier it fell from (so it can't flicker), and waits 6 s after any step before stepping down again (drei's samples keep rolling after a step). The `PerformanceMonitor` bounds are fixed at 45 and 57 fps: drei's default guesses the refresh rate from the best fps seen, which kept a 30 fps desktop from ever stepping down. The tier is the store's `qualityTier` (with `graphics`); `startGraphicsPref(compact)` sets both at load and on a change of setting. The `?perf` overlay shows them.
+- **Idle frames** use `sceneIdle`: `isPaused` or `dayOver`.
+- **Lazy panels.** `ui/lazyPanels.tsx` gates each on its open flag; the office computer is one chunk with all its tabs. `prefetchPanels` fetches them once the browser is idle.
+- **Audio.** The `.mp3` copies are dropped: Safari plays OGG Vorbis from iOS 18.4 and macOS 15.4 (not 17, as the plan had it), which Robert took as the floor, and the sound effects were already OGG only. It saves 8.9 MB of hosting, not first load: the music streams on first play.
+- **Storage.** The save is 163 KB at day 500, so no delta encoding and no save change. The notice shows for any refused write, not only `QuotaExceededError`: blocked storage loses the day too.
+- Tests: `sim/graphics.test.ts`, `scene/mergePlanes.test.ts`, `scene/characterPool.test.ts`, and the graphics preference and the refused save in `state/persistence.test.ts`.
 
 - **Adaptive quality.**
   - drei `PerformanceMonitor` steps through three tiers: DPR 2 → 1.5 → 1, shadow map 4096 → 2048 → 1024, and the rain count.
@@ -171,7 +227,9 @@ No behaviour change. Every existing store test passes untouched, and that is the
 
 ## Performance targets
 
-- A busy late-game day on a mid-range Android phone holds **55 fps or more** at 1×. That's 5 above 13c's target of about 50, with the wing built.
+- A busy late-game day (`?perf=busy`) holds **60 fps** at 1× on the devices we have (there's no Android to test on):
+  - the iPhone, which does already (59.6 in `docs/PERF.md`), and must keep doing so;
+  - desktop Chrome, full-window at the default zoom, which runs at 30 today.
 - Draw calls on that day are at least a third lower than the 18a baseline.
 - At most one store `set()` per clock step, and listener time under 1 ms per step.
 - The sim bench shows ms per day flat from day 1 to day 500, with no growth from replays.
@@ -195,7 +253,7 @@ Phase 18 adds nothing the player does, apart from the **Graphics** setting in 18
   - play a full day at 1× and at 4×;
   - check that customers, staff, cars, Nazma, rain and the summary behave as before;
   - take before and after screenshots at the same camera for 18e's merged floors, instanced bulbs, compressed models and each quality tier.
-- On a real phone, play a full busy day on Auto quality. Note the fps and any tier changes.
+- On the iPhone and the desktop, play a full `?perf=busy` day on Auto quality and copy the report from the summary. Note any tier changes.
 - 18b: `git diff --stat` shows no test file edited except for added tests.
 
 ## Left out

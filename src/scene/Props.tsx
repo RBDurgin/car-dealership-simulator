@@ -1,13 +1,17 @@
 import { RoundedBox, useGLTF } from '@react-three/drei'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import {
   AdditiveBlending,
   Box3,
   CanvasTexture,
   Color,
+  type InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Quaternion,
+  SphereGeometry,
   SRGBColorSpace,
   Vector3,
   type Group,
@@ -15,9 +19,12 @@ import {
   type Object3D,
 } from 'three'
 import type { Vec2 } from '../sim/grid'
-import { improvementProps, installed, slotTier, swappedModel } from '../sim/improvements'
+import { improvementProps, slotTier, swappedModel } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
+import { CAR_MODELS } from '../sim/customers'
+import { MODEL_TIER } from '../sim/franchise'
 import {
+  buildLayout,
   DEALERSHIP_NAME,
   FURNITURE_SCALE,
   platformOpen,
@@ -29,6 +36,7 @@ import {
   type Rect,
 } from '../sim/layout'
 import { PLAYER_RADIUS } from '../sim/movement'
+import { upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { Interactable } from './Interactable'
 import { customerPos, interactables, layout, playerPos, rectBounds } from './runtime'
@@ -45,16 +53,24 @@ interface ModelDef {
   yaw?: number
   /** Shrink below `scale` where needed so the model stays inside its prop's footprint. */
   fit?: boolean
+  /** `'receive'` for small things whose shadow doesn't read: a draw call saved each. */
+  shadow?: 'receive'
 }
 
 const car = (name: string): ModelDef => ({ url: `${BASE}/cars/${name}.glb`, scale: CAR_SCALE })
-const furniture = (name: string, opts: { yaw?: number; fit?: boolean } = {}): ModelDef => ({
+const furniture = (
+  name: string,
+  opts: { yaw?: number; fit?: boolean; shadow?: 'receive' } = {},
+): ModelDef => ({
   url: `${BASE}/furniture/${name}.glb`,
   scale: FURNITURE_SCALE,
   ...opts,
 })
 
-const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign'>, ModelDef> = {
+/** Small furniture: its shadow doesn't read, so it doesn't cast one. */
+const SMALL = { shadow: 'receive' } as const
+
+const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone'>, ModelDef> = {
   sedan: car('sedan'),
   'sedan-sports': car('sedan-sports'),
   suv: car('suv'),
@@ -67,34 +83,44 @@ const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign'>, ModelDef> = {
   chairDesk: furniture('chairDesk'),
   chairCushion: furniture('chairCushion'),
   pottedPlant: furniture('pottedPlant'),
-  plantSmall1: furniture('plantSmall1'),
-  kitchenCoffeeMachine: furniture('kitchenCoffeeMachine'),
+  plantSmall1: furniture('plantSmall1', SMALL),
+  kitchenCoffeeMachine: furniture('kitchenCoffeeMachine', SMALL),
   kitchenCabinet: furniture('kitchenCabinet'),
   loungeSofa: furniture('loungeSofa', { fit: true }),
   loungeDesignSofa: furniture('loungeDesignSofa', { fit: true }),
   cabinetTelevision: furniture('cabinetTelevision'),
-  televisionModern: furniture('televisionModern'),
+  televisionModern: furniture('televisionModern', SMALL),
   kitchenBar: furniture('kitchenBar'),
-  stoolBar: furniture('stoolBar'),
+  stoolBar: furniture('stoolBar', SMALL),
   tableCoffeeSquare: furniture('tableCoffeeSquare'),
-  computerScreen: furniture('computerScreen'),
+  computerScreen: furniture('computerScreen', SMALL),
   bookcaseClosedWide: furniture('bookcaseClosedWide'),
-  trashcan: furniture('trashcan'),
+  trashcan: furniture('trashcan', SMALL),
 }
 
-for (const def of Object.values(MODELS)) useGLTF.preload(def.url)
+/**
+ * The models day one draws (the first layout's furniture and the cars a
+ * Bronze dealer stocks) load with the page. The rest (luxury cars, the
+ * wing's and the improvements' furniture) load the first time they're drawn,
+ * each in its own Suspense, so nothing else blinks meanwhile.
+ */
+const DAY_ONE = new Set<PropModel>([
+  ...buildLayout().props.map((p) => p.model),
+  ...CAR_MODELS.filter((m) => !MODEL_TIER[m]),
+])
+for (const [model, def] of Object.entries(MODELS)) {
+  if (DAY_ONE.has(model as PropModel)) useGLTF.preload(def.url)
+}
 
 /**
  * Clones a GLB scene and recenters it so its footprint is centered on x/z and it
- * rests on y=0. With `ownMaterials` the clone gets its own copies of the
- * materials (which clones otherwise share), so they can be tinted per copy.
- * Without `shadows` it neither casts nor receives them.
- * Also returns the model's unscaled size.
+ * rests on y=0. Clones share the model's materials; each mesh keeps its own in
+ * `userData.base`, for `useDirt` to tint from. Without `shadows` it neither
+ * casts nor receives them. Also returns the model's unscaled size.
  */
 function useCenteredModel(
   url: string,
-  ownMaterials = false,
-  shadows = true,
+  shadows: boolean | 'receive' = true,
 ): { object: Object3D; size: Vector3 } {
   const { scene } = useGLTF(url)
   return useMemo(() => {
@@ -102,16 +128,16 @@ function useCenteredModel(
     root.traverse((o) => {
       const mesh = o as Mesh
       if (!mesh.isMesh) return
-      mesh.castShadow = shadows
-      mesh.receiveShadow = shadows
-      if (ownMaterials && !Array.isArray(mesh.material)) mesh.material = mesh.material.clone()
+      mesh.castShadow = shadows === true
+      mesh.receiveShadow = shadows !== false
+      mesh.userData.base = mesh.material
     })
     root.updateMatrixWorld(true)
     const box = new Box3().setFromObject(root)
     const c = box.getCenter(new Vector3())
     root.position.set(-c.x, -box.min.y, -c.z)
     return { object: root, size: box.getSize(new Vector3()) }
-  }, [scene, ownMaterials, shadows])
+  }, [scene, shadows])
 }
 
 /** Paint tint and roughness of a spotless car, and of a filthy one. */
@@ -122,34 +148,47 @@ const DIRTY_ROUGHNESS = 1
 /** A worn used car's paint fades toward this, by up to `MAX_FADE` for a wreck. */
 const FADED_TINT = new Color('#c9c4ba')
 const MAX_FADE = 0.5
+/**
+ * Dirt and wear are drawn in steps, so cars as dirty and as worn as each
+ * other share one material: a few dozen at most, never freed, instead of a
+ * copy per car.
+ */
+const DIRT_STEPS = 10
+const WEAR_STEPS = 5
+const tinted = new Map<string, MeshStandardMaterial>()
 
-/** Calls `fn` with each of a model's own (single) materials. */
-function eachMaterial(object: Object3D, fn: (m: MeshStandardMaterial) => void): void {
-  object.traverse((o) => {
-    const mesh = o as Mesh
-    if (mesh.isMesh && !Array.isArray(mesh.material)) fn(mesh.material as MeshStandardMaterial)
-  })
+/** `base` faded by `condition` (1 for a new car), then dulled toward a dusty brown by dirt. */
+function tintedMaterial(
+  base: MeshStandardMaterial,
+  cleanliness: number,
+  condition: number,
+): MeshStandardMaterial {
+  const dirt = Math.round((1 - cleanliness) * DIRT_STEPS) / DIRT_STEPS
+  const wear = Math.round((1 - condition) * WEAR_STEPS) / WEAR_STEPS
+  const key = `${base.uuid}:${dirt}:${wear}`
+  let m = tinted.get(key)
+  if (!m) {
+    m = base.clone()
+    m.color
+      .copy(CLEAN_TINT)
+      .lerp(FADED_TINT, wear * MAX_FADE)
+      .lerp(DIRTY_TINT, dirt)
+    m.roughness = CLEAN_ROUGHNESS + (DIRTY_ROUGHNESS - CLEAN_ROUGHNESS) * dirt
+    tinted.set(key, m)
+  }
+  return m
 }
 
-/**
- * Fades a worn used car's paint by its `condition` (1 for a new car), then
- * dulls it toward a dusty brown as it gets dirtier.
- */
+/** Gives a car's meshes the shared material for how dirty and worn it is. */
 function useDirt(object: Object3D, cleanliness: number | undefined, condition = 1): void {
   useEffect(() => {
     if (cleanliness === undefined) return
-    const dirt = 1 - cleanliness
-    const base = CLEAN_TINT.clone().lerp(FADED_TINT, (1 - condition) * MAX_FADE)
-    eachMaterial(object, (m) => {
-      m.color.copy(base).lerp(DIRTY_TINT, dirt)
-      m.roughness = CLEAN_ROUGHNESS + (DIRTY_ROUGHNESS - CLEAN_ROUGHNESS) * dirt
+    object.traverse((o) => {
+      const mesh = o as Mesh
+      const base = mesh.userData.base as MeshStandardMaterial | undefined
+      if (mesh.isMesh && base) mesh.material = tintedMaterial(base, cleanliness, condition)
     })
   }, [object, cleanliness, condition])
-  // The materials are this copy's own: free them with it.
-  const isCar = cleanliness !== undefined
-  useEffect(() => {
-    if (isCar) return () => eachMaterial(object, (m) => m.dispose())
-  }, [object, isCar])
 }
 
 /** Size of a footprint in the model's own frame (before its facing turns it). */
@@ -170,18 +209,23 @@ function fitScale(size: Vector3, def: ModelDef, footprint: Footprint): number {
  * A prop's model; cars pass their `cleanliness` to look as dirty as they are,
  * and used cars their `condition` to look as worn.
  */
-function Model({
-  def,
-  footprint,
-  cleanliness,
-  condition,
-}: {
+function Model(props: ModelProps) {
+  return (
+    <Suspense fallback={null}>
+      <LoadedModel {...props} />
+    </Suspense>
+  )
+}
+
+interface ModelProps {
   def: ModelDef
   footprint: Footprint
   cleanliness?: number
   condition?: number
-}) {
-  const { object, size } = useCenteredModel(def.url, cleanliness !== undefined)
+}
+
+function LoadedModel({ def, footprint, cleanliness, condition }: ModelProps) {
+  const { object, size } = useCenteredModel(def.url, def.shadow ?? true)
   useDirt(object, cleanliness, condition)
   return (
     <group rotation-y={def.yaw ?? 0} scale={fitScale(size, def, footprint)}>
@@ -285,55 +329,66 @@ const SIGN_TIERS = [
   { boardY: 4.4, extraWidth: 2.2, post: 0.3 },
 ]
 const BULB_SPACING = 0.32
-const BULB_ON = new MeshStandardMaterial({
-  color: '#fff3c4',
-  emissive: '#ffd36b',
-  emissiveIntensity: 2,
-})
-const BULB_OFF = new MeshStandardMaterial({ color: '#8a7f63', roughness: 0.4 })
+/** Unlit, so a lit bulb shows at full brightness whatever the light, as the sign's face does. */
+const BULB_MATERIAL = new MeshBasicMaterial({ toneMapped: false })
+const BULB_GEOMETRY = new SphereGeometry(0.06, 8, 6)
+const BULB_ON = new Color('#fff3c4')
+const BULB_OFF = new Color('#8a7f63')
+/** Steps of the chase a second. */
+const CHASE_RATE = 6
 
 /**
  * Chasing bulbs along the top and bottom edges of a board `w` by `h`, on both faces,
- * leaving the bottom edge clear within `gap` of each post at ±`postX`.
+ * leaving the bottom edge clear within `gap` of each post at ±`postX`. One
+ * instanced mesh, recoloured as the chase steps: one draw call for them all.
  */
 function Bulbs({ w, h, postX, gap }: { w: number; h: number; postX: number; gap: number }) {
-  const bulbs = useRef<Mesh[]>([]).current
+  const mesh = useRef<InstancedMesh>(null)
+  const shown = useRef(-1)
   const per = Math.floor(w / BULB_SPACING)
-  useFrame(({ clock }) => {
-    const step = Math.floor(clock.elapsedTime * 6)
-    bulbs.forEach((m, i) => (m.material = (i + step) % 3 === 0 ? BULB_ON : BULB_OFF))
-  })
-  const spots = [-1, 1].flatMap((face) =>
-    [-1, 1].flatMap((edge) =>
-      Array.from({ length: per }, (_, i) => [
-        -w / 2 + BULB_SPACING / 2 + i * (w / per),
-        (edge * (h + 0.1)) / 2,
-        face * 0.08,
-      ]).filter(([x]) => edge > 0 || Math.abs(Math.abs(x) - postX) > gap),
-    ),
+  const spots = useMemo(
+    () =>
+      [-1, 1].flatMap((face) =>
+        [-1, 1].flatMap((edge) =>
+          Array.from({ length: per }, (_, i) => [
+            -w / 2 + BULB_SPACING / 2 + i * (w / per),
+            (edge * (h + 0.1)) / 2,
+            face * 0.08,
+          ]).filter(([x]) => edge > 0 || Math.abs(Math.abs(x) - postX) > gap),
+        ),
+      ),
+    [w, h, per, postX, gap],
   )
+  useLayoutEffect(() => {
+    const m = mesh.current
+    if (!m) return
+    const at = new Matrix4()
+    spots.forEach(([x, y, z], i) => m.setMatrixAt(i, at.makeTranslation(x, y, z)))
+    m.instanceMatrix.needsUpdate = true
+    shown.current = -1
+  }, [spots])
+  useFrame(({ clock }) => {
+    const m = mesh.current
+    const step = Math.floor(clock.elapsedTime * CHASE_RATE) % 3
+    if (!m || step === shown.current) return
+    shown.current = step
+    for (let i = 0; i < spots.length; i++)
+      m.setColorAt(i, (i + step) % 3 === 0 ? BULB_ON : BULB_OFF)
+    m.instanceColor!.needsUpdate = true
+  })
   return (
-    <>
-      {spots.map((p, i) => (
-        <mesh
-          key={i}
-          position={p as [number, number, number]}
-          material={BULB_OFF}
-          ref={(m) => {
-            if (m) bulbs[i] = m
-          }}
-        >
-          <sphereGeometry args={[0.06, 8, 6]} />
-        </mesh>
-      ))}
-    </>
+    <instancedMesh
+      key={spots.length}
+      ref={mesh}
+      args={[BULB_GEOMETRY, BULB_MATERIAL, spots.length]}
+    />
   )
 }
 
 /** The dealership sign, as the upgrades have it (0 is the one it opened with). */
 function Sign({ width }: { width: number }) {
   const texture = useSignTexture()
-  const tier = useGame((s) => slotTier(installed(s.improvements, s.clock.day), 'sign'))
+  const tier = useGame((s) => slotTier(upNow(s), 'sign'))
   const { boardY, extraWidth, post } = SIGN_TIERS[tier]
   const lit = tier >= 2
   const boardW = width - 0.2 + extraWidth
@@ -377,6 +432,52 @@ function Sign({ width }: { width: number }) {
   )
 }
 
+const PHONE_BODY = new MeshStandardMaterial({ color: '#2b2f36', roughness: 0.6 })
+const PHONE_KEYS = new MeshStandardMaterial({ color: '#d7dbe0', roughness: 0.5 })
+const PHONE_SCREEN = new MeshStandardMaterial({
+  color: '#7fd1a8',
+  emissive: '#3c9c72',
+  emissiveIntensity: 0.4,
+})
+/** The keypad's buttons, in rows across the phone's front half. */
+const PHONE_KEY_SPOTS = [-0.07, 0, 0.07].flatMap((x) =>
+  [0.02, 0.09].map((z) => [x, 0.095, z] as [number, number, number]),
+)
+
+/** The office desk phone, made of a few boxes: a base, a keypad, a little screen and the handset. */
+function DeskPhone() {
+  return (
+    <group>
+      <mesh position-y={0.04} material={PHONE_BODY}>
+        <boxGeometry args={[0.36, 0.08, 0.3]} />
+      </mesh>
+      {/* Front half sloped toward whoever uses it (+z). */}
+      <mesh position={[0, 0.085, 0.05]} rotation-x={0.25} material={PHONE_BODY}>
+        <boxGeometry args={[0.3, 0.03, 0.18]} />
+      </mesh>
+      {PHONE_KEY_SPOTS.map((p, i) => (
+        <mesh key={i} position={p} material={PHONE_KEYS}>
+          <boxGeometry args={[0.045, 0.02, 0.04]} />
+        </mesh>
+      ))}
+      <mesh position={[0.1, 0.09, -0.04]} material={PHONE_SCREEN}>
+        <boxGeometry args={[0.1, 0.015, 0.05]} />
+      </mesh>
+      {/* The handset, in its cradle along the back. */}
+      <group position={[0, 0.11, -0.09]}>
+        <mesh material={PHONE_BODY}>
+          <boxGeometry args={[0.34, 0.04, 0.08]} />
+        </mesh>
+        {[-1, 1].map((side) => (
+          <mesh key={side} position={[side * 0.15, 0.02, 0]} material={PHONE_BODY}>
+            <boxGeometry args={[0.07, 0.05, 0.1]} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  )
+}
+
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
 interface PropViewProps {
@@ -388,7 +489,29 @@ interface PropViewProps {
   turntable?: boolean
 }
 
-function PropView(props: PropViewProps) {
+/** Same prop, drawn the same: `carProp` makes a fresh prop for each car whenever the stock changes. */
+function samePropView(a: PropViewProps, b: PropViewProps): boolean {
+  const p = a.prop
+  const q = b.prop
+  return (
+    (p === q ||
+      (p.id === q.id &&
+        p.model === q.model &&
+        p.rect === q.rect &&
+        p.facing === q.facing &&
+        !!p.platform === !!q.platform &&
+        p.elevation === q.elevation)) &&
+    a.cleanliness === b.cleanliness &&
+    a.condition === b.condition &&
+    a.turntable === b.turntable
+  )
+}
+
+/**
+ * One prop or car. Memoised, so a change to the stock redraws only the cars
+ * it changed (a wash, a smudge, a sale), not all of them.
+ */
+const PropView = memo(function PropView(props: PropViewProps) {
   const { prop } = props
   const content = <PropContent {...props} />
   return interactables.has(prop.id) ? (
@@ -398,7 +521,7 @@ function PropView(props: PropViewProps) {
       {content}
     </group>
   )
-}
+}, samePropView)
 
 function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps) {
   const b = rectBounds(prop.rect)
@@ -410,6 +533,8 @@ function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps)
         <Sign width={turned ? b.h : b.w} />
       ) : prop.model === 'forSaleSign' ? (
         <ForSaleSign width={turned ? b.h : b.w} />
+      ) : prop.model === 'deskPhone' ? (
+        <DeskPhone />
       ) : (
         <Model
           def={MODELS[prop.model]}
@@ -483,7 +608,15 @@ export function CarBody({
  * across the road, in scene/RivalLot).
  */
 export function StaticCar({ model }: { model: CarModel }) {
-  const { object } = useCenteredModel(MODELS[model].url, false, false)
+  return (
+    <Suspense fallback={null}>
+      <LoadedStaticCar model={model} />
+    </Suspense>
+  )
+}
+
+function LoadedStaticCar({ model }: { model: CarModel }) {
+  const { object } = useCenteredModel(MODELS[model].url, false)
   return (
     <group scale={CAR_SCALE}>
       <primitive object={object} />

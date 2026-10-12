@@ -9,15 +9,33 @@ import { preloadSfx } from './audio/samples'
 import { startSfx } from './audio/sfxBridge'
 import { startUiClicks } from './audio/uiClicks'
 import { COARSE, COMPACT, matchesMedia } from './input/useMediaQuery'
-import { startAudioPref, startAutosave, startControlsPref } from './state/persistence'
+import {
+  startAudioPref,
+  startAutosave,
+  startControlsPref,
+  startGraphicsPref,
+  startTrophyCase,
+} from './state/persistence'
 import { useGame } from './state/store'
+import { startAchievements } from './state/achievements'
+import { instrumentStore, PERF, PERF_BUSY } from './state/perf'
 import { startTips } from './state/tips'
 
-startAutosave()
+// Before anything subscribes, so every listener is timed.
+if (PERF) instrumentStore(useGame)
+// A ?perf=busy game is a test bench: it never saves, or touches the trophy case.
+if (!PERF_BUSY) startAutosave()
+const smallScreen = matchesMedia(COMPACT) || matchesMedia(COARSE)
 // The controls hint starts collapsed on phones and touch screens.
-startControlsPref(!matchesMedia(COMPACT) && !matchesMedia(COARSE))
+startControlsPref(!smallScreen)
 startAudioPref()
+// Auto graphics start a step down there.
+startGraphicsPref(smallScreen)
 startTips()
+// After the tips, so neither shows over the other's notice.
+startAchievements()
+if (!PERF_BUSY) startTrophyCase()
+if (PERF_BUSY) void import('./state/perfScenario').then((m) => m.startBusyDay())
 // Silent until the first gesture; then the sounds load and the music starts.
 startAudio(() => {
   preloadSfx()

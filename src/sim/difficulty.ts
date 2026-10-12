@@ -59,6 +59,10 @@ export interface Tuning {
   serviceDemand: number
   /** × the odds a serviced car comes back for a redo. */
   comebackScale: number
+  /** × every chance a client comes back: trade-ups, bookings, referrals and attendance. */
+  clientReturn: number
+  /** Added to every visit's satisfaction score (see `sim/clients.ts`). */
+  satisfactionShift: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -95,6 +99,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalComeback: 1.5,
     serviceDemand: 1.2,
     comebackScale: 0.5,
+    clientReturn: 1.2,
+    satisfactionShift: 5,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -125,6 +131,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalComeback: 1,
     serviceDemand: 1,
     comebackScale: 1,
+    clientReturn: 1,
+    satisfactionShift: 0,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -155,6 +163,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     rivalComeback: 0.7,
     serviceDemand: 0.8,
     comebackScale: 1.5,
+    clientReturn: 0.8,
+    satisfactionShift: -5,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

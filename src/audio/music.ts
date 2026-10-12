@@ -8,6 +8,7 @@ import {
   type TrackId,
 } from '../sim/musicPlan'
 import { useGame } from '../state/store'
+import { subscribeTo } from '../state/subscribe'
 import { audioContext, busNode } from './engine'
 
 const BASE = `${import.meta.env.BASE_URL}audio/music/`
@@ -31,11 +32,6 @@ let muffle: { filter: BiquadFilterNode; gain: GainNode } | null = null
 let blocked = false
 let muffled = false
 
-/** OGG where the browser plays it, MP3 elsewhere (older Safari). */
-function extension(): string {
-  return new Audio().canPlayType('audio/ogg; codecs="vorbis"') ? 'ogg' : 'mp3'
-}
-
 function muffleNode(ctx: AudioContext): AudioNode {
   if (!muffle) {
     const filter = ctx.createBiquadFilter()
@@ -51,7 +47,7 @@ function muffleNode(ctx: AudioContext): AudioNode {
 function deckFor(ctx: AudioContext, track: TrackId): Deck {
   let deck = decks.get(track)
   if (!deck) {
-    const el = new Audio(`${BASE}${track}.${extension()}`)
+    const el = new Audio(`${BASE}${track}.ogg`)
     el.loop = true
     el.preload = 'none'
     const fade = ctx.createGain()
@@ -118,20 +114,15 @@ export function syncMusic(): void {
  * part, the title and the summary, crossfaded as the store changes. Each
  * track is streamed rather than decoded whole, and picks up where it left off.
  * Changes come only from store updates (the clock's 10-minute steps, the
- * screen, the summary, the guide), never per frame. Call `syncMusic` once
- * audio is unlocked to start it.
+ * screen, the summary, the guide), never per frame, and only when the track
+ * or the muffle would change. Call `syncMusic` once audio is unlocked to
+ * start it.
  */
 export function startMusic(): () => void {
-  const unsubscribe = useGame.subscribe((s, prev) => {
-    if (
-      s.screen !== prev.screen ||
-      s.clock !== prev.clock ||
-      s.customers !== prev.customers ||
-      s.helpOpen !== prev.helpOpen ||
-      s.rotatePrompt !== prev.rotatePrompt
-    )
-      syncMusic()
-  })
+  const unsubscribe = subscribeTo(
+    (s) => (isMuffled(s) ? `${trackFor(s)}~` : trackFor(s)),
+    syncMusic,
+  )
 
   // Some browsers only start a stream inside a gesture; if one refused, the next tap or key starts it.
   const retry = () => {

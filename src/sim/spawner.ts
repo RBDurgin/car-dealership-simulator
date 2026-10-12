@@ -19,24 +19,25 @@ export interface ArrivalSchedule {
   spawned: number
 }
 
-/** What reputation does to a day's arrivals (see `sim/reputation.ts`). */
+/**
+ * What reputation, the calendar and the rest do to a day's arrivals. Friends
+ * sent by clients come through the client book (see `sim/referrals.ts`).
+ */
 export interface Word {
   /** Multiplier on the usual visitor count (rounded). */
   scale: number
-  /** Referral visitors expected (the fraction is rolled). */
-  referrals: number
 }
 
 /**
  * Plans a day's arrivals between opening and `LAST_ARRIVAL_MINUTE`: the usual
- * visitors (scaled by `word`), any `boost` from ad campaigns (see
- * `trafficBoost`) and any referrals, whose fractions are rolled. Each time is
- * the mean of two uniform draws, so arrivals bunch up around midday.
+ * visitors (scaled by `word`) and any `boost` from ad campaigns (see
+ * `trafficBoost`), whose fractions are rolled. Each time is the mean of two
+ * uniform draws, so arrivals bunch up around midday.
  */
 export function planArrivals(
   rng: Rng,
   boost: Partial<Record<Channel, number>> = {},
-  word: Word = { scale: 1, referrals: 0 },
+  word: Word = { scale: 1 },
 ): ArrivalSchedule {
   const span = LAST_ARRIVAL_MINUTE - OPEN_MINUTE
   const time = () => Math.round(OPEN_MINUTE + ((rng.next() + rng.next()) / 2) * span)
@@ -51,7 +52,6 @@ export function planArrivals(
     for (let i = 0; i < extra; i++) planned.push({ minute: time(), source })
   }
   for (const channel of CHANNEL_IDS) add(boost[channel] ?? 0, channel)
-  add(word.referrals, 'referral')
   planned.sort((a, b) => a.minute - b.minute)
   return {
     minutes: planned.map((p) => p.minute),

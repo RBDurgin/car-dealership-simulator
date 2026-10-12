@@ -54,6 +54,14 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 
 ### 17a: Day log, lifetime totals and records (pure + save)
 
+**Built 2026-10-10.** Changes from the plan:
+
+- `gross` (in `DayRecord`, `Lifetime` and the week and month records) is `totalGross` (sales and service), not `grossProfit`: since Phase 15 the career counts service too, and `net` already does.
+- A record counts as broken (`DayStats.newRecords`) only when it's taken from another day, week, month or streak. Setting the first one isn't breaking it, and a week, month or streak still going doesn't break its own record again each day.
+- Ads, improvements, expansions or an appreciation day bought from the summary after settling are brought into the day's record and the lifetime net (`amendDay`).
+- `Sale.sellerId` keeps the salesperson's id for `bySeller`.
+- Save v26.
+
 - New `sim/stats.ts` (pure, tested):
   - `DayRecord { day, sales, usedSales, gross, net, visitors, walkOuts, reputation, cash, marketing }`. These are whole numbers, and the record is built by `dayRecord(stats, day, reputation, cash)` from a settled `DayStats`. `walkOuts` is refused + impatient + closing. `gross` is `grossProfit`, `net` is `netIncome`.
   - `Lifetime`:
@@ -83,6 +91,14 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 
 ### 17b: The Stats tab and charts
 
+**Built 2026-10-10.** Changes from the plan:
+
+- There's no separate `stats` action on the computer: since 16b it offers one `office` action, which opens the panel on its last tab. The tab is reached through **Office** and P.
+- Past `MAX_POINTS` weeks (588 days), the whole game is summed by month, so the cap holds.
+- `hud.css` had no colour variables, so the chart's are defined on `.stats-chart` (`--chart-bar`, `--chart-negative`, `--chart-line`).
+- Also in `sim/stats.ts`: `grossPerSale` and `sellerRows` (the player first, today's staff by sales, then "Former staff"). Record and chart wording is in `ui/statsText.ts`.
+- The `stats` tip (Easy) comes with the first record broken.
+
 - The office computer gets a **Stats** tab: `computerTab` `'stats'`, key P, the computer's `stats` action, and the top-bar **Office** button reaches it as it reaches the other tabs. If the computer's action ring is already full (Phases 14–16 add three more), the tab is still reached through **Office** and P.
 - `ui/StatsTab.tsx`:
   - **Totals**: lifetime sales (new and used), gross, net, visitors, close rate (sales ÷ visitors), and average gross per sale. "Since day N" when `statsFrom` > 1.
@@ -96,6 +112,18 @@ Nothing marks the small wins along the way either: the first sale at full sticke
 - `DaySummary`: a "New record: best day ($8,420)" line for each key in `brokenRecords`.
 
 ### 17c: Achievements (pure + store + notice)
+
+**Built 2026-10-10.** Changes from the plan:
+
+- Each achievement is either `live` or `day` (`when`), with its own `check`. `dayAchievements(ctx, earned)` takes one `DayContext` (the settled stats, the log and records with the day in, reputation, career, franchise and the stock after settling).
+- 49 in the catalogue, Phases 13–16's included. The groups add Reputation, Career, Service and Clients.
+- Comeback Free Month became **Done Right** (5 service jobs in a day, no comebacks): nothing keeps a month's service totals.
+- Hands Off needs 3+ sales, and Spotless 5+ cars, so neither is free on a quiet day. Fort Knox is day-end (thefts happen overnight); Fully Loaded is checked on the morning's change.
+- Lifetime sale counts and Every Model read `Career` (`sales`, `soldByModel`), which covers games from before 17a; Ad Man and Star Seller read `lifetime`.
+- New fields for the checks: `DayStats.washes` (the player's own), `Sale.lastRound`, `BoughtCar.hope`.
+- `earnAchievements(ids)` returns the new ones; `state/achievements.ts` holds the notice until the change that earned them has had its say (a sale's own notice) and no notice is up. The summary lists everything earned that day.
+- The `achievement` tip waits for 17d's Achievements view, which it points to.
+- Save v27.
 
 - New `sim/achievements.ts` (pure, tested):
   - `Achievement { id, title, text, group, hidden?, check }`. `group` is Selling, Business, People, Adversaries, Calendar or Used cars. `hidden` ones show as "???" until earned.
@@ -171,6 +199,12 @@ Phases 13–16 add their own when built:
   - The diff is a no-op when nothing it reads has changed.
 
 ### 17d: Achievements tab, trophy case and title screen
+
+**Built 2026-10-10.** Changes from the plan:
+
+- `mergeCase(case, achievements, records, now)` takes the level from each `EarnedAchievement` (which already keeps it) rather than one `level`, and `now` stamps `first` as a real time (ms), so the case can show when it was first earned on this device.
+- `startTrophyCase` merges whenever the store's `achievements` or `records` change, which covers each unlock, each settled day and a 17c save loading. It writes only when the case changed.
+- The `achievement` tip (Easy) comes with the first unlock and points to the Achievements view and the trophy case.
 
 - The Stats tab gets a second view, **Achievements**: a toggle at the top, no new key.
   - It's grouped by `group`, and each one shows earned (date and a level medal) or not yet earned (greyed, with its text). A hidden one shows "???".

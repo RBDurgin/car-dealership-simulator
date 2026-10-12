@@ -1,4 +1,6 @@
+import { CSI_FLOOR } from './csi'
 import { WASH_BELOW } from './cleanliness'
+import { dueCount, type Client } from './clients'
 import { PLAYER_ID, type Customer } from './customers'
 import type { DayStats } from './deal'
 import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
@@ -10,6 +12,7 @@ import type { OwnerVisit } from './owner'
 import type { RankId } from './progression'
 import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
 import { bayCount, type ServiceJob } from './service'
+import type { RecordKey } from './stats'
 import { isStale, STALE_DAYS } from './usedCars'
 
 /** A used car this worn or worse is worth reconditioning (see the `recon` tip). */
@@ -41,6 +44,15 @@ export type TipId =
   | 'serviceClient'
   | 'finding'
   | 'recall'
+  | 'clientBook'
+  | 'followUp'
+  | 'appointment'
+  | 'tradeUpDue'
+  | 'referral'
+  | 'appreciation'
+  | 'csi'
+  | 'stats'
+  | 'achievement'
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -81,6 +93,23 @@ export const TIPS: Record<TipId, string> = {
   rivalOpens:
     "Nazma's lot across the road is open, and some shoppers go to him instead. A good reputation, ads running and prices close to his win them back. The office computer's Rival tab shows how he's doing.",
   rivalBust: `Nazma went bust: his share stayed under ${Math.round(BUST_SHARE * 100)}% for ${BUST_WEEKS} weeks. He'll be back in a few weeks under a new name, a little stronger, so use the quiet to build up.`,
+  clientBook:
+    'Someone went in your client book: buyers become clients, and shoppers who talked to you but didn’t buy stay as prospects for two weeks. The office computer’s Clients tab shows how happy each visit left them. A star over a waiting customer means they’ve been here before.',
+  followUp:
+    'A shopper left without buying and is a prospect now. Call them back from the desk phone in the office (or the Call button in the Clients tab): a be-back who books an appointment comes in ready to deal.',
+  appointment:
+    'An appointment is booked for tomorrow. The morning notice and the Calendar tab say when they’re due. Don’t keep them waiting: a booked client minds a wait twice as much.',
+  tradeUpDue:
+    'A client is due to trade up the car you sold them. They may come in on their own, the likelier the happier they are, or call them from the desk phone to book a time. They drive in with their old car to trade. The Clients tab’s Due filter lists who’s due, and its loyalty discount brings them back more often.',
+  referral:
+    'A friend of one of your clients is here: their panel says who sent them. Happy clients send friends for a few weeks after buying. A referral fee in the Clients tab, and a thank-you call, make them send more.',
+  appreciation:
+    'Your book has 10 clients. Book a client appreciation day in the Calendar tab: a cookout on the lot that brings clients back, leaves them happier and brings in clients due to trade up.',
+  csi: `This month's CSI came in under ${CSI_FLOOR}, so the manufacturer cut the holdback by a quarter. Every new-car buyer's visit counts: keep waits short, haggle less, and hand over clean cars at a fair price.`,
+  stats:
+    'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
+  achievement:
+    'You earned an achievement. See them all in the office computer’s Stats tab (P) under Achievements, and every game’s in the trophy case on the title screen.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -98,7 +127,8 @@ export interface TipState {
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
-  dayStats: Pick<DayStats, 'missed'>
+  dayStats: Pick<DayStats, 'missed' | 'quota'> & { newRecords?: readonly RecordKey[] }
+  achievements?: readonly unknown[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
   franchise: FranchiseTier
@@ -106,7 +136,14 @@ export interface TipState {
   rival: { status: RivalStatus }
   expansions: readonly OwnedExpansion[]
   serviceJobs: readonly ServiceJob[]
+  clients: readonly Client[]
 }
+
+const prospects = (s: TipState) => s.clients.filter((c) => c.status === 'prospect').length
+const booked = (s: TipState) => s.clients.filter((c) => c.appointment).length
+const clientCount = (s: TipState) => s.clients.filter((c) => c.status === 'client').length
+/** Clients in the book that make an appreciation day worth booking. */
+export const APPRECIATION_TIP_CLIENTS = 10
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
@@ -222,6 +259,36 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           c.service?.kind === 'recall' && c.phase === 'waiting' && before.get(c.id) === 'arriving',
       )
     }
+    case 'clientBook':
+      return next.clients !== prev.clients && next.clients.length > prev.clients.length
+    case 'followUp':
+      return next.clients !== prev.clients && prospects(next) > prospects(prev)
+    case 'appointment':
+      return next.clients !== prev.clients && booked(next) > booked(prev)
+    case 'tradeUpDue':
+      return (
+        (next.clients !== prev.clients || next.clock.day !== prev.clock.day) &&
+        dueCount(next.clients, next.clock.day) > dueCount(prev.clients, prev.clock.day)
+      )
+    case 'referral': {
+      if (next.customers === prev.customers) return false
+      const known = new Set(prev.customers.map((c) => c.id))
+      return next.customers.some((c) => c.referredBy && !known.has(c.id))
+    }
+    case 'appreciation':
+      return (
+        next.clients !== prev.clients &&
+        clientCount(next) >= APPRECIATION_TIP_CLIENTS &&
+        clientCount(prev) < APPRECIATION_TIP_CLIENTS
+      )
+    case 'csi': {
+      const csi = next.dayStats.quota?.csi
+      return !prev.dayStats.quota && csi !== undefined && csi !== null && csi < CSI_FLOOR
+    }
+    case 'stats':
+      return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
+    case 'achievement':
+      return (next.achievements?.length ?? 0) > 0 && !prev.achievements?.length
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

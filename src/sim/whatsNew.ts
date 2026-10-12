@@ -254,6 +254,107 @@ export const UPDATES: readonly Update[] = [
       'Service clients come in more often, and the service garage costs less to build.',
     ],
   },
+  {
+    id: 24,
+    phase: '16',
+    title: 'Your client book',
+    items: [
+      'Everyone who buys now goes in your client book, and so does a shopper you talked to who left without buying.',
+      'Each visit is scored on the wait, the haggling, the price, how clean the car was and the trade-in.',
+      'The new Clients tab on the office computer (L) lists them, how happy they are and why.',
+      'Someone from the book who comes back has a star over them, and their panel says how it went last time.',
+      'The office computer now has one Office action, which opens on the tab you used last.',
+    ],
+  },
+  {
+    id: 25,
+    phase: '16',
+    title: 'Calls and appointments',
+    items: [
+      'There’s a phone on the office desk. Call clients from it, or with Call in the Clients tab.',
+      'Thank new buyers, call prospects back and check on unhappy clients.',
+      'A call can book an appointment for tomorrow. The morning notice and the Calendar tab list them.',
+      'A prospect who comes back is ready to deal. Don’t keep an appointment waiting.',
+      'A receptionist calls clients when nobody is waiting. Turn it off in the Clients tab.',
+    ],
+  },
+  {
+    id: 26,
+    phase: '16',
+    title: 'Trade-ups and the loyalty discount',
+    items: [
+      'A month or two after buying, a client is due to trade up. The happier they are, the likelier they come back.',
+      'They drive in with the car you sold them to trade, and shop the same model or the next size up.',
+      'Call a due client to invite them in. Not back within three weeks, they buy elsewhere.',
+      'Happy clients are keener to buy and haggle less.',
+      'Set a loyalty discount in the Clients tab: returning clients pay less but come back more often.',
+    ],
+  },
+  {
+    id: 27,
+    phase: '16',
+    title: 'Referrals and client appreciation day',
+    items: [
+      'Happy clients send friends in by name for a few weeks after buying. Their panel says who sent them.',
+      'Referrals now come only from your clients: a good reputation and a thank-you call make them send more.',
+      'Set a referral fee in the Clients tab, paid when a friend buys, to get more of them.',
+      'Book a client appreciation day in the Calendar tab: a cookout on the lot that brings your clients back.',
+    ],
+  },
+  {
+    id: 28,
+    phase: '16',
+    title: 'Customer satisfaction, service clients and Nazma',
+    items: [
+      'The manufacturer surveys new-car buyers each month (CSI). A low score cuts the holdback and blocks a tier-up.',
+      'Your clients bring the cars you sold them in for service, by name. Fewer strangers come from town.',
+      'Pitch a trade-up to a client waiting in the garage who is due soon, and they come back tomorrow to trade.',
+      'While Nazma’s lot is open, clients who drift away may buy there. Call them to win them back.',
+      'The owner may ask you to sell to returning clients.',
+    ],
+  },
+  {
+    id: 29,
+    phase: '17',
+    title: 'Stats and records',
+    items: [
+      'The office computer has a Stats tab (P): lifetime totals, close rate and gross per sale.',
+      'Your records: best day, week and month, biggest deal and longest selling streak.',
+      'Charts of sales, gross, net, visitors, reputation and cash, over the last 28 days or the whole game.',
+      'Lifetime sales by model, by what brought buyers in and by who sold them.',
+      'The day summary says when you break a record.',
+    ],
+  },
+  {
+    id: 30,
+    phase: '17',
+    title: 'Achievements',
+    items: [
+      'Earn achievements for small wins: a car sold at full sticker, Nazma run off the lot, the quota met and more.',
+      'Each one pops up with a chime as you earn it; those the end of a day earns are listed in the day summary.',
+      'They’re a record only, and count the same on every level. Each game keeps its own.',
+    ],
+  },
+  {
+    id: 31,
+    phase: '17',
+    title: 'Achievements view and trophy case',
+    items: [
+      'The Stats tab has an Achievements view: each one by group, with the day you earned it and a medal for the level.',
+      'Trophies on the title screen keeps every achievement earned on this device, at the hardest level, and your best records.',
+      'Starting a new game keeps the trophy case. Reset trophies at the bottom of it empties it.',
+    ],
+  },
+  {
+    id: 32,
+    phase: '18',
+    title: 'Smoother play and a Graphics setting',
+    items: [
+      'The game draws far less each frame, loads faster, and no longer piles up memory as you point at things.',
+      'Graphics in the 🔊 panel: Auto lowers the detail when the game stutters and raises it again when it runs smoothly.',
+      'If the browser refuses the end-of-day save, the game now tells you.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

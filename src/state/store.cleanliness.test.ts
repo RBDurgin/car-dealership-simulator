@@ -34,6 +34,10 @@ const browser: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  clientId: null,
+  loyaltyCut: 0,
+  referredBy: null,
+  guest: false,
   service: null,
 }
 

@@ -56,13 +56,15 @@ function pairDirection(a: string, b: string): Vec2 {
  * Push velocity on `self` away from neighbours closer than `radius`, stronger the
  * closer they are and capped at `MAX_PUSH_SPEED`. With a walking direction `dir`,
  * anyone ahead also nudges them to their right, so two people walking head-on
- * pass each other instead of stalling face to face.
+ * pass each other instead of stalling face to face. Writes into `out` when
+ * given, so a frame loop needn't allocate.
  */
 export function separation(
   self: Agent,
   neighbours: Iterable<Agent>,
   dir: Vec2 | null = null,
   radius = SEP_RADIUS,
+  out: Vec2 = { x: 0, z: 0 },
 ): Vec2 {
   let vx = 0
   let vz = 0
@@ -92,17 +94,25 @@ export function separation(
     }
   }
   const len = Math.hypot(vx, vz)
-  if (len < 1e-9) return { x: 0, z: 0 }
+  out.x = 0
+  out.z = 0
+  if (len < 1e-9) return out
   // Full speed once someone's half way in; never faster.
   const speed = Math.min(1, len * 2) * MAX_PUSH_SPEED
-  return { x: (vx / len) * speed, z: (vz / len) * speed }
+  out.x = (vx / len) * speed
+  out.z = (vz / len) * speed
+  return out
 }
+
+/** `crowdStep`'s walking direction and push, kept between calls so a frame allocates nothing. */
+const stepDir: Vec2 = { x: 0, z: 0 }
+const stepPush: Vec2 = { x: 0, z: 0 }
 
 /**
  * One substep for a walker in a crowd: along its path (as `stepAlongPath`, so
  * geometry pinning still drops the path), then pushed by `neighbours` unless
- * `push` is off. Walls clamp the push. Returns the path step; the push isn't
- * counted as walking.
+ * `push` is off. Walls clamp the push. Returns the path step (into `out` when
+ * given); the push isn't counted as walking.
  */
 export function crowdStep(
   grid: Grid,
@@ -112,20 +122,69 @@ export function crowdStep(
   dt: number,
   neighbours: Iterable<Agent>,
   push: boolean,
+  out?: PathStep,
 ): PathStep {
-  const s = stepAlongPath(grid, self.pos, waypoints, speed, dt)
+  const s = stepAlongPath(grid, self.pos, waypoints, speed, dt, PLAYER_RADIUS, out)
   self.pos.x = s.x
   self.pos.z = s.z
   if (push) {
-    const dir = s.dx !== 0 || s.dz !== 0 ? { x: s.dx, z: s.dz } : null
-    const v = separation(self, neighbours, dir)
+    stepDir.x = s.dx
+    stepDir.z = s.dz
+    const dir = s.dx !== 0 || s.dz !== 0 ? stepDir : null
+    const v = separation(self, neighbours, dir, SEP_RADIUS, stepPush)
     if (v.x !== 0 || v.z !== 0) {
-      const next = moveWithCollision(grid, self.pos, v.x * dt, v.z * dt, PLAYER_RADIUS)
-      self.pos.x = next.x
-      self.pos.z = next.z
+      moveWithCollision(grid, self.pos, v.x * dt, v.z * dt, PLAYER_RADIUS, self.pos)
     }
   }
   return s
+}
+
+/** A key for the cell (1 tile square) at `cx`, `cz`, for cells anywhere within ±4096 tiles. */
+const cellKey = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096)
+
+/**
+ * The crowd bucketed into 1-tile cells, so a walker checks only those in the
+ * cells around it instead of everyone. Built once a frame (`build`); buckets
+ * are kept and reused, so building allocates nothing once the crowd has
+ * walked about a bit.
+ */
+export class SpatialHash {
+  private readonly cells = new Map<number, Agent[]>()
+  /** The buckets filled by the last `build`, to empty on the next. */
+  private readonly filled: Agent[][] = []
+
+  build(agents: Iterable<Agent>): void {
+    for (const bucket of this.filled) bucket.length = 0
+    this.filled.length = 0
+    for (const a of agents) {
+      const key = cellKey(Math.floor(a.pos.x), Math.floor(a.pos.z))
+      let bucket = this.cells.get(key)
+      if (!bucket) {
+        bucket = []
+        this.cells.set(key, bucket)
+      }
+      if (bucket.length === 0) this.filled.push(bucket)
+      bucket.push(a)
+    }
+  }
+
+  /**
+   * Everyone in the cells that reach within `reach` of `pos`, into `out`: all
+   * those within `reach` as they stood at `build`, and some a little further.
+   */
+  near(pos: Vec2, reach: number, out: Agent[]): Agent[] {
+    out.length = 0
+    const x1 = Math.floor(pos.x + reach)
+    const z0 = Math.floor(pos.z - reach)
+    const z1 = Math.floor(pos.z + reach)
+    for (let cx = Math.floor(pos.x - reach); cx <= x1; cx++) {
+      for (let cz = z0; cz <= z1; cz++) {
+        const bucket = this.cells.get(cellKey(cx, cz))
+        if (bucket) for (const a of bucket) out.push(a)
+      }
+    }
+    return out
+  }
 }
 
 /**

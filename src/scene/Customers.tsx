@@ -28,7 +28,9 @@ import {
 } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
+import { customerById } from '../state/selectors'
 import { useGame } from '../state/store'
+import { useShallow } from 'zustand/react/shallow'
 import { Character } from './Character'
 import { CustomerBubble } from './CustomerBubble'
 import { Interactable } from './Interactable'
@@ -60,6 +62,7 @@ import {
   turnToward,
   walk,
   type Walker,
+  report,
 } from './walker'
 
 /** Real seconds a customer thinks over an offer before answering. */
@@ -133,6 +136,10 @@ const companionGroups = new Map<string, Group>()
 /** Still driving in: they're in their car (scene/DrivenCar), not on foot. */
 const inCar = (c: Customer) =>
   (!!c.vehicle && !c.vehicle.parked) || (!!c.service && !c.service.parked)
+
+/** The ids of the customers on foot, who are drawn here (the rest are in their cars). */
+const onFoot = (s: { customers: readonly Customer[] }) =>
+  s.customers.filter((c) => !inCar(c)).map((c) => c.id)
 
 /**
  * The customer's walker, created on first sight: at a sidewalk end, where
@@ -406,25 +413,26 @@ function onServiceArrived(c: Customer, w: CustomerWalker): void {
 /**
  * Reports progress to the store once a walker has stopped at its goal (or given
  * up on it). Called every frame while they stand still; phases with nothing to
- * report are ignored.
+ * report are ignored, and a report is made again only once the store has
+ * changed (`report`).
  */
 function onArrived(c: Customer, w: CustomerWalker): void {
   if (c.service) return onServiceArrived(c, w)
   const game = useGame.getState()
   switch (c.phase) {
     case 'arriving':
-      game.dispatchCustomer({ type: 'arrive', id: c.id })
+      report(w, 'arrive', () => game.dispatchCustomer({ type: 'arrive', id: c.id }))
       break
     case 'browsing':
       if (w.unreachable || !interactables.has(currentBrowseCarId(c) ?? '')) {
         // Can't get to it, or it sold while they were on their way: move on.
-        game.dispatchCustomer({ type: 'browsed', id: c.id })
+        report(w, 'browsed', () => game.dispatchCustomer({ type: 'browsed', id: c.id }))
       } else if (w.lingerUntil === null) {
         const minutes = w.rng.int(LINGER_MINUTES.min, LINGER_MINUTES.max)
         w.lingerUntil = gameTime.minute + minutes * ARCHETYPES[c.archetype].linger
         customersAtCar.add(c.id)
       } else if (gameTime.minute >= w.lingerUntil) {
-        game.dispatchCustomer({ type: 'browsed', id: c.id })
+        report(w, 'browsed', () => game.dispatchCustomer({ type: 'browsed', id: c.id }))
       }
       break
     case 'following': {
@@ -550,7 +558,7 @@ const CustomerFigure = memo(function CustomerFigure({
 }) {
   // Clickable while there's something to do with them (greet, make an offer).
   const helpable = useGame((s) => {
-    const c = s.customers.find((x) => x.id === id)
+    const c = customerById(s, id)
     return !!c && customerActions(c, s.serviceJobs).length > 0
   })
   return (
@@ -590,6 +598,10 @@ const CustomerFigure = memo(function CustomerFigure({
   )
 })
 
+/** The frame loop's sets, cleared and refilled each frame instead of made anew. */
+const ready = new Set<string>()
+const live = new Set<string>()
+
 /**
  * Every customer in the world, moved by one `useFrame`: they walk in from the
  * sidewalk (a passer-by who wandered in picks up from where they were), with a
@@ -601,7 +613,8 @@ const CustomerFigure = memo(function CustomerFigure({
  * and step around each other, staff and the player (see `sim/crowd.ts`).
  */
 export function Customers() {
-  const customers = useGame((s) => s.customers)
+  // Re-renders only when someone comes, goes or gets in or out of their car.
+  const ids = useGame(useShallow(onFoot))
 
   useFrame((_, rawDelta) => {
     const game = useGame.getState()
@@ -611,10 +624,10 @@ export function Customers() {
       closingDeal: game.activeAction?.action === 'closeDeal',
     }
     // Service clients whose car is done.
-    const ready = new Set(
-      game.serviceJobs.flatMap((j) => (j.status === 'ready' && j.customerId ? [j.customerId] : [])),
-    )
-    const live = new Set<string>()
+    ready.clear()
+    for (const j of game.serviceJobs)
+      if (j.status === 'ready' && j.customerId) ready.add(j.customerId)
+    live.clear()
     for (const c of game.customers) {
       if (inCar(c)) continue
       live.add(c.id)
@@ -632,22 +645,23 @@ export function Customers() {
 
   return (
     <>
-      {customers
-        .filter((c) => !inCar(c))
-        .map((c) => {
-          const w = walkerFor(c)
-          const m = companionFor(c, w)
-          return (
-            <CustomerFigure
-              key={c.id}
-              id={c.id}
-              variant={c.variant}
-              anim={w.anim}
-              companionVariant={c.companion}
-              companionAnim={m?.anim ?? null}
-            />
-          )
-        })}
+      {ids.map((id) => {
+        // A customer's looks never change, so they're read as they are now.
+        const c = customerById(useGame.getState(), id)
+        if (!c) return null
+        const w = walkerFor(c)
+        const m = companionFor(c, w)
+        return (
+          <CustomerFigure
+            key={c.id}
+            id={c.id}
+            variant={c.variant}
+            anim={w.anim}
+            companionVariant={c.companion}
+            companionAnim={m?.anim ?? null}
+          />
+        )
+      })}
     </>
   )
 }

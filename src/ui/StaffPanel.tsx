@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
-import { expansionsUp } from '../sim/expansions'
 import {
   canHire,
   MAX_SKILL,
@@ -11,6 +10,7 @@ import {
   type Employee,
   type StaffStatus,
 } from '../sim/staff'
+import { groundUp } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -61,11 +61,15 @@ function StaffRow({
  */
 export function StaffPanel() {
   const open = useGame((s) => s.staffOpen)
+  return open ? <StaffList /> : null
+}
+
+/** The open panel; only it selects the roster, so a closed panel doesn't re-render as staff move. */
+function StaffList() {
   const roster = useGame((s) => s.roster)
   const candidates = useGame((s) => s.candidates)
-  const ground = useGame(useShallow(expansionsUp))
+  const ground = useGame(useShallow(groundUp))
   const touch = useMediaQuery(COARSE)
-  if (!open) return null
 
   const game = useGame.getState()
   const employed = roster.filter((e) => !e.fired)

@@ -1,3 +1,4 @@
+import { csiLine, csiOf } from '../sim/csi'
 import { calendarOf, formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
 import { eventOn } from '../sim/events'
@@ -61,9 +62,10 @@ function RankChip() {
 function QuotaMeter({ day }: { day: number }) {
   const sold = useGame((s) => s.monthSales.count)
   const quota = useGame((s) => s.quota)
+  const csi = useGame((s) => csiOf(s.monthCsi))
   const left = daysLeft(calendarOf(day).dayOfMonth)
   const status = quotaStatus(sold, quota, left)
-  const text = `Manufacturer's quota: ${quotaLine(sold, quota, left)} (${QUOTA_STATUS_LABELS[status].toLowerCase()}). Hit it for a holdback at month end.`
+  const text = `Manufacturer's quota: ${quotaLine(sold, quota, left)} (${QUOTA_STATUS_LABELS[status].toLowerCase()}). Hit it for a holdback at month end. ${csiLine(csi)}.`
   return (
     <span className={`quota-meter quota-${status}`} title={text} aria-label={text}>
       <span className="quota-icon" aria-hidden>
@@ -164,7 +166,7 @@ function SoundButton() {
 /**
  * Date, weather, any sale, time, cash, reputation, the dealer rank, the month's quota, Nazma's share
  * (while his lot is open), the owner's goal (on their days) and the office (stock, marketing, upgrades,
- * calendar and rival), staff and sound buttons.
+ * calendar, rival, service, clients and stats), staff and sound buttons.
  * Re-renders only on 10-minute clock steps and sales.
  */
 export function TopBar() {

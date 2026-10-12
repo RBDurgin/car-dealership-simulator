@@ -104,14 +104,21 @@ export function dayOrdinal(n: number): string {
   return `${n}${(!teen && ['th', 'st', 'nd', 'rd'][n % 10]) || 'th'}`
 }
 
-/** "Recall: the Summit Ridge needs a brake sensor replaced. …", the morning one starts. */
-export function recallNotice(recall: Recall, sold: number): string {
+/**
+ * "Recall: the Summit Ridge needs a brake sensor replaced. …", the morning one
+ * starts. `clients` is how many in the book drive one.
+ */
+export function recallNotice(recall: Recall, sold: number, clients = 0): string {
   const name = carName(recall.model)
   const due =
     sold === 0
       ? `You haven't sold any, so expect few in.`
       : `You've sold ${sold}; expect about ${Math.max(1, recallExpected(sold))} of them in by the ${dayOrdinal(RECALL_LAST)}.`
-  return `Recall: the ${name} needs ${recall.issue} replaced. ${due} The manufacturer pays for the work.`
+  const book =
+    clients > 0
+      ? ` ${clients === 1 ? '1 of your clients drives' : `${clients} of your clients drive`} one.`
+      : ''
+  return `Recall: the ${name} needs ${recall.issue} replaced. ${due}${book} The manufacturer pays for the work.`
 }
 
 /** What a recall is about, for the Calendar and Service tabs: "Summit Ridge for a brake sensor". */

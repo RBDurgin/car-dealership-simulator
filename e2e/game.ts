@@ -18,9 +18,16 @@ export function watchErrors(page: Page): string[] {
   return errors
 }
 
-/** Opens the game and starts a new one at `level`, past the how-to-play guide. */
-export async function startGame(page: Page, level: Difficulty = 'medium'): Promise<void> {
-  await page.goto('/')
+/**
+ * Opens the game (at `path`, e.g. `/?perf`) and starts a new one at `level`,
+ * past the how-to-play guide.
+ */
+export async function startGame(
+  page: Page,
+  level: Difficulty = 'medium',
+  path = '/',
+): Promise<void> {
+  await page.goto(path)
   await page.getByText('New game').click()
   const label = level[0].toUpperCase() + level.slice(1)
   // Not exact: the button holds the level's blurb too.

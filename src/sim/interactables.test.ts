@@ -95,14 +95,7 @@ describe('dealership interactables', () => {
     expect(all.get('display-1')?.car?.location).toBe('Showroom display')
     expect(all.get('office-chair')?.actions).toEqual(['sit', 'closeDeal'])
     expect(all.get('coffee-machine')?.actions).toEqual(['getCoffee'])
-    expect(all.get('office-monitor')?.actions).toEqual([
-      'orderStock',
-      'advertise',
-      'improve',
-      'calendar',
-      'rival',
-      'service',
-    ])
+    expect(all.get('office-monitor')?.actions).toEqual(['office'])
     expect(all.has('office-desk')).toBe(false)
     expect(all.has('sales-monitor-1')).toBe(false)
   })
@@ -120,6 +113,13 @@ describe('dealership interactables', () => {
       { tx: 32, tz: 4 },
       { tx: 34, tz: 4 },
     ])
+  })
+
+  it('approaches the desk phone from the side, leaving the desk chair free', () => {
+    // The phone sits on the desk's free end at (32, 5); the chair is at (33, 4).
+    const phone = all.get('office-phone')!
+    expect(phone).toMatchObject({ kind: 'phone', actions: ['call'] })
+    expect(phone.approachTiles).toEqual([{ tx: 31, tz: 5 }])
   })
 
   it('approaches the coffee machine from in front of the counter', () => {

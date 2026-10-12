@@ -13,6 +13,7 @@ import {
   vehiclePos,
 } from '../scene/runtime'
 import { useGame } from '../state/store'
+import { subscribeDiff } from '../state/subscribe'
 import { playSfx } from './samples'
 
 /** Each cue's level before distance, so the files sit together in the mix. */
@@ -36,6 +37,8 @@ const VOLUME: Record<SfxCue, number> = {
   door: 0.6,
   wrench: 0.5,
   lift: 0.45,
+  ring: 0.35,
+  trophy: 0.45,
 }
 
 /** When each cue last played, so bursts are heard once (`allowCue`). */
@@ -83,8 +86,8 @@ function play(cue: SfxCue, subject?: SfxSubject): void {
  * something on the lot are placed by where it is relative to the camera.
  */
 export function startSfx(): () => void {
-  return useGame.subscribe((s, prev) => {
-    const events = sfxFor(prev, s)
+  return subscribeDiff((prev, next) => {
+    const events = sfxFor(prev, next)
     if (events.length === 0) return
     const now = performance.now()
     for (const { cue, subject } of events) {

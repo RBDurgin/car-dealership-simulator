@@ -1,13 +1,24 @@
+import { CSI_FLOOR } from './csi'
 import { describe, expect, it } from 'vitest'
 import { WASH_BELOW } from './cleanliness'
 import { generateCustomer, PLAYER_ID, type Customer } from './customers'
 import { buildInventory, type InventoryCar } from './inventory'
 import type { NazmaVisit } from './nazma'
+import type { Client } from './clients'
 import { createRng } from './rng'
 import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
 import { STALE_DAYS } from './usedCars'
-import { LOW_CASH, TIP_IDS, tipFor, tipText, TIPS, type TipId, type TipState } from './tips'
+import {
+  APPRECIATION_TIP_CLIENTS,
+  LOW_CASH,
+  TIP_IDS,
+  tipFor,
+  tipText,
+  TIPS,
+  type TipId,
+  type TipState,
+} from './tips'
 
 const inventory = buildInventory(createRng(42)).map((c) => ({ ...c, cleanliness: 1 }))
 const customer = (id: string, patch: Partial<Customer> = {}): Customer => ({
@@ -31,7 +42,7 @@ const base: TipState = {
   cash: 20_000,
   inventory,
   customers: [customer('c1')],
-  dayStats: { missed: {} },
+  dayStats: { missed: {}, quota: null },
   owner: null,
   nazma: null,
   franchise: 'bronze',
@@ -39,6 +50,7 @@ const base: TipState = {
   rival: { status: 'unopened' },
   expansions: [],
   serviceJobs: [],
+  clients: [],
 }
 const garage: TipState['expansions'] = [
   { id: 'east-lot', day: 1 },
@@ -99,6 +111,11 @@ const finding: Finding = {
   status: 'found',
 }
 
+const clientsOf = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `client-1-${i}`, status: 'client' }) as Client)
+
+const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
+
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
   wash: [{ inventory: withCar({ cleanliness: WASH_BELOW - 0.01 }) }, {}],
   haggle: [
@@ -106,13 +123,33 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     {},
   ],
   restock: [{ inventory: withCar({ status: 'sold' }) }, {}],
-  missed: [{ dayStats: { missed: { sedan: 1 } } }, {}],
+  missed: [{ dayStats: { missed: { sedan: 1 }, quota: null } }, {}],
   nazma: [{ nazma: nazma('onLot') }, { nazma: nazma('coming') }],
   owner: [
     { owner: { goal: { kind: 'noImpatient' }, announced: true } },
     { owner: { goal: { kind: 'noImpatient' }, announced: false } },
   ],
   lowCash: [{ cash: LOW_CASH - 1 }, { cash: LOW_CASH }],
+  stats: [{ dayStats: { missed: {}, quota: null, newRecords: ['bestDay'] } }, {}],
+  achievement: [
+    { achievements: [{ id: 'first-sale', day: 1, level: 'easy' }] },
+    { achievements: [] },
+  ],
+  csi: [
+    {
+      dayStats: {
+        missed: {},
+        quota: {
+          quota: 40,
+          sold: 42,
+          payout: 900,
+          csi: CSI_FLOOR - 1,
+          tier: { from: 'bronze', to: 'silver' },
+        },
+      },
+    },
+    {},
+  ],
   franchise: [{ franchise: 'silver' }, { franchise: 'bronze' }],
   expansion: [{ career: { rank: 'main-street' } }, { career: { rank: 'corner-lot' } }],
   seller: [
@@ -149,9 +186,40 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0, finding }] },
     { serviceJobs: [{ ...job, status: 'inBay', bay: 0 }] },
   ],
+  clientBook: [{ clients: [{ id: 'client-1-0' } as Client] }, {}],
+  followUp: [
+    { clients: [{ id: 'client-1-0', status: 'prospect' } as Client] },
+    { clients: [{ id: 'client-1-0', status: 'lapsed' } as Client] },
+  ],
+  appointment: [
+    {
+      clients: [
+        {
+          id: 'client-1-0',
+          status: 'prospect',
+          appointment: { day: 2, minute: 600, reason: 'beBack' },
+        } as Client,
+      ],
+    },
+    { clients: [{ id: 'client-1-0', status: 'prospect', appointment: null } as Client] },
+  ],
+  tradeUpDue: [
+    { clients: dueBook, clock: { day: 40 } },
+    { clients: dueBook, clock: { day: 39 } },
+  ],
   staleUsed: [
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
+  ],
+  referral: [{ customers: [customer('f1', { referredBy: 'client-1-0' })] }, {}],
+  appreciation: [
+    { clients: clientsOf(APPRECIATION_TIP_CLIENTS) },
+    // The tenth was a prospect yesterday.
+    {
+      clients: clientsOf(APPRECIATION_TIP_CLIENTS).map((c, i) =>
+        i === 0 ? { ...c, status: 'prospect' as const } : c,
+      ),
+    },
   ],
 }
 

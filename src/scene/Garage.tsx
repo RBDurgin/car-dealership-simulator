@@ -1,25 +1,37 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
-import { CanvasTexture, MeshStandardMaterial, SRGBColorSpace, type Group } from 'three'
+import { useLayoutEffect, useMemo, useRef } from 'react'
+import { CanvasTexture, MathUtils, MeshStandardMaterial, SRGBColorSpace, type Group } from 'three'
 import type { InventoryCar } from '../sim/inventory'
-import { GARAGE_SIGN, SERVICE_BAYS, type ServiceBay } from '../sim/layout'
+import {
+  GARAGE_CLIENT_DOOR,
+  GARAGE_SIGN,
+  SERVICE_BAYS,
+  type Rect,
+  type ServiceBay,
+} from '../sim/layout'
 import type { ServiceJob } from '../sim/service'
+import { isCutaway } from '../sim/walls'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
-import { lifts, rectBounds } from './runtime'
+import { layout, lifts, rectBounds } from './runtime'
 import { useGround } from './useUpNow'
+import { CAP, CAP_COLORS, THICKNESS, WALL_COLOR, WALL_HEIGHT } from './wallStyle'
 
 /** How high a lift raises a car, and how fast (units a second). */
 const LIFT_UP = 0.9
 const LIFT_SPEED = 0.5
-/** Where the roll-up doors sit, rolled up over their openings. */
-const DOOR_DRUM_Y = 2.2
+/** The top of a door opening; the header above it runs up to the wall top. */
+const DOOR_TOP = 2
+/** The rolled-up door's drum, tucked under the header on the inside. */
+const DRUM_RADIUS = 0.16
 
 // Shared by every bay: the garage is a handful of meshes, none casting shadows.
 const STEEL = new MeshStandardMaterial({ color: '#5d636b', metalness: 0.6, roughness: 0.45 })
 const LIFT_YELLOW = new MeshStandardMaterial({ color: '#e0b43a', roughness: 0.6 })
 const DOOR = new MeshStandardMaterial({ color: '#c8ccd2', metalness: 0.3, roughness: 0.5 })
 const POST = new MeshStandardMaterial({ color: '#3a3f46', roughness: 0.6 })
+const HEADER = new MeshStandardMaterial({ color: WALL_COLOR })
+const HEADER_CAP = new MeshStandardMaterial({ color: CAP_COLORS.solid })
 
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
@@ -80,7 +92,6 @@ function ServiceSign() {
 function Bay({ index, bay, car }: { index: number; bay: ServiceBay; car: InventoryCar | null }) {
   const lift = useRef<Group>(null)
   const b = rectBounds(bay.rect)
-  const door = rectBounds(bay.door)
   // Posts stand either side of the car, across its width.
   const across = bay.facing % 2 === 0 ? 'x' : 'z'
   const half = (across === 'x' ? b.w : b.h) / 2 - 0.08
@@ -133,10 +144,74 @@ function Bay({ index, bay, car }: { index: number; bay: ServiceBay; car: Invento
           )}
         </group>
       </group>
-      {/* The roll-up door, rolled up into its drum. */}
-      <mesh position={[door.x, DOOR_DRUM_Y, door.z]} rotation-z={Math.PI / 2} material={DOOR}>
-        <cylinderGeometry args={[0.16, 0.16, door.w, 12]} />
+      <DoorFrame door={bay.door} rollUp />
+    </group>
+  )
+}
+
+/**
+ * The frame of a door in the garage's south wall: a header over the opening,
+ * level with the wall top, and for a roll-up door its drum and side tracks.
+ * It rises and drops with the wall around it (`WALL_HEIGHT`, cut away like a
+ * wall piece on the door's tile), so nothing floats with the walls down.
+ */
+function DoorFrame({ door, rollUp = false }: { door: Rect; rollUp?: boolean }) {
+  const frame = useRef<Group>(null)
+  const settled = useRef(false)
+  const wallMode = useGame((s) => s.wallMode)
+  const viewYaw = useGame((s) => s.viewYaw)
+  const piece = { tx: door.tx, tz: door.tz, dir: 'e', kind: 'solid' } as const
+  const height =
+    wallMode === 'cutaway' && !isCutaway(layout, piece, viewYaw)
+      ? WALL_HEIGHT.up
+      : WALL_HEIGHT[wallMode]
+  const target = height / WALL_HEIGHT.up
+  // A new mode or view: let useFrame ease toward it.
+  useLayoutEffect(() => {
+    settled.current = false
+  }, [target])
+  useFrame((_, rawDelta) => {
+    const g = frame.current
+    if (!g || settled.current) return
+    const next = MathUtils.damp(g.scale.y, target, 12, Math.min(rawDelta, 0.05))
+    g.scale.y = Math.abs(next - target) < 1e-3 ? target : next
+    settled.current = g.scale.y === target
+  })
+  const b = rectBounds(door)
+  const header = WALL_HEIGHT.up - DOOR_TOP
+  const t = THICKNESS.solid
+  // The wall tiles either side are bare posts at their centres (the walls draw
+  // no arm toward an opening), so the header reaches over to them.
+  const span = b.w + 1
+  return (
+    <group ref={frame} position={[b.x, 0, b.z]}>
+      <mesh position-y={DOOR_TOP + header / 2} material={HEADER}>
+        <boxGeometry args={[span, header, t]} />
       </mesh>
+      <mesh position-y={WALL_HEIGHT.up + CAP / 2} material={HEADER_CAP}>
+        <boxGeometry args={[span + 0.02, CAP, t + 0.02]} />
+      </mesh>
+      {rollUp && (
+        <>
+          {/* The door, rolled up into its drum just inside the header. */}
+          <mesh
+            position={[0, DOOR_TOP - DRUM_RADIUS, -t / 2 - DRUM_RADIUS]}
+            rotation-z={Math.PI / 2}
+            material={DOOR}
+          >
+            <cylinderGeometry args={[DRUM_RADIUS, DRUM_RADIUS, b.w - 0.1, 12]} />
+          </mesh>
+          {[-1, 1].map((side) => (
+            <mesh
+              key={side}
+              position={[side * (b.w / 2 - 0.04), DOOR_TOP / 2, -t / 2 - 0.04]}
+              material={POST}
+            >
+              <boxGeometry args={[0.08, DOOR_TOP, 0.08]} />
+            </mesh>
+          ))}
+        </>
+      )}
     </group>
   )
 }
@@ -154,8 +229,8 @@ function carInBay(
 /**
  * The service garage, once it's built: its walls, floor, counter and chairs
  * come from the layout; this adds the lifts, our own cars on them (a client's
- * is drawn by scene/DrivenCar, raised with the lift), the roll-up
- * doors and the SERVICE sign.
+ * is drawn by scene/DrivenCar, raised with the lift), the door frames
+ * and the SERVICE sign.
  */
 export function Garage() {
   const ground = useGround()
@@ -167,6 +242,9 @@ export function Garage() {
       {SERVICE_BAYS.map((bay, i) => (
         <Bay key={i} index={i} bay={bay} car={carInBay(i, jobs, inventory)} />
       ))}
+      <group onPointerDown={swallowClick} onPointerUp={swallowClick}>
+        <DoorFrame door={GARAGE_CLIENT_DOOR} />
+      </group>
       <ServiceSign />
     </>
   )

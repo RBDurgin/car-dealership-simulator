@@ -5,7 +5,7 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift'
+type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift' | 'ring' | 'trophy'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -32,6 +32,8 @@ const ALL_IDS = [
   'door',
   'wrench',
   'lift',
+  'ring',
+  'trophy',
 ] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
@@ -187,6 +189,66 @@ function liftBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+const RING_SECONDS = 1.3
+/** The two bursts of a ring, in seconds. */
+const RING_BURSTS = [
+  [0, 0.4],
+  [0.55, 0.95],
+]
+
+/**
+ * A phone ringing at the other end of the line: the classic pair of tones
+ * (440 and 480 Hz) warbled at 20 Hz, in two short bursts, as heard down a
+ * handset.
+ */
+function ringBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(RING_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const [from, to] of RING_BURSTS) {
+    const start = Math.floor(from * rate)
+    const end = Math.min(data.length, Math.floor(to * rate))
+    for (let i = start; i < end; i++) {
+      const t = i / rate
+      const edge = Math.min(1, (t - from) / 0.01, (to - t) / 0.02)
+      const warble = 0.6 + 0.4 * Math.sin(2 * Math.PI * 20 * t)
+      const tones = Math.sin(2 * Math.PI * 440 * t) + Math.sin(2 * Math.PI * 480 * t)
+      data[i] = tones * 0.35 * warble * edge
+    }
+  }
+  return buffer
+}
+
+/** An achievement's chime: two bright bell notes a fifth apart, then the octave. */
+const TROPHY_NOTES = [
+  { at: 0, hz: 1318.5 },
+  { at: 0.09, hz: 1975.53 },
+  { at: 0.18, hz: 2637.02 },
+]
+const TROPHY_SECONDS = 1.2
+
+/**
+ * Bell-like notes: a sine with a slightly sharp, quicker-fading partial for
+ * the shimmer, each struck and left to ring. Made here so it can't be mistaken
+ * for the sale or the bell.
+ */
+function trophyBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(TROPHY_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const note of TROPHY_NOTES) {
+    const start = Math.floor(note.at * rate)
+    for (let i = start; i < data.length; i++) {
+      const t = (i - start) / rate
+      const strike = Math.min(1, t / 0.004)
+      const ring = Math.sin(2 * Math.PI * note.hz * t) * Math.exp(-t / 0.35)
+      const shimmer = 0.35 * Math.sin(2 * Math.PI * note.hz * 2.76 * t) * Math.exp(-t / 0.08)
+      data[i] += (ring + shimmer) * strike * 0.3
+    }
+  }
+  return buffer
+}
+
 const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   spray: sprayBuffer,
   fanfare: fanfareBuffer,
@@ -194,10 +256,12 @@ const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   door: doorBuffer,
   wrench: wrenchBuffer,
   lift: liftBuffer,
+  ring: ringBuffer,
+  trophy: trophyBuffer,
 }
 
 /** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */
-const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500, lift: 1200 }
+const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500, lift: 1200, ring: 3000 }
 
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)

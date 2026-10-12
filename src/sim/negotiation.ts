@@ -97,11 +97,21 @@ export function roundOf(c: Customer): number {
 }
 
 /**
+ * The sticker `c` is priced from: MSRP, or for a returning client the loyalty
+ * price, `msrp × (1 − loyaltyCut)`. Asks top out here.
+ */
+export function stickerOf(c: Pick<Customer, 'loyaltyCut'>, car: InventoryCar): number {
+  return c.loyaltyCut > 0 ? roundPrice(car.msrp * (1 - c.loyaltyCut)) : car.msrp
+}
+
+/**
  * What they hope to pay for `car` on `day`: MSRP (for a used car, what it's
- * worth that day, `fairPrice`) less their `expect`, within budget.
+ * worth that day, `fairPrice`) less any loyalty discount, less their
+ * `expect`, within budget.
  */
 export function hopePrice(c: Customer, car: InventoryCar, day = car.arrivedDay): number {
-  return Math.min(c.budget, roundPrice(fairPrice(car, day) * (1 - c.expect)))
+  const worth = fairPrice(car, day) * (1 - c.loyaltyCut)
+  return Math.min(c.budget, roundPrice(worth * (1 - c.expect)))
 }
 
 /**
@@ -241,7 +251,7 @@ export function dealWarmth(
 
 /**
  * The prices a seller can ask now, with `allowance` for the customer's trade:
- * up to MSRP at first, then between their counter and the last ask (nets,
+ * up to their sticker (`stickerOf`) at first, then between their counter and the last ask (nets,
  * with a trade, so the allowance is added back).
  */
 export function askRange(
@@ -249,9 +259,10 @@ export function askRange(
   car: InventoryCar,
   allowance?: number,
 ): { min: number; max: number } {
-  if (!c.haggle) return { min: PRICE_STEP, max: car.msrp }
+  const sticker = stickerOf(c, car)
+  if (!c.haggle) return { min: PRICE_STEP, max: sticker }
   const add = c.trade && allowance !== undefined ? allowance : 0
-  const max = Math.min(car.msrp, c.haggle.lastAsk + add)
+  const max = Math.min(sticker, c.haggle.lastAsk + add)
   return { min: Math.min(max, c.haggle.counter + add), max }
 }
 
@@ -267,11 +278,11 @@ export function matchAsk(c: Customer, car: InventoryCar, allowance?: number): nu
 }
 
 /**
- * A sensible next ask, with `allowance` for their trade: MSRP to open, then
- * splitting the difference with their counter.
+ * A sensible next ask, with `allowance` for their trade: their sticker to
+ * open, then splitting the difference with their counter.
  */
 export function suggestedAsk(c: Customer, car: InventoryCar, allowance?: number): number {
-  if (!c.haggle) return car.msrp
+  if (!c.haggle) return stickerOf(c, car)
   const add = c.trade && allowance !== undefined ? allowance : 0
   return clampAsk(c, car, roundPrice((c.haggle.lastAsk + c.haggle.counter) / 2) + add, allowance)
 }
@@ -317,6 +328,9 @@ export function staffConcession(skill: number): number {
  * Against the rival's `quote` (see `quoteFor`) they come down to it when they
  * would ask more: average and better ones (3+) only when it keeps cost +
  * `STAFF_FLOOR_MARGIN`, green ones whenever it's over cost.
+ *
+ * `sticker` is what they price from: MSRP, or a returning client's loyalty
+ * price (`stickerOf`). They never ask over it.
  */
 export function staffAsk(
   skill: number,
@@ -324,15 +338,16 @@ export function staffAsk(
   haggle: Haggle | null,
   allowance = 0,
   quote: number | null = null,
+  sticker = car.msrp,
 ): number {
   const floor = car.cost + STAFF_FLOOR_MARGIN
   // With a trade, the haggle's nets are prices once this round's allowance is added back.
-  const lastAsk = haggle ? Math.min(car.msrp, haggle.lastAsk + allowance) : car.msrp
+  const lastAsk = haggle ? Math.min(sticker, haggle.lastAsk + allowance) : sticker
   const counter = haggle ? Math.min(lastAsk, haggle.counter + allowance) : 0
   const ask = (() => {
     if (!haggle) {
-      const open = skill >= 3 ? car.msrp : roundPrice(car.msrp * (1 - STAFF_OPEN_DISCOUNT))
-      return Math.min(car.msrp, Math.max(floor, open))
+      const open = skill >= 3 ? sticker : roundPrice(sticker * (1 - STAFF_OPEN_DISCOUNT))
+      return Math.min(sticker, Math.max(floor, open))
     }
     const takes =
       counter >= floor &&

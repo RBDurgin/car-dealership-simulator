@@ -21,6 +21,7 @@ import type { Vec2 } from '../sim/grid'
 import { OWNER_ID } from '../sim/owner'
 import { createRng } from '../sim/rng'
 import { isPaused, useGame } from '../state/store'
+import { subscribeDiff, subscribeTo } from '../state/subscribe'
 import { ambientPos, cameraState, customerPos, playerPos, staffPos } from './runtime'
 import { frameSeconds } from './walker'
 
@@ -42,7 +43,13 @@ const talks = new Map<string, { conv: Conversation; turn: number; nextAt: number
 const busyUntil = new Map<string, number>()
 let queue: Queued[] = []
 const voices = new Map<string, Voice>()
-let convCache: { customers: unknown; nazma: unknown; list: Conversation[] } | null = null
+let convCache: {
+  customers: unknown
+  nazma: unknown
+  action: unknown
+  call: unknown
+  list: Conversation[]
+} | null = null
 
 function voiceFor(s: ChatterState, speaker: string): Voice | null {
   let v = voices.get(speaker)
@@ -77,8 +84,19 @@ function enqueue(s: ChatterState, lines: Line[]): void {
 
 /** Keeps `talks` in step with the conversations the store implies, starting new ones' timers. */
 function syncTalks(s: ChatterState): void {
-  if (convCache?.customers !== s.customers || convCache.nazma !== s.nazma) {
-    convCache = { customers: s.customers, nazma: s.nazma, list: conversationsOf(s) }
+  const changed =
+    convCache?.customers !== s.customers ||
+    convCache.nazma !== s.nazma ||
+    convCache.action !== s.activeAction ||
+    convCache.call !== s.receptionCall
+  if (changed) {
+    convCache = {
+      customers: s.customers,
+      nazma: s.nazma,
+      action: s.activeAction,
+      call: s.receptionCall,
+      list: conversationsOf(s),
+    }
     const keys = new Set(convCache.list.map((c) => c.key))
     for (const key of talks.keys()) if (!keys.has(key)) talks.delete(key)
     for (const conv of convCache.list) {
@@ -88,6 +106,9 @@ function syncTalks(s: ChatterState): void {
     }
   }
 }
+
+/** Lines due this frame, emptied and refilled each frame instead of made anew. */
+const due: Queued[] = []
 
 /**
  * Gibberish voices (`sim/chatter`, `audio/voice`): salespeople pitching,
@@ -99,7 +120,7 @@ function syncTalks(s: ChatterState): void {
 export function Chatter() {
   useEffect(
     () =>
-      useGame.subscribe((s, prev) => {
+      subscribeDiff((prev, s) => {
         if (s.screen !== 'playing') return
         for (const lines of reactionsFor(prev, s, rng)) enqueue(s, lines)
       }),
@@ -112,7 +133,7 @@ export function Chatter() {
     now += frameSeconds(rawDelta, 1).realSeconds
     syncTalks(game)
 
-    const due: Queued[] = []
+    due.length = 0
     for (const t of talks.values()) {
       if (t.nextAt > now) continue
       const [a, b] = t.conv.speakers
@@ -156,12 +177,14 @@ export function Chatter() {
   // The owner leaves with the day; forget voices of anyone no longer around.
   useEffect(
     () =>
-      useGame.subscribe((s, prev) => {
-        if (s.clock.day === prev.clock.day) return
-        for (const id of voices.keys()) if (id !== PLAYER_ID && id !== OWNER_ID) voices.delete(id)
-        busyUntil.clear()
-        queue = []
-      }),
+      subscribeTo(
+        (s) => s.clock.day,
+        () => {
+          for (const id of voices.keys()) if (id !== PLAYER_ID && id !== OWNER_ID) voices.delete(id)
+          busyUntil.clear()
+          queue = []
+        },
+      ),
     [],
   )
   return null

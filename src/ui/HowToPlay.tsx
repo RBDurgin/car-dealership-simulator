@@ -1,6 +1,16 @@
+import { CSI_FACTORS, CSI_FLOOR, CSI_PAR, CSI_TIER_MIN, CSI_TOP } from '../sim/csi'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
+import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
+import {
+  DUE_SOON,
+  LAPSE_DAYS,
+  LOYAL,
+  PROSPECT_DAYS,
+  SERVICE_INTERVAL,
+  TRADE_UP_DAYS,
+} from '../sim/clients'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import {
@@ -54,7 +64,9 @@ import { dayOrdinal, RECALL_FIRST, RECALL_LAST, RECALL_RESPONSE } from '../sim/r
 import { MODEL_TIER, TIER_PERKS, TIERS, tierName } from '../sim/franchise'
 import { carName } from '../sim/interactables'
 import type { CarModel } from '../sim/layout'
-import { MAX_DAILY_CHANGE, MAX_REFERRALS, REPUTATION_POINTS } from '../sim/reputation'
+import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from '../sim/reputation'
+import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
+import { APPRECIATION_COST, BOOK_AHEAD, COST_PER_GUEST } from '../sim/appreciation'
 import {
   FINANCE_FEE,
   MIN_COMMISSION,
@@ -64,6 +76,7 @@ import {
   roleLimits,
   SALES_COMMISSION,
 } from '../sim/staff'
+import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
@@ -171,6 +184,16 @@ function BasicsTab({ touch, click }: TabProps) {
           <b>Selling</b>). Each day ends with a summary, and your progress is saved then.
         </p>
         <p>
+          Small wins along the way earn <b>achievements</b>: a car sold at full sticker, Nazma run
+          off the lot, a month that meets the quota and more, with a few kept secret. Each pops up
+          with a 🏆 and a chime as you earn it, and those the end of a day earns are listed in the
+          day summary. They&apos;re a record only, the same on every level, and each game keeps its
+          own: the office computer&apos;s <b>Stats</b> tab (P) lists them under <b>Achievements</b>,
+          with a medal for the level you earned each on. <b>Trophies</b> on the title screen keeps
+          every achievement earned on this device across games, at the hardest level, with your
+          best-ever records; a new game doesn&apos;t clear it.
+        </p>
+        <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent
           updates, and it opens by itself when you come back to a game saved before them.
         </p>
@@ -224,7 +247,7 @@ function BasicsTab({ touch, click }: TabProps) {
   )
 }
 
-function SellingTab({ click }: TabProps) {
+function SellingTab({ touch, click }: TabProps) {
   return (
     <>
       <section>
@@ -327,6 +350,76 @@ function SellingTab({ click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Clients</h3>
+        <p>
+          Everyone who buys goes in your client book. So does a shopper you or your staff talked to
+          who left without buying: they stay as a prospect for {PROSPECT_DAYS} days. Sellers,
+          service clients and anyone nobody greeted aren&apos;t kept.
+        </p>
+        <p>
+          Each visit is scored out of 100. Waiting long, haggling many rounds, paying more than they
+          hoped, a dirty car or a low trade-in offer take points off; quick service, a good price, a
+          clean car and a fair trade-in add them. The score is blended into how happy they are with
+          you, so one bad visit hurts without wiping out the good ones.
+        </p>
+        <p>
+          The <b>Clients</b> tab on the office computer (<OfficeKey touch={touch} keyName="L" />)
+          lists the book: how happy each person is, their car or what they were after, and why their
+          last visit scored as it did. When someone from the book comes back, a ★ shows over them
+          while they wait, and their panel says how it went last time.
+        </p>
+        <p>
+          Follow up from the <b>desk phone</b> in the office: {click.toLowerCase()} it and choose{' '}
+          <b>Call a client</b> to call the top of your list, or press <b>Call</b> by someone in the
+          Clients tab. A call takes about {CALL_MINUTES} game minutes, and walking off hangs up.
+          Thank a buyer in their first {THANKS_DAYS} days and they&apos;re happier with you. Call a
+          prospect back, or check on an unhappy client, and they may book an appointment for
+          tomorrow. A prospect who comes back is ready to deal, hoping to pay about what they last
+          offered. Some don&apos;t pick up: try again tomorrow. Anyone who answered isn&apos;t
+          called again for {CALL_GAP_DAYS} days, and calling more than {MAX_CALLS} times between
+          visits annoys them.
+        </p>
+        <p>
+          The morning notice and the Calendar tab list the day&apos;s appointments. Most turn up, by
+          car if there&apos;s a space. Keep them waiting and it costs twice as much as a
+          walk-in&apos;s wait.
+        </p>
+        <p>
+          A buyer is due to trade up {TRADE_UP_DAYS.min} to {TRADE_UP_DAYS.max} days after their
+          purchase (the Clients tab&apos;s Due filter lists them). Once due, they may come in on
+          their own any day, the likelier the happier they are, and a call invites them in with much
+          better odds than waiting. They drive in with the car you sold them, a few years older by
+          then, to trade, and shop the same model or the next size up. With no parking space free
+          they come on foot without it. Not back within {LAPSE_DAYS} days of falling due, they buy
+          elsewhere.
+        </p>
+        <p>
+          A happy client is keener to say yes and hopes for less off; an unhappy one is warier. With
+          a loyalty discount on (see the Business tab), a returning client is priced from the
+          loyalty price instead of the sticker: their panel shows it, and asks top out there.
+        </p>
+        <p>
+          Happy clients (satisfaction {REFER_MIN} or more) send friends in for {REFER_WINDOW} days
+          after they buy, up to {MAX_FRIENDS} each: more of them with a good reputation, a referral
+          fee (see the Business tab) or after a thank-you call. A friend&apos;s panel says who sent
+          them. If they buy, the client is happier with you and the friend joins the book too.
+        </p>
+        <p>
+          Once you have a service garage, clients bring the car you sold them in for service about
+          every {SERVICE_INTERVAL} days, by name. A job done on time leaves them happier and keeps
+          their car in better shape for its trade-in; a late one, a comeback or being turned away
+          costs. A client waiting in the garage who&apos;s due to trade up within {DUE_SOON} days
+          can be pitched: {click.toLowerCase()} them and choose <b>Pitch a trade-up</b>. If
+          they&apos;re keen, they come back tomorrow to trade in the car you just serviced.
+        </p>
+        <p>
+          While {RIVAL_NAMES[0]} is open across the road, clients who drift away (and unhappy
+          prospects) may buy from him instead: the Clients tab shows them as at his lot. Call them
+          and you may win them back as a prospect. Clients at {LOYAL} or more satisfaction are loyal
+          and come straight to you without his price.
+        </p>
+      </section>
+      <section>
         <h3>Reputation</h3>
         <p>
           The ♥ meter in the top bar, 0 to 100, moves once a day at closing: each buyer adds{' '}
@@ -337,9 +430,9 @@ function SellingTab({ click }: TabProps) {
           {MAX_DAILY_CHANGE} either way.
         </p>
         <p>
-          A good name brings more visitors, sends friends of past buyers your way (up to{' '}
-          {MAX_REFERRALS} referrals a day at the top, mostly ready to buy) and makes every ad bring
-          more. A poor one means fewer visitors and weaker ads.
+          A good name brings more visitors, has happy clients send more friends your way (half as
+          many at 0, half as many again at 100) and makes every ad bring more. A poor one means
+          fewer visitors and weaker ads.
         </p>
       </section>
     </>
@@ -351,9 +444,41 @@ function BusinessTab({ touch, click }: TabProps) {
   return (
     <>
       <p className="how-lead">
-        Stock, ads, upgrades and the calendar are all on the office computer: {click.toLowerCase()}{' '}
-        the screen on your desk, or <OfficeKey touch={touch} keyName="I" /> and pick a tab.
+        Stock, ads, upgrades, the calendar, the garage, your clients and your stats are all on the
+        office computer: {click.toLowerCase()} the screen on your desk and choose <b>Office</b>, or{' '}
+        <OfficeKey touch={touch} keyName="I" />, and pick a tab.
       </p>
+      <section>
+        <h3>Loyalty discount</h3>
+        <p>
+          The Clients tab sets a loyalty discount for returning clients: none, 2% or 4% off the
+          sticker. Every sale to them earns that much less, but a client due to trade up comes back
+          more often (a fifth more at 2%, two fifths at 4%) and leaves a little happier. A 2%
+          discount about pays for itself; 4% needs a big book.
+        </p>
+      </section>
+      <section>
+        <h3>Referral fee</h3>
+        <p>
+          The Clients tab also sets a referral fee: none, $100 or $250, paid to a client when a
+          friend they sent buys. It comes off the day&apos;s net, and clients send{' '}
+          {Math.round((FEE_REFER[100] - 1) * 100)}% more friends at $100 and{' '}
+          {Math.round((FEE_REFER[250] - 1) * 100)}% more at $250.
+        </p>
+      </section>
+      <section>
+        <h3>Client appreciation day</h3>
+        <p>
+          Book a cookout for your clients in the Calendar tab, {BOOK_AHEAD.min} to {BOOK_AHEAD.max}{' '}
+          days ahead and once a month. It costs {formatMoney(APPRECIATION_COST)} plus{' '}
+          {formatMoney(COST_PER_GUEST)} for each client invited, paid when you book. Every client
+          who isn&apos;t unhappy is invited; the happier they are the likelier they come, and rain
+          keeps some away. Guests turn up over lunch, each a little happier for being asked, and
+          those due to trade up within a week come ready to. Some bring a friend, and a few more
+          passers-by wander in. A guest nobody gets to just eats and goes home: it doesn&apos;t
+          count as a walk-out.
+        </p>
+      </section>
       <section>
         <h3>Buying stock</h3>
         <p>
@@ -414,6 +539,25 @@ function BusinessTab({ touch, click }: TabProps) {
         </ul>
       </section>
       <section>
+        <h3>Stats</h3>
+        <p>
+          The office computer&apos;s <b>Stats</b> tab{touch ? '' : ' (P)'} keeps every day you
+          close: lifetime cars sold, gross, net and visitors, your close rate (cars sold for every
+          visitor) and the gross per sale.
+        </p>
+        <p>
+          It also keeps your records: the best day, week and month for gross, the most cars sold in
+          a day, the biggest single deal and the longest run of days with a sale. The end-of-day
+          summary tells you when you break one.
+        </p>
+        <p>
+          The chart shows sales, gross, net, visitors, reputation or cash over the last{' '}
+          {RECENT_DAYS} days or the whole game. {touch ? 'Tap' : 'Point at'} a bar to read it. Past{' '}
+          {MAX_POINTS} days, the whole game is shown by week. Below it are your lifetime sales by
+          model, by what brought the buyer in, and by who sold them.
+        </p>
+      </section>
+      <section>
         <h3>Service garage</h3>
         <p>
           The {EXPANSIONS[GARAGE_EXPANSION].label.toLowerCase()} has {GARAGE_BAYS} bays. Hire a
@@ -428,8 +572,10 @@ function BusinessTab({ touch, click }: TabProps) {
           and wait at the garage&apos;s counter. {click} them and choose <b>Check in</b> to quote
           the job, or hire a <b>service advisor</b> to do it. Most take the quote. They&apos;re told
           when it&apos;ll be ready: within an hour and they sit and wait, otherwise they leave the
-          car and come back for it. They pay for labor and parts when they collect it. The more cars
-          you&apos;ve sold, the more come in. Mondays are busiest, and the shop is shut on Sundays.
+          car and come back for it. They pay for labor and parts when they collect it. A few come
+          from town every day, and your clients bring the cars you sold them (see Clients on the
+          Selling tab), so the bigger your book, the busier the garage. Mondays are busiest, and the
+          shop is shut on Sundays.
         </p>
         <p>
           The <b>shop rate</b> is set on the Service tab:{' '}
@@ -456,11 +602,11 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>
           Some months the manufacturer <b>recalls</b> a model, from the {dayOrdinal(RECALL_FIRST)}{' '}
           to the {dayOrdinal(RECALL_LAST)}. About {Math.round(RECALL_RESPONSE * 100)}% of the people
-          you sold one to bring it in over that time, on top of the usual clients. Check them in
-          like anyone else: they pay nothing, and the manufacturer pays for the work (
-          {formatMoney(WARRANTY_HOURLY)} an hour, and the parts at cost). Extra work found on a
-          recalled car is paid by the client as usual. The Calendar and Service tabs show the recall
-          on now.
+          you sold one to bring it in over that time, on top of the usual clients, your own clients
+          who drive one first (the notice says how many there are). Check them in like anyone else:
+          they pay nothing, and the manufacturer pays for the work ({formatMoney(WARRANTY_HOURLY)}{' '}
+          an hour, and the parts at cost). Extra work found on a recalled car is paid by the client
+          as usual. The Calendar and Service tabs show the recall on now.
         </p>
         <p>
           A job still in a bay at closing, or a client&apos;s car still waiting for one, is finished
@@ -518,14 +664,20 @@ function BusinessTab({ touch, click }: TabProps) {
           {Math.round(HOLDBACK_STRETCH * 100)}% from {Math.round(HOLDBACK_STRETCH_AT * 100)}%. Every
           new car sold counts, whoever makes it; used cars don&apos;t.
         </p>
+        <p>
+          The manufacturer also surveys every new-car buyer: the month&apos;s average visit score is
+          its <b>CSI</b>. It scales the holdback: × {CSI_FACTORS.under} under {CSI_FLOOR}, × 1 at{' '}
+          {CSI_PAR}, up to × {CSI_FACTORS.top} from {CSI_TOP}. The Calendar and Clients tabs show
+          the month&apos;s CSI so far.
+        </p>
       </section>
       <section>
         <h3>Franchise tier</h3>
         <p>
           The manufacturer ranks its dealers Bronze, Silver and Gold, and you start at Bronze. A
-          month that meets the quota moves you up a tier; one under{' '}
-          {Math.round(HOLDBACK_FLOOR * 100)}% of it drops you a tier. A higher tier pays less for
-          stock, gets a bigger holdback and may order the top models:
+          month that meets the quota moves you up a tier, as long as its CSI is {CSI_TIER_MIN} or
+          better; one under {Math.round(HOLDBACK_FLOOR * 100)}% of it drops you a tier. A higher
+          tier pays less for stock, gets a bigger holdback and may order the top models:
         </p>
         <ul>
           {TIERS.map((t) => {
@@ -663,7 +815,9 @@ function PeopleTab({ touch, click }: TabProps) {
             customer you&apos;re walking to, and a tick marks someone they&apos;re helping.
           </li>
           <li>
-            A <b>receptionist</b> keeps waiting customers patient.
+            A <b>receptionist</b> keeps waiting customers patient. With nobody waiting, they call
+            clients from the book, slower and less persuasively than you, and tell you when someone
+            books. Turn their calls off in the Clients tab.
           </li>
           <li>
             A <b>finance manager</b> signs buyers at your office desk for {formatMoney(FINANCE_FEE)}{' '}
@@ -772,6 +926,15 @@ function ControlsTab({ touch }: TabProps) {
         <p>
           Everyone talks in gibberish, each in their own voice: hellos, back and forth over a car, a
           questioning counter, a happy yes or a grumble. You only hear the people near you.
+        </p>
+      </section>
+      <section>
+        <h3>Graphics</h3>
+        <p>
+          The same 🔊 panel has a Graphics setting. On Auto, the game lowers the detail (sharpness,
+          shadow quality and rain) when it stutters, and raises it again a minute later if it runs
+          smoothly. High and Low hold the detail where you put it. It&apos;s kept on this device
+          too.
         </p>
       </section>
     </>

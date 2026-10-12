@@ -180,6 +180,7 @@ export type PropModel =
   | 'trashcan'
   | 'sign'
   | 'forSaleSign'
+  | 'deskPhone'
 
 export type CarModel = Extract<
   PropModel,
@@ -331,6 +332,8 @@ export const DESK_CHAIR_ID = 'office-chair'
 /** The office computer, where stock is ordered from the manufacturer. */
 export const OFFICE_COMPUTER_ID = 'office-monitor'
 export const GUEST_CHAIR_ID = 'guest-chair'
+/** The phone on the office desk's free end, where clients are called from. */
+export const DESK_PHONE_ID = 'office-phone'
 /** Where the receptionist sits, behind the reception desk facing the showroom. */
 export const RECEPTION_CHAIR_ID = 'reception-chair'
 
@@ -420,6 +423,14 @@ const FIXED_PROPS: Prop[] = [
     id: OFFICE_COMPUTER_ID,
     model: 'computerScreen',
     rect: { tx: 33, tz: 5, w: 1, h: 1 }, // in front of the office chair
+    facing: 2,
+    blocks: false,
+    elevation: DESK_TOP,
+  },
+  {
+    id: DESK_PHONE_ID,
+    model: 'deskPhone',
+    rect: { tx: 32, tz: 5, w: 1, h: 1 }, // the desk's free end, reached from the side
     facing: 2,
     blocks: false,
     elevation: DESK_TOP,
@@ -573,10 +584,13 @@ export const SERVICE_SPOTS: ParkingSpace[] = spaceRow(
 /** The service counter, where clients check in. */
 export const SERVICE_COUNTER_ID = 'service-counter'
 
+/** The clients' door into the garage, by the counter. */
+export const GARAGE_CLIENT_DOOR: Rect = { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 }
+
 /** The roll-up doors, the clients' door by the counter and the service drive's gate. */
 const GARAGE_OPENINGS: Rect[] = [
   ...SERVICE_BAYS.map((b) => b.door),
-  { tx: 56, tz: GARAGE.tz + GARAGE.h - 1, w: 1, h: 1 },
+  GARAGE_CLIENT_DOOR,
   SERVICE_GATE,
 ]
 

@@ -7,6 +7,7 @@ All models in this folder are by [Kenney](https://www.kenney.nl) and released un
 - `furniture/`: [Furniture Kit](https://kenney.nl/assets/furniture-kit) (GLB format)
 - `characters/`: [Mini Characters](https://kenney.nl/assets/mini-characters) (GLB format, with its shared `Textures/colormap.png`)
 
-Only the models the game uses are copied here. To add more, download the kit and copy
-the GLB files across, then register them in `src/scene/Props.tsx`
-(characters: `src/sim/characters.ts`).
+Only the models the game uses are copied here, compressed: the originals are in
+`assets-src/models`. To add more, download the kit, copy the GLB files (and
+`Textures/`) into `assets-src/models`, run `node scripts/compress-models.mjs`, then
+register them in `src/scene/Props.tsx` (characters: `src/sim/characters.ts`).

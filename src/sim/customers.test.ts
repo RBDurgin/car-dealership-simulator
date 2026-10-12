@@ -56,6 +56,10 @@ const base: Customer = {
   selling: null,
   trade: null,
   rivalQuote: null,
+  clientId: null,
+  loyaltyCut: 0,
+  referredBy: null,
+  guest: false,
   service: null,
 }
 
@@ -539,6 +543,18 @@ describe('reduceCustomer', () => {
     }
   })
 
+  it('lets a guest nobody got to leave as visited, not impatient', () => {
+    const tick: CustomerEvent = { type: 'tick', minutes: 1000 }
+    const guest = run(at('waiting', { guest: true }), tick)!
+    expect(guest).toMatchObject({ phase: 'leaving', leaveReason: 'visited' })
+    expect(moodOf(guest)).toBe('happy')
+    expect(bubbleOf(guest)).toBeNull()
+    // Greeted and then left waiting, they did deal with us.
+    const greeted = run(at('waiting', { guest: true, sellerId: PLAYER_ID }), tick)!
+    expect(greeted.leaveReason).toBe('impatient')
+    expect(run(at('waiting'), tick)!.leaveReason).toBe('impatient')
+  })
+
   it('loses patience only while waiting, then leaves', () => {
     const tick = (minutes: number): CustomerEvent => ({ type: 'tick', minutes })
     for (const phase of ['browsing', 'talking', 'following'] as const) {
@@ -662,6 +678,13 @@ describe('bubbleOf', () => {
     expect(bubbleOf(at('following'))).toBeNull()
   })
 
+  it('shows a star over someone from the client book while they wait, until impatient', () => {
+    const client = { clientId: 'client-1-0' }
+    expect(bubbleOf(at('waiting', client))).toBe('client')
+    expect(bubbleOf(at('waiting', { ...client, patienceLeft: 10 }))).toBe('impatient')
+    expect(bubbleOf(at('browsing', client))).toBeNull()
+  })
+
   it('shows how the visit ended', () => {
     const left = (leaveReason: Customer['leaveReason']) => bubbleOf(at('leaving', { leaveReason }))
     expect(left('bought')).toBe('bought')
@@ -729,6 +752,10 @@ describe('salespeople', () => {
       selling: null,
       trade: null,
       rivalQuote: null,
+      clientId: null,
+      loyaltyCut: 0,
+      referredBy: null,
+      guest: false,
       service: null,
     })
   })

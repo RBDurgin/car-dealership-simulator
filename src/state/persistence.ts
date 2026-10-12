@@ -1,8 +1,12 @@
 import { parseAudioSettings } from '../sim/audioSettings'
 import { isClosed } from '../sim/clock'
+import { parseGraphics, startQuality } from '../sim/graphics'
 import { createSave, parseSave, type SaveData } from '../sim/save'
+import { emptyCase, mergeCase, parseCase, type TrophyCase } from '../sim/trophyCase'
 import { LATEST_NEWS } from '../sim/whatsNew'
 import { useGame } from './store'
+import { sameFields, subscribeTo } from './subscribe'
+import type { GameState } from './types'
 
 const SAVE_KEY = 'car-dealership-simulator.save'
 
@@ -18,13 +22,20 @@ export function readSave(): SaveData | null {
   }
 }
 
-export function writeSave(save: SaveData): void {
+/** Writes the save; false when the browser refused it (storage full or blocked). */
+export function writeSave(save: SaveData): boolean {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save))
+    return true
   } catch {
     // Not saved; the game carries on.
+    return false
   }
 }
+
+/** Shown when the end-of-day save is refused, most likely for a full storage quota. */
+export const SAVE_FAILED_NOTICE =
+  "Couldn't save today: this browser's storage is full or blocked. The game carries on."
 
 /**
  * Marks the save as having seen every update, keeping everything else, once
@@ -43,29 +54,49 @@ export function clearSave(): void {
   }
 }
 
+/** What the day summary can still change once the day is settled, each worth saving again. */
+const SAVED_AFTER_CLOSING = [
+  'cash',
+  'inventory',
+  'orders',
+  'campaigns',
+  'improvements',
+  'roster',
+  'tipsSeen',
+  'achievements',
+  'service',
+  'clients',
+  'clientPerks',
+  'appreciation',
+  'won',
+] as const
+
+/** Whether the day is over and payroll paid, so the day can be saved. */
+function settledDay(s: GameState): boolean {
+  if (s.screen !== 'playing' || !isClosed(s.clock) || s.customers.length > 0) return false
+  return s.dayStats.settled
+}
+
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
- * payroll is paid, then again for any hiring, firing, ordering, advertising, improving or changing the service settings from the day summary
- * (or a tip shown after closing, or Keep playing on the win screen).
+ * payroll is paid, then again for any hiring, firing, ordering, advertising, improving, changing the service settings or the client book's levers from the day summary
+ * (or a tip shown or an achievement earned after closing, or Keep playing on the win screen).
+ * Does nothing else until the day is settled.
  */
 export function startAutosave(): () => void {
-  return useGame.subscribe((s, prev) => {
-    if (s.screen !== 'playing' || !isClosed(s.clock) || s.customers.length > 0) return
-    if (!s.dayStats.settled) return
-    const changed =
-      !prev.dayStats.settled ||
-      s.screen !== prev.screen ||
-      s.cash !== prev.cash ||
-      s.inventory !== prev.inventory ||
-      s.orders !== prev.orders ||
-      s.campaigns !== prev.campaigns ||
-      s.improvements !== prev.improvements ||
-      s.roster !== prev.roster ||
-      s.tipsSeen !== prev.tipsSeen ||
-      s.service !== prev.service ||
-      s.won !== prev.won
-    if (changed) writeSave(createSave(s, Date.now()))
-  })
+  return subscribeTo(
+    (s) => s,
+    (s) => {
+      if (settledDay(s) && !writeSave(createSave(s, Date.now()))) {
+        useGame.getState().showNotice(SAVE_FAILED_NOTICE)
+      }
+    },
+    (a, b) => {
+      const settled = settledDay(a)
+      if (settled !== settledDay(b)) return false
+      return !settled || sameFields(a, b, SAVED_AFTER_CLOSING)
+    },
+  )
 }
 
 const CONTROLS_KEY = 'car-dealership-simulator.controlsOpen'
@@ -83,14 +114,16 @@ export function startControlsPref(fallback: boolean): () => void {
     // No storage: use the fallback.
   }
   useGame.getState().toggleControls(saved === null ? fallback : saved === '1')
-  return useGame.subscribe((s, prev) => {
-    if (s.controlsOpen === prev.controlsOpen) return
-    try {
-      localStorage.setItem(CONTROLS_KEY, s.controlsOpen ? '1' : '0')
-    } catch {
-      // Not remembered; it still toggles.
-    }
-  })
+  return subscribeTo(
+    (s) => s.controlsOpen,
+    (open) => {
+      try {
+        localStorage.setItem(CONTROLS_KEY, open ? '1' : '0')
+      } catch {
+        // Not remembered; it still toggles.
+      }
+    },
+  )
 }
 
 const AUDIO_KEY = 'car-dealership-simulator.audio'
@@ -108,12 +141,88 @@ export function startAudioPref(): () => void {
     // No storage, or junk in it: use the defaults.
   }
   useGame.setState({ audio: parseAudioSettings(saved) })
-  return useGame.subscribe((s, prev) => {
-    if (s.audio === prev.audio) return
-    try {
-      localStorage.setItem(AUDIO_KEY, JSON.stringify(s.audio))
-    } catch {
-      // Not remembered; the change still applies.
-    }
-  })
+  return subscribeTo(
+    (s) => s.audio,
+    (audio) => {
+      try {
+        localStorage.setItem(AUDIO_KEY, JSON.stringify(audio))
+      } catch {
+        // Not remembered; the change still applies.
+      }
+    },
+  )
+}
+
+const GRAPHICS_KEY = 'car-dealership-simulator.graphics'
+
+/**
+ * Loads this device's Graphics setting (Auto on a first visit) and starts the
+ * scene on its tier (a step down on Auto on a `compact` screen), then
+ * remembers each change and starts the new setting's tier. Like the sound
+ * settings, it's kept apart from the save slot.
+ */
+export function startGraphicsPref(compact: boolean): () => void {
+  let saved: unknown = null
+  try {
+    saved = localStorage.getItem(GRAPHICS_KEY)
+  } catch {
+    // No storage: Auto.
+  }
+  const setting = parseGraphics(saved)
+  useGame.setState({ graphics: setting, qualityTier: startQuality(setting, compact).tier })
+  return subscribeTo(
+    (s) => s.graphics,
+    (graphics) => {
+      useGame.getState().setQualityTier(startQuality(graphics, compact).tier)
+      try {
+        localStorage.setItem(GRAPHICS_KEY, graphics)
+      } catch {
+        // Not remembered; the change still applies.
+      }
+    },
+  )
+}
+
+const TROPHY_KEY = 'dealership.trophies'
+
+/** This device's trophy case, or an empty one when there's none (or no storage). */
+export function readTrophyCase(): TrophyCase {
+  try {
+    const json = localStorage.getItem(TROPHY_KEY)
+    return json ? parseCase(JSON.parse(json)) : emptyCase()
+  } catch {
+    return emptyCase()
+  }
+}
+
+/** Empties the trophy case (the title screen's Reset trophies). The save is left alone. */
+export function resetTrophyCase(): void {
+  try {
+    localStorage.removeItem(TROPHY_KEY)
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+/**
+ * Keeps the device-wide trophy case: each achievement as it's earned (and
+ * those a loaded save already holds) and each day's records as it's settled
+ * are merged in and written back. Like the audio settings, it's kept apart
+ * from the save slot, so a new game or a cleared save keeps it.
+ */
+export function startTrophyCase(): () => void {
+  return subscribeTo(
+    (s) => s,
+    ({ achievements, records }) => {
+      const before = readTrophyCase()
+      const after = mergeCase(before, achievements, records, Date.now())
+      if (after === before) return
+      try {
+        localStorage.setItem(TROPHY_KEY, JSON.stringify(after))
+      } catch {
+        // Not kept; the game carries on.
+      }
+    },
+    (a, b) => sameFields(a, b, ['achievements', 'records']),
+  )
 }

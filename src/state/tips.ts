@@ -1,6 +1,7 @@
 import { TUNING } from '../sim/difficulty'
 import { tipFor, tipText, type TipId } from '../sim/tips'
 import { isPaused, useGame } from './store'
+import { subscribeDiff } from './subscribe'
 
 /** Tips that came up while another notice (or the guide) was showing, oldest first. */
 let pending: TipId[] = []
@@ -12,15 +13,15 @@ let pending: TipId[] = []
  */
 export function startTips(): () => void {
   pending = []
-  return useGame.subscribe((s, prev) => {
+  return subscribeDiff((prev, s) => {
     // A new or resumed game starts with nothing waiting.
     if (s.screen !== prev.screen) pending = []
     if (!TUNING[s.difficulty].tips) return
     const id = tipFor(prev, s, [...s.tipsSeen, ...pending])
     if (id) pending.push(id)
-    if (pending.length === 0 || s.notice || isPaused(s)) return
-    const next = pending.shift()!
-    s.markTipSeen(next)
-    s.showNotice(tipText(next))
+    if (pending.length === 0 || useGame.getState().notice || isPaused(s)) return
+    const tip = pending.shift()!
+    s.markTipSeen(tip)
+    s.showNotice(tipText(tip))
   })
 }

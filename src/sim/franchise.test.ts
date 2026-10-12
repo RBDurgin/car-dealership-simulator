@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { CSI_TIER_MIN } from './csi'
 import {
+  heldByCsi,
+  heldNotice,
   isFranchiseTier,
   lockedReason,
   modelTier,
@@ -46,6 +49,25 @@ describe('franchise tiers', () => {
     expect(nextTier('gold', month(15))).toBe('silver')
     expect(nextTier('silver', month(0))).toBe('bronze')
     expect(nextTier('bronze', month(0))).toBe('bronze')
+  })
+
+  it('doesn’t move up while the month’s CSI is under the minimum, and says why', () => {
+    expect(nextTier('bronze', { ...month(20), csi: CSI_TIER_MIN - 1 })).toBe('bronze')
+    expect(nextTier('bronze', { ...month(20), csi: CSI_TIER_MIN })).toBe('silver')
+    expect(nextTier('bronze', { ...month(20), csi: null })).toBe('silver')
+    // A low CSI doesn't drop a tier on its own.
+    expect(nextTier('silver', { ...month(19), csi: 10 })).toBe('silver')
+    const held = {
+      ...month(20),
+      payout: 0,
+      csi: 72,
+      tier: { from: 'bronze' as const, to: 'bronze' as const },
+    }
+    expect(heldByCsi(held)).toBe(true)
+    expect(heldNotice(held)).toContain('CSI of 72 kept you from Silver')
+    expect(heldByCsi({ ...held, tier: { from: 'gold', to: 'gold' } })).toBe(false)
+    expect(heldByCsi({ ...held, sold: 19 })).toBe(false)
+    expect(heldByCsi({ ...held, csi: 85 })).toBe(false)
   })
 
   it('lets slack hold the tier a little under the floor', () => {

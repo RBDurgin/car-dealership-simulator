@@ -1,3 +1,4 @@
+import { ARCHETYPES } from './archetypes'
 import {
   PLAYER_ID,
   reduceCustomers,
@@ -6,6 +7,7 @@ import {
   type CustomerPhase,
 } from './customers'
 import { washBlocker } from './cleanliness'
+import { emptyClientStats, type Client, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
 import {
   approachTilesFor,
@@ -18,14 +20,16 @@ import type { InventoryCar } from './inventory'
 import { GUEST_CHAIR_ID, type CarModel } from './layout'
 import type { Source } from './marketing'
 import { emptyNazmaStats, type NazmaStats } from './nazma'
+import { roundOf } from './negotiation'
 import type { RivalStats } from './rival'
 import type { OwnerVerdict } from './owner'
 import type { RankId } from './progression'
+import type { RecordKey } from './stats'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
-import { financeOnDuty, type Employee } from './staff'
-import { tradeOver, type TradeRecord } from './tradeIns'
+import { financeOnDuty, FINANCE_FEE, salesCommission, type Employee } from './staff'
+import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 
 /**
  * Selling to a customer: who is dealing with whom, which actions a customer
@@ -123,10 +127,15 @@ export function employeeActions(e: Employee, roster: readonly Employee[]): Actio
 export function customerActions(c: Customer, jobs: readonly ServiceJob[] = []): ActionId[] {
   if (staffHandled(c)) return []
   // A service client is checked in at the counter, then left to the garage.
-  if (c.service) {
+  const visit = c.service
+  if (visit) {
     if (c.phase === 'waiting') return ['checkIn']
-    const job = jobs.find((j) => j.id === c.service!.jobId)
-    return c.phase === 'servicing' && openFinding(job) ? ['recommend'] : []
+    if (c.phase !== 'servicing') return []
+    const job = jobs.find((j) => j.id === visit.jobId)
+    const out: ActionId[] = openFinding(job) ? ['recommend'] : []
+    // A client from the book due to trade up soon, waiting on their car.
+    if (visit.pitch && !visit.dropOff && !visit.returned) out.push('pitch')
+    return out
   }
   switch (c.phase) {
     case 'browsing':
@@ -177,6 +186,7 @@ const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set([
   'offer',
   'checkIn',
   'recommend',
+  'pitch',
 ])
 
 export function isCustomerAction(action: ActionId): boolean {
@@ -248,6 +258,8 @@ export interface Sale {
   minute: number
   /** The salesperson who made the sale, or null when the player did. */
   soldBy: string | null
+  /** Their employee id, while `soldBy` is set. */
+  sellerId?: string
   /** The finance manager who signed it, or null when the seller did. */
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
@@ -258,6 +270,56 @@ export interface Sale {
   trade?: TradeRecord
   /** The car sold was a used one. */
   used?: boolean
+  /** Sold to a client from the book, back for another car. */
+  returning?: boolean
+  /** Closed after the buyer's last counter, when they had no rounds left. */
+  lastRound?: boolean
+}
+
+/** What `saleRecord` needs to know besides the buyer and the car. */
+export interface SaleTerms {
+  price: number
+  /** The day and minute the paperwork was signed. */
+  day: number
+  minute: number
+  /** Today's payroll, to name the salesperson who made the sale. */
+  roster: readonly Employee[]
+  /** The employee at the desk (finance, or the salesperson), null for the player. */
+  signer: Employee | null
+  /** The client book, to mark a sale to a returning client. */
+  book: readonly Client[]
+  /** What we allowed for their trade-in, or null without one in the deal. */
+  tradePrice: number | null
+}
+
+/** The record of `c` buying `car`: who sold and signed it, the commission and what went with it. */
+export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
+  // Who made the sale. A salesperson let go since is no longer on the roster.
+  const seller =
+    c.sellerId && c.sellerId !== PLAYER_ID
+      ? (t.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
+      : null
+  const finance = t.signer?.role === 'finance' ? t.signer : null
+  const sale: Sale = {
+    customerName: c.name,
+    carId: car.id,
+    model: car.model,
+    price: t.price,
+    msrp: car.msrp,
+    cost: car.cost,
+    minute: t.minute,
+    soldBy: seller,
+    ...(seller && { sellerId: c.sellerId as string }),
+    signedBy: finance?.name ?? null,
+    commission: (seller ? salesCommission(t.price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
+    source: c.source,
+  }
+  const trade = t.tradePrice !== null && tradeRecord(c, t.tradePrice, t.day)
+  if (trade) sale.trade = trade
+  if (car.used) sale.used = true
+  if (c.haggle && roundOf(c) >= ARCHETYPES[c.archetype].haggle.rounds) sale.lastRound = true
+  if (t.book.some((x) => x.id === c.clientId && x.status === 'client')) sale.returning = true
+  return sale
 }
 
 /** One day's results, for the end-of-day summary. */
@@ -289,6 +351,8 @@ export interface DayStats {
   missedUsed: number
   /** What the day did to reputation (set when settled; see `reputationChange`). */
   reputation: number
+  /** Records the day took from an earlier one (set when settled; see `sim/stats.ts`). */
+  newRecords: RecordKey[]
   /** Payroll has been paid for the day. */
   settled: boolean
   /** On an owner's day, how the day measured up to their goal (set when settled). */
@@ -304,12 +368,16 @@ export interface DayStats {
   bailout: number
   /** Used cars bought from sellers today: stock, not an expense, so off `netIncome`. */
   bought: BoughtCar[]
+  /** Cars the player washed themselves today. */
+  washes: number
   /** The rank reached when the day was settled, or null if it didn't change. */
   rankUp: RankId | null
   /** How Nazma's lot across the road stood today, or null while it isn't open. */
   rival: RivalStats | null
   /** The service department's day (see `sim/service.ts`). */
   service: ServiceStats
+  /** What the client book did today (see `sim/clients.ts`). */
+  clients: ClientStats
 }
 
 export function emptyStats(): DayStats {
@@ -330,15 +398,18 @@ export function emptyStats(): DayStats {
     missed: {},
     missedUsed: 0,
     reputation: 0,
+    newRecords: [],
     settled: false,
     owner: null,
     nazma: emptyNazmaStats(),
     quota: null,
     bailout: 0,
     bought: [],
+    washes: 0,
     rankUp: null,
     rival: null,
     service: emptyServiceStats(),
+    clients: emptyClientStats(),
   }
 }
 
@@ -384,8 +455,9 @@ export function theftLoss(stats: DayStats): number {
 
 /**
  * Gross profit on sales and service less the day's staff costs, floor plan
- * interest, ad spend, improvements, expansions and stolen stock, plus any
- * bonus from the owner and the month-end holdback.
+ * interest, ad spend, improvements, expansions, referral fees, a client
+ * appreciation day and stolen stock, plus any bonus from the owner and the
+ * month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
   return (
@@ -396,6 +468,8 @@ export function netIncome(stats: DayStats): number {
     stats.marketing -
     stats.improvements -
     stats.expansions -
+    stats.clients.referralFees -
+    stats.clients.appreciation -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

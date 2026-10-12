@@ -1,3 +1,4 @@
+import { clientCarInfo, type Client } from './clients'
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE } from './clock'
 import { moodOf, reduceCustomer, reduceCustomers, type Customer } from './customers'
@@ -38,6 +39,7 @@ import {
   type ServiceJob,
 } from './service'
 import {
+  bookServiceClient,
   comebackClient,
   FREE_QUOTE,
   freeServiceSpot,
@@ -210,6 +212,72 @@ describe('a service client', () => {
   })
 })
 
+describe('a client from the book', () => {
+  const client: Client = {
+    id: 'client-3-0',
+    name: 'Alex B.',
+    variant: 'female-b',
+    companion: 'male-a',
+    archetype: 'couple',
+    status: 'client',
+    since: 3,
+    lastVisit: 3,
+    visits: 1,
+    bought: 1,
+    car: {
+      model: 'truck',
+      used: false,
+      price: 40_000,
+      boughtDay: 3,
+      year: 2026,
+      miles: 0,
+      condition: 1,
+    },
+    budget: 45_000,
+    preferredModels: ['truck'],
+    lastDeal: null,
+    satisfaction: 75,
+    reasons: [],
+    dueDay: 60,
+    expires: null,
+    lastCall: null,
+    callsThisCycle: 0,
+    appointment: null,
+    referredBy: null,
+    referrals: 0,
+    friendsSent: 0,
+    thanked: false,
+    serviceDue: 17,
+  }
+
+  it('drives in by name, alone, in the car we sold them', () => {
+    const c = bookServiceClient(client, 's', 'oil', 1, createRng(4), 31, 'standard')
+    expect(c).toMatchObject({
+      name: 'Alex B.',
+      variant: 'female-b',
+      companion: null,
+      archetype: 'regular',
+      clientId: client.id,
+    })
+    expect(c.service!.car).toEqual({ model: 'truck', ...clientCarInfo(client.car!, 31) })
+    expect(c.service!.pitch).toBe(false)
+  })
+
+  it('can be pitched a trade-up once due within a week, waiting on their car', () => {
+    const due = { ...client, dueDay: 35 }
+    const c = bookServiceClient(due, 's', 'oil', 1, createRng(4), 31, 'standard')
+    expect(c.service!.pitch).toBe(true)
+    const waiting: Customer = { ...c, phase: 'servicing' }
+    expect(customerActions(waiting)).toContain('pitch')
+    expect(customerActions({ ...waiting, service: { ...waiting.service!, pitch: false } })).toEqual(
+      [],
+    )
+    const away = { ...waiting, service: { ...waiting.service!, dropOff: true } }
+    expect(customerActions(away)).not.toContain('pitch')
+    expect(customerActions({ ...c, phase: 'waiting' })).toEqual(['checkIn'])
+  })
+})
+
 describe('service spaces', () => {
   it('are handed out first-free, and held by clients away', () => {
     const a = client('a', { service: { ...client().service!, spot: 0 } })
@@ -313,6 +381,7 @@ describe('booking a job', () => {
     const schedule = {
       minutes: [540, 550, 560],
       kinds: ['oil', 'tires', 'brakes'] as const,
+      clientIds: [null, null, null],
       spawned: 0,
     }
     const { schedule: next, due } = takeDueVisits(

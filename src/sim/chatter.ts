@@ -34,6 +34,10 @@ export interface ChatterState {
   roster: readonly Employee[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
+  /** What the player is doing: on the phone during a `call`. */
+  activeAction?: { action: string; phase: string } | null
+  /** The receptionist on the phone to a client, or null. */
+  receptionCall?: { employeeId: string } | null
 }
 
 /** A couple's companion speaks as this id (their walker's id in scene/Customers). */
@@ -51,9 +55,9 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
   return s.roster.find((e) => e.id === speaker)?.variant ?? null
 }
 
-export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn'
+export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn' | 'phone'
 
-/** Two people talking back and forth; `speakers[0]` opens. */
+/** Two people talking back and forth; `speakers[0]` opens. On the phone both are the caller. */
 export interface Conversation {
   key: string
   kind: ConversationKind
@@ -83,6 +87,13 @@ export function conversationsOf(s: ChatterState): Conversation[] {
   if (poached) {
     out.push({ key: `poach:${poached}`, kind: 'poach', speakers: [NAZMA_ID, poached] })
   }
+  // A call is one-sided: we only hear whoever is on the phone.
+  const a = s.activeAction
+  if (a?.action === 'call' && a.phase === 'performing') {
+    out.push({ key: `phone:${PLAYER_ID}`, kind: 'phone', speakers: [PLAYER_ID, PLAYER_ID] })
+  }
+  const r = s.receptionCall?.employeeId
+  if (r) out.push({ key: `phone:${r}`, kind: 'phone', speakers: [r, r] })
   return out
 }
 
@@ -96,6 +107,8 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   couple: [2000, 9000],
   poach: [300, 800],
   checkIn: [500, 1000],
+  // Past the ring.
+  phone: [1200, 2000],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -110,8 +123,8 @@ export const COUPLE_PAUSE_MS: readonly [number, number] = [7000, 16000]
  * two sides take turns: in a pitch the seller talks up the car and the
  * customer chimes in, at the desk it's a murmur over the paperwork, a
  * couple trade a remark now and then, Nazma talks someone round in a low
- * voice while they ask questions, and a service client explains what's wrong
- * with their car.
+ * voice while they ask questions, a service client explains what's wrong
+ * with their car, and someone on the phone talks, then listens.
  */
 export function nextLine(
   conv: Conversation,
@@ -163,6 +176,12 @@ export function nextLine(
       const syllables = first ? rng.int(3, 7) : rng.int(2, 4)
       return { line: { speaker, tone, syllables }, gapMs: between(rng, [400, 1100]) }
     }
+    case 'phone': {
+      // Talking, then a pause while the other end answers.
+      const tone: Tone = rng.next() < 0.3 ? 'question' : rng.next() < 0.3 ? 'happy' : 'neutral'
+      const gapMs = first ? between(rng, [300, 700]) : between(rng, [1400, 2800])
+      return { line: { speaker, tone, syllables: rng.int(2, 6) }, gapMs }
+    }
     case 'poach': {
       const tone: Tone = first
         ? rng.next() < 0.6
@@ -203,10 +222,18 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       const from = was.phase
       const to = c.phase
       if (to === 'talking' && (from === 'browsing' || from === 'waiting') && c.handlerId) {
-        out.push([
-          { speaker: c.handlerId, tone: 'greeting', syllables: rng.int(2, 3) },
-          { speaker: c.id, tone: 'greeting', syllables: 2 },
-        ])
+        // Someone from the client book: "good to see you again".
+        out.push(
+          c.clientId
+            ? [
+                { speaker: c.handlerId, tone: 'happy', syllables: rng.int(4, 6) },
+                { speaker: c.id, tone: 'happy', syllables: rng.int(2, 3) },
+              ]
+            : [
+                { speaker: c.handlerId, tone: 'greeting', syllables: rng.int(2, 3) },
+                { speaker: c.id, tone: 'greeting', syllables: 2 },
+              ],
+        )
       } else if (from === 'arriving' && receptionist) {
         out.push([{ speaker: receptionist.id, tone: 'greeting', syllables: rng.int(2, 3) }])
       } else if (from === 'talking' && to === 'considering') {

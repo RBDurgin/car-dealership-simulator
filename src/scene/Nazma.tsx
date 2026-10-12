@@ -22,6 +22,7 @@ import {
   turnToward,
   walk,
   type Walker,
+  report,
 } from './walker'
 
 /** A dark hoodie, over the staff uniform he still has. */
@@ -146,7 +147,7 @@ function poach(w: NazmaWalker, employeeId: string, seconds: number): void {
   const e = game.roster.find((x) => x.id === employeeId)
   const at = staffPos.get(employeeId)
   if (!e || e.fired || e.status === 'off' || e.status === 'leaving' || !at) {
-    game.nazmaPoach(employeeId)
+    report(w, `poach:${employeeId}`, () => game.nazmaPoach(employeeId))
     return
   }
   const dist = Math.hypot(at.x - w.pos.x, at.z - w.pos.z)
@@ -157,7 +158,8 @@ function poach(w: NazmaWalker, employeeId: string, seconds: number): void {
     w.anim.current = 'idle'
     if (!game.nazma?.chatting) game.nazmaChat()
     w.timer += seconds
-    if (w.timer >= POACH_SECONDS) game.nazmaPoach(employeeId)
+    if (w.timer >= POACH_SECONDS)
+      report(w, `poach:${employeeId}`, () => game.nazmaPoach(employeeId))
     return
   }
   // They've moved off: after them.
@@ -184,7 +186,7 @@ function update(w: NazmaWalker, seconds: number): void {
     // Back across the road: gone. Over to this side: on the lot.
     if (w.homeward) return leave()
     w.anim.current = 'idle'
-    game.nazmaArrived()
+    report(w, 'arrived', () => game.nazmaArrived())
     return
   }
   const target = nazma.status === 'onLot' && !isClosed(game.clock) ? nextTarget(nazma) : null
@@ -216,7 +218,7 @@ function update(w: NazmaWalker, seconds: number): void {
   if (w.waypoints.length > 0) return
 
   if (task === 'flee' || task === 'leave') {
-    game.nazmaLeft()
+    report(w, 'left', () => game.nazmaLeft())
     if (!fromRivalLot()) return leave()
     // Off the lot, and back over the road to his own.
     w.homeward = true
@@ -226,12 +228,12 @@ function update(w: NazmaWalker, seconds: number): void {
   }
   // Sold, or out of reach: on to the next one without a smudge.
   if (!it || w.unreachable) {
-    game.nazmaSmudge(target!)
+    report(w, `smudge:${target}`, () => game.nazmaSmudge(target!))
     return
   }
   w.anim.current = 'interact-right'
   w.timer += seconds
-  if (w.timer >= SMUDGE_SECONDS) game.nazmaSmudge(target!)
+  if (w.timer >= SMUDGE_SECONDS) report(w, `smudge:${target}`, () => game.nazmaSmudge(target!))
 }
 
 /**

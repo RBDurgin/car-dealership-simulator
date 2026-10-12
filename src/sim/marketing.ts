@@ -12,9 +12,10 @@ export type Channel = 'newspaper' | 'radio' | 'tv' | 'online' | 'classifieds'
 
 /**
  * Where a customer heard of us: a campaign, wandering in off the sidewalk, a
- * friend who bought here (see `sim/reputation.ts`), or none of those.
+ * friend who bought here (see `sim/reputation.ts`), being in our client book
+ * already (see `sim/clients.ts`), or none of those.
  */
-export type Source = 'regular' | 'walk-in' | 'referral' | Channel
+export type Source = 'regular' | 'walk-in' | 'referral' | 'client' | Channel
 
 export interface ChannelInfo {
   label: string
@@ -134,7 +135,7 @@ export function trafficBoost(
 
 /** Archetype odds for a customer from `source`: a channel's (or referrals') skew on the usual weights. */
 export function sourceWeights(source: Source): Record<Archetype, number> | undefined {
-  if (source === 'regular' || source === 'walk-in') return undefined
+  if (source === 'regular' || source === 'walk-in' || source === 'client') return undefined
   const skew = source === 'referral' ? REFERRAL_SKEW : CHANNELS[source].skew
   const weights = {} as Record<Archetype, number>
   for (const a of Object.keys(ARCHETYPES) as Archetype[]) {
@@ -183,5 +184,6 @@ export function sourceLabel(source: Source): string {
   if (source === 'regular') return 'Regular traffic'
   if (source === 'walk-in') return 'Walked in'
   if (source === 'referral') return 'Referral'
+  if (source === 'client') return 'Returning clients'
   return CHANNELS[source].label
 }

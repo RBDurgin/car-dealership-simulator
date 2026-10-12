@@ -6,15 +6,13 @@ import { ACTIONS } from '../sim/interactables'
 import { findInteractable } from '../scene/runtime'
 import { useGame, winShowing } from '../state/store'
 import { ActionMenu } from './ActionMenu'
-import { AudioPanel } from './AudioPanel'
 import { ControlsHint } from './ControlsHint'
 import { CustomerPanel } from './CustomerPanel'
-import { DaySummary } from './DaySummary'
-import { HowToPlay } from './HowToPlay'
 import { InfoPanel } from './InfoPanel'
+import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
+import { prefetchPanels } from './panelChunks'
 import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
-import { StockPanel } from './StockPanel'
 import { TitleScreen } from './TitleScreen'
 import { WinScreen } from './WinScreen'
 import { TopBar } from './TopBar'
@@ -86,6 +84,7 @@ function NoticeToast() {
 }
 
 export function HUD() {
+  useEffect(prefetchPanels, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const game = useGame.getState()
@@ -124,6 +123,11 @@ export function HUD() {
       else if (e.code === 'KeyC' && !e.repeat) game.toggleStockPanel(undefined, 'calendar')
       else if (e.code === 'KeyK' && !e.repeat) game.toggleStockPanel(undefined, 'rival')
       else if (e.code === 'KeyB' && !e.repeat) game.toggleStockPanel(undefined, 'service')
+      // Dev: Shift+L brings someone back from the client book.
+      else if (e.code === 'KeyL' && !e.repeat && e.shiftKey && import.meta.env.DEV)
+        game.devReturnClient()
+      else if (e.code === 'KeyL' && !e.repeat) game.toggleStockPanel(undefined, 'clients')
+      else if (e.code === 'KeyP' && !e.repeat) game.toggleStockPanel(undefined, 'stats')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

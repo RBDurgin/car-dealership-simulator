@@ -38,6 +38,9 @@ export interface PathStep {
   moved: number
 }
 
+/** Where `stepAlongPath`'s move lands, before it's copied out. */
+const scratch: Vec2 = { x: 0, z: 0 }
+
 /** A step shorter than this (world units) counts as no movement at all. */
 const PINNED_EPSILON = 1e-6
 
@@ -45,6 +48,7 @@ const PINNED_EPSILON = 1e-6
  * Moves `pos` up to `speed * dt` along `waypoints`, shifting off each waypoint as
  * it's reached (the array is mutated). If geometry pins the mover so it can't make
  * progress, the remaining waypoints are dropped rather than leaving it stuck.
+ * Writes into `out` when given, so a frame loop needn't allocate.
  */
 export function stepAlongPath(
   grid: Grid,
@@ -53,8 +57,13 @@ export function stepAlongPath(
   speed: number,
   dt: number,
   radius = PLAYER_RADIUS,
+  out: PathStep = { x: 0, z: 0, dx: 0, dz: 0, moved: 0 },
 ): PathStep {
-  const out: PathStep = { x: pos.x, z: pos.z, dx: 0, dz: 0, moved: 0 }
+  out.x = pos.x
+  out.z = pos.z
+  out.dx = 0
+  out.dz = 0
+  out.moved = 0
   if (waypoints.length === 0) return out
 
   const step = speed * dt
@@ -74,7 +83,7 @@ export function stepAlongPath(
   // not being pinned either.
   if (Math.hypot(out.dx, out.dz) <= PINNED_EPSILON) return out
 
-  const next = moveWithCollision(grid, pos, out.dx, out.dz, radius)
+  const next = moveWithCollision(grid, pos, out.dx, out.dz, radius, scratch)
   out.moved = Math.hypot(next.x - pos.x, next.z - pos.z)
   out.x = next.x
   out.z = next.z

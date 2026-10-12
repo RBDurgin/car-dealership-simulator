@@ -1,0 +1,225 @@
+import { expect, test } from 'vitest'
+import type { Difficulty } from '../../sim/difficulty'
+import { createSave, parseSave } from '../../sim/save'
+import { startAchievements } from '../achievements'
+import { instrumentStore, storeCounts } from '../perf'
+import { startAudioPref, startAutosave, startControlsPref, startTrophyCase } from '../persistence'
+import { useGame } from '../store'
+import { startTips } from '../tips'
+import { nextDay, playDay } from './bot'
+
+/**
+ * The long-game bench (`npm run bench`, not part of `npm test`): plays 500
+ * days headless on Medium and Hard with `bot.ts`, and reports ms per day
+ * (early, middle and late, which should stay flat), ms per `tickClock`, and
+ * the save's size and `createSave`/`parseSave` times at the end. The numbers
+ * go in `docs/PERF.md`; each run prints them as JSON.
+ */
+
+const DAYS = 500
+/** Days averaged at the start, middle and end of the run. */
+const WINDOW = 50
+
+const initial = useGame.getState()
+const game = () => useGame.getState()
+
+const avg = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+const pct = (xs: readonly number[], p: number) => {
+  const sorted = [...xs].sort((a, b) => a - b)
+  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0
+}
+const round = (n: number, places = 3) => Number(n.toFixed(places))
+
+interface Run {
+  level: Difficulty
+  days: number
+  totalSeconds: number
+  msPerDay: {
+    first: number
+    middle: number
+    last: number
+    p95: number
+    max: number
+    slowestDay: number
+  }
+  msPerTick: { mean: number; p95: number; max: number }
+  /** Store sets (each runs every listener) per `tickClock` and per `startNextDay`. */
+  setsPerTick: { mean: number; max: number }
+  setsPerMorning: { mean: number; max: number }
+  /** What the bot got done, so a run that stalled shows. */
+  played: {
+    sales: number
+    visitors: number
+    clients: number
+    logDays: number
+    cash: number
+    rank: string
+    expansions: number
+  }
+  save: { bytes: number; createMs: number; parseMs: number }
+}
+
+/** Times `fn` over a few runs and gives the mean, after one to warm up. */
+function timeIt(fn: () => void, runs = 10): number {
+  fn()
+  const t = performance.now()
+  for (let i = 0; i < runs; i++) fn()
+  return (performance.now() - t) / runs
+}
+
+type State = ReturnType<typeof game>
+
+function playGame(level: Difficulty): { run: Run; state: State; saveText: string } {
+  useGame.setState(initial, true)
+  game().newGame(level)
+  const dayMs: number[] = []
+  const tickMs: number[] = []
+  const tickSets: number[] = []
+  const morningSets: number[] = []
+  const start = performance.now()
+  for (let d = 0; d < DAYS; d++) {
+    const t = performance.now()
+    playDay((ms, sets) => {
+      tickMs.push(ms)
+      tickSets.push(sets)
+    })
+    morningSets.push(nextDay())
+    dayMs.push(performance.now() - t)
+  }
+  const totalSeconds = (performance.now() - start) / 1000
+  const s = game()
+  const saveText = JSON.stringify(createSave(s, 0))
+  const mid = Math.floor(DAYS / 2 - WINDOW / 2)
+  return {
+    state: s,
+    saveText,
+    run: {
+      level,
+      days: DAYS,
+      totalSeconds: round(totalSeconds, 1),
+      msPerDay: {
+        first: round(avg(dayMs.slice(0, WINDOW)), 2),
+        middle: round(avg(dayMs.slice(mid, mid + WINDOW)), 2),
+        last: round(avg(dayMs.slice(-WINDOW)), 2),
+        p95: round(pct(dayMs, 0.95), 2),
+        max: round(Math.max(...dayMs), 2),
+        slowestDay: dayMs.indexOf(Math.max(...dayMs)) + 1,
+      },
+      msPerTick: {
+        mean: round(avg(tickMs)),
+        p95: round(pct(tickMs, 0.95)),
+        max: round(Math.max(...tickMs)),
+      },
+      setsPerTick: { mean: round(avg(tickSets), 2), max: Math.max(...tickSets) },
+      setsPerMorning: { mean: round(avg(morningSets), 2), max: Math.max(...morningSets) },
+      played: {
+        sales: s.lifetime.sales,
+        visitors: s.lifetime.visitors,
+        clients: s.clients.length,
+        logDays: s.log.length,
+        cash: Math.round(s.cash),
+        rank: s.career.rank,
+        expansions: s.expansions.length,
+      },
+      save: {
+        bytes: saveText.length,
+        createMs: round(timeIt(() => JSON.stringify(createSave(s, 0)))),
+        parseMs: round(timeIt(() => parseSave(JSON.parse(saveText)))),
+      },
+    },
+  }
+}
+
+/** Days played with the game's listeners subscribed. */
+const LISTENER_DAYS = 200
+
+/**
+ * The game's store listeners that run headless, as `main.tsx` starts them, and
+ * the sound ones with the browser stubbed out (they stay silent: no audio is
+ * unlocked). Chatter's are left out, as they live in a scene component.
+ */
+async function startListeners(): Promise<void> {
+  const noop = () => {}
+  const target = { addEventListener: noop, removeEventListener: noop, hidden: false }
+  Object.assign(globalThis, { requestAnimationFrame: () => 0 })
+  if (typeof window === 'undefined') Object.assign(globalThis, { window: target, document: target })
+  const { startAudio } = await import('../../audio/engine')
+  const { startMusic } = await import('../../audio/music')
+  const { startRain } = await import('../../audio/rain')
+  const { startSfx } = await import('../../audio/sfxBridge')
+  startAutosave()
+  startControlsPref(true)
+  startAudioPref()
+  startTips()
+  startAchievements()
+  startTrophyCase()
+  startAudio(noop)
+  startMusic()
+  startRain()
+  startSfx()
+}
+
+// Each level's game is played once, in its test, and then the benches time
+// the saves of a real day-500 game.
+for (const level of ['medium', 'hard'] as const) {
+  test(`${DAYS} days on ${level}`, { timeout: 300_000 }, async ({ bench }) => {
+    const { run, state, saveText } = playGame(level)
+    console.log(JSON.stringify(run, null, 2))
+    expect(run.played.logDays).toBe(DAYS)
+    expect(parseSave(JSON.parse(saveText))).not.toBeNull()
+    await bench.compare(
+      bench('createSave + stringify', () => {
+        JSON.stringify(createSave(state, 0))
+      }),
+      bench('parse + parseSave', () => {
+        parseSave(JSON.parse(saveText))
+      }),
+    )
+  })
+}
+
+// Last, as the listeners stay subscribed: the time they take per clock step
+// and per morning, for 18c's subscription changes.
+test(`listeners over ${LISTENER_DAYS} days on medium`, { timeout: 300_000 }, async () => {
+  useGame.setState(initial, true)
+  instrumentStore(useGame)
+  await startListeners()
+  game().newGame('medium')
+  const tickMs: number[] = []
+  const morningMs: number[] = []
+  let ticks = 0
+  let listenerMs = 0
+  const t = performance.now()
+  for (let d = 0; d < LISTENER_DAYS; d++) {
+    const before = storeCounts.listenerMs
+    playDay(() => {
+      ticks++
+    })
+    tickMs.push(storeCounts.listenerMs - before)
+    const morning = storeCounts.listenerMs
+    nextDay()
+    morningMs.push(storeCounts.listenerMs - morning)
+    listenerMs = storeCounts.listenerMs
+  }
+  const sets = storeCounts.sets
+  console.log(
+    JSON.stringify(
+      {
+        days: LISTENER_DAYS,
+        listeners: storeCounts.listeners,
+        totalSeconds: round((performance.now() - t) / 1000, 1),
+        sets,
+        listenerMs: round(listenerMs, 1),
+        listenerMsPerSet: round(listenerMs / sets, 4),
+        listenerMsPerStep: round(avg(tickMs) / (ticks / LISTENER_DAYS)),
+        listenerMsPerDay: round(avg(tickMs), 2),
+        setsPerDay: round(sets / LISTENER_DAYS, 1),
+        listenerMsPerMorning: round(avg(morningMs), 3),
+        sales: game().lifetime.sales,
+      },
+      null,
+      2,
+    ),
+  )
+  expect(game().log.length).toBe(LISTENER_DAYS)
+})

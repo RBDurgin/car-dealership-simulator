@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DAYS_PER_MONTH } from '../sim/calendar'
+import { emptyMonthCsi } from '../sim/clients'
+import { CSI_FACTORS, csiFactor } from '../sim/csi'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { emptyStats, netIncome } from '../sim/deal'
 import { BASE_SLOTS } from '../sim/ordering'
@@ -60,6 +62,7 @@ describe('manufacturer quota', () => {
       quota,
       sold: quota,
       payout,
+      csi: null,
       tier: { from: 'bronze', to: 'silver' },
     })
     expect(game().cash).toBe(cash + payout)
@@ -74,6 +77,7 @@ describe('manufacturer quota', () => {
       quota: game().quota,
       sold: 2,
       payout: 0,
+      csi: null,
       tier: { from: 'bronze', to: 'bronze' },
     })
   })
@@ -116,6 +120,35 @@ describe('manufacturer quota', () => {
     })
     endDay()
     expect(game().franchise).toBe('gold')
+  })
+
+  it('scales the holdback by the month’s CSI, and a low one holds the tier', () => {
+    goTo(DAYS_PER_MONTH)
+    const quota = game().quota
+    const monthSales = { count: quota, msrp: quota * 35_000 }
+    useGame.setState({ monthSales, monthCsi: { total: 65 * 10, count: 10 } })
+    endDay()
+    expect(game().dayStats.quota?.csi).toBe(65)
+    expect(game().dayStats.quota?.payout).toBe(
+      holdback(quota, quota, monthSales.msrp, csiFactor(65)),
+    )
+    expect(game().franchise).toBe('bronze')
+    expect(game().career.bestCsi).toBe(65)
+    game().startNextDay()
+    expect(game().notice?.text).toContain('CSI of 65')
+    expect(game().monthCsi).toEqual(emptyMonthCsi())
+  })
+
+  it('pays more for a high CSI and moves up as usual', () => {
+    goTo(DAYS_PER_MONTH)
+    const quota = game().quota
+    const monthSales = { count: quota, msrp: quota * 35_000 }
+    useGame.setState({ monthSales, monthCsi: { total: 92 * 4, count: 4 } })
+    endDay()
+    expect(game().dayStats.quota?.payout).toBe(
+      holdback(quota, quota, monthSales.msrp, CSI_FACTORS.top),
+    )
+    expect(game().franchise).toBe('silver')
   })
 
   it('keeps the franchise tier through a save', () => {

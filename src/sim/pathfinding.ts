@@ -45,6 +45,8 @@ export function findPathToAny(
 ): Tile[] | null {
   const targets = goals.filter((t) => grid.isWalkable(t.tx, t.tz))
   if (!grid.inBounds(start.tx, start.tz) || targets.length === 0) return null
+  // Without a goal in reach, the search would cover all it can reach first.
+  if (!anyInReach(grid, start, targets)) return null
 
   const n = grid.width * grid.height
   const g = new Float64Array(n).fill(Infinity)
@@ -98,6 +100,24 @@ export function findPathToAny(
     }
   }
   return null
+}
+
+/**
+ * Whether any of `targets` (walkable) is in the same connected area as
+ * `start`, or, from a blocked start (someone stood on a chair's tile), as an
+ * open tile beside it: a diagonal step off it needs both sides open, so those
+ * are the only ways off.
+ */
+function anyInReach(grid: Grid, start: Tile, targets: Tile[]): boolean {
+  const inReach = (area: number) => targets.some((t) => grid.area(grid.index(t.tx, t.tz)) === area)
+  if (grid.isWalkable(start.tx, start.tz)) return inReach(grid.area(grid.index(start.tx, start.tz)))
+  for (const [dx, dz] of DIRS) {
+    if (dx !== 0 && dz !== 0) continue
+    const x = start.tx + dx
+    const z = start.tz + dz
+    if (grid.isWalkable(x, z) && inReach(grid.area(grid.index(x, z)))) return true
+  }
+  return false
 }
 
 /**

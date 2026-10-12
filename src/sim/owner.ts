@@ -20,6 +20,8 @@ export type OwnerGoal =
   | { kind: 'reputation'; points: number }
   /** Finish `count` clients' service jobs today. */
   | { kind: 'serviced'; count: number }
+  /** Sell to `count` clients from the book today. */
+  | { kind: 'returning'; count: number }
 
 /** The owner's id in the world (crowd, chatter). */
 export const OWNER_ID = 'owner'
@@ -55,6 +57,11 @@ export function isOwnerDay(day: number): boolean {
   return visit === day
 }
 
+/** Clients due or booked in today before the owner asks for sales to returning clients. */
+export const RETURNING_MIN = 4
+/** Sales to returning clients the owner asks for. */
+export const RETURNING_GOAL = 2
+
 /** On a sale weekend the owner is likelier to set a sales goal, and this many cars bigger. */
 export const EVENT_SALES_EXTRA = 2
 
@@ -62,7 +69,8 @@ export const EVENT_SALES_EXTRA = 2
  * A goal the day's team can reasonably meet: more sales, revenue and profit with more
  * salespeople on the payroll, and a body type only if one is for sale. On a
  * sale weekend (`onSale`) a sales goal is likelier, and bigger. A service
- * goal only with `bays` up and the garage open today.
+ * goal only with `bays` up and the garage open today, and one for returning
+ * clients only with `RETURNING_MIN` of them `due` or booked in today.
  */
 export function generateGoal(
   rng: Rng,
@@ -70,12 +78,14 @@ export function generateGoal(
   salesStaff: number,
   onSale = false,
   bays = 0,
+  due = 0,
 ): OwnerGoal {
   const models = [...new Set(availableCars(inventory).map((c) => c.model))]
   const kinds: OwnerGoal['kind'][] = ['sales', 'revenue', 'profit', 'noImpatient', 'reputation']
   if (models.length > 0) kinds.push('model')
   if (onSale) kinds.push('sales', 'sales')
   if (bays > 0) kinds.push('serviced')
+  if (due >= RETURNING_MIN) kinds.push('returning')
   switch (rng.pick(kinds)) {
     case 'sales':
       return {
@@ -95,12 +105,15 @@ export function generateGoal(
       return { kind: 'model', model: rng.pick(models) }
     case 'serviced':
       return { kind: 'serviced', count: rng.int(1, 2) + bays }
+    case 'returning':
+      return { kind: 'returning', count: RETURNING_GOAL }
   }
 }
 
 /**
  * "Sell 2 cars", "Sell a Summit Ridge", "No impatient walk-outs", "$80,000 revenue",
- * "$8,000 gross profit", "Gain 4 reputation", "Finish 4 service jobs".
+ * "$8,000 gross profit", "Gain 4 reputation", "Finish 4 service jobs",
+ * "Sell to 2 returning clients".
  */
 export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string {
   switch (goal.kind) {
@@ -118,6 +131,8 @@ export function goalLabel(goal: OwnerGoal, money: (n: number) => string): string
       return `Gain ${goal.points} reputation`
     case 'serviced':
       return `Finish ${goal.count} service jobs`
+    case 'returning':
+      return `Sell to ${goal.count} returning clients`
   }
 }
 
@@ -156,6 +171,10 @@ export function goalProgress(
     }
     case 'serviced': {
       const current = stats.service.jobs
+      return { current, target: goal.count, met: current >= goal.count }
+    }
+    case 'returning': {
+      const current = stats.sales.filter((s) => s.returning).length
       return { current, target: goal.count, met: current >= goal.count }
     }
   }

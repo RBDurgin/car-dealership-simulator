@@ -5,7 +5,6 @@ import type { Customer } from './customers'
 import type { InventoryCar } from './inventory'
 import { CLOSE_MINUTE, OPEN_MINUTE } from './clock'
 import { SERVICE_BAYS, serviceBays, type CarModel, type ExpansionId } from './layout'
-import type { Career } from './progression'
 import type { Rng } from './rng'
 import { MAX_SKILL, MIN_SKILL, skillSeconds } from './staff'
 import { marketValue, usedListPrice } from './usedCars'
@@ -176,10 +175,11 @@ export function quote(kind: JobKind, rate: RateLevel, rng: Rng): Quote {
   }
 }
 
-/** Service visits a day from town, whoever sold them their car. */
+/**
+ * Service visits a day from town, whoever sold them their car. The cars we
+ * sold come in on top, from the client book (see `sim/clientService.ts`).
+ */
 export const TOWN_SERVICE = 3
-/** Service visits a day for each car the dealership has ever sold. */
-export const SERVICE_PER_CAR = 0.035
 /** × the day's visits by weekday, Monday first. The shop is shut on Sundays. */
 export const SERVICE_WEEKDAY = [1.3, 1.1, 1.0, 1.0, 0.9, 0.7, 0]
 /** Jobs one bay can take in a day. */
@@ -203,21 +203,19 @@ export interface DemandOpts {
 }
 
 /**
- * The service visits expected on `day`: a base from town plus a share of every
- * car sold, by the weekday, the shop rate and the level, and no more than the
- * bays can take.
+ * × a day's service visits on `day` at the shop `rate` and the level's
+ * `factor`: by the weekday (none on Sundays), the rate's demand and the level.
  */
-export function serviceDemand(
-  day: number,
-  career: Pick<Career, 'sales'>,
-  opts: DemandOpts,
-): number {
-  const base = TOWN_SERVICE + career.sales * SERVICE_PER_CAR
-  const expected =
-    base *
-    SERVICE_WEEKDAY[calendarOf(day).weekday] *
-    RATE_LEVELS[opts.rate].demand *
-    (opts.factor ?? 1)
+export function demandScale(day: number, rate: RateLevel, factor = 1): number {
+  return SERVICE_WEEKDAY[calendarOf(day).weekday] * RATE_LEVELS[rate].demand * factor
+}
+
+/**
+ * The visits expected from town on `day` (strangers, not kept in the book), by
+ * the weekday, the shop rate and the level, and no more than the bays can take.
+ */
+export function serviceDemand(day: number, opts: DemandOpts): number {
+  const expected = TOWN_SERVICE * demandScale(day, opts.rate, opts.factor)
   return Math.min(expected, opts.bays * JOBS_PER_BAY)
 }
 
@@ -230,15 +228,17 @@ export interface ServiceSchedule {
   minutes: number[]
   /** The job each visit wants, by index into `minutes`. */
   kinds: JobKind[]
+  /** The client from the book each visit is, or null for a stranger, by index into `minutes`. */
+  clientIds: (string | null)[]
   spawned: number
 }
 
 export function emptySchedule(): ServiceSchedule {
-  return { minutes: [], kinds: [], spawned: 0 }
+  return { minutes: [], kinds: [], clientIds: [], spawned: 0 }
 }
 
 /**
- * Plans `expected` visits (the fraction rolled) between opening and
+ * Plans `expected` visits from town (the fraction rolled) between opening and
  * `LAST_SERVICE_MINUTE`, drop-offs bunched toward the morning, and on top of
  * them `recalls` expected recall visits (see `recallDemand`). The recalls are
  * rolled after the rest, so a day without one plans as it always did.
@@ -256,10 +256,45 @@ export function planServiceVisits(rng: Rng, expected: number, recalls = 0): Serv
   const visits = [...roll(expected, () => pickKind(rng)), ...roll(recalls, () => 'recall')]
   if (visits.length === 0) return emptySchedule()
   visits.sort((a, b) => a.minute - b.minute)
-  return { minutes: visits.map((v) => v.minute), kinds: visits.map((v) => v.kind), spawned: 0 }
+  return {
+    minutes: visits.map((v) => v.minute),
+    kinds: visits.map((v) => v.kind),
+    clientIds: visits.map(() => null),
+    spawned: 0,
+  }
 }
 
-function pickKind(rng: Rng): JobKind {
+/** A client from the book due in for service today (see `planBookService`). */
+export interface BookServiceVisit {
+  clientId: string
+  minute: number
+  kind: JobKind
+}
+
+/** `schedule` (not started yet) with the book's `visits` merged in by minute. */
+export function withBookVisits(
+  schedule: ServiceSchedule,
+  visits: readonly BookServiceVisit[],
+): ServiceSchedule {
+  if (visits.length === 0) return schedule
+  const all = [
+    ...schedule.minutes.map((minute, i) => ({
+      minute,
+      kind: schedule.kinds[i],
+      clientId: schedule.clientIds[i],
+    })),
+    ...visits,
+  ].sort((a, b) => a.minute - b.minute)
+  return {
+    minutes: all.map((v) => v.minute),
+    kinds: all.map((v) => v.kind),
+    clientIds: all.map((v) => v.clientId),
+    spawned: 0,
+  }
+}
+
+/** A client's job, picked on `rng`: an oil change most often. */
+export function pickKind(rng: Rng): JobKind {
   let roll = rng.next()
   for (const { kind, weight } of CLIENT_KINDS) {
     roll -= weight
@@ -277,7 +312,7 @@ export function takeDueVisits(
   schedule: ServiceSchedule,
   minute: number,
   max = Infinity,
-): { schedule: ServiceSchedule; due: JobKind[] } {
+): { schedule: ServiceSchedule; due: JobKind[]; clientIds: (string | null)[] } {
   let spawned = schedule.spawned
   while (
     spawned < schedule.minutes.length &&
@@ -287,7 +322,8 @@ export function takeDueVisits(
     spawned++
   }
   const due = schedule.kinds.slice(schedule.spawned, spawned)
-  return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due }
+  const clientIds = schedule.clientIds.slice(schedule.spawned, spawned)
+  return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due, clientIds }
 }
 
 /** The odds a mechanic starting on a client's car finds something else it needs. */

@@ -43,20 +43,20 @@ public/audio/
 
 ## Hooks that already exist
 
-| Hook | Where | Phase 8 use |
-|---|---|---|
-| `isPaused(s)` | `state/store.ts:299` | Duck SFX/voices, muffle music |
-| `screen` (`title` / `playing`) | `state/store.ts` | Title track; unlock audio on first click |
-| `clock.minute`, `OPEN_MINUTE`, `CLOSE_MINUTE` | `sim/clock.ts` | Day part for the playlist |
-| Day summary open after `settleDay` | `ui/DaySummary.tsx`, store | Summary track, paper sound |
-| `phase`, `handlerId`, `haggle`, `leaveReason` | `sim/customers.ts` | Who talks, and in what tone |
-| `bubbleOf(c)` | `sim/customers.ts:330` | Mood mapping (counter → question, upset → grumble) |
-| `sellCar`, `orderCar`, `launchCampaign`, `buyImprovement` | store | Cash register / coin cues |
-| `hire`, `fire`, `staffWash`, the player's `wash` action | store | Stamp, water spray |
-| `showNotice`, `startNextDay` | store | Pop, morning bell |
-| `hashSeed`, `createRng` | `sim/rng.ts` | Stable per-character voice |
-| `controlsOpen` persisted by subscribe | `state/persistence.ts` | Same pattern for audio settings |
-| `COARSE` | `input/useMediaQuery.ts` | Touch wording for the mute button |
+| Hook                                                      | Where                      | Phase 8 use                                        |
+| --------------------------------------------------------- | -------------------------- | -------------------------------------------------- |
+| `isPaused(s)`                                             | `state/store.ts:299`       | Duck SFX/voices, muffle music                      |
+| `screen` (`title` / `playing`)                            | `state/store.ts`           | Title track; unlock audio on first click           |
+| `clock.minute`, `OPEN_MINUTE`, `CLOSE_MINUTE`             | `sim/clock.ts`             | Day part for the playlist                          |
+| Day summary open after `settleDay`                        | `ui/DaySummary.tsx`, store | Summary track, paper sound                         |
+| `phase`, `handlerId`, `haggle`, `leaveReason`             | `sim/customers.ts`         | Who talks, and in what tone                        |
+| `bubbleOf(c)`                                             | `sim/customers.ts:330`     | Mood mapping (counter → question, upset → grumble) |
+| `sellCar`, `orderCar`, `launchCampaign`, `buyImprovement` | store                      | Cash register / coin cues                          |
+| `hire`, `fire`, `staffWash`, the player's `wash` action   | store                      | Stamp, water spray                                 |
+| `showNotice`, `startNextDay`                              | store                      | Pop, morning bell                                  |
+| `hashSeed`, `createRng`                                   | `sim/rng.ts`               | Stable per-character voice                         |
+| `controlsOpen` persisted by subscribe                     | `state/persistence.ts`     | Same pattern for audio settings                    |
+| `COARSE`                                                  | `input/useMediaQuery.ts`   | Touch wording for the mute button                  |
 
 ## Sub-phases
 

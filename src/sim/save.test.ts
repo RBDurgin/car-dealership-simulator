@@ -1,11 +1,21 @@
+import type { EarnedAchievement } from './achievements'
 import { describe, expect, it } from 'vitest'
+import {
+  defaultPerks,
+  emptyMonthCsi,
+  SERVICE_INTERVAL,
+  type Appreciation,
+  type Client,
+  type ClientPerks,
+  type MonthCsi,
+} from './clients'
 import { CLOSE_MINUTE } from './clock'
 import type { OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
-import { PARKING_SPACES } from './layout'
+import { PARKING_SPACES, type CarModel } from './layout'
 import type { OwnedImprovement } from './improvements'
 import { CAR_MODELS } from './customers'
-import { buildInventory } from './inventory'
+import { BASE_MSRP, buildInventory } from './inventory'
 import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { emptyCareer, type Career } from './progression'
@@ -17,6 +27,14 @@ import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
+import {
+  emptyLifetime,
+  emptyRecords,
+  tupleToRecord,
+  type DayRecord,
+  type Lifetime,
+  type Records,
+} from './stats'
 import type { TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 import type { Employee } from './staff'
@@ -63,7 +81,70 @@ const source = () => ({
   rival: emptyRival() as Rival,
   // As a v21 save upgrades, so the older upgrades compare equal.
   service: defaultService() as ServiceSettings,
+  // As a v22 save upgrades, so the older upgrades compare equal.
+  clients: [] as Client[],
+  clientPerks: defaultPerks() as ClientPerks,
+  appreciation: null as Appreciation | null,
+  monthCsi: emptyMonthCsi() as MonthCsi,
+  // As a v25 save of day 3 upgrades, so the older upgrades compare equal.
+  log: [] as DayRecord[],
+  lifetime: emptyLifetime() as Lifetime,
+  records: emptyRecords() as Records,
+  statsFrom: 4,
+  // As a v26 save upgrades, so the older upgrades compare equal.
+  achievements: [] as EarnedAchievement[],
 })
+
+const record = (day: number, extra: Partial<DayRecord> = {}): DayRecord => ({
+  day,
+  sales: 2,
+  usedSales: 1,
+  gross: 6_400,
+  net: 3_150,
+  visitors: 11,
+  walkOuts: 4,
+  reputation: 52,
+  cash: 31_500,
+  marketing: 900,
+  ...extra,
+})
+
+const client: Client = {
+  id: 'client-3-0',
+  name: 'Alex B.',
+  variant: 'male-a',
+  companion: null,
+  archetype: 'regular',
+  status: 'client',
+  since: 3,
+  lastVisit: 3,
+  visits: 1,
+  bought: 1,
+  car: {
+    model: 'sedan',
+    used: false,
+    price: 28_500,
+    boughtDay: 3,
+    year: 2026,
+    miles: 0,
+    condition: 1,
+  },
+  budget: 32_000,
+  preferredModels: ['sedan'],
+  lastDeal: null,
+  satisfaction: 78,
+  reasons: [{ kind: 'wait', points: -8, detail: 25 }],
+  dueDay: 41,
+  expires: null,
+  lastCall: null,
+  callsThisCycle: 0,
+  appointment: null,
+  referredBy: null,
+  referrals: 0,
+  friendsSent: 0,
+  thanked: false,
+  serviceDue: 3 + SERVICE_INTERVAL,
+}
 
 const order: Order = {
   id: 'order-3-1',
@@ -377,6 +458,183 @@ describe('save data', () => {
     expect(parseSave({ ...save, career: oldCareer })).toBeNull()
   })
 
+  it('mends a client saved with a NaN (null) budget from their priciest model', () => {
+    const prospect = { ...client, preferredModels: ['truck', 'suv'] as CarModel[] }
+    const save = createSave({ ...source(), clients: [prospect] }, 123)
+    const broken = JSON.parse(JSON.stringify({ ...save, clients: [{ ...prospect, budget: NaN }] }))
+    const budget = Math.round(Math.max(BASE_MSRP.truck, BASE_MSRP.suv) / 500) * 500
+    expect(parseSave(broken)?.clients).toEqual([{ ...prospect, budget }])
+  })
+
+  it('upgrades a version 23 save: nobody has sent a friend or been thanked yet', () => {
+    const save = createSave({ ...source(), clients: [{ ...client, thanked: true }] }, 123)
+    const { friendsSent: _, thanked: __, ...old } = save.clients[0]
+    const v23 = { ...save, version: 23, clients: [old] }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v23)))
+    expect(upgraded?.clients).toEqual([{ ...client, friendsSent: 0, thanked: false }])
+    expect(parseSave({ ...save, clients: [old] })).toBeNull()
+  })
+
+  it('upgrades a version 24 save: no best CSI yet, and clients due for service after buying', () => {
+    const save = createSave({ ...source(), clients: [client] }, 123)
+    const { bestCsi: _, ...career } = save.career
+    const v24 = {
+      ...save,
+      version: 24,
+      career,
+      clients: [
+        { ...client, serviceDue: null },
+        { ...client, id: 'p', status: 'prospect', car: null, serviceDue: null },
+      ],
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v24)))
+    expect(upgraded?.career.bestCsi).toBeNull()
+    expect(upgraded?.clients[0].serviceDue).toBe(client.car!.boughtDay + SERVICE_INTERVAL)
+    expect(upgraded?.clients[1].serviceDue).toBeNull()
+    expect(parseSave({ ...save, career })).toBeNull()
+  })
+
+  it('keeps the log as tuples, the lifetime totals and records, and rejects a malformed log', () => {
+    const lifetime: Lifetime = {
+      ...emptyLifetime(),
+      sales: 4,
+      byModel: { sedan: 3, truck: 1 },
+      bySource: { tv: 4 },
+      bySeller: { player: { sales: 1, gross: 2_000 }, 'staff-1-1': { sales: 3, gross: 7_000 } },
+    }
+    const records: Records = {
+      ...emptyRecords(),
+      bestDay: { value: 6_400, day: 3 },
+      biggestDeal: { value: 3_100, day: 2, model: 'truck' },
+      streak: 2,
+    }
+    const log = [record(2), record(3, { net: -1_200 })]
+    const save = createSave({ ...source(), log, lifetime, records, statsFrom: 2 }, 123)
+    expect(save.log).toEqual([
+      [2, 2, 1, 6_400, 3_150, 11, 4, 52, 31_500, 900],
+      [3, 2, 1, 6_400, -1_200, 11, 4, 52, 31_500, 900],
+    ])
+    expect(save.log.map(tupleToRecord)).toEqual(log)
+    const parsed = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(parsed).toEqual(save)
+    // A short tuple, days out of order, or a bad record are rejected.
+    expect(parseSave({ ...save, log: [[2, 2, 1]] })).toBeNull()
+    expect(parseSave({ ...save, log: [save.log[1], save.log[0]] })).toBeNull()
+    expect(parseSave({ ...save, log: [save.log[0], save.log[0]] })).toBeNull()
+    expect(
+      parseSave({ ...save, records: { ...records, biggestDeal: { value: 1, day: 1 } } }),
+    ).toBeNull()
+    expect(parseSave({ ...save, lifetime: { ...lifetime, byModel: { boat: 1 } } })).toBeNull()
+    expect(parseSave({ ...save, statsFrom: 0 })).toBeNull()
+  })
+
+  it('reads a 500-day log quickly', () => {
+    const log = Array.from({ length: 500 }, (_, i) => record(i + 1))
+    const json = JSON.stringify(createSave({ ...source(), log, statsFrom: 1 }, 123))
+    const start = performance.now()
+    expect(parseSave(JSON.parse(json))?.log).toHaveLength(500)
+    expect(performance.now() - start).toBeLessThan(50)
+  })
+
+  it('keeps the achievements earned, dropping any this build no longer has', () => {
+    const achievements: EarnedAchievement[] = [
+      { id: 'first-sale', day: 1, level: 'medium' },
+      { id: 'full-sticker', day: 3, level: 'hard' },
+    ]
+    const save = createSave({ ...source(), achievements }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.achievements).toEqual(achievements)
+    const gone = {
+      ...save,
+      achievements: [...achievements, { id: 'moon-shot', day: 2, level: 'easy' }],
+    }
+    expect(parseSave(gone)?.achievements).toEqual(achievements)
+    expect(
+      parseSave({ ...save, achievements: [{ id: 'first-sale', day: 0, level: 'medium' }] }),
+    ).toBeNull()
+    expect(
+      parseSave({ ...save, achievements: [{ id: 'first-sale', day: 1, level: 'insane' }] }),
+    ).toBeNull()
+    expect(parseSave({ ...save, achievements: undefined })).toBeNull()
+  })
+
+  it('upgrades a version 26 save with no achievements', () => {
+    const { achievements: _, ...v26 } = createSave(source(), 123)
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v26, version: 26 })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.achievements).toEqual([])
+  })
+
+  it('upgrades a version 25 save with an empty log, kept from the next day', () => {
+    const save = createSave(source(), 123)
+    const { log: _, lifetime: __, records: ___, statsFrom: ____, ...v25 } = save
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v25, version: 25 })))
+    expect(upgraded).toMatchObject({
+      log: [],
+      lifetime: emptyLifetime(),
+      records: emptyRecords(),
+      statsFrom: save.day + 1,
+    })
+  })
+
+  it('upgrades a version 22 save with an empty client book', () => {
+    const save = createSave({ ...source(), clients: [client] }, 123)
+    const v22 = {
+      ...save,
+      version: 22,
+      clients: undefined,
+      clientPerks: undefined,
+      appreciation: undefined,
+      monthCsi: undefined,
+    }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v22)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.clients).toEqual([])
+    expect(upgraded?.clientPerks).toEqual(defaultPerks())
+    expect(upgraded?.appreciation).toBeNull()
+    expect(upgraded?.monthCsi).toEqual(emptyMonthCsi())
+  })
+
+  it('keeps the client book and its levers, and rejects malformed ones', () => {
+    const perks: ClientPerks = { loyaltyDiscount: 0.02, referralFee: 250, receptionCalls: false }
+    const prospect: Client = {
+      ...client,
+      id: 'client-4-0',
+      name: 'Sam K.',
+      status: 'prospect',
+      car: null,
+      bought: 0,
+      dueDay: null,
+      expires: 18,
+      lastDeal: { model: 'suv', ask: 31_500, counter: 29_800 },
+      appointment: { day: 5, minute: 630, reason: 'beBack' },
+    }
+    const save = createSave(
+      {
+        ...source(),
+        clients: [client, prospect],
+        clientPerks: perks,
+        appreciation: { day: 9, month: 1 },
+        monthCsi: { total: 312, count: 4 },
+      },
+      123,
+    )
+    const back = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(back?.clients).toEqual([client, prospect])
+    expect(back?.clientPerks).toEqual(perks)
+    expect(back?.appreciation).toEqual({ day: 9, month: 1 })
+    expect(back?.monthCsi).toEqual({ total: 312, count: 4 })
+    const bad = (c: Partial<Record<keyof Client, unknown>>) =>
+      parseSave({ ...save, clients: [{ ...client, ...c }] })
+    expect(bad({ status: 'friend' })).toBeNull()
+    expect(bad({ satisfaction: 120 })).toBeNull()
+    expect(bad({ archetype: 'alien' })).toBeNull()
+    expect(bad({ car: { ...client.car, model: 'hovercar' } })).toBeNull()
+    expect(bad({ dueDay: undefined })).toBeNull()
+    expect(parseSave({ ...save, clientPerks: { ...perks, loyaltyDiscount: 0.5 } })).toBeNull()
+    expect(parseSave({ ...save, appreciation: { day: 9 } })).toBeNull()
+    expect(parseSave({ ...save, monthCsi: undefined })).toBeNull()
+  })
+
   it('upgrades a version 21 save: the shop at its defaults, its sales spread over the models', () => {
     const career: Career = { ...emptyCareer(), sales: 2 * CAR_MODELS.length + 1 }
     const save = createSave({ ...source(), career }, 123)
@@ -455,6 +713,7 @@ describe('save data', () => {
       days: 20,
       monthGross: 30_000,
       bestMonth: 95_000,
+      bestCsi: 84,
       rank: 'main-street',
       rivalsBeaten: 2,
       soldByModel: { sedan: 30, truck: 11 },

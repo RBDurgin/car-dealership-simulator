@@ -660,6 +660,15 @@ kbd {
 .bubble-waiting::after {
   border-top-color: #fde047;
 }
+/* Someone from the client book waiting for help. */
+.bubble-client {
+  background: #fde047;
+  color: #b45309;
+  font-size: 15px;
+}
+.bubble-client::after {
+  border-top-color: #fde047;
+}
 /* A salesperson is helping them: staff blue, like the badges. */
 .bubble-helped {
   background: #1d4ed8;
@@ -845,8 +854,134 @@ kbd {
   gap: 6px;
   margin: 4px 0 8px;
 }
+/* The Clients tab: a satisfaction face and score, and a client due to trade up. */
+.client-score {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.client-score-happy {
+  color: #86efac;
+}
+.client-score-ok {
+  color: #fde047;
+}
+.client-score-unhappy {
+  color: #fca5a5;
+}
+/* Name, score and status wrap on a narrow panel, each chip whole. */
+.stock-who .client-name {
+  white-space: normal;
+}
+.client-name .stock-badge {
+  display: inline-block;
+  white-space: nowrap;
+}
+/* A booked appointment, in the Clients tab and the Calendar tab. */
+.client-appointment {
+  color: #93c5fd;
+}
+.stock-badge.client-due {
+  background: rgba(253, 224, 71, 0.25);
+  color: #fde047;
+}
 .stock-who .staff-name {
   white-space: nowrap;
+}
+/* The Stats tab: the chart's colours, then its parts. */
+.stats-chart {
+  --chart-bar: #60a5fa;
+  --chart-negative: #f87171;
+  --chart-line: #fde047;
+  --chart-axis: rgba(255, 255, 255, 0.25);
+  --chart-guide: rgba(255, 255, 255, 0.12);
+  margin: 0 0 8px;
+}
+.stats-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.stats-chart-readout {
+  margin: 0 0 4px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-chart-ends {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 12%;
+  font-size: 11px;
+}
+.chart-bar {
+  fill: var(--chart-bar);
+}
+.chart-bar-negative {
+  fill: var(--chart-negative);
+}
+.chart-line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.chart-dot {
+  fill: var(--chart-line);
+  stroke: #141820;
+  stroke-width: 2;
+}
+.chart-zero {
+  stroke: var(--chart-axis);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.chart-guide {
+  stroke: var(--chart-guide);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.chart-axis-label {
+  fill: #e8ecf2;
+  opacity: 0.55;
+  font-size: 10px;
+  text-anchor: end;
+  font-variant-numeric: tabular-nums;
+}
+.stats-negative {
+  color: #fca5a5;
+}
+.stats-since {
+  margin: -4px 0 8px;
+}
+.stats-when {
+  font-size: 11px;
+}
+.stats-pickers {
+  margin: 0 0 6px;
+}
+.stats-breakdown td:first-child {
+  white-space: normal;
+}
+.summary-records {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(96, 165, 250, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+}
+.summary-records div + div,
+.summary-achievements div + div {
+  margin-top: 2px;
+}
+.summary-achievements {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(250, 204, 21, 0.14);
+  border: 1px solid rgba(250, 204, 21, 0.45);
 }
 .stock-summary {
   display: grid;
@@ -969,6 +1104,17 @@ kbd {
   margin: -2px 0 8px;
   font-size: 12px;
   opacity: 0.65;
+}
+/* Someone from the client book: their badge, and how it went last time. */
+.client-badge {
+  vertical-align: middle;
+  background: rgba(253, 224, 71, 0.25);
+  color: #fde047;
+}
+.customer-history {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: #fde68a;
 }
 .customer-quote {
   margin: 0 0 10px;
@@ -1237,6 +1383,78 @@ kbd {
   opacity: 0.8;
 }
 
+/* Achievements: the Stats tab's second view and the title screen's trophy case. */
+.achievement-count {
+  margin: 0 0 6px;
+}
+.achievement-groups h3 {
+  margin: 10px 0 4px;
+}
+.achievement-list,
+.whats-new-list .achievement-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px;
+}
+.achievement {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  text-align: left;
+}
+.achievement-locked {
+  opacity: 0.5;
+}
+.achievement-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.achievement-text,
+.achievement-when {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.achievement-when {
+  font-size: 11px;
+  opacity: 0.65;
+}
+.trophy-case.day-summary {
+  width: min(560px, calc(100vw - 32px));
+  text-align: left;
+}
+.trophy-case h2 {
+  margin-bottom: 0;
+}
+.trophy-case h3 {
+  font-size: 15px;
+}
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.trophy-reset {
+  display: block;
+  margin: 14px auto 0;
+  font-size: 12px;
+}
+
 /* Sound settings */
 .topbar-sound {
   padding: 2px 8px;
@@ -1277,6 +1495,19 @@ kbd {
   text-align: right;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
+}
+.graphics-setting {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.graphics-options {
+  display: flex;
+  gap: 6px;
+}
+.graphics-options .btn {
+  flex: 1;
 }
 .audio-note {
   margin: 0;
@@ -1505,7 +1736,14 @@ kbd {
     max-height: calc(100dvh - var(--edge-t) - var(--edge-b));
   }
   .customer-panel.haggling
-    :is(.info-kicker, .customer-quote, .customer-type, .customer-car, .haggle-last) {
+    :is(
+      .info-kicker,
+      .customer-quote,
+      .customer-type,
+      .customer-history,
+      .customer-car,
+      .haggle-last
+    ) {
     display: none;
   }
   .customer-panel.haggling .customer-actions,
@@ -1561,4 +1799,44 @@ kbd {
     border-width: 4px;
     border-bottom: 0;
   }
+}
+
+.cal-book {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.cal-book select {
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: #1f2a3c;
+  color: inherit;
+  font:
+    500 13px system-ui,
+    sans-serif;
+}
+
+/* ?perf: the day's readings at the top of the day summary, to paste into docs/PERF.md. */
+.perf-report {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 34 / 70%);
+}
+.perf-report pre {
+  margin: 6px 0 8px;
+  font: 11px/1.4 monospace;
+  color: #0f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.day-summary .perf-report .btn {
+  width: auto;
 }

@@ -82,7 +82,7 @@ describe('manufacturer recalls', () => {
       arrivals: { minutes: [], sources: [], spawned: 0 },
       // Premium rates put no one off recall work.
       service: { ...game().service, rate: 'premium' },
-      serviceVisits: { minutes: [minute], kinds: ['recall'], spawned: 0 },
+      serviceVisits: { minutes: [minute], kinds: ['recall'], clientIds: [null], spawned: 0 },
       helpOpen: false,
     })
     game().tickClock({ day: START_DAY, minute })

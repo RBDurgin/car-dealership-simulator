@@ -32,17 +32,43 @@ function labelFor(action: ActionId, it: Interactable): string {
   return c && car ? `Ask ${formatMoney(suggestedAsk(c, car))}` : ACTIONS.offer.label
 }
 
-/** Sims-style pie menu: action buttons arranged on a ring around the click point. */
+/** One button of the menu. */
+interface MenuItem {
+  id: ActionId
+  label: string
+  /** Unavailable actions stay clickable: requestAction explains why they can't run. */
+  blocked: boolean
+}
+
+/** What the menu on `targetId` shows now: its name and buttons, or null if there's nothing to do. */
+function menuFor(targetId: string): { it: Interactable; items: MenuItem[] } | null {
+  const it = findInteractable(targetId)
+  if (!it || it.actions.length === 0) return null
+  const s = useGame.getState()
+  const items = it.actions.map((id) => ({
+    id,
+    label: labelFor(id, it),
+    blocked: actionBlocker(id, it.id, s.customers, s.roster, s.inventory, s.serviceJobs) !== null,
+  }))
+  return { it, items }
+}
+
+/** The menu as text, so it re-renders only when what it shows changes. */
+function menuKey(targetId: string): string {
+  const m = menuFor(targetId)
+  if (!m) return ''
+  return [m.it.name, ...m.items.map((x) => `${x.id}:${x.label}:${x.blocked}`)].join('|')
+}
+
+/**
+ * Sims-style pie menu: action buttons arranged on a ring around the click
+ * point. Selects nothing else while it's closed; open, it re-renders only when
+ * its buttons change (a customer's phase, a car sold or washed, the office desk
+ * changing hands, extra work offered on a service client's car).
+ */
 export function ActionMenu() {
   const menu = useGame((s) => s.menu)
-  // Re-render when customers change, so a customer's menu follows their phase.
-  const customers = useGame((s) => s.customers)
-  // And when staff come and go: the office desk changes hands with the finance manager.
-  const roster = useGame((s) => s.roster)
-  // And when a car is sold or washed.
-  const inventory = useGame((s) => s.inventory)
-  // And when extra work on a service client's car is offered.
-  const jobs = useGame((s) => s.serviceJobs)
+  useGame((s) => (s.menu ? menuKey(s.menu.targetId) : null))
   const ref = useRef<HTMLDivElement>(null)
   const radius = useMediaQuery(COARSE) ? TOUCH_RADIUS : RADIUS
   const margin = useMediaQuery(COMPACT) ? COMPACT_MARGIN : MARGIN
@@ -58,20 +84,19 @@ export function ActionMenu() {
     return () => window.removeEventListener('pointerdown', onDown, true)
   }, [menu])
 
-  const it = menu && findInteractable(menu.targetId)
-  if (!menu || !it || it.actions.length === 0) return null
+  const shown = menu && menuFor(menu.targetId)
+  if (!menu || !shown) return null
+  const { it, items } = shown
 
   const x = Math.min(Math.max(menu.x, margin), window.innerWidth - margin)
   const y = Math.min(Math.max(menu.y, margin), window.innerHeight - margin)
-  const n = it.actions.length
+  const n = items.length
   return (
     <div ref={ref} className="pie" style={{ left: x, top: y }}>
       <div className="pie-title">{it.name}</div>
-      {it.actions.map((id, i) => {
+      {items.map(({ id, label, blocked }, i) => {
         // Start at the top and go clockwise.
         const angle = -Math.PI / 2 + (i * 2 * Math.PI) / n
-        // Unavailable actions stay clickable: requestAction explains why they can't run.
-        const blocked = actionBlocker(id, it.id, customers, roster, inventory, jobs) !== null
         return (
           <button
             key={id}
@@ -80,7 +105,7 @@ export function ActionMenu() {
             aria-disabled={blocked}
             onClick={() => useGame.getState().requestAction(it.id, id)}
           >
-            {labelFor(id, it)}
+            {label}
           </button>
         )
       })}
