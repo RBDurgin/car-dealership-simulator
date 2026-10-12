@@ -681,7 +681,11 @@ export type CustomerEvent =
    * (the desk the player closes at), else the office's.
    */
   | { type: 'seat'; id: string; chairId?: string }
-  /** Their handler passed them to the finance manager `to`. They wait in the lounge. */
+  /**
+   * Their handler passed them to the finance manager `to`. They wait in the
+   * lounge. From a salesperson's desk too, when no lender would take them at
+   * the buy rate: he may get them a loan with more down.
+   */
   | { type: 'handOff'; id: string; to: string }
   /** Their salesperson sends them to sit at the desk with guest chair `chairId`. */
   | { type: 'lead'; id: string; chairId: string }
@@ -691,7 +695,10 @@ export type CustomerEvent =
   | { type: 'menu'; id: string; deal: FiDeal }
   /** The F&I menu moved on: a lender, a markup, a down payment or a product's answer. */
   | { type: 'fi'; id: string; deal: FiDeal }
-  /** No lender will take them, and they can't put more down: they leave. */
+  /**
+   * No lender will take them, and they can't put more down: they leave. From
+   * the menu, or from signing with staff.
+   */
   | { type: 'declined'; id: string }
   /**
    * Paperwork signed (or, from the menu, the contracts): the sale goes
@@ -825,9 +832,13 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
       if (c.phase !== 'following') return c
       return { ...c, phase: 'signing', chairId: c.chairId ?? ev.chairId ?? GUEST_CHAIR_ID }
     case 'handOff':
+      if (c.handlerId === null || c.handlerId === ev.to) return c
+      // Up from a salesperson's desk, the paperwork stuck on the loan.
+      if (c.phase === 'signing' && staffHandled(c)) {
+        return { ...c, phase: 'queued', handlerId: ev.to, chairId: null }
+      }
       // From the player or a salesperson, before they've been sent to a desk.
-      if (c.phase !== 'following' || c.handlerId === null || c.handlerId === ev.to) return c
-      if (c.chairId !== null) return c
+      if (c.phase !== 'following' || c.chairId !== null) return c
       return { ...c, phase: 'queued', handlerId: ev.to }
     case 'lead':
       if (c.phase !== 'following' || !staffHandled(c) || c.chairId !== null) return c
@@ -841,7 +852,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'fi':
       return c.phase === 'menu' ? { ...c, fi: ev.deal } : c
     case 'declined':
-      return c.phase === 'menu' ? leave(c, 'declined') : c
+      return c.phase === 'menu' || (c.phase === 'signing' && staffHandled(c))
+        ? leave(c, 'declined')
+        : c
     case 'signed':
       if (c.phase !== 'signing' && c.phase !== 'menu') return c
       return leave(ev.traded ? { ...c, vehicle: null } : c, 'bought')

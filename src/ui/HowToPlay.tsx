@@ -69,6 +69,7 @@ import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from '../sim/reputation'
 import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
 import { APPRECIATION_COST, BOOK_AHEAD, COST_PER_GUEST } from '../sim/appreciation'
 import {
+  FI_COMMISSION,
   FINANCE_FEE,
   MIN_COMMISSION,
   MIN_RETENTION_RAISE,
@@ -295,7 +296,10 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
         <p>
           With a finance manager on shift you can still close at your own desk and run the menu
-          yourself. They earn nothing on those deals.
+          yourself. They earn nothing on those deals. Hand a buyer off at the office desk and they
+          run the menu for you (see <b>Staff</b>). A salesperson closing at their own desk arranges
+          the loan at the lender&apos;s rate, with no markup and no products, and sends a buyer no
+          lender will take over to finance (or home, with nobody there).
         </p>
         <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
@@ -593,6 +597,17 @@ function BusinessTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Finance</h3>
+        <p>
+          The office computer&apos;s <b>Finance</b> tab{touch ? '' : ' (F)'} shows today&apos;s and
+          this month&apos;s F&amp;I: buyers who financed or paid cash, those every lender declined,
+          the lenders&apos; reserve, the products&apos; margin, the F&amp;I gross per deal and how
+          often each product sells. It also lists the lenders, the credit tiers each takes and their
+          rates. The day summary&apos;s seller table shows the F&amp;I each seller made at their own
+          desk, and the finance manager gets a row for the deals they signed.
+        </p>
+      </section>
+      <section>
         <h3>Service garage</h3>
         <p>
           The {EXPANSIONS[GARAGE_EXPANSION].label.toLowerCase()} has {GARAGE_BAYS} bays. Hire a
@@ -855,10 +870,14 @@ function PeopleTab({ touch, click }: TabProps) {
             books. Turn their calls off in the Clients tab.
           </li>
           <li>
-            A <b>finance manager</b> signs buyers at the office desk for {formatMoney(FINANCE_FEE)}{' '}
-            a deal, while your own desk stays yours: lead a buyer to the office,{' '}
-            {click.toLowerCase()} them and choose <b>Hand off to finance</b>, and you&apos;re free
-            for the next customer. Buyers wait in the lounge if finance is busy.
+            A <b>finance manager</b> takes the office desk while your own desk stays yours: lead a
+            buyer to the office, {click.toLowerCase()} them and choose <b>Hand off to finance</b>,
+            and you&apos;re free for the next customer. Buyers wait in the lounge if finance is
+            busy. They run the F&amp;I menu by skill: they pick the lender that pays the best
+            reserve, mark up more the more skilled they are (less for good credit) and present
+            products until a yes gets unlikely, taking a little longer for each. A buyer no lender
+            takes is asked for more down. They earn {formatMoney(FINANCE_FEE)} a deal plus{' '}
+            {Math.round(FI_COMMISSION * 100)}% of its F&amp;I gross.
           </li>
           <li>
             A <b>lot porter</b> washes the dirtiest cars all day.

@@ -26,7 +26,7 @@ import {
 import { leadChoice } from '../../sim/staffAi'
 import { commit, notify, setRoster, type Kit } from '../core'
 import type { GameState } from '../types'
-import { sign, tradeAllowance, tradeLine } from './customers'
+import { declineBuyer, sign, staffDeal, tradeAllowance, tradeLine } from './customers'
 import { tallyNazma } from './world'
 
 type StaffKeys =
@@ -154,7 +154,21 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const e = s.roster.find((x) => x.id === employeeId)
       const c = s.customers.find((x) => x.id === customerId)
       if (!e || c?.phase !== 'signing' || c.handlerId !== employeeId) return
-      const sale = sign(k, c, e)
+      const deal = c.offer ? staffDeal(k, c, e) : null
+      if (c.offer && !deal) {
+        // No lender at the buy rate: the finance manager may get them one with more down.
+        const fm = e.role === 'finance' ? null : financeOnDuty(s.roster)
+        if (!fm) {
+          const line = `No bank will take ${c.name} at the buy rate, and there's no finance manager to try more down. They went home.`
+          return declineBuyer(k, c, e.role === 'finance' ? undefined : line)
+        }
+        commit(k, reduceCustomers(s.customers, { type: 'handOff', id: c.id, to: fm.id }))
+        return notify(
+          k,
+          `${e.name}: "No bank will take ${c.name} at the buy rate. Over to finance."`,
+        )
+      }
+      const sale = sign(k, c, e, deal)
       if (!sale) {
         commit(k, reduceCustomers(get().customers, { type: 'cancel', id: c.id }))
         return notify(k, `${e.name}: "The ${c.name} deal fell through."`)

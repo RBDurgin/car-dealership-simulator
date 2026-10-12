@@ -18,6 +18,7 @@ import { isClosed, startOfDay } from '../../sim/clock'
 import { dirtyOvernight } from '../../sim/cleanliness'
 import { csiFactor, csiOf } from '../../sim/csi'
 import { arrivalScale, type Customer } from '../../sim/customers'
+import { emptyFiStats } from '../../sim/fi'
 import { emptyStats, type DayStats } from '../../sim/deal'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from '../../sim/dealershipName'
 import { DEFAULT_DIFFICULTY, TUNING, type Difficulty } from '../../sim/difficulty'
@@ -145,6 +146,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     clientPerks: defaultPerks(),
     appreciation: null as Appreciation | null,
     monthCsi: emptyMonthCsi(),
+    monthFi: emptyFiStats(),
     clientVisits: [] as ClientVisit[],
     callsTried: [] as string[],
     playerCall: null as string | null,
@@ -213,6 +215,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           clientPerks: save.clientPerks,
           appreciation: save.appreciation,
           monthCsi: save.monthCsi,
+          monthFi: save.monthFi,
         })
         beginDay(k, save.day + 1)
       }),
@@ -479,6 +482,7 @@ function morning(k: Kit, day: number): void {
     weather,
     monthSales: newMonth ? emptyMonthSales() : s.monthSales,
     monthCsi: newMonth ? emptyMonthCsi() : s.monthCsi,
+    monthFi: newMonth ? emptyFiStats() : s.monthFi,
     quota: newMonth ? monthlyQuota(date.month, BASE_SLOTS, s.reputation, level.quota) : s.quota,
     inventory,
     orders: [],

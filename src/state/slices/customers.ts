@@ -15,6 +15,8 @@ import {
   addFiSale,
   answered,
   canPresent,
+  deskLoan,
+  type FiDeal,
   loanDeclined,
   moreDownFor,
   netPrice,
@@ -23,6 +25,7 @@ import {
   PRODUCTS,
   productTake,
   saleFi,
+  staffMenu,
   withDown,
   withLoan,
 } from '../../sim/fi'
@@ -145,7 +148,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const c = menuCustomer(k)
       if (!c?.fi) return
       if (loanDeclined(c, c.fi)) return notify(k, 'No lender has approved the loan yet.')
-      const sale = sign(k, c, null)
+      const sale = sign(k, c, null, c.fi)
       if (!sale) {
         endDeal(k, ['menu'])
         return notify(k, 'The deal fell through.')
@@ -339,10 +342,15 @@ export function appraiseCar(k: Kit, targetId: string): void {
 /**
  * Signs `c`'s paperwork: sells the car at the offer price, logs the sale and
  * sends them home happy. `signer` is the employee at the desk (finance, or
- * the salesperson), null for the player. Returns the sale, or null if the car
- * can't be sold.
+ * the salesperson), null for the player. `deal` is the loan and the F&I
+ * menu, when they had them. Returns the sale, or null if the car can't be sold.
  */
-export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null {
+export function sign(
+  k: Kit,
+  c: Customer,
+  signer: Employee | null,
+  deal?: FiDeal | null,
+): Sale | null {
   const { get, set } = k
   const s = get()
   const car = s.inventory.find((x) => x.id === c.offer?.carId)
@@ -355,8 +363,9 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
       : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
   if (allowance !== undefined && !traded) return null
   if (!get().sellCar(car.id, price)) return null
-  // The player's buyer comes from the F&I menu, with the loan and the products taken.
-  const fi = c.phase === 'menu' && c.fi ? saleFi(c, c.fi, netPrice(c.offer)) : undefined
+  // The loan and the products taken; a salesperson's loan comes without the menu.
+  const fi = deal ? saleFi(c, deal, netPrice(c.offer)) : undefined
+  const menu = signer === null || signer.role === 'finance'
   const quote = quoteFor(c, car)
   if (quote !== null && price <= quote) tallyRival(k, 'matched')
   const sale = saleRecord(c, car, {
@@ -378,8 +387,9 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
       sales: [...stats.sales, sale],
       bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
       clients: { ...stats.clients, referralFees: stats.clients.referralFees + fee },
-      fi: addFiSale(stats.fi, c.credit, fi),
+      fi: addFiSale(stats.fi, c.credit, fi, menu),
     },
+    monthFi: addFiSale(get().monthFi, c.credit, fi, menu),
     // Less the referral fee and their trade-in, which we pay for out of the
     // price, and with the F&I gross (the lender's reserve and the products).
     cash: get().cash - fee - (traded?.price ?? 0) + (fi?.gross ?? 0),
@@ -417,11 +427,32 @@ function menuCustomer(k: Kit): Customer | null {
 }
 
 /** No lender will take `c`, and they can't put more down: they go home without the car. */
-function declineBuyer(k: Kit, c: Customer): void {
+export function declineBuyer(
+  k: Kit,
+  c: Customer,
+  line = `No lender will take ${c.name}'s loan, and they can't put more down. They went home.`,
+): void {
   commit(k, reduceCustomers(k.get().customers, { type: 'declined', id: c.id }))
-  const stats = k.get().dayStats
-  k.set({ dayStats: { ...stats, fi: { ...stats.fi, declined: stats.fi.declined + 1 } } })
-  notify(k, `No lender will take ${c.name}'s loan, and they can't put more down. They went home.`)
+  const { dayStats: stats, monthFi } = k.get()
+  k.set({
+    dayStats: { ...stats, fi: { ...stats.fi, declined: stats.fi.declined + 1 } },
+    monthFi: { ...monthFi, declined: monthFi.declined + 1 },
+  })
+  notify(k, line)
+}
+
+/**
+ * The loan employee `e` arranges for `c` at their desk: the finance manager
+ * runs the whole menu by his skill, a salesperson takes the first lender at
+ * the buy rate and presents nothing. Null when no lender takes them (a
+ * finance manager has already tried more down).
+ */
+export function staffDeal(k: Kit, c: Customer, e: Employee): FiDeal | null {
+  if (!c.offer) return null
+  const net = netPrice(c.offer)
+  return e.role === 'finance'
+    ? staffMenu(e.skill, c, net, rng.fi, tuning(k).productTake)
+    : deskLoan(c, net)
 }
 
 /** " Their Summit Sedan goes on the lot tonight." after a sale with a trade-in. */

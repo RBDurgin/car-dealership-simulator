@@ -17,6 +17,7 @@ import { isAchievementId, type EarnedAchievement } from './achievements'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
+import { emptyFiStats, PRODUCT_IDS, type FiStats } from './fi'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { CAR_MODELS } from './customers'
@@ -55,7 +56,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 28
+export const SAVE_VERSION = 29
 
 export interface SaveData {
   version: number
@@ -108,6 +109,8 @@ export interface SaveData {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores so far, for the CSI. */
   monthCsi: MonthCsi
+  /** The month's F&I so far (see `sim/fi.ts`). */
+  monthFi: FiStats
   /**
    * A record of each day settled since `statsFrom` (see `sim/stats.ts`), each
    * a tuple in `LOG_FIELDS` order to stay small (`tupleToRecord` reads one).
@@ -147,6 +150,7 @@ export interface SaveSource {
   clientPerks: ClientPerks
   appreciation: Appreciation | null
   monthCsi: MonthCsi
+  monthFi: FiStats
   log: DayRecord[]
   lifetime: Lifetime
   records: Records
@@ -190,6 +194,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     clientPerks: s.clientPerks,
     appreciation: s.appreciation,
     monthCsi: s.monthCsi,
+    monthFi: s.monthFi,
     log: s.log.map(recordToTuple),
     lifetime: s.lifetime,
     records: s.records,
@@ -364,6 +369,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   26: (raw) => ({ ...raw, achievements: [] }),
   // v28: the dealership's name. Every game before it had the default.
   27: (raw) => ({ ...raw, dealershipName: DEFAULT_DEALERSHIP_NAME }),
+  // v29: the month's F&I, starting from nothing.
+  28: (raw) => ({ ...raw, monthFi: emptyFiStats() }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -427,6 +434,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isPerks(clientPerks)) return null
   if (appreciation !== null && !isAppreciation(appreciation)) return null
   if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
+  if (!isFiStats(raw.monthFi)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   if (!isLog(raw.log)) return null
   if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
@@ -444,6 +452,21 @@ export function parseSave(input: unknown): SaveData | null {
     achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
   } as unknown as SaveData
 }
+
+function isFiStats(v: unknown): boolean {
+  return isObject(v) && FI_COUNTS.every((k) => isNumber(v[k])) && isCounts(v.sold, PRODUCT_IDS)
+}
+
+const FI_COUNTS = [
+  'financed',
+  'cash',
+  'declined',
+  'menus',
+  'financedMenus',
+  'reserve',
+  'productGross',
+  'fees',
+] as const satisfies readonly (keyof FiStats)[]
 
 function isEarned(v: unknown): boolean {
   return (

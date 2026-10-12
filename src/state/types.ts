@@ -3,6 +3,7 @@ import type { AchievementId, EarnedAchievement } from '../sim/achievements'
 import type { AudioBus, AudioSettings } from '../sim/audioSettings'
 import type { GraphicsSetting } from '../sim/graphics'
 import type { CallKind, ClientVisit } from '../sim/calls'
+import type { FiStats } from '../sim/fi'
 import type { CustomerVariant } from '../sim/characters'
 import type { Appreciation, Client, ClientPerks, MonthCsi } from '../sim/clients'
 import type { GameTime } from '../sim/clock'
@@ -71,7 +72,15 @@ export interface ReceptionCall {
 
 /** The office computer panel's tabs. */
 export type ComputerTab =
-  'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients' | 'stats'
+  | 'stock'
+  | 'marketing'
+  | 'upgrades'
+  | 'calendar'
+  | 'rival'
+  | 'service'
+  | 'clients'
+  | 'finance'
+  | 'stats'
 
 /**
  * The whole store: one state, built from the slices in `state/slices/`.
@@ -129,6 +138,8 @@ export interface GameState {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores, for the manufacturer's CSI. Saved. */
   monthCsi: MonthCsi
+  /** The month's F&I so far, for the Finance tab. Saved. */
+  monthFi: FiStats
   /** Clients due in on an appointment today, still to come. Planned each morning, never saved. */
   clientVisits: ClientVisit[]
   /** Clients phoned today who didn't pick up, or did: not called again today. Never saved. */

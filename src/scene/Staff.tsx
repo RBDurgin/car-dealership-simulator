@@ -22,7 +22,6 @@ import { buyBlocker } from '../sim/sellers'
 import {
   ADVISOR_CALL_SECONDS,
   ADVISOR_CHECK_IN_SECONDS,
-  financeSeconds,
   GUARD_CHASE_SPEED,
   PORTER_WASH_SECONDS,
   postChairId,
@@ -46,6 +45,7 @@ import {
   type SalesTask,
 } from '../sim/staffAi'
 import { useGame } from '../state/store'
+import { financePaperwork } from '../state/derived'
 import { Character } from './Character'
 import { Interactable } from './Interactable'
 import {
@@ -219,7 +219,7 @@ function doPaperwork(
     return
   }
   if (w.paperwork?.customerId !== c.id) {
-    w.paperwork = { customerId: c.id, left: financeSeconds(e.skill) }
+    w.paperwork = { customerId: c.id, left: financePaperwork(useGame.getState(), c, e) }
   }
   w.paperwork.left -= seconds
   if (w.paperwork.left > 0) return

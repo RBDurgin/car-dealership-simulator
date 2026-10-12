@@ -527,6 +527,23 @@ describe('reduceCustomer', () => {
     expect(reduceCustomer(following, { type: 'call', id: 'c1' })).toBe(following)
   })
 
+  it('goes from a salesperson’s desk to finance, or home, when no lender takes them', () => {
+    const signing = at('signing', { handlerId: 'staff-2', chairId: 'sales-guest-1' })
+    expect(run(signing, { type: 'handOff', id: 'c1', to: 'staff-1' })).toMatchObject({
+      phase: 'queued',
+      handlerId: 'staff-1',
+      chairId: null,
+    })
+    expect(run(signing, { type: 'declined', id: 'c1' })).toMatchObject({
+      phase: 'leaving',
+      leaveReason: 'declined',
+    })
+    // The player's buyer signing goes to the menu instead.
+    const mine = at('signing', { handlerId: PLAYER_ID, chairId: GUEST_CHAIR_ID })
+    expect(reduceCustomer(mine, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(mine)
+    expect(reduceCustomer(mine, { type: 'declined', id: 'c1' })).toBe(mine)
+  })
+
   it('can be greeted while still browsing', () => {
     const c = run(at('browsing'), { type: 'greet', id: 'c1', carId: 'lot-car-5', by: 'player' })!
     expect(c).toMatchObject({ phase: 'talking', targetCarId: 'lot-car-5' })

@@ -1,16 +1,18 @@
 import type { Archetype } from './archetypes'
-import type { Credit } from './credit'
+import type { Credit, CreditTier } from './credit'
 import {
   acquisitionFee,
   approvingLenders,
   clampMarkup,
   lenderById,
   loanAmount,
+  MAX_MARKUP,
   reserve,
   saveByDown,
   type LenderId,
 } from './lenders'
 import type { Warmth } from './negotiation'
+import type { Rng } from './rng'
 
 /**
  * The F&I menu: once the price is agreed and the buyer is seated, the loan is
@@ -378,8 +380,18 @@ export function emptyFiStats(): FiStats {
   }
 }
 
-/** The day's F&I with a sale to a buyer with `credit` added, and its menu if it had one. */
-export function addFiSale(stats: FiStats, credit: Credit | null, fi?: SaleFi): FiStats {
+/**
+ * The day's F&I with a sale to a buyer with `credit` added, and its loan if
+ * they had one. `menu`: the loan came with the F&I menu (the player's or the
+ * finance manager's), so it counts toward penetration; a salesperson's loan
+ * at the buy rate adds only its reserve and fee.
+ */
+export function addFiSale(
+  stats: FiStats,
+  credit: Credit | null,
+  fi?: SaleFi,
+  menu = true,
+): FiStats {
   const financed = !!credit?.finance
   const out = {
     ...stats,
@@ -387,17 +399,40 @@ export function addFiSale(stats: FiStats, credit: Credit | null, fi?: SaleFi): F
     cash: stats.cash + (financed ? 0 : 1),
   }
   if (!fi) return out
+  const money = { ...out, reserve: out.reserve + fi.reserve, fees: out.fees + fi.fee }
+  if (!menu) return money
   const sold = { ...stats.sold }
   for (const p of fi.products) sold[p.id] = (sold[p.id] ?? 0) + 1
   return {
-    ...out,
+    ...money,
     menus: out.menus + 1,
     financedMenus: out.financedMenus + (fi.financed ? 1 : 0),
-    reserve: out.reserve + fi.reserve,
     productGross: out.productGross + fi.products.reduce((sum, p) => sum + p.price - p.cost, 0),
-    fees: out.fees + fi.fee,
     sold,
   }
+}
+
+/** F&I over two spans added together, as the month's is from its days. */
+export function addFiStats(a: FiStats, b: FiStats): FiStats {
+  const sold = { ...a.sold }
+  for (const id of PRODUCT_IDS) if (b.sold[id]) sold[id] = (sold[id] ?? 0) + (b.sold[id] ?? 0)
+  return {
+    financed: a.financed + b.financed,
+    cash: a.cash + b.cash,
+    declined: a.declined + b.declined,
+    menus: a.menus + b.menus,
+    financedMenus: a.financedMenus + b.financedMenus,
+    reserve: a.reserve + b.reserve,
+    productGross: a.productGross + b.productGross,
+    fees: a.fees + b.fees,
+    sold,
+  }
+}
+
+/** F&I gross per deal sold (every buyer, cash or financed), or null with none. */
+export function fiPerDeal(stats: FiStats): number | null {
+  const deals = stats.financed + stats.cash
+  return deals > 0 ? fiDayGross(stats) / deals : null
 }
 
 /** The day's F&I gross: reserve and products, less lenders' fees. */
@@ -424,4 +459,120 @@ export function soldLine(stats: FiStats): string {
 export function payLine(stats: FiStats): string {
   const declined = stats.declined > 0 ? `, ${stats.declined} declined` : ''
   return `${stats.financed} financed, ${stats.cash} cash${declined}`
+}
+
+/** How far the finance manager eases the markup for each tier: good credit shops its rate. */
+export const STAFF_MARKUP_EASE: Record<CreditTier, number> = { A: 0.5, B: 0.75, C: 1, D: 1 }
+/** Added to every take chance per skill level over average: a better pitch. */
+export const STAFF_PITCH = 0.06
+/** The take chance under which an average (skill 3) finance manager stops presenting. */
+export const STAFF_FLOOR = 0.12
+/** Added to the floor per skill level over average: a good one knows when to stop. */
+export const STAFF_FLOOR_STEP = 0.03
+/** Where in each product's price range an average finance manager prices it (0 low, 1 high). */
+export const STAFF_PRICE_ALONG = 0.25
+/** Added to that per skill level over average. */
+export const STAFF_PRICE_STEP = 0.05
+
+/** The markup a finance manager of `skill` puts on a buyer of `tier`, in quarter points. */
+export function staffMarkup(skill: number, tier: CreditTier): number {
+  return clampMarkup(Math.round((skill / 5) * MAX_MARKUP * STAFF_MARKUP_EASE[tier] * 4) / 4)
+}
+
+/** The take chance under which a finance manager of `skill` presents nothing more. */
+export function staffFloor(skill: number): number {
+  return STAFF_FLOOR + (skill - 3) * STAFF_FLOOR_STEP
+}
+
+/** What a finance manager of `skill` asks for `product`. */
+export function staffPrice(skill: number, product: Product): number {
+  const along = Math.max(0, Math.min(1, STAFF_PRICE_ALONG + (skill - 3) * STAFF_PRICE_STEP))
+  return clampProductPrice(product.id, product.low + along * (product.high - product.low))
+}
+
+/** What a finance manager of `skill` adds to a take chance on top of `bonus`. */
+function staffBonus(skill: number, bonus: number): number {
+  return bonus + (skill - 3) * STAFF_PITCH
+}
+
+/** The loan a finance manager sets up and the products he'll present, in order. */
+export interface StaffPlan {
+  deal: FiDeal
+  presents: { id: ProductId; price: number }[]
+}
+
+/**
+ * What a finance manager of `skill` will do with `c`, who pays `net`: the
+ * down payment that gets them a loan (more if nobody takes them at theirs),
+ * the approving lender with the best reserve less its fee at his markup, and
+ * the products in order of likely take, until the next one's chance would be
+ * under his floor. Null when no lender takes them at any down payment they
+ * can reach. Deterministic, so the scene can time his paperwork from it.
+ */
+export function staffPlan(skill: number, c: FiBuyer, net: number, bonus = 0): StaffPlan | null {
+  let deal = openDeal(c, net)
+  if (loanDeclined(c, deal)) {
+    const down = moreDownFor(c, net)
+    if (down === null) return null
+    deal = withDown(c, deal, net, down)
+    if (loanDeclined(c, deal)) return null
+  }
+  if (deal.lender && c.credit) {
+    const credit = { ...c.credit, down: deal.down }
+    const markup = staffMarkup(skill, c.credit.tier)
+    const amount = financedAmount(c, deal, net)
+    const value = (id: LenderId) =>
+      reserve(amount, markup, lenderById(id)) - acquisitionFee(lenderById(id), credit)
+    const ids = approvingFor(c, net, deal.down)
+    const best = ids.reduce((a, b) => (value(b) > value(a) ? b : a), ids[0])
+    deal = { ...deal, lender: best, markup }
+  }
+  const more = staffBonus(skill, bonus)
+  const presents: StaffPlan['presents'] = []
+  let left = productsFor(c)
+  let pressure = pressureOf(deal)
+  while (left.length > 0) {
+    const odds = left.map((p) => {
+      const price = staffPrice(skill, p)
+      return { p, price, chance: productTake(c, p, price, pressure, more) }
+    })
+    const next = odds.reduce((a, b) => (b.chance > a.chance ? b : a))
+    if (next.chance < staffFloor(skill)) break
+    presents.push({ id: next.p.id, price: next.price })
+    left = left.filter((p) => p !== next.p)
+    pressure += 1
+  }
+  return { deal, presents }
+}
+
+/**
+ * The finance manager of `skill` runs `c`'s menu (see `staffPlan`), each
+ * answer rolled on `rng`. Null when no lender takes them.
+ */
+export function staffMenu(
+  skill: number,
+  c: FiBuyer,
+  net: number,
+  rng: Rng,
+  bonus = 0,
+): FiDeal | null {
+  const plan = staffPlan(skill, c, net, bonus)
+  if (!plan) return null
+  const more = staffBonus(skill, bonus)
+  let deal = plan.deal
+  for (const { id, price } of plan.presents) {
+    const chance = productTake(c, PRODUCTS[id], price, pressureOf(deal), more)
+    deal = answered(deal, id, price, rng.next() < chance)
+  }
+  return deal
+}
+
+/**
+ * A salesperson signing at their own desk: the loan from the first lender
+ * that takes the buyer at the buy rate, and no products. Null when no lender
+ * takes them at their down payment (a finance manager could ask for more).
+ */
+export function deskLoan(c: FiBuyer, net: number): FiDeal | null {
+  const deal = openDeal(c, net)
+  return loanDeclined(c, deal) ? null : deal
 }

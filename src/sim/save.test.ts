@@ -26,6 +26,7 @@ import { monthlyQuota } from './quota'
 import { lastTheftNight } from './nazma'
 import { createRng } from './rng'
 import { DEFAULT_DEALERSHIP_NAME } from './dealershipName'
+import { emptyFiStats } from './fi'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
 import {
@@ -87,6 +88,7 @@ const source = () => ({
   clientPerks: defaultPerks() as ClientPerks,
   appreciation: null as Appreciation | null,
   monthCsi: emptyMonthCsi() as MonthCsi,
+  monthFi: emptyFiStats(),
   // As a v25 save of day 3 upgrades, so the older upgrades compare equal.
   log: [] as DayRecord[],
   lifetime: emptyLifetime() as Lifetime,
@@ -565,6 +567,31 @@ describe('save data', () => {
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.dealershipName).toBe("Robert's Rides")
     expect(parseSave({ ...save, dealershipName: '  Big\n Al  ' })?.dealershipName).toBe('Big Al')
     expect(parseSave({ ...save, dealershipName: 7 })?.dealershipName).toBe(DEFAULT_DEALERSHIP_NAME)
+  })
+
+  it('keeps the month’s F&I', () => {
+    const monthFi = {
+      ...emptyFiStats(),
+      financed: 3,
+      cash: 1,
+      menus: 2,
+      financedMenus: 2,
+      reserve: 900,
+      productGross: 1_400,
+      sold: { warranty: 1, gap: 2 },
+    }
+    const save = createSave({ ...source(), monthFi }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.monthFi).toEqual(monthFi)
+    expect(parseSave({ ...save, monthFi: undefined })).toBeNull()
+    expect(parseSave({ ...save, monthFi: { ...monthFi, reserve: 'lots' } })).toBeNull()
+    expect(parseSave({ ...save, monthFi: { ...monthFi, sold: { hat: 1 } } })).toBeNull()
+  })
+
+  it('upgrades a version 28 save with no F&I this month', () => {
+    const { monthFi: _, ...v28 } = createSave(source(), 123)
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...v28, version: 28 })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.monthFi).toEqual(emptyFiStats())
   })
 
   it('upgrades a version 27 save with the default name', () => {

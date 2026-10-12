@@ -385,6 +385,18 @@ export const UPDATES: readonly Update[] = [
       'A lot they’d kept clean used to be just clean enough each morning for them to skip it.',
     ],
   },
+  {
+    id: 36,
+    phase: '19',
+    title: 'The finance manager runs the menu',
+    items: [
+      'Hand a buyer off to your finance manager and they run the F&I menu: the more skilled, the more they make.',
+      'They earn a fee plus a share of each deal’s F&I, and they ask a buyer no lender takes for more down.',
+      'Salespeople at their own desks set up loans at the lender’s rate but sell no products.',
+      'New Finance tab on the office computer (F): today’s and this month’s F&I, product sales and the lenders.',
+      'The day summary’s seller table has an F&I column, and the finance manager gets a row of their own.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

@@ -14,6 +14,7 @@ import {
   netIncome,
   theftLoss,
   revenue,
+  salesByFinance,
   salesBySeller,
   salesBySource,
   walkOuts,
@@ -524,7 +525,7 @@ function SummaryPanel() {
             </tbody>
           </table>
         )}
-        {stats.sales.some((s) => s.soldBy !== null) && (
+        {stats.sales.some((s) => s.soldBy !== null || s.signedBy !== null) && (
           <table className="summary-sellers">
             <thead>
               <tr>
@@ -533,6 +534,7 @@ function SummaryPanel() {
                 <th>Revenue</th>
                 <th>Off MSRP</th>
                 <th>Gross</th>
+                <th title="Loans and products, at the seller's own desk">F&amp;I</th>
                 <th>Commission</th>
                 {traded && (
                   <th title="Trade allowances over (or under) the cars' value">Trades ±</th>
@@ -547,12 +549,25 @@ function SummaryPanel() {
                   <td className="price">{formatMoney(t.revenue)}</td>
                   <td>{(averageDiscount(t) * 100).toFixed(1)}%</td>
                   <td className="price">{formatMoney(t.gross)}</td>
+                  <td className="price">{formatMoney(t.fi)}</td>
                   <td className="price">{formatMoney(t.commission)}</td>
                   {traded && (
                     <td className={t.tradeOver > 0 ? 'price margin-loss' : 'price'}>
                       {t.trades > 0 ? formatMoney(t.tradeOver) : '—'}
                     </td>
                   )}
+                </tr>
+              ))}
+              {salesByFinance(stats).map((t) => (
+                <tr key={`finance-${t.name}`}>
+                  <td title="Finance manager: the deals they signed">{t.name} (F&amp;I)</td>
+                  <td>{t.deals}</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td className="price">{formatMoney(t.fi)}</td>
+                  <td className="price">{formatMoney(t.commission)}</td>
+                  {traded && <td>—</td>}
                 </tr>
               ))}
             </tbody>

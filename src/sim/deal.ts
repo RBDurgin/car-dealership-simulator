@@ -29,7 +29,7 @@ import type { RecordKey } from './stats'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
-import { financeOnDuty, FINANCE_FEE, salesCommission, type Employee } from './staff'
+import { financeCommission, financeOnDuty, salesCommission, type Employee } from './staff'
 import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 
 /**
@@ -282,6 +282,8 @@ export interface Sale {
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
   commission: number
+  /** Of `commission`, what the finance manager earned for signing it, while `signedBy` is set. */
+  financeCommission?: number
   /** What brought the buyer in. */
   source: Source
   /** The car they traded in, if they did. */
@@ -292,7 +294,10 @@ export interface Sale {
   returning?: boolean
   /** Closed after the buyer's last counter, when they had no rounds left. */
   lastRound?: boolean
-  /** The F&I menu, when the player ran it: the loan, the products taken and their gross. */
+  /**
+   * The loan and the F&I menu: the player's or the finance manager's menu, or
+   * a salesperson's loan at the buy rate with no products.
+   */
   fi?: SaleFi
 }
 
@@ -310,7 +315,7 @@ export interface SaleTerms {
   book: readonly Client[]
   /** What we allowed for their trade-in, or null without one in the deal. */
   tradePrice: number | null
-  /** The F&I menu, when the player ran one. */
+  /** The loan and the F&I menu, when the buyer had them. */
   fi?: SaleFi
 }
 
@@ -322,6 +327,7 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
       ? (t.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
       : null
   const finance = t.signer?.role === 'finance' ? t.signer : null
+  const financePay = finance ? financeCommission(t.fi?.gross ?? 0) : 0
   const sale: Sale = {
     customerName: c.name,
     carId: car.id,
@@ -333,9 +339,10 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
     soldBy: seller,
     ...(seller && { sellerId: c.sellerId as string }),
     signedBy: finance?.name ?? null,
-    commission: (seller ? salesCommission(t.price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
+    commission: (seller ? salesCommission(t.price, car.cost) : 0) + financePay,
     source: c.source,
   }
+  if (finance) sale.financeCommission = financePay
   const trade = t.tradePrice !== null && tradeRecord(c, t.tradePrice, t.day)
   if (trade) sale.trade = trade
   if (car.used) sale.used = true
@@ -589,11 +596,13 @@ export interface SellerTally {
   msrp: number
   /** Revenue less the cost of these cars. */
   gross: number
-  /** What staff earned on these sales (the salesperson's cut and any finance fee). */
+  /** What the salesperson earned on these sales (the finance manager's pay is his own row). */
   commission: number
   /** Trade-ins taken on these sales, and how much over their value they were allowed (under if negative). */
   trades: number
   tradeOver: number
+  /** F&I made at the seller's own desk: the player's menu, or a salesperson's loan. */
+  fi: number
 }
 
 /** The day's sales by who made them, the player first, then in order of first sale. */
@@ -612,6 +621,7 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       commission: 0,
       trades: 0,
       tradeOver: 0,
+      fi: 0,
     }
     tallies.set(s.soldBy, {
       ...t,
@@ -619,9 +629,34 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       revenue: t.revenue + s.price,
       msrp: t.msrp + s.msrp,
       gross: t.gross + s.price - s.cost,
-      commission: t.commission + s.commission,
+      commission: t.commission + s.commission - (s.financeCommission ?? 0),
       trades: t.trades + (s.trade ? 1 : 0),
       tradeOver: t.tradeOver + (s.trade ? tradeOver(s.trade) : 0),
+      fi: t.fi + (s.signedBy === null ? (s.fi?.gross ?? 0) : 0),
+    })
+  }
+  return [...tallies.values()]
+}
+
+/** The deals a finance manager signed today: how many, their F&I and his pay on them. */
+export interface FinanceTally {
+  name: string
+  deals: number
+  fi: number
+  commission: number
+}
+
+/** The day's deals by the finance manager who signed them, in order of first deal. */
+export function salesByFinance(stats: DayStats): FinanceTally[] {
+  const tallies = new Map<string, FinanceTally>()
+  for (const s of stats.sales) {
+    if (s.signedBy === null) continue
+    const t = tallies.get(s.signedBy) ?? { name: s.signedBy, deals: 0, fi: 0, commission: 0 }
+    tallies.set(s.signedBy, {
+      ...t,
+      deals: t.deals + 1,
+      fi: t.fi + (s.fi?.gross ?? 0),
+      commission: t.commission + (s.financeCommission ?? 0),
     })
   }
   return [...tallies.values()]
