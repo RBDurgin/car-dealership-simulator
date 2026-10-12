@@ -83,3 +83,7 @@ Stats and achievements. Every day goes into a short log, and the office computer
 ## Phase 20
 
 Test drives. A shopper can ask to drive the car they're looking at, or you can offer. You or a salesperson ride along: the car drives out through the gate and off the map, and comes back a while later. While the player is out they can't act on the floor, so a salesperson who takes drives is worth having. Twice on each drive you pick something to point out, and a pick that suits the buyer and the car warms them. A good drive makes a sale likelier and the haggle softer. Cars come back dirtier (more in the rain), used cars gain miles, and now and then a car comes back with a ding that the garage has to fix.
+
+## Phase 21
+
+Staff growth and morale. Staff learn on the job: their work earns experience, skill rises slowly up to each hire's potential, and a level-up comes with a request for a raise. Each employee has a morale that moves with pay, workload and how they're treated. Happy staff work a little faster, and unhappy ones work slower, are easier for Nazma to poach and, if nothing changes, hand in their notice. A weekly rota gives everyone days off while keeping each role covered, and you can change it. Pay for training courses, promote your best to a Senior title, praise people, hold a morning huddle, build a break room and name an Employee of the Month. Each employee has a page with their record.
