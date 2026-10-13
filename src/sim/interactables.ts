@@ -30,6 +30,7 @@ export type ActionId =
   | 'office'
   | 'call'
   | 'recondition'
+  | 'fixDing'
   | 'confront'
   | 'testDrive'
   | 'ride'
@@ -141,6 +142,13 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   recondition: {
     id: 'recondition',
     label: 'Recondition',
+    verb: 'Sending it to the shop',
+    mode: 'instant',
+  },
+  // A car with a dent from a test drive: off to the service garage to have it fixed.
+  fixDing: {
+    id: 'fixDing',
+    label: 'Fix dent',
     verb: 'Sending it to the shop',
     mode: 'instant',
   },

@@ -118,6 +118,8 @@ interface DrivenCar {
   y: number
   /** A stock car out on a test drive (keyed by the car's id, not a customer's). Null otherwise. */
   drive: DriveTrip | null
+  /** A stock car with a dent in it. */
+  ding: boolean
 }
 
 const cars = new Map<string, DrivenCar>()
@@ -168,6 +170,7 @@ function createCar(c: Customer): DrivenCar {
     service: null,
     y: 0,
     drive: null,
+    ding: false,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
@@ -208,6 +211,7 @@ function createDriveCar(stock: InventoryCar, c: Customer): DrivenCar {
       awayUntil: 0,
       reported: false,
     },
+    ding: stock.ding,
   }
   cars.set(stock.id, car)
   vehiclePos.set(stock.id, car.at)
@@ -243,6 +247,7 @@ function createServiceCar(c: Customer): DrivenCar {
     service: { place: 'spot' },
     y: 0,
     drive: null,
+    ding: false,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
@@ -625,6 +630,7 @@ export function DrivenCars() {
                   model={car.model}
                   cleanliness={car.cleanliness}
                   condition={car.condition}
+                  ding={car.ding}
                 />
               </Suspense>
             ) : (

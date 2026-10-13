@@ -421,7 +421,7 @@ export interface DayStats {
   clients: ClientStats
   /** Loans and the F&I menu today (see `sim/fi.ts`). */
   fi: FiStats
-  /** Test drives today: back from the road, of those how many bought, and how many were cut short. */
+  /** Test drives today: back from the road, of those how many bought, how many were cut short and how many came back dinged. */
   drives: DriveStats
 }
 
@@ -430,6 +430,9 @@ export interface DriveStats {
   taken: number
   bought: number
   cut: number
+  /** Taken by salespeople (the rest by the player). */
+  byStaff: number
+  dings: number
 }
 
 export function emptyStats(): DayStats {
@@ -463,7 +466,7 @@ export function emptyStats(): DayStats {
     service: emptyServiceStats(),
     clients: emptyClientStats(),
     fi: emptyFiStats(),
-    drives: { taken: 0, bought: 0, cut: 0 },
+    drives: { taken: 0, bought: 0, cut: 0, byStaff: 0, dings: 0 },
   }
 }
 

@@ -5,7 +5,16 @@ import { buildInventory, type InventoryCar } from './inventory'
 import { createRng } from './rng'
 import {
   assignDriveAsk,
+  carsHeld,
   CUT_KEEPS,
+  DING_BASE,
+  dingChance,
+  DRIVE_DIRT,
+  DRIVE_MILES,
+  driveDirt,
+  rollWear,
+  staffDriveCar,
+  wearCar,
   DRIVE_BASE,
   DRIVE_BONUS,
   DRIVE_MINUTES,
@@ -195,5 +204,74 @@ describe('cars out', () => {
     expect(playerRiding([shopper({ drive })])).toBe(false)
     expect(playerRiding([shopper({ drive, phase: 'driving' })])).toBe(true)
     expect(playerRiding([shopper({ drive, phase: 'driving', handlerId: 'emp-1' })])).toBe(false)
+  })
+})
+
+describe('salespeople’s drives', () => {
+  const keen = (extra: Partial<Customer> = {}) =>
+    shopper({ handlerId: 'emp-1', wantsDrive: true, ...extra })
+
+  it('takes out a shopper who asked, in a car no other drive holds', () => {
+    expect(staffDriveCar(keen(), stock)?.id).toBe(lot.id)
+    expect(staffDriveCar(keen(), stock, new Set([lot.id]))).toBeNull()
+    expect(staffDriveCar(keen({ wantsDrive: false }), stock)).toBeNull()
+    expect(staffDriveCar(keen({ phase: 'waiting' }), stock)).toBeNull()
+    const had = { ...newDrive(lot.id, 'emp-1', 25), back: true }
+    expect(staffDriveCar(keen({ drive: had }), stock)).toBeNull()
+  })
+
+  it('knows which cars drives hold', () => {
+    const drive = newDrive(lot.id, 'emp-1', 25)
+    expect([...carsHeld([keen({ drive })])]).toEqual([lot.id])
+    expect(carsHeld([keen({ drive: { ...drive, back: true } })]).size).toBe(0)
+  })
+})
+
+describe('mud, miles and dings', () => {
+  it('muddies the car more in the rain', () => {
+    expect(driveDirt('sunny')).toBe(DRIVE_DIRT.dry)
+    expect(driveDirt('rain')).toBe(DRIVE_DIRT.rain)
+    expect(DRIVE_DIRT.rain).toBeGreaterThan(DRIVE_DIRT.dry)
+  })
+
+  it('dings about 1 drive in 30, less with a skilled rider, more in the rain', () => {
+    expect(dingChance('emp-1', 3, 'sunny')).toBeCloseTo(DING_BASE)
+    expect(DING_BASE).toBeGreaterThan(1 / 40)
+    expect(DING_BASE).toBeLessThan(1 / 20)
+    expect(dingChance('emp-1', 5, 'sunny')).toBeLessThan(dingChance('emp-1', 1, 'sunny'))
+    expect(dingChance(PLAYER_ID, 1, 'sunny')).toBeLessThan(DING_BASE)
+    expect(dingChance('emp-1', 3, 'rain')).toBeGreaterThan(DING_BASE)
+    expect(dingChance('emp-1', 3, 'sunny', 2)).toBeCloseTo(2 * DING_BASE)
+  })
+
+  it('puts miles on a used car only, and rolls a ding now and then', () => {
+    const rng = createRng(5)
+    let dings = 0
+    for (let i = 0; i < 3000; i++) {
+      const wear = rollWear(lot, 'emp-1', 3, 'sunny', rng)
+      expect(wear.miles).toBe(0)
+      if (wear.ding) dings++
+    }
+    expect(dings / 3000).toBeGreaterThan(DING_BASE * 0.6)
+    expect(dings / 3000).toBeLessThan(DING_BASE * 1.4)
+    const used = { used: { year: 2020, miles: 40_000, condition: 0.7, acquiredDay: 1 } }
+    const miles = rollWear(used, 'emp-1', 3, 'sunny', createRng(1)).miles
+    expect(miles).toBeGreaterThanOrEqual(DRIVE_MILES.min)
+    expect(miles).toBeLessThanOrEqual(DRIVE_MILES.max)
+  })
+
+  it('wears the car: dirtier, more miles, a ding that stays', () => {
+    const used = {
+      ...lot,
+      cleanliness: 0.5,
+      used: { year: 2020, miles: 40_000, condition: 0.7, acquiredDay: 1 },
+    }
+    const [worn] = wearCar([used], used.id, { dirt: 0.15, miles: 12, ding: true })
+    expect(worn.cleanliness).toBeCloseTo(0.35)
+    expect(worn.used!.miles).toBe(40_012)
+    expect(worn.ding).toBe(true)
+    const [again] = wearCar([worn], used.id, { dirt: 0.5, miles: 0, ding: false })
+    expect(again.cleanliness).toBe(0)
+    expect(again.ding).toBe(true)
   })
 })

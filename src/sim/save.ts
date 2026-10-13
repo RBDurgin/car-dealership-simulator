@@ -58,7 +58,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 31
+export const SAVE_VERSION = 32
 
 export interface SaveData {
   version: number
@@ -401,6 +401,13 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
       ? raw.clients.map((c) => (isObject(c) ? { ...c, chargedBack: false } : c))
       : raw.clients,
   }),
+  // v32: a dent from a test drive. None yet.
+  31: (raw) => ({
+    ...raw,
+    inventory: Array.isArray(raw.inventory)
+      ? raw.inventory.map((c) => (isObject(c) ? { ...c, ding: false } : c))
+      : raw.inventory,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -594,7 +601,8 @@ function isCar(v: unknown): boolean {
     typeof v.floored === 'boolean' &&
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold' || v.status === 'recon') &&
-    (v.used === null || isUsedInfo(v.used))
+    (v.used === null || isUsedInfo(v.used)) &&
+    typeof v.ding === 'boolean'
   )
 }
 

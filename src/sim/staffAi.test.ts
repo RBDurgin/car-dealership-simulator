@@ -5,8 +5,10 @@ import { buildInventory, sellCar, type InventoryCar } from './inventory'
 import { GUARD_PATROL_TILES, GUEST_CHAIR_ID, patrolTiles, SALES_DESKS } from './layout'
 import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
+import { newDrive } from './testDrive'
 import {
   EARLY_GREET_SKILL,
+  freeSalesperson,
   guardSight,
   leadChoice,
   nextGuardTask,
@@ -226,6 +228,49 @@ describe('nextSalesTask', () => {
   it('is done with a buyer once finance has them', () => {
     const handedOff = shopper('a', { phase: 'queued', handlerId: 'fm', sellerId: 'sam' })
     expect(nextSalesTask(sam, [handedOff], ctx([sam, fm]))).toEqual({ kind: 'idle' })
+  })
+})
+
+describe('test drives with a salesperson', () => {
+  const stock = buildInventory(createRng(1))
+  const withStock = { ...ctx(), inventory: stock }
+  const keen = (extra: Partial<Customer> = {}) =>
+    shopper('a', { phase: 'talking', handlerId: 'sam', wantsDrive: true, ...extra })
+
+  it('takes a shopper who asked for a drive out before the pitch', () => {
+    expect(nextSalesTask(sam, [keen()], withStock)).toEqual({
+      kind: 'drive',
+      customerId: 'a',
+      carId: 'lot-car-1',
+    })
+    // Without the stock to look at, or once they've driven, it's the pitch.
+    expect(nextSalesTask(sam, [keen()], ctx()).kind).toBe('offer')
+    const had = { ...newDrive('lot-car-1', 'sam', 25), back: true }
+    expect(nextSalesTask(sam, [keen({ drive: had })], withStock).kind).toBe('offer')
+    expect(nextSalesTask(sam, [keen({ wantsDrive: false })], withStock).kind).toBe('offer')
+  })
+
+  it('rides along from the walk to the car until it’s back', () => {
+    const drive = newDrive('lot-car-1', 'sam', 25)
+    const ride = { kind: 'ride', customerId: 'a', carId: 'lot-car-1' }
+    expect(nextSalesTask(sam, [keen({ drive })], withStock)).toEqual(ride)
+    expect(nextSalesTask(sam, [keen({ drive, phase: 'driving' })], withStock)).toEqual(ride)
+  })
+
+  it('never takes a car out twice', () => {
+    const held = { ...withStock, carsOut: new Set(['lot-car-1']) }
+    expect(nextSalesTask(sam, [keen()], held).kind).toBe('offer')
+    const out = stock.map((c) => (c.id === 'lot-car-1' ? { ...c, status: 'out' as const } : c))
+    expect(nextSalesTask(sam, [keen()], { ...ctx(), inventory: out }).kind).toBe('offer')
+  })
+
+  it('finds the most skilled free salesperson for the player to hand a shopper to', () => {
+    const ace = staff('ace', 'sales', { skill: 5 })
+    const busy = shopper('b', { phase: 'talking', handlerId: 'ace' })
+    expect(freeSalesperson([sam, ace], [])?.id).toBe('ace')
+    expect(freeSalesperson([sam, ace], [busy])?.id).toBe('sam')
+    expect(freeSalesperson([{ ...sam, status: 'arriving' }], [])).toBeNull()
+    expect(freeSalesperson([{ ...sam, fired: true }], [])).toBeNull()
   })
 })
 

@@ -1,6 +1,6 @@
 # Phase 20 Plan: Test Drives
 
-**Status:** planned 2026-10-10. Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map), 15 (the garage, for fixing dings), 16 (the visit score) and 18 (the store slices, the bench and CI).
+**Status:** planned 2026-10-10. 20a, 20b and 20c built (20c on 2026-10-13: save v32; `DING_BASE` 0.035, `DRIVE_DIRT` 0.15/0.35, `DRIVE_MILES` 10–20, `DING_PENALTY` 0.08, `STAFF_TOPIC_SKILL` 0.4–0.85, ding parts $200–500). Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map), 15 (the garage, for fixing dings), 16 (the visit score) and 18 (the store slices, the bench and CI).
 
 - Phase 19 (F&I) isn't built. Nothing here depends on it, and if it lands first, a drive happens before the F&I menu and doesn't change it.
 - Only 20c touches the save. It takes the next free save version (`SAVE_VERSION` + 1).

@@ -26,6 +26,8 @@ import { estimateRange, SELLER_HINTS } from '../sim/sellers'
 import { quoteTotal } from '../sim/service'
 import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
+import { freeSalesperson } from '../sim/staffAi'
+import { expansionsUp } from '../sim/expansions'
 import { driveBlocker, drivePending } from '../sim/testDrive'
 import { stockValue, usedTag } from '../sim/usedCars'
 import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
@@ -419,6 +421,10 @@ function TradeFigures({ c }: { c: Customer }) {
  */
 function TestDrive({ c }: { c: Customer }) {
   const blocker = useGame((s) => driveBlocker(c, s.inventory))
+  // A salesperson free to take them out instead, if they asked.
+  const free = useGame((s) =>
+    c.wantsDrive ? freeSalesperson(s.roster, s.customers, expansionsUp(s)) : null,
+  )
   const carModel = useGame((s) => s.inventory.find((x) => x.id === c.drive?.carId)?.model)
   const game = useGame.getState()
   if (c.drive?.back) {
@@ -457,6 +463,15 @@ function TestDrive({ c }: { c: Customer }) {
       >
         🔑 Test drive
       </button>
+      {free && !blocker && (
+        <button
+          className="btn"
+          title={`${free.name} takes them out and carries on with the sale.`}
+          onClick={() => game.sendWith(c.id, free.id)}
+        >
+          Send with {free.name}
+        </button>
+      )}
       {blocker ? (
         <span className="status-hint">{blocker}</span>
       ) : (

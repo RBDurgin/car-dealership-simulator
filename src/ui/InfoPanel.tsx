@@ -73,7 +73,10 @@ export function InfoPanel() {
         <dt>Status</dt>
         <dd>{STATUS_LABELS[stock.status]}</dd>
         <dt>Condition</dt>
-        <dd>{conditionOf(stock.cleanliness)}</dd>
+        <dd>
+          {conditionOf(stock.cleanliness)}
+          {stock.ding && ', dented'}
+        </dd>
         {stock.used && (
           <>
             <dt>Shape</dt>

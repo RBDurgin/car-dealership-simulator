@@ -94,6 +94,10 @@ const PATROL_PAUSE_SECONDS = 5
 const CATCH_REACH = 1.2
 /** Chasing Nazma: game seconds between new paths to where he is now. */
 const CHASE_REPLAN_SECONDS = 0.4
+/** At the test drive car: they get in once the shopper is this close to it… */
+const BOARD_REACH = 3
+/** …or after this many game seconds, however far behind the shopper is. */
+const BOARD_WAIT_SECONDS = 8
 
 /** Where staff without a chair wait, and what they face. */
 function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
@@ -128,6 +132,8 @@ interface StaffWalker extends Walker {
   leg: number
   /** Customers (or, for the porter, cars) they couldn't get to; they leave them be. */
   unreachableIds: Set<string>
+  /** Out on a test drive in this car: hidden, and off the floor. Null otherwise. */
+  away: string | null
 }
 
 const walkers = new Map<string, StaffWalker>()
@@ -148,6 +154,7 @@ function walkerFor(e: Employee): StaffWalker {
     timer: 0,
     leg: 0,
     unreachableIds: new Set(),
+    away: null,
   }
   walkers.set(e.id, w)
   staffPos.set(e.id, w.pos)
@@ -299,6 +306,8 @@ function updateSales(
     atCar: customersAtCar,
     buying: !buyBlocker(game),
     expansions: expansionsUp(game),
+    // A car out on a drive is out of stock already, so no two drives take it.
+    inventory: game.inventory,
   })
   if (
     task.kind === 'greet' &&
@@ -313,6 +322,8 @@ function updateSales(
   }
   // No chair free for them yet: asked again once something has changed.
   if (task.kind === 'lead') return void report(w, 'lead', () => game.staffLead(e.id))
+  // They asked to drive it: off to the car before any talk of price.
+  if (task.kind === 'drive') return void report(w, 'drive', () => game.staffTestDrive(e.id))
 
   const key = salesKey(task)
   if (key !== w.task) planSales(e, w, task, key)
@@ -328,6 +339,19 @@ function updateSales(
       return
     }
     game.staffGreet(e.id)
+    return
+  }
+  if (task.kind === 'ride') {
+    const c = customers.find((x) => x.id === task.customerId)
+    if (c?.phase === 'driving') return goAway(e, w, task.carId)
+    walk(w, STAFF_SPEED, seconds, w.faceTo)
+    if (w.waypoints.length > 0) return
+    // At the car: in once the shopper has caught up (or they've waited long enough).
+    w.anim.current = 'idle'
+    w.timer += seconds
+    const at = customerPos.get(task.customerId)
+    const near = !!at && Math.hypot(at.x - w.pos.x, at.z - w.pos.z) <= BOARD_REACH
+    if (near || w.timer >= BOARD_WAIT_SECONDS) report(w, 'board', () => game.staffBoard(e.id))
     return
   }
   if (task.kind === 'offer') {
@@ -378,11 +402,51 @@ function planSales(e: Employee, w: StaffWalker, task: SalesTask, key: string): v
     else w.unreachable = true
     return
   }
+  if (task.kind === 'ride') {
+    // To the side of the test drive car, facing it.
+    const car = useGame.getState().inventory.find((x) => x.id === task.carId)
+    if (!car) return
+    w.faceTo = grid.tileToWorld(
+      car.rect.tx + (car.rect.w - 1) / 2,
+      car.rect.tz + (car.rect.h - 1) / 2,
+    )
+    pathTo(w, approachTilesFor(grid, car.rect))
+    return
+  }
   if (task.kind === 'sign') {
     const chair = propById(task.chairId)
     if (chair) pathTo(w, approachTilesFor(grid, chair.rect))
   }
 }
+
+/** In the test drive car and off: hidden, and out of everyone's way, until it's back. */
+function goAway(e: Employee, w: StaffWalker, carId: string): void {
+  if (w.away) return
+  w.away = carId
+  w.waypoints = []
+  w.timer = 0
+  standUp(w)
+  staffPos.delete(e.id)
+  releaseWalker(e.id)
+}
+
+/** Back from a test drive: they get out beside the car and carry on from there. */
+function comeBack(e: Employee, w: StaffWalker): void {
+  const car = useGame.getState().inventory.find((x) => x.id === w.away)
+  w.away = null
+  w.task = null
+  if (car) {
+    const tile = w.rng.pick(approachTilesFor(grid, car.rect))
+    const at = grid.tileToWorld(tile.tx, tile.tz)
+    w.pos.x = at.x
+    w.pos.z = at.z
+  }
+  staffPos.set(e.id, w.pos)
+}
+
+/** Whether employee `id` is out on a test drive with a shopper. */
+const outDriving = (customers: readonly Customer[], id: string) =>
+  customers.some((c) => c.handlerId === id && c.phase === 'driving')
 
 const WASH_PREFIX = 'wash:'
 
@@ -564,6 +628,11 @@ function update(
   seconds: number,
   customers: readonly Customer[],
 ): void {
+  // Out on a test drive: nothing to do on the lot until it's back.
+  if (w.away) {
+    if (outDriving(customers, e.id)) return
+    comeBack(e, w)
+  }
   // Sent home (closing, or let go) with buyers still in hand: finish them first.
   const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
@@ -646,6 +715,8 @@ export function Staff() {
     }
     for (const id of walkers.keys()) if (!live.has(id)) removeWalker(id)
     syncGroups(groups, walkers)
+    // Out on a test drive: not drawn.
+    for (const [id, g] of groups) g.visible = !walkers.get(id)?.away
   })
 
   return (

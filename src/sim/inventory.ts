@@ -40,6 +40,8 @@ export interface InventoryCar {
   floored: boolean
   /** A used car's year, miles and condition (see `sim/usedCars`), or null for a new one. */
   used: UsedInfo | null
+  /** Came back from a test drive with a dent, until the garage fixes it (see `sim/testDrive.ts`). */
+  ding: boolean
 }
 
 /** List price per model before per-car variation (trim, options). */
@@ -72,7 +74,7 @@ function rollCost(msrp: number, rng: Rng): number {
   return roundTo100(msrp * (min + rng.next() * (max - min)))
 }
 
-type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used'>
+type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used' | 'ding'>
 
 /**
  * Opening stock: the showroom displays plus the lot cars, priced from `rng`.
@@ -111,6 +113,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
     arrivedDay: 1,
     floored: false,
     used: null,
+    ding: false,
   }))
 }
 

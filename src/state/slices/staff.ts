@@ -1,7 +1,7 @@
 import { washCar } from '../../sim/cleanliness'
 import { isClosed } from '../../sim/clock'
-import { chooseTarget, reduceCustomers, type CustomerPhase } from '../../sim/customers'
-import { hasBuyersInHand } from '../../sim/deal'
+import { chooseTarget, PLAYER_ID, reduceCustomers, type CustomerPhase } from '../../sim/customers'
+import { dealCustomer, hasBuyersInHand } from '../../sim/deal'
 import { expansionsUp } from '../../sim/expansions'
 import { formatMoney } from '../../sim/format'
 import { carName } from '../../sim/interactables'
@@ -23,8 +23,10 @@ import {
   retentionRaise,
   ROLE_LABELS,
 } from '../../sim/staff'
-import { leadChoice } from '../../sim/staffAi'
+import { freeSalesperson, leadChoice } from '../../sim/staffAi'
+import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
 import { commit, notify, setRoster, type Kit } from '../core'
+import { rng } from '../rng'
 import type { GameState } from '../types'
 import { declineBuyer, sign, staffDeal, tradeAllowance, tradeLine } from './customers'
 import { tallyNazma } from './world'
@@ -38,6 +40,9 @@ type StaffKeys =
   | 'staffClaim'
   | 'staffGreet'
   | 'staffOffer'
+  | 'staffTestDrive'
+  | 'staffBoard'
+  | 'sendWith'
   | 'staffLead'
   | 'staffSign'
   | 'staffWash'
@@ -131,6 +136,34 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const price = Math.max(allow ?? 0, ask)
       const ev = { type: 'offer', id: c.id, carId: car.id, price, allowance: allow } as const
       commit(k, reduceCustomers(s.customers, ev))
+    },
+    staffTestDrive: (employeeId) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      const c = staffCustomer(k, employeeId, ['talking'])
+      if (!e || e.fired || !c) return
+      const car = staffDriveCar(c, s.inventory, carsHeld(s.customers))
+      if (!car) return
+      const minutes = driveMinutes(rng.testDrive)
+      const ev = { type: 'testDrive', id: c.id, carId: car.id, by: e.id, minutes } as const
+      commit(k, reduceCustomers(s.customers, ev))
+    },
+    staffBoard: (employeeId) => {
+      const c = staffCustomer(k, employeeId, ['talking'])
+      if (!c?.drive || c.drive.back) return
+      commit(k, reduceCustomers(get().customers, { type: 'boarded', id: c.id }))
+    },
+    sendWith: (customerId, employeeId) => {
+      const s = get()
+      const c = dealCustomer(s.customers, PLAYER_ID)
+      const e = freeSalesperson(s.roster, s.customers, expansionsUp(s))
+      if (c?.id !== customerId || c.phase !== 'talking') return
+      if (e?.id !== employeeId) return notify(k, 'That salesperson is busy.')
+      const car = staffDriveCar(c, s.inventory, carsHeld(s.customers))
+      if (!car) return notify(k, `There's nothing for ${c.name} to drive.`)
+      commit(k, reduceCustomers(s.customers, { type: 'sendWith', id: c.id, to: e.id }))
+      set({ menu: null, inspectedId: null })
+      notify(k, `${e.name} will take ${c.name} out in the ${carName(car.model)}.`)
     },
     staffLead: (employeeId) => {
       const s = get()

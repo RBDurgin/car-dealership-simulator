@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createRng } from './rng'
 import {
+  dingBlocker,
+  dingJob,
+  finishDing,
   acceptFinding,
   bayCount,
   clientJob,
@@ -422,6 +425,63 @@ describe('reconditioning', () => {
       }
       expect(reconBlocker({ ...book, customers: [left as never] }, car.id)).toBeNull()
     })
+  })
+})
+
+describe('dents', () => {
+  const dinged = { ...buildInventory(createRng(1)).find((c) => c.location === 'lot')!, ding: true }
+  const book: ReconBook = {
+    inventory: [dinged],
+    customers: [],
+    bays: GARAGE_BAYS,
+    mechanics: 1,
+    closed: false,
+  }
+
+  it('is a short job on our own car, at recon priority, with no findings', () => {
+    const job = dingJob('ding-1', dinged.id, 300)
+    expect(job).toMatchObject({ kind: 'ding', carId: dinged.id, customerId: null, labor: 0 })
+    expect(job.minutes).toBe(JOBS.ding.minutes)
+    expect(JOBS.ding.minutes).toBeLessThan(JOBS.recon.minutes)
+    expect(jobPriority(job)).toBe(jobPriority({ kind: 'recon' }))
+    const rng = createRng(1)
+    for (let i = 0; i < 50; i++) expect(rollFinding('ding', 'standard', rng)).toBeNull()
+  })
+
+  it('costs $200–500 in parts', () => {
+    expect(JOBS.ding.parts).toEqual({ min: 200, max: 500 })
+  })
+
+  it('takes a dinged car to the shop, and says why not', () => {
+    expect(dingBlocker(book, dinged.id)).toBeNull()
+    expect(dingBlocker({ ...book, bays: 0 }, dinged.id)).toMatch(/garage/)
+    expect(dingBlocker({ ...book, mechanics: 0 }, dinged.id)).toMatch(/mechanic/)
+    expect(dingBlocker({ ...book, closed: true }, dinged.id)).toMatch(/closed/)
+    const clean = { ...dinged, ding: false }
+    expect(dingBlocker({ ...book, inventory: [clean] }, dinged.id)).toMatch(/no dent/)
+    const out = { ...dinged, status: 'out' as const }
+    expect(dingBlocker({ ...book, inventory: [out] }, dinged.id)).toMatch(/test drive/)
+  })
+
+  it('hands the car back fixed and washed, the parts on its cost', () => {
+    const car = { ...dinged, status: 'recon' as const, cleanliness: 0.4 }
+    const [done] = finishDing([car], car.id, 300)
+    expect(done).toMatchObject({ ding: false, status: 'available', cleanliness: 1 })
+    expect(done.cost).toBe(car.cost + 300)
+    expect(finishDing([dinged], dinged.id, 300)[0]).toBe(dinged)
+  })
+
+  it('is fixed along the way by reconditioning', () => {
+    const used = usedStockCar(
+      'used-9-1',
+      { model: 'sedan', year: 2021, miles: 60_000, condition: 0.3, acquiredDay: 9 },
+      { location: 'lot', index: 20 },
+      8_000,
+      9,
+      0.3,
+    )
+    const car = { ...used, ding: true, status: 'recon' as const }
+    expect(finishRecon([car], car.id, 400, 10)[0].ding).toBe(false)
   })
 })
 

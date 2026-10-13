@@ -237,6 +237,7 @@ export function deliver(orders: readonly Order[], rng: Rng, day: number): Invent
       arrivedDay: day,
       floored: o.financing === 'floor',
       used: null,
+      ding: false,
     }
   })
 }

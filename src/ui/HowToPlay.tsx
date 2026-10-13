@@ -27,6 +27,8 @@ import {
 import { CLOSEOUT_REBATE, EVENTS } from '../sim/events'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
+import { DING_PENALTY } from '../sim/cleanliness'
+import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
@@ -723,6 +725,25 @@ function BusinessTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Wear from test drives</h3>
+        <p>
+          Every test drive brings the car back dirtier ({Math.round(DRIVE_DIRT.dry * 100)} points of
+          clean, {Math.round(DRIVE_DIRT.rain * 100)} in the rain), and a used car comes back with{' '}
+          {DRIVE_MILES.min}–{DRIVE_MILES.max} more miles, so it&apos;s worth a little less. About
+          one drive in {Math.round(1 / DING_BASE)} comes back with a <b>ding</b>: a dent you can see
+          on its side, and buyers are {Math.round(DING_PENALTY * 100)} points less likely to take
+          it. It&apos;s rarer with a skilled salesperson or you riding along, and more likely in the
+          rain.
+        </p>
+        <p>
+          {click} a dented car and choose <b>Fix dent</b> to send it to the garage: you pay for the
+          parts ({formatMoney(JOBS.ding.parts.min)}–{formatMoney(JOBS.ding.parts.max)}) and a
+          mechanic fixes it in about {JOBS.ding.minutes} minutes, with the parts on its cost.
+          Reconditioning a used car fixes a dent too. Without a garage you can still sell it as it
+          is, at the lower odds.
+        </p>
+      </section>
+      <section>
         <h3>The rival across the road</h3>
         <p>
           Once you reach {rankById(OPENING_RANK).name}, Nazma buys the lot across the road. A week
@@ -919,7 +940,13 @@ function PeopleTab({ touch, click }: TabProps) {
             {formatMoney(MIN_COMMISSION)}). Seasoned ones hold nearer MSRP, get more yeses and greet
             customers on arrival; green ones open lower and give in sooner. None sell below cost.
             They take trade-ins and buy from sellers too (see <b>Selling</b>). They leave alone a
-            customer you&apos;re walking to, and a tick marks someone they&apos;re helping.
+            customer you&apos;re walking to, and a tick marks someone they&apos;re helping. A
+            shopper who asked for a test drive (🔑) gets one before any talk of price: the
+            salesperson rides along, off the floor until it&apos;s back, and picks the talking
+            points, the right one more often the more skilled they are. While you&apos;re talking to
+            a 🔑 shopper, <b>Send with …</b> in the customer panel hands them to your best free
+            salesperson, who takes them out and carries on with the sale, so you can stay on the
+            floor.
           </li>
           <li>
             A <b>receptionist</b> keeps waiting customers patient. With nobody waiting, they call

@@ -15,9 +15,17 @@ import { marketValue, usedListPrice } from './usedCars'
  * from car sales; the more cars the dealership has sold, the busier it is.
  */
 
-export type JobKind = 'oil' | 'tires' | 'brakes' | 'repair' | 'recall' | 'recon'
+export type JobKind = 'oil' | 'tires' | 'brakes' | 'repair' | 'recall' | 'recon' | 'ding'
 
-export const JOB_KINDS: readonly JobKind[] = ['oil', 'tires', 'brakes', 'repair', 'recall', 'recon']
+export const JOB_KINDS: readonly JobKind[] = [
+  'oil',
+  'tires',
+  'brakes',
+  'repair',
+  'recall',
+  'recon',
+  'ding',
+]
 
 export interface JobSpec {
   label: string
@@ -34,6 +42,8 @@ export const JOBS: Record<JobKind, JobSpec> = {
   repair: { label: 'Repair', minutes: 150, parts: { min: 200, max: 500 } },
   recall: { label: 'Recall work', minutes: 60, parts: { min: 50, max: 150 } },
   recon: { label: 'Reconditioning', minutes: 120, parts: { min: 300, max: 800 } },
+  // A dent from a test drive, in one of our own cars (see `sim/testDrive.ts`).
+  ding: { label: 'Dent repair', minutes: 45, parts: { min: 200, max: 500 } },
 }
 
 /** How often a client who drives in wants each kind of job. */
@@ -391,7 +401,7 @@ export const FINDINGS: readonly FindingSpec[] = [
  * cars or on a free redo.
  */
 export function rollFinding(kind: JobKind, rate: RateLevel, rng: Rng): Finding | null {
-  if (kind === 'recon' || rng.next() >= FINDING_CHANCE) return null
+  if (kind === 'recon' || kind === 'ding' || rng.next() >= FINDING_CHANCE) return null
   const spec = rng.pick(FINDINGS.filter((f) => f.not !== kind))
   const partsCost = Math.round(rng.int(spec.parts.min, spec.parts.max) / 5) * 5
   return {
@@ -578,7 +588,7 @@ export function reconGain(car: InventoryCar, day: number): number {
 
 /**
  * Car `id` back from the shop on `day`: its condition up by `RECON_STEP`,
- * detailed (washed), re-listed at the price its new worth calls for (never
+ * detailed (washed), any dent fixed, re-listed at the price its new worth calls for (never
  * lower than it was) and for sale again. The `partsCost` goes on its cost, so
  * its gross when sold is honest. Returns the same array if it isn't in the shop.
  */
@@ -594,6 +604,8 @@ export function finishRecon(
   const done: InventoryCar = {
     ...car,
     used,
+    // A dent is seen to along the way.
+    ding: false,
     status: 'available',
     msrp: Math.max(car.msrp, usedListPrice(marketValue(car.model, used, day))),
     cost: car.cost + partsCost,
@@ -672,12 +684,62 @@ export function reconPartsCost(rng: Rng): number {
   return quote('recon', 'standard', rng).partsCost
 }
 
+/** Why dinged car `id` can't go to the shop to have its dent fixed now, or null if it can. */
+export function dingBlocker(book: ReconBook, id: string): string | null {
+  if (book.bays === 0) return 'You need a service garage to fix dents.'
+  const car = book.inventory.find((c) => c.id === id)
+  if (!car || car.status === 'sold') return 'That car has been sold.'
+  if (car.status === 'recon') return "It's in the shop already."
+  if (car.status === 'out') return "It's out on a test drive."
+  if (!car.ding) return "There's no dent to fix."
+  if (book.closed) return 'The shop is closed for the day.'
+  if (book.mechanics === 0) return 'Hire a mechanic first.'
+  const wanted = book.customers.some(
+    (c) => c.phase !== 'leaving' && (c.targetCarId === id || c.offer?.carId === id),
+  )
+  if (wanted) return 'A customer is looking at it.'
+  return null
+}
+
+/** A job to fix the dent in car `carId`, its parts at `partsCost` (paid when it's booked). */
+export function dingJob(id: string, carId: string, partsCost: number): ServiceJob {
+  return { ...reconJob(id, carId, partsCost), kind: 'ding', minutes: JOBS.ding.minutes }
+}
+
+/** The parts fixing a dent needs. */
+export function dingPartsCost(rng: Rng): number {
+  return quote('ding', 'standard', rng).partsCost
+}
+
+/**
+ * Car `id` back from the shop with its dent fixed: washed, for sale again,
+ * the `partsCost` on its cost. Returns the same array if it isn't in the shop.
+ */
+export function finishDing(
+  inventory: InventoryCar[],
+  id: string,
+  partsCost: number,
+): InventoryCar[] {
+  const car = inventory.find((c) => c.id === id)
+  if (car?.status !== 'recon') return inventory
+  const done: InventoryCar = {
+    ...car,
+    ding: false,
+    status: 'available',
+    cost: car.cost + partsCost,
+  }
+  return washCar(
+    inventory.map((c) => (c === car ? done : c)),
+    id,
+  )
+}
+
 /**
  * Which waiting job a mechanic takes first: clients' cars (15c), then recalls
- * (15e), then our own reconditioning.
+ * (15e), then our own cars (reconditioning and dents).
  */
 export function jobPriority(job: Pick<ServiceJob, 'kind'>): number {
-  if (job.kind === 'recon') return 2
+  if (job.kind === 'recon' || job.kind === 'ding') return 2
   if (job.kind === 'recall') return 1
   return 0
 }

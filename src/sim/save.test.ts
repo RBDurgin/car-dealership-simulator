@@ -626,6 +626,22 @@ describe('save data', () => {
     expect(parseSave({ ...save, chargebacks: [{ ...chargebacks[0], kind: 'hat' }] })).toBeNull()
   })
 
+  it('keeps a car’s dent, and upgrades a version 31 save with none', () => {
+    const base = source()
+    const dinged = base.inventory.map((c, i) => (i === 0 ? { ...c, ding: true } : c))
+    const save = createSave({ ...base, inventory: dinged }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.inventory[0].ding).toBe(true)
+    const old = save.inventory.map((c) => {
+      const { ding: _, ...rest } = c
+      return rest
+    })
+    const v31 = { ...save, version: 31, inventory: old }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(v31)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.inventory.every((c) => c.ding === false)).toBe(true)
+    expect(parseSave({ ...save, inventory: old })).toBeNull()
+  })
+
   it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {
     const save = createSave({ ...source(), clients: [{ ...client, chargedBack: true }] }, 123)
     expect(parseSave(JSON.parse(JSON.stringify(save)))?.clients[0].chargedBack).toBe(true)

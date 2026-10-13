@@ -340,6 +340,12 @@ export interface GameState {
   staffGreet: (employeeId: string) => void
   /** Salesperson `employeeId` makes their customer an offer. */
   staffOffer: (employeeId: string) => void
+  /** Salesperson `employeeId` takes the customer they're talking to for the test drive they asked for. */
+  staffTestDrive: (employeeId: string) => void
+  /** Salesperson `employeeId` got in the test drive car with their customer: off they go. */
+  staffBoard: (employeeId: string) => void
+  /** The player hands customer `customerId`, whom they're talking to, to salesperson `employeeId` for their test drive. */
+  sendWith: (customerId: string, employeeId: string) => void
   /** Salesperson `employeeId`'s customer said yes: off to finance, or to their desk. */
   staffLead: (employeeId: string) => void
   /** Finance, or a salesperson at their desk, finished the paperwork for the buyer opposite. */
@@ -376,6 +382,8 @@ export interface GameState {
   staffStartJob: (employeeId: string, jobId: string, bay: number) => void
   /** Sends used car `carId` to the shop for reconditioning, paying for the parts. False if it can't go. */
   recondition: (carId: string) => boolean
+  /** Sends dinged car `carId` to the shop to have the dent fixed, paying for the parts. False if it can't go. */
+  fixDing: (carId: string) => boolean
   /** Turns reconditioning used cars as they come in on or off. */
   setAutoRecon: (on: boolean) => void
   /** Sets the shop rate: quotes from now on, the number of clients from tomorrow. */

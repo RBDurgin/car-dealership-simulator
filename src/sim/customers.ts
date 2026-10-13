@@ -1,7 +1,7 @@
 import { ARCHETYPES, EXPECT_JITTER, pickArchetype, skewWeights, type Archetype } from './archetypes'
 import { weekdayTraffic } from './calendar'
 import { CUSTOMER_VARIANTS, type CustomerVariant } from './characters'
-import { cleanlinessBonus } from './cleanliness'
+import { cleanlinessBonus, dingPenalty } from './cleanliness'
 import type { Credit } from './credit'
 import type { FiDeal } from './fi'
 import type { Client } from './clients'
@@ -50,7 +50,8 @@ import { WEATHER_EFFECTS, type Weather } from './weather'
  * take them. A shopper may take the car for a test drive first
  * (`sim/testDrive.ts`): `testDrive` sets them off to the car, still talking,
  * `boarded` has them out on the road (`driving`, which drains no patience)
- * and `droveBack` brings them back to talking, once a visit. Waiting
+ * and `droveBack` brings them back to talking, once a visit; the player
+ * may `sendWith` a salesperson instead, who takes over the drive and the sale. Waiting
  * customers lose patience on `tick` and leave impatient at zero, unless
  * someone is on their way to help. `close` sends everyone home except a
  * customer mid-signature or in staff hands (one out on a drive comes back at
@@ -588,7 +589,7 @@ export function skillBonus(skill: number): number {
  * tire-kicker rarely says yes, a decisive buyer usually does) and the seller's
  * `bonus` (see `skillBonus`), capped at 95%. A used car's headroom is also
  * judged against what it's worth on `day` (`valueHeadroom`), and its
- * condition adds ±10% (`conditionBonus`).
+ * condition adds ±10% (`conditionBonus`). A dinged car is `DING_PENALTY` less.
  */
 export function acceptChance(
   c: Customer,
@@ -608,7 +609,8 @@ export function acceptChance(
     0.35 * preferred +
     0.3 * headroom +
     (car.used ? conditionBonus(car.used.condition) : 0) +
-    cleanlinessBonus(car.cleanliness) +
+    cleanlinessBonus(car.cleanliness) -
+    dingPenalty(car) +
     ARCHETYPES[c.archetype].accept +
     bonus
   return Math.max(0, Math.min(MAX_ACCEPT_CHANCE, chance))
@@ -700,6 +702,8 @@ export type CustomerEvent =
   | { type: 'testDrive'; id: string; carId: string; by: string; minutes: number }
   /** In the car: off on the drive. */
   | { type: 'boarded'; id: string }
+  /** The player hands them to salesperson `to`, who takes them for their drive and the sale. */
+  | { type: 'sendWith'; id: string; to: string }
   /** Head back: the drive is cut short. */
   | { type: 'cutDrive'; id: string }
   /** A talking-point prompt comes up on the drive (20b); one still open counts as unanswered. */
@@ -894,6 +898,9 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'boarded':
       if (c.phase !== 'talking' || !c.drive || c.drive.back) return c
       return { ...c, phase: 'driving' }
+    case 'sendWith':
+      if (c.phase !== 'talking' || c.handlerId !== PLAYER_ID || c.drive || c.offer) return c
+      return { ...c, handlerId: ev.to, sellerId: ev.to }
     case 'topics':
       if (c.phase !== 'driving' || !c.drive) return c
       return { ...c, drive: { ...closePrompt(c.drive), offered: ev.topics } }

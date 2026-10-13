@@ -71,6 +71,8 @@ export interface Tuning {
   chargebackScale: number
   /** × what a test drive adds to the odds of a yes (see `driveBonus`). */
   driveBonus: number
+  /** × the odds a test drive comes back with a ding (see `dingChance`). */
+  dingChance: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -113,6 +115,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     productTake: 0.05,
     chargebackScale: 0.6,
     driveBonus: 1.2,
+    dingChance: 0.6,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -149,6 +152,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     productTake: 0,
     chargebackScale: 1,
     driveBonus: 1,
+    dingChance: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -185,6 +189,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     productTake: -0.05,
     chargebackScale: 1.4,
     driveBonus: 0.85,
+    dingChance: 1.4,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

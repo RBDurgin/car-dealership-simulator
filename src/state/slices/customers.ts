@@ -70,12 +70,15 @@ import {
   driveLine,
   driveMinutes,
   driveScore,
+  rollWear,
+  wearCar,
 } from '../../sim/testDrive'
 import {
   closePrompt,
   offerTopics,
   PROMPTS_PER_DRIVE,
   promptsMade,
+  staffTopic,
   topicFit,
 } from '../../sim/talkingPoints'
 import { nextUsedId } from '../../sim/usedCars'
@@ -206,17 +209,40 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       // A prompt still up when they're back counts as unanswered.
       const closed = closePrompt(c.drive)
       const score = driveScore(closed, c, car)
-      const drive = { ...closed, back: true, score }
+      // The road leaves its mark: dirt, miles on a used car, now and then a ding.
+      const rider = s.roster.find((e) => e.id === c.drive!.by)
+      const wear = rollWear(
+        car,
+        c.drive.by,
+        rider?.skill ?? 3,
+        s.weather,
+        rng.wear,
+        tuning(k).dingChance,
+      )
+      const drive = { ...closed, back: true, score, ding: wear.ding }
       const ev = { type: 'droveBack', id, drive, expect: driveExpect(c, score) } as const
       const { drives } = s.dayStats
       set({
+        inventory: wearCar(s.inventory, car.id, wear),
         dayStats: {
           ...s.dayStats,
-          drives: { ...drives, taken: drives.taken + 1, cut: drives.cut + (drive.cut ? 1 : 0) },
+          drives: {
+            taken: drives.taken + 1,
+            bought: drives.bought,
+            cut: drives.cut + (drive.cut ? 1 : 0),
+            byStaff: drives.byStaff + (rider ? 1 : 0),
+            dings: drives.dings + (wear.ding ? 1 : 0),
+          },
         },
       })
-      commit(k, reduceCustomers(s.customers, ev))
-      if (c.handlerId === PLAYER_ID) notify(k, `${c.name}: "${driveLine(score, drive.cut)}"`)
+      commit(k, reduceCustomers(get().customers, ev))
+      // Their salesperson was let go while they were out: they're back to waiting.
+      if (rider?.fired) commit(k, reduceCustomers(get().customers, { type: 'cancel', id }))
+      const dinged = wear.ding ? ` The ${carName(car.model)} came back with a ding.` : ''
+      if (c.handlerId === PLAYER_ID)
+        notify(k, `${c.name}: "${driveLine(score, drive.cut)}"${dinged}`)
+      else if (dinged)
+        notify(k, `${rider?.name ?? 'A salesperson'} is back from a test drive.${dinged}`)
     },
     drivePrompt: (id) => {
       const s = get()
@@ -226,6 +252,12 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       if (promptsMade(c.drive) >= PROMPTS_PER_DRIVE) return
       const topics = offerTopics(c, car, rng.testDrive)
       commit(k, reduceCustomers(s.customers, { type: 'topics', id, topics }))
+      // A salesperson riding along picks one at once, the better the more skilled.
+      const rider = s.roster.find((e) => e.id === c.drive!.by)
+      if (!rider) return
+      const topic = staffTopic(rider.skill, c, car, topics, rng.testDrive)
+      const point = { topic, fit: topicFit(c, car, topic) }
+      commit(k, reduceCustomers(get().customers, { type: 'point', id, point }))
     },
     pickTopic: (index) => {
       const s = get()

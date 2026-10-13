@@ -10,6 +10,7 @@ import {
   approachTilesFor,
   buildInteractables,
   carName,
+  type ActionId,
   type Interactable,
 } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
@@ -378,9 +379,17 @@ export function findInteractable(id: string): Interactable | undefined {
   const it = interactables.get(id)
   // The finance manager works from the desk chair while they're on shift.
   if (it && id === DESK_CHAIR_ID) return { ...it, actions: deskActions(game.roster) }
-  // A worn used car can go to the service garage once there is one.
-  if (it?.kind === 'car' && canRecondition(game, id)) {
-    return { ...it, actions: [...it.actions, 'recondition'] }
+  // A worn used car can go to the service garage once there is one, and a
+  // dented one always offers its fix (greyed out without a garage).
+  if (it?.kind === 'car') {
+    const recon = canRecondition(game, id)
+    const ding = game.inventory.some((c) => c.id === id && c.ding)
+    if (recon || ding) {
+      const extra: ActionId[] = []
+      if (recon) extra.push('recondition')
+      if (ding) extra.push('fixDing')
+      return { ...it, actions: [...it.actions, ...extra] }
+    }
   }
   if (it) return it
   const c = game.customers.find((x) => x.id === id)

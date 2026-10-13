@@ -16,6 +16,10 @@ import {
   declineFinding,
   findingBlocker,
   finishedLate,
+  dingBlocker,
+  dingJob,
+  dingPartsCost,
+  finishDing,
   finishRecon,
   inTime,
   jobMinutesFor,
@@ -62,6 +66,7 @@ type ServiceKeys =
   | 'serviceWentAway'
   | 'staffStartJob'
   | 'recondition'
+  | 'fixDing'
   | 'setAutoRecon'
   | 'setServiceRate'
 
@@ -161,6 +166,24 @@ export function serviceSlice(k: Kit): Pick<GameState, ServiceKeys> {
       notify(
         k,
         `The ${carName(car.model)} went to the shop for reconditioning. Parts: ${formatMoney(partsCost)}.`,
+      )
+      return true
+    },
+    fixDing: (carId) => {
+      const s = get()
+      const blocker = dingBlocker(reconBook(s), carId)
+      const partsCost = blocker ? 0 : dingPartsCost(rng.service)
+      const reason = blocker ?? (s.cash < partsCost ? 'Not enough cash for the parts.' : null)
+      if (reason) {
+        notify(k, reason)
+        return false
+      }
+      const n = s.serviceJobs.filter((j) => j.kind === 'ding').length + 1
+      toShop(k, carId, partsCost, dingJob(`ding-${s.clock.day}-${n}`, carId, partsCost))
+      const car = get().inventory.find((c) => c.id === carId)!
+      notify(
+        k,
+        `The ${carName(car.model)} went to the shop to have its dent fixed. Parts: ${formatMoney(partsCost)}.`,
       )
       return true
     },
@@ -483,14 +506,21 @@ export function serviceArrivals(k: Kit, step: GameTime, present: readonly Custom
 
 /**
  * Books jobs that just finished: a reconditioned car goes back on sale,
- * better and dearer. `late`: finished after closing, so said quietly.
+ * better and dearer, and a dented one as good as it was. `late`: finished
+ * after closing, so said quietly.
  */
 export function jobsDone(k: Kit, done: readonly ServiceJob[], late = false): void {
-  const recon = done.filter((j) => j.status === 'done' && j.carId)
-  if (recon.length === 0) return
+  const ours = done.filter((j) => j.status === 'done' && j.carId)
+  if (ours.length === 0) return
   const s = k.get()
   let inventory = s.inventory
-  for (const j of recon) inventory = finishRecon(inventory, j.carId!, j.partsCost, s.clock.day)
+  for (const j of ours) {
+    inventory =
+      j.kind === 'ding'
+        ? finishDing(inventory, j.carId!, j.partsCost)
+        : finishRecon(inventory, j.carId!, j.partsCost, s.clock.day)
+  }
+  const recon = ours.filter((j) => j.kind !== 'ding')
   const stats = k.get().dayStats
   k.set({
     inventory,
@@ -500,25 +530,32 @@ export function jobsDone(k: Kit, done: readonly ServiceJob[], late = false): voi
     },
   })
   if (late) return
-  for (const j of recon) {
+  for (const j of ours) {
     const car = inventory.find((c) => c.id === j.carId)
-    if (car) {
-      notify(
-        k,
-        `The ${carName(car.model)} is back from the shop, on sale at ${formatMoney(car.msrp)}.`,
-      )
-    }
+    if (!car) continue
+    notify(
+      k,
+      j.kind === 'ding'
+        ? `The ${carName(car.model)} is back from the shop, dent fixed.`
+        : `The ${carName(car.model)} is back from the shop, on sale at ${formatMoney(car.msrp)}.`,
+    )
   }
 }
 
-/** Sends car `carId` to the shop, its parts paid for now. */
+/** Sends car `carId` to the shop for reconditioning, its parts paid for now. */
 function queueRecon(k: Kit, carId: string, partsCost: number): void {
   const s = k.get()
   const n = s.serviceJobs.filter((j) => j.kind === 'recon').length + 1
+  toShop(k, carId, partsCost, reconJob(`recon-${s.clock.day}-${n}`, carId, partsCost))
+}
+
+/** Sends car `carId` to the shop for `job`, its parts paid for now. */
+function toShop(k: Kit, carId: string, partsCost: number, job: ServiceJob): void {
+  const s = k.get()
   k.set({
     cash: s.cash - partsCost,
     inventory: s.inventory.map((c) => (c.id === carId ? { ...c, status: 'recon' } : c)),
-    serviceJobs: [...s.serviceJobs, reconJob(`recon-${s.clock.day}-${n}`, carId, partsCost)],
+    serviceJobs: [...s.serviceJobs, job],
     menu: s.menu?.targetId === carId ? null : s.menu,
     hoveredId: s.hoveredId === carId ? null : s.hoveredId,
     inspectedId: s.inspectedId === carId ? null : s.inspectedId,

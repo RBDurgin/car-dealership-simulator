@@ -69,6 +69,7 @@ export const JOB_WANTS: Record<JobKind, string> = {
   repair: 'a repair',
   recall: 'recall work',
   recon: 'reconditioning',
+  ding: 'a dent fixed',
 }
 
 /** A client told the car will be ready within this many game minutes waits for it. */

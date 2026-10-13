@@ -112,7 +112,7 @@ describe('test drives in the store', () => {
     expect(customer().phase).toBe('talking')
     expect(customer().drive?.back).toBe(true)
     expect(car().status).toBe('available')
-    expect(game().dayStats.drives).toEqual({ taken: 1, bought: 0, cut: 1 })
+    expect(game().dayStats.drives).toMatchObject({ taken: 1, bought: 0, cut: 1, byStaff: 0 })
   })
 
   it('calls the drive off, and brings the car back, when the player walks off first', () => {
@@ -195,11 +195,15 @@ describe('test drives in the store', () => {
     // Two a drive: the third does nothing, and the second is left open.
     expect(customer().drive!.points).toHaveLength(1)
     expect(customer().drive!.offered).not.toBeNull()
+    // Scored on the car as it was on the road, before the mud it brings back.
+    const before = car()
     game().driveBack('customer-a')
     const drive = customer().drive!
     expect(drive.points).toEqual([expect.objectContaining({ fit: 'good' }), UNANSWERED])
     expect(drive.score).toBeCloseTo(
-      driveScore({ points: [], cut: false }, customer(), car()) + POINT_SCORE.good + POINT_SCORE.ok,
+      driveScore({ points: [], cut: false }, customer(), before) +
+        POINT_SCORE.good +
+        POINT_SCORE.ok,
     )
   })
 

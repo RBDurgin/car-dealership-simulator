@@ -364,7 +364,9 @@ function SummaryPanel() {
               <dt>Test drives</dt>
               <dd>
                 {stats.drives.taken} ({stats.drives.bought} bought
-                {stats.drives.cut > 0 && `, ${stats.drives.cut} cut short`})
+                {stats.drives.byStaff > 0 && `, ${stats.drives.byStaff} by salespeople`}
+                {stats.drives.cut > 0 && `, ${stats.drives.cut} cut short`}
+                {stats.drives.dings > 0 && `, ${stats.drives.dings} dinged`})
               </dd>
             </>
           )}

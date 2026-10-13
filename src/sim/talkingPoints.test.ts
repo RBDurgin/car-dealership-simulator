@@ -5,10 +5,13 @@ import { createRng } from './rng'
 import {
   bestTopic,
   closePrompt,
+  goodTopicChance,
   MODEL_TOPICS,
   offerTopics,
   promptsDue,
   promptsMade,
+  staffTopic,
+  STAFF_TOPIC_SKILL,
   topicFit,
   TOPICS,
   TOPICS_OFFERED,
@@ -82,5 +85,37 @@ describe('talking points', () => {
     expect(promptsMade(closed)).toBe(1)
     const none = { points: [], offered: null }
     expect(closePrompt(none)).toBe(none)
+  })
+})
+
+describe('a salesperson’s talking points', () => {
+  it('picks the best topic more often the more skilled they are, about 40% to 85%', () => {
+    expect(goodTopicChance(1)).toBeCloseTo(STAFF_TOPIC_SKILL.min)
+    expect(goodTopicChance(5)).toBeCloseTo(STAFF_TOPIC_SKILL.max)
+    const rate = (skill: number) => {
+      const rng = createRng(skill)
+      let good = 0
+      for (let i = 0; i < 2000; i++) {
+        const topics = offerTopics({ archetype: 'regular' }, { model: 'sedan' }, rng)
+        const t = staffTopic(skill, { archetype: 'regular' }, { model: 'sedan' }, topics, rng)
+        if (topicFit({ archetype: 'regular' }, { model: 'sedan' }, t) === 'good') good++
+      }
+      return good / 2000
+    }
+    const rates = [1, 2, 3, 4, 5].map(rate)
+    for (let i = 1; i < rates.length; i++) expect(rates[i]).toBeGreaterThan(rates[i - 1])
+    expect(rates[0]).toBeGreaterThan(0.35)
+    expect(rates[0]).toBeLessThan(0.55)
+    expect(rates[4]).toBeGreaterThan(0.8)
+  })
+
+  it('always picks one of the topics offered', () => {
+    const rng = createRng(3)
+    const topics = offerTopics({ archetype: 'couple' }, { model: 'van' }, rng)
+    for (let i = 0; i < 20; i++) {
+      expect(topics).toContain(
+        staffTopic(1, { archetype: 'couple' }, { model: 'van' }, topics, rng),
+      )
+    }
   })
 })

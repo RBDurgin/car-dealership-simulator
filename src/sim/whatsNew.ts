@@ -459,6 +459,19 @@ export const UPDATES: readonly Update[] = [
       'On Easy, the best topic is marked.',
     ],
   },
+  {
+    id: 42,
+    phase: '20',
+    title: 'Salespeople take test drives',
+    items: [
+      'Salespeople now take a shopper who asked for a drive out themselves, before talking price.',
+      'They pick the talking points, the right one more often the more skilled they are.',
+      'Talking to a shopper with a key? Send with … hands them to your best free salesperson.',
+      'Drives bring cars back muddier (more in the rain), and used cars with a few more miles.',
+      'Now and then a car comes back with a ding, which puts buyers off. Fix dent sends it to the garage.',
+      'The day summary counts drives taken by salespeople, and any dings.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

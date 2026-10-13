@@ -9,7 +9,7 @@ import {
 } from '../../sim/deal'
 import { PLAYER_ID } from '../../sim/customers'
 import { confrontBlocker } from '../../sim/nazma'
-import { reconBlocker } from '../../sim/service'
+import { dingBlocker, reconBlocker } from '../../sim/service'
 import { vehicleOwnerId } from '../../sim/sellers'
 import { playerRiding } from '../../sim/testDrive'
 import { WALL_MODES } from '../../sim/walls'
@@ -127,7 +127,9 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
           ? confrontBlocker(s.nazma)
           : action === 'recondition'
             ? reconBlocker(reconBook(s), targetId)
-            : actionBlocker(action, targetId, s.customers, s.roster, s.inventory, s.serviceJobs)
+            : action === 'fixDing'
+              ? dingBlocker(reconBook(s), targetId)
+              : actionBlocker(action, targetId, s.customers, s.roster, s.inventory, s.serviceJobs)
       if (blocker) {
         set({ menu: null })
         return notify(k, blocker)

@@ -293,6 +293,8 @@ export function dispatch(k: Kit, ev: ActionEvent): void {
     }
     case 'recondition':
       return void get().recondition(finished.targetId)
+    case 'fixDing':
+      return void get().fixDing(finished.targetId)
     case 'confront':
       return get().nazmaRunOff('player')
   }

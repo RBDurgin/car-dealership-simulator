@@ -47,6 +47,14 @@ export function cleanlinessBonus(cleanliness: number): number {
   return (clamp01(cleanliness) * 2 - 1) * MAX_CLEAN_BONUS
 }
 
+/** Off a customer's accept chance for a car with a ding in it (from a test drive, see `sim/testDrive.ts`). */
+export const DING_PENALTY = 0.08
+
+/** What a car's ding takes off a customer's accept chance. */
+export function dingPenalty(car: Pick<InventoryCar, 'ding'>): number {
+  return car.ding ? DING_PENALTY : 0
+}
+
 /** Maps the cars `fn` changes, returning the same array when it changes none. */
 function mapCars(inventory: InventoryCar[], fn: (c: InventoryCar) => number): InventoryCar[] {
   let changed = false

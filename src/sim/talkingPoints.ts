@@ -104,6 +104,31 @@ export function bestTopic(
   return best
 }
 
+/** The odds a salesperson picks the best topic offered, from skill 1 to skill 5. */
+export const STAFF_TOPIC_SKILL = { min: 0.4, max: 0.85 }
+
+/** The odds a salesperson of `skill` (1–5) picks the best of the topics offered. */
+export function goodTopicChance(skill: number): number {
+  const t = Math.max(0, Math.min(1, (skill - 1) / 4))
+  return STAFF_TOPIC_SKILL.min + (STAFF_TOPIC_SKILL.max - STAFF_TOPIC_SKILL.min) * t
+}
+
+/**
+ * What a salesperson of `skill` points out from `topics`: the best fit
+ * `goodTopicChance(skill)` of the time, otherwise one of the others.
+ */
+export function staffTopic(
+  skill: number,
+  c: Pick<Customer, 'archetype'>,
+  car: Pick<InventoryCar, 'model'>,
+  topics: readonly Topic[],
+  rng: Rng,
+): Topic {
+  const best = bestTopic(c, car, topics) ?? topics[0]
+  const others = topics.filter((t) => t !== best)
+  return rng.next() < goodTopicChance(skill) || others.length === 0 ? best : rng.pick(others)
+}
+
 /** How many prompts are due `elapsed` game minutes into a drive `minutes` long. */
 export function promptsDue(elapsed: number, minutes: number): number {
   let due = 0

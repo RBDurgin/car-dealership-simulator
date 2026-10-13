@@ -1,9 +1,10 @@
 import { ARCHETYPES } from './archetypes'
-import { PLAYER_ID, type Customer } from './customers'
+import { PLAYER_ID, PLAYER_SKILL, type Customer } from './customers'
 import { carName } from './interactables'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
 import type { Topic } from './talkingPoints'
+import type { Weather } from './weather'
 
 /**
  * Test drives (Phase 20): a shopper takes the car they're talking about out
@@ -94,6 +95,25 @@ export function drivableCar(
 
 /** A drive set off for, still to come back. */
 export const drivePending = (c: Pick<Customer, 'drive'>): boolean => !!c.drive && !c.drive.back
+
+const NONE_OUT: ReadonlySet<string> = new Set()
+
+/**
+ * The car a salesperson would take `c` out in, or null: only a shopper who
+ * asked for a drive and hasn't had one, while they're talking it over, in a
+ * car no other drive holds (`carsOut`, see `carsHeld`).
+ */
+export function staffDriveCar(
+  c: Customer,
+  inventory: readonly InventoryCar[],
+  carsOut: ReadonlySet<string> = NONE_OUT,
+): InventoryCar | null {
+  if (!c.wantsDrive || c.drive || c.phase !== 'talking' || c.offer || c.selling || c.service) {
+    return null
+  }
+  const car = drivableCar(c, inventory).car
+  return car && !carsOut.has(car.id) ? car : null
+}
 
 /** Why the player can't take `c` for a test drive now, or null if they can. */
 export function driveBlocker(c: Customer, inventory: readonly InventoryCar[]): string | null {
@@ -202,7 +222,7 @@ export function playerRiding(customers: readonly Customer[]): boolean {
  * The cars that should be out: those a shopper is walking to or driving.
  * Everything else that's out comes back (a drive called off, or closing).
  */
-function carsHeld(customers: readonly Customer[]): Set<string> {
+export function carsHeld(customers: readonly Customer[]): Set<string> {
   const held = new Set<string>()
   for (const c of customers)
     if (c.drive && !c.drive.back && c.phase !== 'leaving') held.add(c.drive.carId)
@@ -236,4 +256,77 @@ export function driveLine(score: number, cut: boolean): string {
   if (score >= DRIVE_LOVED) return 'What a drive! I could get used to that.'
   if (score >= 0.35) return 'It drives nicely.'
   return "Hmm. It's fine, I suppose."
+}
+
+/** What a drive takes off a car's cleanliness, in dry weather and in the rain. */
+export const DRIVE_DIRT = { dry: 0.15, rain: 0.35 }
+
+/** What a drive in `weather` takes off the car's cleanliness. */
+export function driveDirt(weather: Weather): number {
+  return weather === 'rain' ? DRIVE_DIRT.rain : DRIVE_DIRT.dry
+}
+
+/** Miles a drive puts on a used car's clock. */
+export const DRIVE_MILES = { min: 10, max: 20 }
+
+/** Miles this drive put on the car. */
+export function driveMiles(rng: Rng): number {
+  return rng.int(DRIVE_MILES.min, DRIVE_MILES.max)
+}
+
+/** The odds a drive comes back with a ding, with a rider of middling skill in dry weather. */
+export const DING_BASE = 0.035
+/** Each point of the rider's skill over (or under) 3 takes this share off (or adds it). */
+export const DING_SKILL_STEP = 0.12
+/** × the odds in the rain. */
+export const DING_RAIN = 1.4
+
+/**
+ * The odds a drive with `by` riding along comes back dinged: about 1 in 30,
+ * less with a skilled salesperson (or the player, as skilled as
+ * `PLAYER_SKILL`), more in the rain, × the level's `scale`.
+ */
+export function dingChance(by: string, skill: number, weather: Weather, scale = 1): number {
+  const rider = by === PLAYER_ID ? PLAYER_SKILL : skill
+  const skillFactor = Math.max(0.2, 1 - (rider - 3) * DING_SKILL_STEP)
+  return DING_BASE * skillFactor * (weather === 'rain' ? DING_RAIN : 1) * scale
+}
+
+/** What a drive did to the car: the dirt it picked up, the miles (used) and whether it's dinged. */
+export interface DriveWear {
+  dirt: number
+  miles: number
+  ding: boolean
+}
+
+/**
+ * The wear on a car back from a drive with `by` riding along: dirt by the
+ * weather, miles on a used car and the odds of a ding, rolled on `rng` (its
+ * own stream, so the rest of the day plays as before).
+ */
+export function rollWear(
+  car: Pick<InventoryCar, 'used'>,
+  by: string,
+  skill: number,
+  weather: Weather,
+  rng: Rng,
+  scale = 1,
+): DriveWear {
+  const miles = driveMiles(rng)
+  const ding = rng.next() < dingChance(by, skill, weather, scale)
+  return { dirt: driveDirt(weather), miles: car.used ? miles : 0, ding }
+}
+
+/** Car `id` with a drive's `wear` on it: dirtier, more miles on a used one, maybe dinged. */
+export function wearCar(inventory: InventoryCar[], id: string, wear: DriveWear): InventoryCar[] {
+  return inventory.map((c) =>
+    c.id !== id
+      ? c
+      : {
+          ...c,
+          cleanliness: Math.max(0, Math.round((c.cleanliness - wear.dirt) * 1000) / 1000),
+          used: c.used && { ...c.used, miles: c.used.miles + wear.miles },
+          ding: c.ding || wear.ding,
+        },
+  )
 }
