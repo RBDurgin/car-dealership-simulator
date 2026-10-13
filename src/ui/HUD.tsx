@@ -7,6 +7,7 @@ import { driveClock, findInteractable } from '../scene/runtime'
 import { useGame, winShowing } from '../state/store'
 import { ActionMenu } from './ActionMenu'
 import { ControlsHint } from './ControlsHint'
+import { DrivePrompt } from './DrivePrompt'
 import { CustomerPanel } from './CustomerPanel'
 import { InfoPanel } from './InfoPanel'
 import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
@@ -108,6 +109,7 @@ function DriveStatus() {
       <div className="status-label">
         {cut ? `Heading back with ${c.name}` : `Test drive with ${c.name}`}
       </div>
+      <DrivePrompt c={c} />
       <div className="progress">
         <div ref={fill} className="drive-fill" />
       </div>
@@ -165,7 +167,10 @@ export function HUD() {
       // The win screen waits for Keep playing.
       if (winShowing(game)) return
       if (e.code === 'Escape') game.cancelAll()
-      else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
+      // 1–3 point out a topic on a test drive (does nothing without a prompt up).
+      else if (/^(Digit|Numpad)[1-3]$/.test(e.code) && !e.repeat) {
+        game.pickTopic(Number(e.code.slice(-1)) - 1)
+      } else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
       else if (e.code === 'KeyI' && !e.repeat) game.toggleStockPanel(undefined, 'stock')
       else if (e.code === 'KeyM' && !e.repeat) game.toggleStockPanel(undefined, 'marketing')
       else if (e.code === 'KeyU' && !e.repeat) game.toggleStockPanel(undefined, 'upgrades')

@@ -6,7 +6,8 @@ import { MANAGER_DESK } from '../sim/layout'
 import { dealWarmth, type AskResponse } from '../sim/negotiation'
 import { freeSlots } from '../sim/ordering'
 import { createSave } from '../sim/save'
-import { DRIVE_BONUS, NO_DRIVE_PENALTY } from '../sim/testDrive'
+import { topicFit, UNANSWERED } from '../sim/talkingPoints'
+import { DRIVE_BONUS, driveScore, NO_DRIVE_PENALTY, POINT_SCORE } from '../sim/testDrive'
 import { sellerBonusFor } from './derived'
 import { useGame } from './store'
 
@@ -178,5 +179,36 @@ describe('test drives in the store', () => {
     game().completeAction(id)
     game().fiSign()
     expect(game().dayStats.drives.bought).toBe(1)
+  })
+
+  it('puts up two talking points a drive, and a good one makes it a better drive', () => {
+    setOff()
+    game().drivePrompt('customer-a')
+    const offered = customer().drive!.offered!
+    expect(offered).toHaveLength(3)
+    // A regular in a sedan: the good fit among those offered.
+    const good = offered.findIndex((t) => topicFit(customer(), car(), t) === 'good')
+    game().pickTopic(good)
+    expect(customer().drive).toMatchObject({ offered: null, points: [{ fit: 'good' }] })
+    game().drivePrompt('customer-a')
+    game().drivePrompt('customer-a')
+    // Two a drive: the third does nothing, and the second is left open.
+    expect(customer().drive!.points).toHaveLength(1)
+    expect(customer().drive!.offered).not.toBeNull()
+    game().driveBack('customer-a')
+    const drive = customer().drive!
+    expect(drive.points).toEqual([expect.objectContaining({ fit: 'good' }), UNANSWERED])
+    expect(drive.score).toBeCloseTo(
+      driveScore({ points: [], cut: false }, customer(), car()) + POINT_SCORE.good + POINT_SCORE.ok,
+    )
+  })
+
+  it('puts up no talking points once heading back, and takes 1–3 only with one up', () => {
+    setOff()
+    game().pickTopic(0)
+    expect(customer().drive!.points).toEqual([])
+    game().headBack()
+    game().drivePrompt('customer-a')
+    expect(customer().drive!.offered).toBeNull()
   })
 })

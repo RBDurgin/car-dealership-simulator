@@ -17,7 +17,8 @@ import type { Rng } from './rng'
 import type { RivalQuote } from './rival'
 import type { Selling } from './sellers'
 import type { ServiceVisit } from './serviceClients'
-import type { TestDrive } from './testDrive'
+import { closePrompt, type Topic } from './talkingPoints'
+import type { TalkingPoint, TestDrive } from './testDrive'
 import type { TradeIn } from './tradeIns'
 import { conditionBonus, marketValue, valueHeadroom, type Appraisal } from './usedCars'
 import { WEATHER_EFFECTS, type Weather } from './weather'
@@ -701,6 +702,10 @@ export type CustomerEvent =
   | { type: 'boarded'; id: string }
   /** Head back: the drive is cut short. */
   | { type: 'cutDrive'; id: string }
+  /** A talking-point prompt comes up on the drive (20b); one still open counts as unanswered. */
+  | { type: 'topics'; id: string; topics: Topic[] }
+  /** The rider pointed out one of the topics offered, and how it went down. */
+  | { type: 'point'; id: string; point: TalkingPoint }
   /** Back in the space, out of the car and talking again: how it went, and the discount they now hope for. */
   | { type: 'droveBack'; id: string; drive: TestDrive; expect: number }
   /**
@@ -879,6 +884,7 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
           by: ev.by,
           minutes: ev.minutes,
           points: [],
+          offered: null,
           cut: false,
           ding: false,
           back: false,
@@ -888,6 +894,12 @@ export function reduceCustomer(c: Customer, ev: CustomerEvent): Customer | null 
     case 'boarded':
       if (c.phase !== 'talking' || !c.drive || c.drive.back) return c
       return { ...c, phase: 'driving' }
+    case 'topics':
+      if (c.phase !== 'driving' || !c.drive) return c
+      return { ...c, drive: { ...closePrompt(c.drive), offered: ev.topics } }
+    case 'point':
+      if (c.phase !== 'driving' || !c.drive?.offered) return c
+      return { ...c, drive: { ...c.drive, points: [...c.drive.points, ev.point], offered: null } }
     case 'cutDrive':
       if (c.phase !== 'driving' || !c.drive || c.drive.cut) return c
       return { ...c, drive: { ...c.drive, cut: true } }

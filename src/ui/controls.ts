@@ -17,6 +17,7 @@ export const CONTROLS: [string, string][] = [
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
   ['Esc', 'Cancel / walk away / head back'],
+  ['1–3', 'Talking point (on a test drive)'],
   ['N', 'Mute sound'],
   ['?', 'How to play'],
   ...(import.meta.env.DEV

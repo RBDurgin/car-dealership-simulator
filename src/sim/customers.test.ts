@@ -874,6 +874,21 @@ describe('test drives', () => {
     expect(run(out, { type: 'cutDrive', id: 'c1' })!.drive?.cut).toBe(true)
   })
 
+  it('puts up talking points on the road, an open one counting as unanswered', () => {
+    const topics: CustomerEvent = { type: 'topics', id: 'c1', topics: ['safety', 'power', 'tech'] }
+    const asked = run(out, topics)!
+    expect(asked.drive?.offered).toEqual(['safety', 'power', 'tech'])
+    const point: CustomerEvent = { type: 'point', id: 'c1', point: { topic: 'power', fit: 'good' } }
+    const made = run(asked, point)!
+    expect(made.drive).toMatchObject({ offered: null, points: [{ topic: 'power', fit: 'good' }] })
+    // No point without a prompt up, and no prompt off the road.
+    expect(run(made, point)).toBe(made)
+    expect(run(talking, topics)).toBe(talking)
+    const twice = run(asked, { ...topics, topics: ['space', 'comfort', 'economy'] })!
+    expect(twice.drive?.points).toEqual([{ topic: null, fit: 'ok' }])
+    expect(twice.drive?.offered).toEqual(['space', 'comfort', 'economy'])
+  })
+
   it('takes one drive a visit, only from talking, and only with whoever is talking to them', () => {
     const back = { ...out, phase: 'talking' as const, drive: { ...out.drive!, back: true } }
     expect(run(back, setOff)).toBe(back)

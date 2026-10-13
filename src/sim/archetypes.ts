@@ -1,5 +1,6 @@
 import type { CreditTraits } from './credit'
 import type { Rng } from './rng'
+import type { Topic } from './talkingPoints'
 
 /**
  * Kinds of customer. Each bends the traits `generateCustomer` rolls (how many
@@ -44,6 +45,8 @@ export interface ArchetypeTraits {
   credit: CreditTraits
   /** Their chance of asking to drive the car (see `assignDriveAsk`). */
   drive: number
+  /** The talking points they care about on a test drive (see `topicFit`). */
+  topics: readonly Topic[]
   /** What the player learns about them on greeting. */
   hint: string
 }
@@ -64,6 +67,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 2,
     credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.65 },
     drive: 0.35,
+    topics: ['safety', 'comfort', 'tech', 'space'],
     hint: 'Shopping around',
   },
   'tire-kicker': {
@@ -78,6 +82,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 2,
     credit: { tiers: { A: 30, B: 35, C: 25, D: 10 }, finance: 0.55 },
     drive: 0.6,
+    topics: ['handling', 'tech', 'comfort', 'space'],
     hint: 'Just looking',
   },
   decisive: {
@@ -92,6 +97,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 2,
     credit: { tiers: { A: 40, B: 35, C: 20, D: 5 }, finance: 0.55 },
     drive: 0.15,
+    topics: ['power', 'safety', 'tech', 'economy'],
     hint: 'Knows what they want',
   },
   bargain: {
@@ -106,6 +112,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 2,
     credit: { tiers: { A: 15, B: 30, C: 35, D: 20 }, finance: 0.5 },
     drive: 0.3,
+    topics: ['economy', 'safety', 'space', 'tech'],
     hint: 'Watching every dollar',
   },
   couple: {
@@ -120,6 +127,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 2,
     credit: { tiers: { A: 30, B: 40, C: 22, D: 8 }, finance: 0.7 },
     drive: 0.5,
+    topics: ['safety', 'comfort', 'space', 'handling'],
     hint: 'Shopping together',
   },
   'used-shopper': {
@@ -134,6 +142,7 @@ export const ARCHETYPES: Record<Archetype, ArchetypeTraits> = {
     models: 3,
     credit: { tiers: { A: 10, B: 25, C: 40, D: 25 }, finance: 0.6 },
     drive: 0.3,
+    topics: ['economy', 'safety', 'comfort', 'handling'],
     hint: 'After a good used car',
   },
 }

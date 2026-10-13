@@ -115,6 +115,7 @@ export function Player() {
     // Out on a test drive: in the car, by its door on the lot as far as the
     // camera is concerned, until it's back.
     riding.player = playerRiding(game.customers)
+    riding.with = riding.player ? (dealCustomer(game.customers, PLAYER_ID)?.id ?? null) : null
     if (group.current) group.current.visible = !riding.player
     if (riding.player) {
       waypoints.current = []

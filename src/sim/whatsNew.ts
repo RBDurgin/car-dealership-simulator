@@ -447,6 +447,18 @@ export const UPDATES: readonly Update[] = [
       'The day summary counts the day’s test drives and how many of them bought.',
     ],
   },
+  {
+    id: 41,
+    phase: '20',
+    title: 'Talking points',
+    items: [
+      'Twice on each test drive you get 3 things to point out about the car: tap one, or press 1–3.',
+      'Pick what the buyer cares about and the car is good at, and the drive goes down better.',
+      'A couple wants safety and room, a bargain hunter economy; a truck is roomy and strong, a sports car handles.',
+      'How they took it shows under the drive bar. A prompt you leave counts as so-so.',
+      'On Easy, the best topic is marked.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

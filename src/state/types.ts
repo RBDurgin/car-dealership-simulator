@@ -330,6 +330,10 @@ export interface GameState {
   headBack: () => void
   /** The world: customer `id`'s test drive car is back in its space, and they get out. */
   driveBack: (id: string) => void
+  /** The world: customer `id`'s test drive has come to a talking point, so 3 topics come up (see `sim/talkingPoints.ts`). */
+  drivePrompt: (id: string) => void
+  /** Out on a test drive: the player points out topic `index` (0–2) of the prompt that's up. */
+  pickTopic: (index: number) => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */

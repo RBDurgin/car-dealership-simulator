@@ -25,6 +25,7 @@ import {
 } from '../sim/driving'
 import type { Vec2 } from '../sim/grid'
 import type { InventoryCar } from '../sim/inventory'
+import { promptsDue, promptsMade } from '../sim/talkingPoints'
 import { HEAD_BACK_MINUTES } from '../sim/testDrive'
 import type { CarModel } from '../sim/layout'
 import { createRng, hashSeed } from '../sim/rng'
@@ -42,7 +43,7 @@ import {
   serviceCarsHome,
   vehiclePos,
 } from './runtime'
-import { frameSeconds, MAX_STEP_S } from './walker'
+import { frameSeconds, MAX_STEP_S, report } from './walker'
 
 /** Top speed on the road and on the lot, in tiles per game second. */
 const ROAD_SPEED = 5
@@ -494,6 +495,15 @@ function updateDrive(
         useGame.getState().driveBack(c.id)
       }
       break
+  }
+  // Talking points at a third and two thirds of the way, until it's back (or Head back).
+  const onRoad = trip.stage === 'leaving' || trip.stage === 'away' || trip.stage === 'returning'
+  if (c?.drive && onRoad && !c.drive.cut && c.phase === 'driving') {
+    const due = promptsDue(now - trip.departed, minutes)
+    if (due > promptsMade(c.drive)) {
+      const id = c.id
+      report(trip, `prompt:${due}`, () => useGame.getState().drivePrompt(id))
+    }
   }
   if (c && trip.stage !== 'waiting' && trip.stage !== 'back') {
     const total = Math.max(minutes, 1)

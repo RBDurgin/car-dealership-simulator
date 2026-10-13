@@ -71,6 +71,13 @@ import {
   driveMinutes,
   driveScore,
 } from '../../sim/testDrive'
+import {
+  closePrompt,
+  offerTopics,
+  PROMPTS_PER_DRIVE,
+  promptsMade,
+  topicFit,
+} from '../../sim/talkingPoints'
 import { nextUsedId } from '../../sim/usedCars'
 import {
   arrivalOpts,
@@ -102,6 +109,8 @@ type CustomerKeys =
   | 'testDrive'
   | 'headBack'
   | 'driveBack'
+  | 'drivePrompt'
+  | 'pickTopic'
 
 /** Everyone on the lot, and the player's side of the deal. */
 export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
@@ -194,8 +203,10 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const c = s.customers.find((x) => x.id === id)
       const car = c?.drive && s.inventory.find((x) => x.id === c.drive!.carId)
       if (c?.phase !== 'driving' || !c.drive || !car) return
-      const score = driveScore(c.drive, c, car)
-      const drive = { ...c.drive, back: true, score }
+      // A prompt still up when they're back counts as unanswered.
+      const closed = closePrompt(c.drive)
+      const score = driveScore(closed, c, car)
+      const drive = { ...closed, back: true, score }
       const ev = { type: 'droveBack', id, drive, expect: driveExpect(c, score) } as const
       const { drives } = s.dayStats
       set({
@@ -206,6 +217,24 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       })
       commit(k, reduceCustomers(s.customers, ev))
       if (c.handlerId === PLAYER_ID) notify(k, `${c.name}: "${driveLine(score, drive.cut)}"`)
+    },
+    drivePrompt: (id) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === id)
+      const car = c?.drive && s.inventory.find((x) => x.id === c.drive!.carId)
+      if (c?.phase !== 'driving' || !c.drive || c.drive.cut || !car) return
+      if (promptsMade(c.drive) >= PROMPTS_PER_DRIVE) return
+      const topics = offerTopics(c, car, rng.testDrive)
+      commit(k, reduceCustomers(s.customers, { type: 'topics', id, topics }))
+    },
+    pickTopic: (index) => {
+      const s = get()
+      const c = dealCustomer(s.customers, PLAYER_ID)
+      const topic = c?.phase === 'driving' ? c.drive?.offered?.[index] : undefined
+      const car = topic && s.inventory.find((x) => x.id === c!.drive!.carId)
+      if (!topic || !car) return
+      const point = { topic, fit: topicFit(c!, car, topic) }
+      commit(k, reduceCustomers(s.customers, { type: 'point', id: c!.id, point }))
     },
     walkIn: (variant) => {
       const s = get()

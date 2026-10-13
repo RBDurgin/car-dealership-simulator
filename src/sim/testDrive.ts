@@ -3,6 +3,7 @@ import { PLAYER_ID, type Customer } from './customers'
 import { carName } from './interactables'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
+import type { Topic } from './talkingPoints'
 
 /**
  * Test drives (Phase 20): a shopper takes the car they're talking about out
@@ -18,7 +19,8 @@ export type TopicFit = 'good' | 'ok' | 'poor'
 
 /** One talking point made on the drive (20b). */
 export interface TalkingPoint {
-  topic: string
+  /** What was pointed out, or null for a prompt left unanswered. */
+  topic: Topic | null
   fit: TopicFit
 }
 
@@ -32,6 +34,8 @@ export interface TestDrive {
   minutes: number
   /** The talking points made on the way (20b). */
   points: TalkingPoint[]
+  /** The topics offered at the prompt that's up now, or null (20b). */
+  offered: Topic[] | null
   /** Brought back early (Head back). */
   cut: boolean
   /** Came back with a dent (20c). */
@@ -102,7 +106,17 @@ export function driveBlocker(c: Customer, inventory: readonly InventoryCar[]): s
 
 /** A new drive in `car` with `by` riding along. */
 export function newDrive(carId: string, by: string, minutes: number): TestDrive {
-  return { carId, by, minutes, points: [], cut: false, ding: false, back: false, score: 0 }
+  return {
+    carId,
+    by,
+    minutes,
+    points: [],
+    offered: null,
+    cut: false,
+    ding: false,
+    back: false,
+    score: 0,
+  }
 }
 
 /** What any drive scores before the talking points, the car's looks and a cut. */
@@ -213,10 +227,13 @@ export function syncCarsOut(
   )
 }
 
+/** A drive scoring this or more went really well. */
+export const DRIVE_LOVED = 0.6
+
 /** What `c` says getting out of the car after a drive scoring `score`. */
 export function driveLine(score: number, cut: boolean): string {
   if (cut) return 'Back already? It was nice, what I saw of it.'
-  if (score >= 0.6) return 'What a drive! I could get used to that.'
+  if (score >= DRIVE_LOVED) return 'What a drive! I could get used to that.'
   if (score >= 0.35) return 'It drives nicely.'
   return "Hmm. It's fine, I suppose."
 }

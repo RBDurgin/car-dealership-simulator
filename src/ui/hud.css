@@ -139,6 +139,65 @@ kbd {
   width: 0;
   background: #fde047;
 }
+/* A test drive's talking points (Phase 20b): 3 big buttons above the drive bar. */
+.drive-prompt {
+  margin-top: 8px;
+}
+.drive-prompt-title {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.drive-topics {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.drive-topics .drive-topic {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 84px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.drive-topic-icon {
+  font-size: 20px;
+}
+.drive-topics .drive-topic-key {
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font:
+    600 10px system-ui,
+    sans-serif;
+  opacity: 0.5;
+}
+.drive-topic .warmth-chip {
+  margin-top: 2px;
+  font-size: 10px;
+  padding: 0 6px;
+}
+.drive-topic-best {
+  border-color: rgba(34, 197, 94, 0.6);
+}
+.drive-reaction {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.drive-reaction-good {
+  color: #86efac;
+}
+.drive-reaction-poor {
+  color: #93c5fd;
+}
 .progress-fill {
   height: 100%;
   background: #fde047;
@@ -1679,6 +1738,10 @@ kbd {
     padding: 0 18px;
     font-size: 14px;
   }
+  /* No keyboard to number the talking points for. */
+  .drive-topics .drive-topic-key {
+    display: none;
+  }
 }
 
 /* Compact: landscape phones and small windows. Keep in step with COMPACT in input/useMediaQuery.ts. */
@@ -1742,6 +1805,17 @@ kbd {
   }
   .status-label {
     font-size: 13px;
+  }
+  .drive-topics {
+    gap: 6px;
+  }
+  .drive-topics .drive-topic {
+    min-width: 60px;
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+  .drive-topic-icon {
+    font-size: 16px;
   }
   .notice {
     top: auto;

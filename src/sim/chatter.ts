@@ -9,6 +9,7 @@ import { OWNER_ID, type OwnerVisit } from './owner'
 import type { Rng } from './rng'
 import { spatialMix } from './sfxEvents'
 import type { Employee } from './staff'
+import { DRIVE_LOVED, drivePending } from './testDrive'
 
 /**
  * Who says what, when. Two kinds of talk: conversations that go on while a
@@ -55,7 +56,8 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
   return s.roster.find((e) => e.id === speaker)?.variant ?? null
 }
 
-export type ConversationKind = 'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn' | 'phone'
+export type ConversationKind =
+  'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn' | 'phone' | 'drive'
 
 /** Two people talking back and forth; `speakers[0]` opens. On the phone both are the caller. */
 export interface Conversation {
@@ -74,6 +76,9 @@ export function conversationsOf(s: ChatterState): Conversation[] {
     const checkingIn = c.phase === 'talking' || c.phase === 'considering'
     if (c.service && checkingIn && c.handlerId) {
       out.push({ key: `checkIn:${c.id}`, kind: 'checkIn', speakers: [c.id, c.handlerId] })
+    } else if (c.phase === 'talking' && c.handlerId && drivePending(c)) {
+      // On the way to the test drive car, the shopper is keen.
+      out.push({ key: `drive:${c.id}`, kind: 'drive', speakers: [c.id, c.handlerId] })
     } else if (c.phase === 'talking' && c.handlerId) {
       out.push({ key: `pitch:${c.id}`, kind: 'pitch', speakers: [c.handlerId, c.id] })
     } else if ((c.phase === 'signing' || c.phase === 'menu') && c.handlerId) {
@@ -110,6 +115,7 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   checkIn: [500, 1000],
   // Past the ring.
   phone: [1200, 2000],
+  drive: [300, 700],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -183,6 +189,18 @@ export function nextLine(
       const gapMs = first ? between(rng, [300, 700]) : between(rng, [1400, 2800])
       return { line: { speaker, tone, syllables: rng.int(2, 6) }, gapMs }
     }
+    case 'drive': {
+      // The shopper asks about the car; whoever rides along answers.
+      const tone: Tone = first
+        ? rng.next() < 0.5
+          ? 'question'
+          : 'happy'
+        : rng.next() < 0.4
+          ? 'happy'
+          : 'neutral'
+      const syllables = first ? rng.int(2, 5) : rng.int(3, 6)
+      return { line: { speaker, tone, syllables }, gapMs: between(rng, [300, 900]) }
+    }
     case 'poach': {
       const tone: Tone = first
         ? rng.next() < 0.6
@@ -205,6 +223,17 @@ function fiAnswer(was: Customer, c: Customer): Omit<Line, 'speaker'> | null {
   return last?.taken ? { tone: 'happy', syllables: 2 } : { tone: 'grumble', syllables: 1 }
 }
 
+/** How the shopper took the talking point just made on a test drive, as a line, if there's a new one. */
+function pointAnswer(was: Customer, c: Customer): Omit<Line, 'speaker'> | null {
+  if (c.phase !== 'driving' || !c.drive || !was.drive) return null
+  if (c.drive.points.length <= was.drive.points.length) return null
+  const last = c.drive.points[c.drive.points.length - 1]
+  if (!last.topic) return null
+  if (last.fit === 'good') return { tone: 'happy', syllables: 3 }
+  if (last.fit === 'ok') return { tone: 'neutral', syllables: 2 }
+  return { tone: 'murmur', syllables: 1 }
+}
+
 /** Gap between the lines of one reaction, ms. */
 export const REACTION_GAP_MS = 250
 
@@ -216,6 +245,8 @@ export const REACTION_GAP_MS = 250
  * - a happy yes (and a happy seller, or a booked service client) on
  *   accepting, a grumble on walking out or turning down a service quote;
  * - a quick yes or a short no to each product at the F&I menu;
+ * - on a test drive, how each talking point went down, and a word on
+ *   getting out of the car (happy after a good drive);
  * - the owner's hello and goal when they reach the office;
  * - Nazma's grumble as he's run off.
  */
@@ -230,6 +261,8 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       const was = before.get(c.id)
       const answer = was && fiAnswer(was, c)
       if (answer) out.push([{ speaker: c.id, ...answer }])
+      const point = was && pointAnswer(was, c)
+      if (point) out.push([{ speaker: c.id, ...point }])
       if (!was || was.phase === c.phase) continue
       const from = was.phase
       const to = c.phase
@@ -246,6 +279,14 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
                 { speaker: c.id, tone: 'greeting', syllables: 2 },
               ],
         )
+      } else if (from === 'driving' && to === 'talking' && c.drive?.back) {
+        // Out of the car: delighted with a good drive, polite about a flat one.
+        const loved = c.drive.score >= DRIVE_LOVED
+        const lines: Line[] = [
+          { speaker: c.id, tone: loved ? 'happy' : 'neutral', syllables: rng.int(3, 5) },
+        ]
+        if (c.handlerId) lines.push({ speaker: c.handlerId, tone: 'happy', syllables: 2 })
+        out.push(lines)
       } else if (from === 'arriving' && receptionist) {
         out.push([{ speaker: receptionist.id, tone: 'greeting', syllables: rng.int(2, 3) }])
       } else if (from === 'talking' && to === 'considering') {

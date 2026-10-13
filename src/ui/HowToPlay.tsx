@@ -155,10 +155,10 @@ function BasicsTab({ touch, click }: TabProps) {
         <p>
           Easy also helps you learn. While you haggle, a chip shows how warm the customer (or a
           seller) is to the numbers on the steppers, after any trade-in: <b>hot</b> (likely to take
-          it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day
-          ends in the red, the bank tops your cash back up to $0; it only does this once. And tips
-          pop up the first time things happen, such as a counter-offer, a dirty car or a visit from
-          Nazma.
+          it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk), and on a test drive
+          the best talking point is marked. The first time a day ends in the red, the bank tops your
+          cash back up to $0; it only does this once. And tips pop up the first time things happen,
+          such as a counter-offer, a dirty car or a visit from Nazma.
         </p>
         <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
@@ -295,6 +295,15 @@ function SellingTab({ touch, click }: TabProps) {
           on the lot they&apos;re keener to buy and hope for less off, more so in a clean car (or a
           used one in good shape). Name a price to someone who wanted a drive without giving them
           one and they&apos;re a little less keen.
+        </p>
+        <p>
+          Twice on each drive you get three <b>talking points</b> to choose from (
+          {touch ? 'tap one' : 'click one or press 1–3'}). A topic the buyer cares about that the
+          car is good at goes down best: a couple likes safety and room, a bargain hunter economy, a
+          tire-kicker the fun stuff; a truck is roomy and strong, a sedan comfortable and thrifty, a
+          sports car quick and nimble. One or the other is fine, neither falls flat, and a prompt
+          left alone counts as so-so. How they took it shows under the drive bar, and on Easy the
+          best topic is marked.
         </p>
       </section>
       <section>

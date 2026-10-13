@@ -95,14 +95,17 @@ describe('the drive', () => {
     const half = { cleanliness: 0.5, used: null }
     expect(driveScore({ points: [], cut: false }, c, half)).toBeCloseTo(DRIVE_BASE)
     expect(driveScore({ points: [], cut: true }, c, half)).toBeCloseTo(DRIVE_BASE * CUT_KEEPS)
-    const good = { points: [{ topic: 'power', fit: 'good' as const }], cut: false }
+    const good = { points: [{ topic: 'power' as const, fit: 'good' as const }], cut: false }
     expect(driveScore(good, c, half)).toBeCloseTo(DRIVE_BASE + POINT_SCORE.good)
     expect(
       driveScore({ points: [], cut: false }, c, { cleanliness: 1, used: null }),
     ).toBeGreaterThan(driveScore({ points: [], cut: false }, c, { cleanliness: 0, used: null }))
     const worn = { cleanliness: 0.5, used: { ...usedInfo, condition: 0.1 } }
     expect(driveScore({ points: [], cut: false }, c, worn)).toBeLessThan(DRIVE_BASE)
-    const lots = Array.from({ length: 6 }, () => ({ topic: 't', fit: 'good' as const }))
+    const lots = Array.from({ length: 6 }, () => ({
+      topic: 'power' as const,
+      fit: 'good' as const,
+    }))
     expect(driveScore({ points: lots, cut: false }, c, half)).toBe(1)
   })
 

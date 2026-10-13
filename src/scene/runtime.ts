@@ -96,10 +96,11 @@ export const playerPos = { x: spawn.x, z: spawn.z }
 
 /**
  * The player is in a test drive car (or off the map in it): hidden, and out
- * of the crowd. Set by scene/Player each frame. `playerPos` stays by the
- * car's door, so the camera waits on the lot.
+ * of the crowd, with the shopper `with` (whose voice comes from the player's
+ * spot). Set by scene/Player each frame. `playerPos` stays by the car's
+ * door, so the camera waits on the lot.
  */
-export const riding = { player: false }
+export const riding: { player: boolean; with: string | null } = { player: false, with: null }
 
 /**
  * Test drives on the road, by their customer's id: game minutes left until
