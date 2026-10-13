@@ -70,6 +70,7 @@ import {
   driveLine,
   driveMinutes,
   driveScore,
+  perfectDrive,
   rollWear,
   wearCar,
 } from '../../sim/testDrive'
@@ -232,6 +233,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
             cut: drives.cut + (drive.cut ? 1 : 0),
             byStaff: drives.byStaff + (rider ? 1 : 0),
             dings: drives.dings + (wear.ding ? 1 : 0),
+            perfect: drives.perfect + (!rider && perfectDrive(drive) ? 1 : 0),
           },
         },
       })

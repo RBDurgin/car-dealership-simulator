@@ -472,6 +472,27 @@ export const UPDATES: readonly Update[] = [
       'The day summary counts drives taken by salespeople, and any dings.',
     ],
   },
+  {
+    id: 43,
+    phase: '20',
+    title: 'Test drives tuned',
+    items: [
+      'A great test drive now does more: buyers hope for less off and haggle less.',
+      'A shopper who asked to drive the car and got a price instead is noticeably cooler.',
+      'Visit scores note a test drive the buyer loved, and one they asked for and never had.',
+      'New tips on Easy for test drives, dinged cars and handing drives to salespeople.',
+    ],
+  },
+  {
+    id: 44,
+    phase: '20',
+    title: 'Test drive achievements',
+    items: [
+      'Six achievements for test drives, in a new Test drives group of the Achievements list.',
+      'Ride along, make every talking point count, sell to five drivers in a day, and more.',
+      'One of them is hidden.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

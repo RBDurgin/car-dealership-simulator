@@ -205,6 +205,19 @@ describe('test drives in the store', () => {
         POINT_SCORE.good +
         POINT_SCORE.ok,
     )
+    // A prompt left open isn't a perfect drive.
+    expect(game().dayStats.drives.perfect).toBe(0)
+  })
+
+  it('counts a drive with every talking point a good fit as perfect', () => {
+    setOff()
+    for (let i = 0; i < 2; i++) {
+      game().drivePrompt('customer-a')
+      const offered = customer().drive!.offered!
+      game().pickTopic(offered.findIndex((t) => topicFit(customer(), car(), t) === 'good'))
+    }
+    game().driveBack('customer-a')
+    expect(game().dayStats.drives.perfect).toBe(1)
   })
 
   it('puts up no talking points once heading back, and takes 1–3 only with one up', () => {

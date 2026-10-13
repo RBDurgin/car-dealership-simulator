@@ -26,6 +26,8 @@ import {
   isDue,
   LAPSE_DAYS,
   LOW_TRADE_POINTS,
+  LOVED_DRIVE_POINTS,
+  NO_DRIVE_POINTS,
   nextClientId,
   PRICE_CAP,
   PROSPECT_DAYS,
@@ -68,6 +70,7 @@ import { BASE_MSRP, buildInventory, type InventoryCar } from './inventory'
 import { hopePrice } from './negotiation'
 import type { CarModel } from './layout'
 import { createRng } from './rng'
+import { DRIVE_LOVED, newDrive } from './testDrive'
 import { MILES_PER_YEAR, modelYear } from './usedCars'
 
 const inventory = buildInventory(createRng(42))
@@ -184,6 +187,22 @@ describe('visitScore', () => {
     const base = score(buyer()).score
     expect(with_(10_000).score).toBe(base + FAIR_TRADE_POINTS)
     expect(with_(7_000).score).toBe(base + LOW_TRADE_POINTS)
+  })
+
+  it('likes a test drive they loved, and minds one they asked for and never had', () => {
+    const drive = (score: number) => ({ ...newDrive('car', 'player', 20), back: true, score })
+    const base = score(buyer()).score
+    const loved = score(buyer({ wantsDrive: true, drive: drive(DRIVE_LOVED) }))
+    expect(loved.score).toBe(base + LOVED_DRIVE_POINTS)
+    expect(loved.reasons.map(reasonText)).toContain('Loved the test drive')
+    expect(score(buyer({ wantsDrive: true, drive: drive(0.4) })).score).toBe(base)
+    const never = score(left('refused', { wantsDrive: true }))
+    expect(never.score).toBe(score(left('refused')).score + NO_DRIVE_POINTS)
+    expect(never.reasons.map(reasonText)).toContain('Never got to drive it')
+    // Nobody minds missing a drive they never asked for.
+    expect(score(left('refused', { wantsDrive: false })).reasons.map((r) => r.kind)).not.toContain(
+      'noDrive',
+    )
   })
 
   it('adds the level’s shift and stays within 0–100', () => {

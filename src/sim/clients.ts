@@ -8,6 +8,7 @@ import type { CarModel } from './layout'
 import { hopePrice } from './negotiation'
 import { creditReferral } from './referrals'
 import type { Rng } from './rng'
+import { DRIVE_LOVED } from './testDrive'
 import { insultingAllowance } from './tradeIns'
 import { MILES_PER_YEAR, modelYear, type UsedInfo } from './usedCars'
 
@@ -72,6 +73,8 @@ export type ReasonKind =
   | 'markup'
   | 'pushed'
   | 'chargeback'
+  | 'lovedDrive'
+  | 'noDrive'
 
 export interface ScoreReason {
   kind: ReasonKind
@@ -184,6 +187,10 @@ export const APPOINTMENT_WAIT_WEIGHT = 2
 export const CHARGEBACK_SCORE = -15
 /** A chargeback this many days or fewer after the purchase sours the client. */
 export const EARLY_CHARGEBACK_DAYS = 30
+/** A test drive scoring `DRIVE_LOVED` or more (see `sim/testDrive.ts`). */
+export const LOVED_DRIVE_POINTS = 6
+/** Off the score of a shopper who asked to drive the car and never did. */
+export const NO_DRIVE_POINTS = -6
 /** Reasons kept per visit. */
 export const REASONS_KEPT = 3
 
@@ -212,7 +219,8 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * waiting, haggling and paying over what they hoped take off, and a price
  * under it, a clean car and a fair trade-in allowance add on. A buyer's F&I
  * menu adds a little when fair, and takes off for markup and pushing
- * (`fiSatisfaction`); an early chargeback sours their next visit.
+ * (`fiSatisfaction`); an early chargeback sours their next visit. A test
+ * drive they loved adds on, and one they asked for and never had takes off.
  */
 export function visitScore(c: Customer, outcome: VisitOutcome, ctx: ScoreContext): VisitScore {
   const reasons: ScoreReason[] = []
@@ -227,6 +235,12 @@ export function visitScore(c: Customer, outcome: VisitOutcome, ctx: ScoreContext
   const rounds = c.haggle?.round ?? 1
   if (rounds > 1)
     reasons.push({ kind: 'haggle', points: -HAGGLE_POINTS * (rounds - 1), detail: rounds })
+
+  if (c.drive?.back && c.drive.score >= DRIVE_LOVED) {
+    reasons.push({ kind: 'lovedDrive', points: LOVED_DRIVE_POINTS, detail: 0 })
+  } else if (c.wantsDrive && !c.drive) {
+    reasons.push({ kind: 'noDrive', points: NO_DRIVE_POINTS, detail: 0 })
+  }
 
   const { car } = ctx
   if (car) {
@@ -304,6 +318,10 @@ export function reasonText(r: ScoreReason): string {
       return `Turned down ${r.detail} products`
     case 'chargeback':
       return 'A product was charged back'
+    case 'lovedDrive':
+      return 'Loved the test drive'
+    case 'noDrive':
+      return 'Never got to drive it'
   }
 }
 
@@ -924,6 +942,7 @@ const COST_WORDS: Partial<Record<ReasonKind, (n: number, detail: number) => stri
   markup: (n) => `Finance: ${plural(n, 'buyer')} had their rate marked up over a point`,
   pushed: (n) => `Finance: ${plural(n, 'buyer')} turned down product after product`,
   chargeback: (n) => `Chargebacks: ${plural(n, 'client')} came back sour`,
+  noDrive: (n) => `Test drives: ${plural(n, 'customer')} never got to drive the car`,
 }
 
 /**

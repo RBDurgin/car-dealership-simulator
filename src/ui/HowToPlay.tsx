@@ -296,7 +296,8 @@ function SellingTab({ touch, click }: TabProps) {
           <b>Head back</b> ({touch ? '✕' : '✕ or Esc'}) turns round early, for a smaller lift. Back
           on the lot they&apos;re keener to buy and hope for less off, more so in a clean car (or a
           used one in good shape). Name a price to someone who wanted a drive without giving them
-          one and they&apos;re a little less keen.
+          one and they&apos;re less keen, and they leave less happy. A drive takes you off the floor
+          for a while, so with customers waiting, a salesperson is often the better driver.
         </p>
         <p>
           Twice on each drive you get three <b>talking points</b> to choose from (
@@ -450,10 +451,10 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
         <p>
           Each visit is scored out of 100. Waiting long, haggling many rounds, paying more than they
-          hoped, a dirty car, a low trade-in offer or a pushy F&amp;I menu take points off; quick
-          service, a good price, a clean car, a fair trade-in and fair finance add them. The score
-          is blended into how happy they are with you, so one bad visit hurts without wiping out the
-          good ones.
+          hoped, a dirty car, a low trade-in offer, a pushy F&amp;I menu or a test drive they asked
+          for and never had take points off; quick service, a good price, a clean car, a fair
+          trade-in, fair finance and a test drive they loved add them. The score is blended into how
+          happy they are with you, so one bad visit hurts without wiping out the good ones.
         </p>
         <p>
           The <b>Clients</b> tab on the office computer (<OfficeKey touch={touch} keyName="L" />)

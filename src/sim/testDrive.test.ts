@@ -29,6 +29,7 @@ import {
   newDrive,
   NO_DRIVE_PENALTY,
   playerRiding,
+  perfectDrive,
   POINT_SCORE,
   syncCarsOut,
 } from './testDrive'
@@ -124,9 +125,18 @@ describe('the drive', () => {
     expect(driveBonus(0.5, 2)).toBeCloseTo(DRIVE_BONUS.min + DRIVE_BONUS.max)
   })
 
-  it('cuts the discount they hope for by up to a third', () => {
+  it('cuts the discount they hope for by up to half', () => {
     expect(driveExpect({ expect: 0.06 }, 0)).toBe(0.06)
     expect(driveExpect({ expect: 0.06 }, 1)).toBeCloseTo(0.06 * (1 - MAX_EXPECT_CUT))
+  })
+})
+
+describe('perfectDrive', () => {
+  const point = (fit: 'good' | 'ok' | 'poor') => ({ topic: null, fit })
+  it('needs every talking point made, and every one a good fit', () => {
+    expect(perfectDrive({ points: [point('good'), point('good')] })).toBe(true)
+    expect(perfectDrive({ points: [point('good'), point('ok')] })).toBe(false)
+    expect(perfectDrive({ points: [point('good')] })).toBe(false)
   })
 })
 

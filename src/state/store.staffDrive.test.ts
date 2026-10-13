@@ -102,7 +102,8 @@ describe('salespeople’s test drives', () => {
     expect(customer()).toMatchObject({ phase: 'talking', handlerId: 'sam' })
     expect(customer().drive!.back).toBe(true)
     expect(car().status).toBe('available')
-    expect(game().dayStats.drives).toMatchObject({ taken: 1, byStaff: 1 })
+    // Only the player's drives count as perfect.
+    expect(game().dayStats.drives).toMatchObject({ taken: 1, byStaff: 1, perfect: 0 })
   })
 
   it('takes only a shopper who asked, once', () => {

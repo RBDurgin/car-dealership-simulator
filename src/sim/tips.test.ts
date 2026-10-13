@@ -9,9 +9,11 @@ import type { FiDeal } from './fi'
 import { createRng } from './rng'
 import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
+import { newDrive } from './testDrive'
 import { STALE_DAYS } from './usedCars'
 import {
   APPRECIATION_TIP_CLIENTS,
+  DRIVE_STAFF_TIP_DRIVES,
   FINANCE_TIP_DEALS,
   LOW_CASH,
   TIP_IDS,
@@ -135,6 +137,13 @@ const fiStats = (financed: number, declined = 0, chargebackCount = 0) => ({
   fi: { financed, declined, chargebackCount },
 })
 
+const driveStats = (taken: number, byStaff = 0, dings = 0) => ({
+  missed: {},
+  quota: null,
+  drives: { taken, byStaff, dings },
+})
+const idleSeller = [{ id: 'staff-1-1', role: 'sales', status: 'atPost', fired: false }]
+
 const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
 
 const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
@@ -245,6 +254,15 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { dayStats: fiStats(FINANCE_TIP_DEALS), roster: [] },
     { dayStats: fiStats(FINANCE_TIP_DEALS - 1), roster: [] },
   ],
+  testDrive: [
+    { customers: [customer('d1', { phase: 'waiting', handlerId: null, wantsDrive: true })] },
+    { customers: [customer('d1', { phase: 'browsing', handlerId: null, wantsDrive: true })] },
+  ],
+  ding: [{ dayStats: driveStats(1, 0, 1) }, { dayStats: driveStats(0) }],
+  driveStaff: [
+    { dayStats: driveStats(DRIVE_STAFF_TIP_DRIVES + 1, 1), roster: idleSeller },
+    { dayStats: driveStats(DRIVE_STAFF_TIP_DRIVES, 1), roster: idleSeller },
+  ],
   referral: [{ customers: [customer('f1', { referredBy: 'client-1-0' })] }, {}],
   appreciation: [
     { clients: clientsOf(APPRECIATION_TIP_CLIENTS) },
@@ -315,10 +333,27 @@ describe('tipFor', () => {
 
   it('suggests a finance manager only when there isn’t one', () => {
     const [next, prev] = triggers.financeManager
-    const roster = [{ role: 'finance', fired: false }]
+    const roster = [{ id: 'staff-1-1', role: 'finance', status: 'atPost', fired: false }]
     expect(tip({ ...next, roster }, { ...prev, roster })).toBeNull()
-    const gone = [{ role: 'finance', fired: true }]
+    const gone = [{ ...roster[0], fired: true }]
     expect(tip({ ...next, roster: gone }, { ...prev, roster: gone })).toBe('financeManager')
+  })
+
+  it('points at a salesperson’s drives only while one is free', () => {
+    const [next, prev] = triggers.driveStaff
+    const busy = [customer('d2', { handlerId: 'staff-1-1' })]
+    expect(tip({ ...next, customers: busy }, { ...prev, customers: busy })).toBeNull()
+    const off = [{ ...idleSeller[0], status: 'off' }]
+    expect(tip({ ...next, roster: off }, { ...prev, roster: off })).toBeNull()
+    // Drives the salespeople took don't count.
+    expect(tip({ ...next, dayStats: driveStats(5, 3) }, prev)).toBeNull()
+  })
+
+  it('points at the key only once it shows', () => {
+    const [next] = triggers.testDrive
+    const driven = customer('d1', { phase: 'waiting', handlerId: null, wantsDrive: true })
+    const back = { ...driven, drive: { ...newDrive('car', PLAYER_ID, 20), back: true } }
+    expect(tip({ customers: [back] }, next)).toBeNull()
   })
 
   it('gives the first unseen tip when several apply', () => {

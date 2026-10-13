@@ -36,6 +36,7 @@ export type AchievementGroup =
   | 'service'
   | 'clients'
   | 'finance'
+  | 'drives'
 
 export const GROUP_LABELS: Record<AchievementGroup, string> = {
   selling: 'Selling',
@@ -49,6 +50,7 @@ export const GROUP_LABELS: Record<AchievementGroup, string> = {
   service: 'Service',
   clients: 'Clients',
   finance: 'Finance',
+  drives: 'Test drives',
 }
 
 // Thresholds, at every level.
@@ -74,6 +76,9 @@ export const BOOK_CLIENTS = 50
 export const CSI_TARGET = 90
 export const BACK_END_GROSS = 2_000
 export const CLEAN_BOOKS_DEALS = 10
+export const ROAD_SALES = 5
+export const TEAM_DRIVES = 5
+export const SCRATCH_FREE_DRIVES = 6
 const SATURDAY = 5
 
 /** The slice of the store `achievementsFor` compares. */
@@ -88,7 +93,7 @@ export interface AchievementState {
   weather: Weather
   dayStats: Pick<
     DayStats,
-    'sales' | 'nazma' | 'bought' | 'service' | 'clients' | 'washes' | 'settled'
+    'sales' | 'nazma' | 'bought' | 'service' | 'clients' | 'washes' | 'settled' | 'drives'
   >
   career: Pick<Career, 'sales' | 'soldByModel' | 'rivalsBeaten'>
   lifetime: Pick<Lifetime, 'bySource' | 'bySeller'>
@@ -179,6 +184,12 @@ export type AchievementId =
   | 'back-end'
   | 'clean-books'
   | 'covered'
+  | 'first-drive'
+  | 'perfect-pitch'
+  | 'sold-on-the-road'
+  | 'road-crew'
+  | 'not-a-scratch'
+  | 'fender-bender'
   | 'car-wash'
   | 'tube-man-fan'
 
@@ -275,6 +286,13 @@ const PRODUCT_IDS = Object.keys(PRODUCTS) as ProductId[]
 
 /** A sale closed at your own desk: nobody sold it and no finance manager signed it. */
 const yours = (s: Sale) => s.soldBy === null && s.signedBy === null
+
+/** A test drive tally of today's reaching `n` (or more) since `prev`. */
+const drivesReach = (n: number, count: (d: DayStats['drives']) => number) => ({
+  when: 'live' as const,
+  check: (prev: AchievementState, next: AchievementState) =>
+    next.dayStats !== prev.dayStats && count(next.dayStats.drives) >= n,
+})
 
 const rankName = (id: RankId) => RANKS.find((r) => r.id === id)!.name
 
@@ -715,7 +733,52 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     check: (prev, next) =>
       next.dayStats.service !== prev.dayStats.service && next.dayStats.service.claims > 0,
   },
+  // Test drives
+  {
+    id: 'first-drive',
+    title: 'Along for the Ride',
+    text: 'rode along on a test drive',
+    group: 'drives',
+    ...drivesReach(1, (d) => d.taken - d.byStaff),
+  },
+  {
+    id: 'perfect-pitch',
+    title: 'Perfect Pitch',
+    text: 'made every talking point count on a test drive',
+    group: 'drives',
+    ...drivesReach(1, (d) => d.perfect),
+  },
+  {
+    id: 'sold-on-the-road',
+    title: 'Sold on the Road',
+    text: `sold ${ROAD_SALES} cars in a day to buyers who took a test drive`,
+    group: 'drives',
+    ...drivesReach(ROAD_SALES, (d) => d.bought),
+  },
+  {
+    id: 'road-crew',
+    title: 'Road Crew',
+    text: `had salespeople take ${TEAM_DRIVES} test drives in a day`,
+    group: 'drives',
+    ...drivesReach(TEAM_DRIVES, (d) => d.byStaff),
+  },
+  {
+    id: 'not-a-scratch',
+    title: 'Not a Scratch',
+    text: `took ${SCRATCH_FREE_DRIVES}+ test drives in a day without a ding`,
+    group: 'drives',
+    when: 'day',
+    check: (ctx) => ctx.stats.drives.taken >= SCRATCH_FREE_DRIVES && ctx.stats.drives.dings === 0,
+  },
   // Hidden
+  {
+    id: 'fender-bender',
+    title: 'Fender Bender',
+    text: 'had a car come back from a test drive with a ding',
+    group: 'drives',
+    hidden: true,
+    ...drivesReach(1, (d) => d.dings),
+  },
   {
     id: 'car-wash',
     title: 'Car Wash',

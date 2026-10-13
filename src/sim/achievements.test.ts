@@ -7,6 +7,9 @@ import {
   BACK_END_GROSS,
   BIG_TICKET_GROSS,
   CLEAN_BOOKS_DEALS,
+  ROAD_SALES,
+  SCRATCH_FREE_DRIVES,
+  TEAM_DRIVES,
   CLOSER_SALES,
   dayAchievements,
   SIX_FIGURES,
@@ -509,6 +512,43 @@ describe('finance achievements', () => {
     expect(dayEarns(ctx({ day: DAYS_PER_MONTH, monthFi: charged }), 'clean-books')).toBe(false)
     const quiet = { ...month, financed: CLEAN_BOOKS_DEALS - 1 }
     expect(dayEarns(ctx({ day: DAYS_PER_MONTH, monthFi: quiet }), 'clean-books')).toBe(false)
+  })
+})
+
+describe('test drive achievements', () => {
+  const driving = (patch: Partial<DayStats['drives']>) =>
+    withStats(base, { drives: { ...base.dayStats.drives, ...patch } })
+
+  it('marks your first ride along, not a salesperson’s', () => {
+    expect(earns(base, driving({ taken: 1 }), 'first-drive')).toBe(true)
+    expect(earns(base, driving({ taken: 1, byStaff: 1 }), 'first-drive')).toBe(false)
+  })
+
+  it('marks a drive where every talking point counted', () => {
+    expect(earns(base, driving({ taken: 1, perfect: 1 }), 'perfect-pitch')).toBe(true)
+    expect(earns(base, driving({ taken: 1 }), 'perfect-pitch')).toBe(false)
+  })
+
+  it(`needs ${ROAD_SALES} buyers who drove, and ${TEAM_DRIVES} drives by salespeople, in a day`, () => {
+    expect(earns(base, driving({ bought: ROAD_SALES }), 'sold-on-the-road')).toBe(true)
+    expect(earns(base, driving({ bought: ROAD_SALES - 1 }), 'sold-on-the-road')).toBe(false)
+    expect(earns(base, driving({ byStaff: TEAM_DRIVES }), 'road-crew')).toBe(true)
+    expect(earns(base, driving({ byStaff: TEAM_DRIVES - 1 }), 'road-crew')).toBe(false)
+  })
+
+  it('marks a ding, and keeps it hidden', () => {
+    expect(earns(base, driving({ dings: 1 }), 'fender-bender')).toBe(true)
+    expect(ACHIEVEMENTS.find((a) => a.id === 'fender-bender')?.hidden).toBe(true)
+  })
+
+  it(`marks a day of ${SCRATCH_FREE_DRIVES}+ drives without a ding`, () => {
+    const day = (taken: number, dings = 0) =>
+      ctx({
+        stats: { ...emptyStats(), settled: true, drives: { ...emptyStats().drives, taken, dings } },
+      })
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES), 'not-a-scratch')).toBe(true)
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES - 1), 'not-a-scratch')).toBe(false)
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES, 1), 'not-a-scratch')).toBe(false)
   })
 })
 

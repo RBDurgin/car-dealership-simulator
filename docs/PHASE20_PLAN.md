@@ -1,6 +1,6 @@
 # Phase 20 Plan: Test Drives
 
-**Status:** planned 2026-10-10. 20a, 20b and 20c built (20c on 2026-10-13: save v32; `DING_BASE` 0.035, `DRIVE_DIRT` 0.15/0.35, `DRIVE_MILES` 10–20, `DING_PENALTY` 0.08, `STAFF_TOPIC_SKILL` 0.4–0.85, ding parts $200–500). Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map), 15 (the garage, for fixing dings), 16 (the visit score) and 18 (the store slices, the bench and CI).
+**Status:** planned 2026-10-10. Built (20c on 2026-10-13: save v32; `DING_BASE` 0.035, `DRIVE_DIRT` 0.15/0.35, `DRIVE_MILES` 10–20, `DING_PENALTY` 0.08, `STAFF_TOPIC_SKILL` 0.4–0.85, ding parts $200–500). 20d on 2026-10-13: `DRIVE_BONUS` 0.03–0.13, `MAX_EXPECT_CUT` ½ (was ⅓), `NO_DRIVE_PENALTY` 0.12 (was 0.05), `LOVED_DRIVE_POINTS` +6 and `NO_DRIVE_POINTS` −6, `DRIVE_STAFF_TIP_DRIVES` 3. Measured on Medium (`state/store.driveBalance.test.ts`, a split-the-difference seller over 4,000 seeded shoppers): a good drive +12 close points, cut +6, poor +7, a refused drive −5; about 33% of shoppers ask and 1 drive in 32 comes back dinged over a bench month. A good drive cuts counters by about 20%, not half: halving them would take nearly all the discount they hope for off, so the target was left short. Taking every drive yourself is left to time: a drive is worth about 0.17 of a sale (the lift plus the refusal avoided), about what the player closes on the floor in its 20–35 minutes, so with customers waiting a salesperson's drives pay. Phase 20 comes after Phase 19 (F&I) in the plan. It needs only built phases: 12b (driving in), 13c (the bigger map), 15 (the garage, for fixing dings), 16 (the visit score) and 18 (the store slices, the bench and CI).
 
 - Phase 19 (F&I) isn't built. Nothing here depends on it, and if it lands first, a drive happens before the F&I menu and doesn't change it.
 - Only 20c touches the save. It takes the next free save version (`SAVE_VERSION` + 1).
@@ -69,7 +69,7 @@ New `sim/testDrive.ts` (pure, tested):
   - a cut-short drive, which loses part of it;
   - the car's cleanliness and, for a used car, its condition.
 - `driveBonus(score, scale)` adds about +0.05 to +0.15 to `acceptChance`.
-- `driveExpect(c, score)` cuts `expect` (the discount they hope for) by up to a third.
+- `driveExpect(c, score)` cuts `expect` (the discount they hope for) by up to a third (half since 20d).
 - `Customer.wantsDrive` is rolled from the archetype's `drive` trait on its own `driveAskRng`, so the rest of the day plays as before.
   - Couples and regulars ask more, and decisive buyers less.
   - Tire-kickers ask often and rarely buy. That's the trap.
@@ -203,7 +203,7 @@ Tests:
   - `driveStaff`: three drives the player took in one day while a salesperson stood idle.
 - **Balance** with the 18a bench (`state/bench/longGame.bench.ts`) and seeded runs against the targets below on all three levels. The final constants go in the Status line.
 
-Tests: `tips.test.ts`, and a balance test in `store.testDrive.test.ts` (a 28-day seeded run lands in the target bands).
+Tests: `tips.test.ts`, and a balance test in `store.driveBalance.test.ts` (its own file, since `store.testDrive.test.ts` mocks `respondToAsk`): the haggle over a seeded crowd and a 28-day seeded run on each level land in the target bands.
 
 ## Performance
 

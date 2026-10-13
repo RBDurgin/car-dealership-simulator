@@ -3,7 +3,7 @@ import { PLAYER_ID, PLAYER_SKILL, type Customer } from './customers'
 import { carName } from './interactables'
 import type { InventoryCar } from './inventory'
 import type { Rng } from './rng'
-import type { Topic } from './talkingPoints'
+import { PROMPTS_PER_DRIVE, type Topic } from './talkingPoints'
 import type { Weather } from './weather'
 
 /**
@@ -167,23 +167,23 @@ export function driveScore(
 }
 
 /** What a drive adds to the odds of a yes, from a score of 0 to one of 1. */
-export const DRIVE_BONUS = { min: 0.05, max: 0.15 }
+export const DRIVE_BONUS = { min: 0.03, max: 0.13 }
 
 /** What a drive scoring `score` adds to the odds of a yes, × the level's `scale`. */
 export function driveBonus(score: number, scale = 1): number {
   return (DRIVE_BONUS.min + (DRIVE_BONUS.max - DRIVE_BONUS.min) * score) * scale
 }
 
-/** The most of the discount they hope for a perfect drive lets go. */
-export const MAX_EXPECT_CUT = 1 / 3
+/** The most of the discount they hope for a perfect drive lets go: half, so they counter less. */
+export const MAX_EXPECT_CUT = 0.5
 
-/** The discount `c` hopes for after a drive scoring `score`: up to a third less. */
+/** The discount `c` hopes for after a drive scoring `score`: up to half less. */
 export function driveExpect(c: Pick<Customer, 'expect'>, score: number): number {
   return Math.round(c.expect * (1 - MAX_EXPECT_CUT * score) * 1000) / 1000
 }
 
 /** Off the odds of a yes for a shopper who asked to drive the car and got a price instead. */
-export const NO_DRIVE_PENALTY = 0.05
+export const NO_DRIVE_PENALTY = 0.12
 
 /**
  * What the test drive does to `c`'s odds of a yes: the drive's bonus once
@@ -245,6 +245,11 @@ export function syncCarsOut(
   return inventory.map((c) =>
     change(c) ? { ...c, status: c.status === 'out' ? 'available' : 'out' } : c,
   )
+}
+
+/** A drive where every talking point was made and suited the buyer. */
+export function perfectDrive(drive: Pick<TestDrive, 'points'>): boolean {
+  return drive.points.length >= PROMPTS_PER_DRIVE && drive.points.every((p) => p.fit === 'good')
 }
 
 /** A drive scoring this or more went really well. */

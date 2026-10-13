@@ -433,6 +433,8 @@ export interface DriveStats {
   /** Taken by salespeople (the rest by the player). */
   byStaff: number
   dings: number
+  /** The player's drives where every talking point suited the buyer (see `perfectDrive`). */
+  perfect: number
 }
 
 export function emptyStats(): DayStats {
@@ -466,7 +468,7 @@ export function emptyStats(): DayStats {
     service: emptyServiceStats(),
     clients: emptyClientStats(),
     fi: emptyFiStats(),
-    drives: { taken: 0, bought: 0, cut: 0, byStaff: 0, dings: 0 },
+    drives: { taken: 0, bought: 0, cut: 0, byStaff: 0, dings: 0, perfect: 0 },
   }
 }
 

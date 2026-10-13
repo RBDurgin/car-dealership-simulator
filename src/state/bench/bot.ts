@@ -6,6 +6,7 @@ import { answerFor, loanDeclined, productsFor } from '../../sim/fi'
 import { MAX_MARKUP } from '../../sim/lenders'
 import type { ActionId } from '../../sim/interactables'
 import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
+import { PROMPTS_PER_DRIVE, topicFit } from '../../sim/talkingPoints'
 import { driveBlocker } from '../../sim/testDrive'
 import { useGame } from '../store'
 
@@ -14,7 +15,7 @@ import { useGame } from '../store'
  * the player, so the store runs whole days with no renderer. It isn't a good
  * player, only a busy one: walkers get where they're going at once, the
  * player works one deal at a time, gives a test drive to anyone who asks (back
- * at once), takes every counter and runs a fair F&I
+ * at once, see `setDriveStyle`), takes every counter and runs a fair F&I
  * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
  * ads are bought each morning. Staff stand idle, as their work is the scene's. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
@@ -47,6 +48,32 @@ function perform(targetId: string, action: ActionId): void {
   game().completeAction(id)
 }
 
+/**
+ * How the bot takes test drives: `plain` (the default) answers no talking
+ * points, `good` and `poor` answer each with the best or worst fit offered,
+ * `cut` heads back at once, and `none` never drives, giving a price instead.
+ */
+export type DriveStyle = 'plain' | 'good' | 'poor' | 'cut' | 'none'
+let driveStyle: DriveStyle = 'plain'
+
+export function setDriveStyle(style: DriveStyle): void {
+  driveStyle = style
+}
+
+const FIT_RANK = { good: 2, ok: 1, poor: 0 }
+
+/** Answers the talking point up now with the best (or worst) fit offered. */
+function pointOut(customerId: string, best: boolean): void {
+  const c = game().customers.find((x) => x.id === customerId)
+  const car = c?.drive && game().inventory.find((x) => x.id === c.drive!.carId)
+  const offered = c?.drive?.offered
+  if (!c || !car || !offered) return
+  const rank = (i: number) => FIT_RANK[topicFit(c, car, offered[i])] * (best ? 1 : -1)
+  let pick = 0
+  for (let i = 1; i < offered.length; i++) if (rank(i) > rank(pick)) pick = i
+  game().pickTopic(pick)
+}
+
 /** Takes `c` for the test drive they asked for: in the car, round the block and back at once. */
 function testDrive(customerId: string): void {
   game().testDrive(customerId)
@@ -54,6 +81,13 @@ function testDrive(customerId: string): void {
   if (id === undefined) return
   game().arriveAction(id)
   game().completeAction(id)
+  if (driveStyle === 'cut') game().headBack()
+  else if (driveStyle === 'good' || driveStyle === 'poor') {
+    for (let i = 0; i < PROMPTS_PER_DRIVE; i++) {
+      game().drivePrompt(customerId)
+      pointOut(customerId, driveStyle === 'good')
+    }
+  }
   game().driveBack(customerId)
 }
 
@@ -140,7 +174,7 @@ function workDeal(): boolean {
   if (!c) return false
   if (c.phase === 'following') closeDeal(c.id)
   else if (c.phase === 'talking') {
-    if (c.wantsDrive && !driveBlocker(c, game().inventory)) {
+    if (driveStyle !== 'none' && c.wantsDrive && !driveBlocker(c, game().inventory)) {
       testDrive(c.id)
       return true
     }

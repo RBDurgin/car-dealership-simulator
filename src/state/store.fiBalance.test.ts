@@ -10,13 +10,14 @@ import { nextDay, playDay, setMenuStyle, type MenuStyle } from './bench/bot'
 import { useGame } from './store'
 
 /**
- * F&I balance on Medium (19e): the bench bot plays 28 seeded days with a
+ * F&I balance on Medium (19e): the bench bot plays 56 seeded days with a
  * fair menu and again with a hard one, and the finance manager's menu is run
  * over a seeded crowd. The bands are the plan's tuning targets, a little
- * wider for a month's noise.
+ * wider for the noise (a single month's sample was too small for the hard menu's
+ * chargebacks).
  */
 
-const DAYS = 28
+const DAYS = 56
 const initial = useGame.getState()
 const game = () => useGame.getState()
 
