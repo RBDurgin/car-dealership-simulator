@@ -396,6 +396,10 @@ export interface GameState {
   fire: (id: string) => void
   /** Keeps an employee who's thinking of quitting, with a raise (see `retentionRaise`). */
   keepEmployee: (id: string) => void
+  /** Grants (the asked wage) or declines an employee's raise request after a level-up. */
+  answerRaise: (id: string, grant: boolean) => void
+  /** Dev: everyone on the lot gains a level's worth of experience now (Shift+G). */
+  devGrowStaff: () => void
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void

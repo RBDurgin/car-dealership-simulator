@@ -916,6 +916,24 @@ kbd {
   color: #fde047;
   letter-spacing: 1px;
 }
+.staff-raise {
+  color: #86efac;
+  font-weight: 600;
+}
+.xp-bar {
+  display: block;
+  width: 72px;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.xp-bar > span {
+  display: block;
+  height: 100%;
+  background: #fde047;
+}
 
 /* Stock panel: the staff panel's frame, a little wider for the catalog */
 .stock-panel {
@@ -1045,7 +1063,15 @@ kbd {
   background: rgba(96, 165, 250, 0.14);
   border: 1px solid rgba(96, 165, 250, 0.45);
 }
+.summary-level-ups {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(134, 239, 172, 0.12);
+  border: 1px solid rgba(134, 239, 172, 0.4);
+}
 .summary-records div + div,
+.summary-level-ups div + div,
 .summary-achievements div + div {
   margin-top: 2px;
 }

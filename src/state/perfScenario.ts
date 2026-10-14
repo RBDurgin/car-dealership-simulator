@@ -35,6 +35,10 @@ export function busyDay(): void {
       status: 'off' as const,
       fired: false,
       quitting: false,
+      xp: 0,
+      potential: 5,
+      hiredDay: 1,
+      raiseAsk: null,
     })),
   )
   useGame.setState({

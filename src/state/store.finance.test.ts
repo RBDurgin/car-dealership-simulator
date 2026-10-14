@@ -117,6 +117,7 @@ describe('handing off to finance', () => {
     game().dispatchCustomer({ type: 'seat', id: 'customer-a' })
     expect(customer()?.phase).toBe('signing')
     game().staffSign(fm, 'customer-a')
+    expect(game().dayStats.staffWork[fm]).toMatchObject({ came: true, signings: 1, sales: 0 })
     const price = car('lot-car-1').msrp
     expect(car('lot-car-1').status).toBe('sold')
     expect(game().cash).toBe(STARTING_CASH + price)

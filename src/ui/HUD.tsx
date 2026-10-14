@@ -177,6 +177,9 @@ export function HUD() {
       else if (e.code === 'KeyC' && !e.repeat) game.toggleStockPanel(undefined, 'calendar')
       else if (e.code === 'KeyK' && !e.repeat) game.toggleStockPanel(undefined, 'rival')
       else if (e.code === 'KeyB' && !e.repeat) game.toggleStockPanel(undefined, 'service')
+      // Dev: Shift+G gives everyone on the lot a level's worth of experience.
+      else if (e.code === 'KeyG' && !e.repeat && e.shiftKey && import.meta.env.DEV)
+        game.devGrowStaff()
       // Dev: Shift+L brings someone back from the client book.
       else if (e.code === 'KeyL' && !e.repeat && e.shiftKey && import.meta.env.DEV)
         game.devReturnClient()

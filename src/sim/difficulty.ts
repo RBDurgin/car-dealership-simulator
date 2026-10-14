@@ -73,6 +73,8 @@ export interface Tuning {
   driveBonus: number
   /** × the odds a test drive comes back with a ding (see `dingChance`). */
   dingChance: number
+  /** × the experience staff earn (see `sim/growth.ts`). */
+  staffGrowth: number
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -116,6 +118,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     chargebackScale: 0.6,
     driveBonus: 1.2,
     dingChance: 0.6,
+    staffGrowth: 1.3,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -153,6 +156,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     chargebackScale: 1,
     driveBonus: 1,
     dingChance: 1,
+    staffGrowth: 1,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -190,6 +194,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     chargebackScale: 1.4,
     driveBonus: 0.85,
     dingChance: 1.4,
+    staffGrowth: 0.85,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

@@ -493,6 +493,17 @@ export const UPDATES: readonly Update[] = [
       'One of them is hidden.',
     ],
   },
+  {
+    id: 45,
+    phase: '21',
+    title: 'Staff who grow',
+    items: [
+      'Your staff earn experience from every day they come in and every bit of work they do.',
+      'Enough of it raises their skill a star, about every three to four weeks of steady work.',
+      'Each hire can only grow so far: hollow stars after their skill show how far, applicants included.',
+      'A level-up comes with a request for a raise. Grant or decline it in the staff panel.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

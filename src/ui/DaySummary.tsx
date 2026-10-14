@@ -26,6 +26,7 @@ import { payLine, soldLine } from '../sim/fi'
 import { carName } from '../sim/interactables'
 import { sourceLabel } from '../sim/marketing'
 import { nazmaSummary } from '../sim/nazma'
+import { ROLE_LABELS } from '../sim/staff'
 import { goalLabel } from '../sim/owner'
 import { rankById, rankProgress } from '../sim/progression'
 import { daysLeft, quotaLine } from '../sim/quota'
@@ -498,6 +499,21 @@ function SummaryPanel() {
         {stats.rankUp && (
           <div className="summary-rank-up">
             ★ Your dealership is now a <b>{rankById(stats.rankUp).name}</b>.
+          </div>
+        )}
+        {(stats.levelUps.length > 0 || stats.raisesLapsed.length > 0) && (
+          <div className="summary-level-ups">
+            {stats.levelUps.map((u) => (
+              <div key={u.id}>
+                ★ {u.name} grew to skill {u.skill} as {ROLE_LABELS[u.role].toLowerCase()}
+                {u.ask !== null && <> and asks for {formatMoney(u.ask)}/day</>}.
+              </div>
+            ))}
+            {stats.raisesLapsed.length > 0 && (
+              <div className="muted">
+                {stats.raisesLapsed.join(' and ')} gave up waiting on a raise.
+              </div>
+            )}
           </div>
         )}
         {stats.newRecords.length > 0 && (

@@ -90,6 +90,7 @@ import {
   endDeal,
   notify,
   tallyMissed,
+  tallyWork,
   tuning,
   type Kit,
 } from '../core'
@@ -548,6 +549,8 @@ export function sign(
     ...(contract && { contracts: addContracts(get().contracts, [contract]) }),
   })
   commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded, deal }))
+  tallyWork(k, sale.sellerId, 'sales')
+  tallyWork(k, signer?.id, 'signings')
   return sale
 }
 

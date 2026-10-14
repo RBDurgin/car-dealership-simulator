@@ -24,6 +24,10 @@ const staff = (id: string, role: Role, skill = 3): Employee => ({
   status: 'atPost',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 })
 const sam = staff('sam', 'sales', 5)
 

@@ -10,6 +10,7 @@ import {
   type Employee,
   type StaffStatus,
 } from '../sim/staff'
+import { ceilingOf, levelProgress } from '../sim/growth'
 import { groundUp } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -21,11 +22,40 @@ const STATUS_LABELS: Record<StaffStatus, string> = {
   leaving: 'Heading home',
 }
 
-export function Skill({ skill }: { skill: number }) {
+/**
+ * Skill as stars out of `MAX_SKILL`; with a `potential`, the levels they
+ * can still grow into are hollow.
+ */
+export function Skill({ skill, potential = skill }: { skill: number; potential?: number }) {
+  const top = Math.max(skill, Math.min(MAX_SKILL, potential))
+  const label =
+    top > skill
+      ? `Skill ${skill} of ${MAX_SKILL}, can grow to ${top}`
+      : `Skill ${skill} of ${MAX_SKILL}`
   return (
-    <span className="skill" aria-label={`Skill ${skill} of ${MAX_SKILL}`}>
+    <span className="skill" aria-label={label} title={label}>
       {'★'.repeat(skill)}
-      <span className="muted">{'★'.repeat(MAX_SKILL - skill)}</span>
+      {'☆'.repeat(top - skill)}
+      <span className="muted">{'★'.repeat(MAX_SKILL - top)}</span>
+    </span>
+  )
+}
+
+/** How far they are toward their next level, or nothing once they can't grow. */
+function Growth({ e }: { e: Employee }) {
+  if (e.skill >= ceilingOf(e)) return null
+  const pct = Math.round(levelProgress(e) * 100)
+  return (
+    <span
+      className="xp-bar"
+      role="meter"
+      aria-label="Experience to the next level"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      title={`${pct}% of the way to skill ${e.skill + 1}`}
+    >
+      <span style={{ width: `${pct}%` }} />
     </span>
   )
 }
@@ -45,7 +75,8 @@ function StaffRow({
       <div className="staff-who">
         <div className="staff-name">{e.name}</div>
         <div className="staff-meta">
-          {ROLE_LABELS[e.role]} · <Skill skill={e.skill} />
+          {ROLE_LABELS[e.role]} · <Skill skill={e.skill} potential={e.potential} />
+          {!blurb && <Growth e={e} />}
         </div>
         {blurb && <div className="staff-blurb muted">{ROLE_BLURBS[e.role]}</div>}
       </div>
@@ -88,10 +119,32 @@ function StaffList() {
             <StaffRow key={e.id} e={e}>
               {e.quitting ? (
                 <span className="staff-status staff-quitting">Thinking of quitting</span>
+              ) : e.raiseAsk ? (
+                <span className="staff-status staff-raise">
+                  Asks for {formatMoney(e.raiseAsk.wage)}/day
+                </span>
               ) : (
                 <span className="staff-status muted">{STATUS_LABELS[e.status]}</span>
               )}
               <div className="staff-actions">
+                {e.raiseAsk && !e.quitting && (
+                  <>
+                    <button
+                      className="btn btn-small btn-primary"
+                      title="Pay the wage for their new skill."
+                      onClick={() => game.answerRaise(e.id, true)}
+                    >
+                      Grant
+                    </button>
+                    <button
+                      className="btn btn-small"
+                      title={`Keep them on ${formatMoney(e.wage)}/day.`}
+                      onClick={() => game.answerRaise(e.id, false)}
+                    >
+                      Decline
+                    </button>
+                  </>
+                )}
                 {e.quitting && (
                   <button
                     className="btn btn-small btn-primary"
@@ -133,7 +186,8 @@ function StaffList() {
         </ul>
       )}
       <div className="status-hint">
-        Wages are paid at closing.{touch ? '' : ' H or Esc to close.'}
+        Wages are paid at closing. Hollow stars are skill they can grow into.
+        {touch ? '' : ' H or Esc to close.'}
       </div>
     </div>
   )

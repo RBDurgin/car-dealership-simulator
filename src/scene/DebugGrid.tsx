@@ -12,7 +12,8 @@ export function DebugGrid() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyG' && !e.repeat) useGame.getState().toggleGrid()
+      // Shift+G is the dev key that grows the staff (ui/HUD).
+      if (e.code === 'KeyG' && !e.repeat && !e.shiftKey) useGame.getState().toggleGrid()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

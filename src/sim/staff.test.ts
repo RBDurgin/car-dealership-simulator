@@ -46,6 +46,10 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
   status: 'off',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
   ...over,
 })
 

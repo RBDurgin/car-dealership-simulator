@@ -33,6 +33,7 @@ import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
+import { potentialFromId } from './growth'
 import { dressFor, ROLES, type Employee } from './staff'
 import {
   emptyLifetime,
@@ -58,7 +59,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 32
+export const SAVE_VERSION = 33
 
 export interface SaveData {
   version: number
@@ -408,6 +409,24 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
       ? raw.inventory.map((c) => (isObject(c) ? { ...c, ding: false } : c))
       : raw.inventory,
   }),
+  // v33: staff grow. Nobody has experience yet; their potential comes from
+  // their id, and they count as hired the day of the save.
+  32: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e) =>
+          isObject(e) && typeof e.id === 'string' && isNumber(e.skill)
+            ? {
+                ...e,
+                xp: 0,
+                potential: potentialFromId(e.id, e.skill),
+                hiredDay: raw.day,
+                raiseAsk: null,
+              }
+            : e,
+        )
+      : raw.roster,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -731,7 +750,13 @@ function isEmployee(v: unknown): boolean {
     (ROLES as readonly unknown[]).includes(v.role) &&
     isNumber(v.wage) &&
     isNumber(v.skill) &&
-    typeof v.quitting === 'boolean'
+    typeof v.quitting === 'boolean' &&
+    isNumber(v.xp) &&
+    isNumber(v.potential) &&
+    v.potential >= v.skill &&
+    isNumber(v.hiredDay) &&
+    (v.raiseAsk === null ||
+      (isObject(v.raiseAsk) && isNumber(v.raiseAsk.wage) && isNumber(v.raiseAsk.day)))
   )
 }
 

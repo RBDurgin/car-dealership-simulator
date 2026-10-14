@@ -25,6 +25,10 @@ const mechanic: Employee = {
   status: 'atPost',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 }
 
 /** The 8th of the first month (from the second) with a recall. */

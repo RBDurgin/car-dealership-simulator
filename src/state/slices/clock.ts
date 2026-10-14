@@ -16,7 +16,7 @@ import type { GameState } from '../types'
 import { clientArrivals, receptionCalls } from './clients'
 import { withQuotes, withShopperRolls } from './customers'
 import { closeUp } from './day'
-import { jobsDone, serviceArrivals } from './service'
+import { creditJobs, jobsDone, serviceArrivals } from './service'
 
 type ClockKeys = 'clock' | 'tickClock'
 
@@ -109,6 +109,10 @@ function tick(k: Kit, step: ReturnType<typeof toStep>): void {
     serviceComebacks: service.comebacks,
   })
   if (jobs !== s.serviceJobs) {
+    creditJobs(
+      k,
+      s.serviceJobs.filter((j, i) => j.status === 'inBay' && jobs[i].status !== 'inBay'),
+    )
     jobsDone(
       k,
       jobs.filter((j, i) => j.status !== s.serviceJobs[i].status),

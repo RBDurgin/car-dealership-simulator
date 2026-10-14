@@ -7,7 +7,7 @@ import { NAZMA_ID, nextTarget, type NazmaStats, type NazmaVisit } from '../../si
 import { goalLabel } from '../../sim/owner'
 import { reduceStaff } from '../../sim/staff'
 import { weatherOn } from '../../sim/weather'
-import { dispatch, notify, setRoster, tuning, type Kit } from '../core'
+import { dispatch, notify, setRoster, tallyWork, tuning, type Kit } from '../core'
 import type { GameState } from '../types'
 import { amendLog } from './career'
 
@@ -126,6 +126,10 @@ export function worldSlice(k: Kit): Pick<GameState, WorldKeys> {
       if (s.nazma?.status !== 'onLot') return
       setNazma(k, { ...s.nazma, status: 'runOff', chatting: false })
       tallyNazma(k, { runOff: by })
+      if (by === 'guard') {
+        const guard = s.roster.find((e) => e.role === 'security' && !e.fired)
+        tallyWork(k, guard?.id, 'chases')
+      }
       notify(
         k,
         by === 'player' ? 'You ran Nazma off the lot.' : 'Your guard ran Nazma off the lot.',

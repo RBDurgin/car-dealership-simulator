@@ -10,7 +10,8 @@ import {
   type ExpansionId,
   type SalesDesk,
 } from './layout'
-import type { Rng } from './rng'
+import { potentialOf } from './growth'
+import { createRng, type Rng } from './rng'
 
 /**
  * The dealership's employees: who can be hired, what they cost, and where they
@@ -138,6 +139,19 @@ export interface Employee {
    * raise. A quitter stays `quitting` once gone, so they're still paid for the day.
    */
   quitting: boolean
+  /** Experience toward the next skill level (see `sim/growth.ts`). */
+  xp: number
+  /** The most `skill` can grow to, rolled at hiring. */
+  potential: number
+  /** The day they applied (and were hired, the same day). */
+  hiredDay: number
+  /** After a level-up: the wage they've asked for, and the day they asked. Null otherwise. */
+  raiseAsk: RaiseAsk | null
+}
+
+export interface RaiseAsk {
+  wage: number
+  day: number
 }
 
 export const MIN_SKILL = 1
@@ -268,16 +282,21 @@ export function dressFor(role: Role, variant: unknown): StaffVariant {
   return WORKER_VARIANTS.find((v) => v === variant) ?? WORKER_VARIANTS[0]
 }
 
+/** Seeds the applicants' potentials when no `growth` rng is given. */
+const GROWTH_SEED = 41_000
+
 /**
  * The day's applicants: one for each role in random order, sometimes plus one
  * more of any role, so every role can be filled on any day. Only roles that
  * can be hired with the `expansions` up apply (no mechanics without a garage),
- * so the rolls are the same as before there were any.
+ * so the rolls are the same as before there were any. Their potentials come
+ * from `growth`, so the rest of each applicant is rolled as before.
  */
 export function generateCandidates(
   rng: Rng,
   day: number,
   expansions: readonly ExpansionId[] = [],
+  growth: Rng = createRng(GROWTH_SEED + day),
 ): Employee[] {
   const limits = roleLimits(expansions)
   const open = ROLES.filter((r) => limits[r] > 0)
@@ -299,6 +318,10 @@ export function generateCandidates(
       status: 'off',
       fired: false,
       quitting: false,
+      xp: 0,
+      potential: potentialOf(growth, skill),
+      hiredDay: day,
+      raiseAsk: null,
     }
   })
 }
@@ -404,6 +427,8 @@ export type StaffEvent =
   | { type: 'keep'; id: string; wage: number }
   /** Walked off the lot. */
   | { type: 'left'; id: string }
+  /** Their raise request answered: the asked wage if `grant`, otherwise as they were. */
+  | { type: 'raise'; id: string; grant: boolean }
 
 /**
  * The roster after `ev`. Returns the same array when nothing changed, and
@@ -443,7 +468,16 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
       if (isPoachable(e) && e.status !== 'off') n = { ...e, quitting: true }
       break
     case 'keep':
-      if (e.quitting && !e.fired) n = { ...e, quitting: false, wage: ev.wage }
+      if (e.quitting && !e.fired) {
+        // A raise to stay that covers what they asked for answers that too.
+        const asked = e.raiseAsk && e.raiseAsk.wage > ev.wage ? e.raiseAsk : null
+        n = { ...e, quitting: false, wage: ev.wage, raiseAsk: asked }
+      }
+      break
+    case 'raise':
+      if (e.raiseAsk && !e.fired) {
+        n = { ...e, wage: ev.grant ? e.raiseAsk.wage : e.wage, raiseAsk: null }
+      }
       break
     case 'atPost':
       if (e.status === 'arriving') n = { ...e, status: 'atPost' }

@@ -9,6 +9,7 @@ import {
 import { washBlocker } from './cleanliness'
 import { emptyClientStats, type Client, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
+import type { LevelUp, StaffWork } from './growth'
 import {
   approachTilesFor,
   carName,
@@ -423,6 +424,12 @@ export interface DayStats {
   fi: FiStats
   /** Test drives today: back from the road, of those how many bought, how many were cut short and how many came back dinged. */
   drives: DriveStats
+  /** What each employee did today, by id (see `sim/growth.ts`). */
+  staffWork: StaffWork
+  /** Who levelled up when the day was settled. */
+  levelUps: LevelUp[]
+  /** Whose raise request lapsed unanswered when the day was settled. */
+  raisesLapsed: string[]
 }
 
 /** A day's test drives (see `sim/testDrive.ts`). */
@@ -469,6 +476,9 @@ export function emptyStats(): DayStats {
     clients: emptyClientStats(),
     fi: emptyFiStats(),
     drives: { taken: 0, bought: 0, cut: 0, byStaff: 0, dings: 0, perfect: 0 },
+    staffWork: {},
+    levelUps: [],
+    raisesLapsed: [],
   }
 }
 

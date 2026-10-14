@@ -41,6 +41,7 @@ import {
 } from './stats'
 import type { TipId } from './tips'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
+import { potentialFromId } from './growth'
 import type { Employee } from './staff'
 
 const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
@@ -53,6 +54,11 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   status: 'leaving',
   fired: false,
   quitting: false,
+  // As an older save's staff come up: hired the save's day, potential from their id.
+  xp: 0,
+  potential: potentialFromId(id, 3),
+  hiredDay: 3,
+  raiseAsk: null,
   ...extra,
 })
 
@@ -640,6 +646,37 @@ describe('save data', () => {
     expect(upgraded?.version).toBe(SAVE_VERSION)
     expect(upgraded?.inventory.every((c) => c.ding === false)).toBe(true)
     expect(parseSave({ ...save, inventory: old })).toBeNull()
+  })
+
+  it('keeps staff growth and a raise request, and upgrades a version 32 save without them', () => {
+    const grown = employee('staff-1-1', {
+      skill: 2,
+      xp: 120,
+      potential: 4,
+      hiredDay: 1,
+      raiseAsk: { wage: 110, day: 3 },
+    })
+    const save = createSave({ ...source(), roster: [grown] }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.roster).toEqual([
+      { ...grown, status: 'off' },
+    ])
+    const old = save.roster.map((e) => {
+      const { xp: _, potential: __, hiredDay: ___, raiseAsk: ____, ...rest } = e
+      return rest
+    })
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...save, version: 32, roster: old })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster[0]).toMatchObject({
+      skill: 2,
+      xp: 0,
+      potential: potentialFromId('staff-1-1', 2),
+      hiredDay: 3,
+      raiseAsk: null,
+    })
+    expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    expect(parseSave({ ...save, roster: [{ ...save.roster[0], potential: 1 }] })).toBeNull()
+    expect(parseSave({ ...save, roster: [{ ...save.roster[0], raiseAsk: 110 }] })).toBeNull()
   })
 
   it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {

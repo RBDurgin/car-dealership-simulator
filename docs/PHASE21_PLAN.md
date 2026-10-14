@@ -1,6 +1,6 @@
 # Phase 21 Plan: Staff Growth and Morale
 
-**Status:** planned 2026-10-12. Phase 21 comes after Phase 20 (test drives) in the plan. It needs only built phases: 3 (staff), 7c (indoor improvements), 9 (poaching), 10a (the calendar), 11 (`Tuning`), 17 (stats and achievements) and 18 (the store slices, the bench and CI).
+**Status:** planned 2026-10-12. 21a built on 2026-10-13 (save v33; `XP_PER_DAY` 6, `XP_TO_LEVEL` 200/240/280/320, `XP_VALUES` sale 4, signing 2, drive 1, wash 1, check-in 2, finding 2, call 0.5, booking 2, job 3, chase 5; potential +0/+1/+2/+3 at 15/40/35/10%; `RAISE_ASK_DAYS` 3; `staffGrowth` 1.3/1/0.85). `raiseAsk` is `{ wage, day }` so it can lapse, and `DayStats.raisesLapsed` names who gave up. Phase 21 comes after Phase 20 (test drives) in the plan. It needs only built phases: 3 (staff), 7c (indoor improvements), 9 (poaching), 10a (the calendar), 11 (`Tuning`), 17 (stats and achievements) and 18 (the store slices, the bench and CI).
 
 - Phases 19 (F&I) and 20 (test drives) don't need to be built first. Where one adds staff work (the finance manager's menu in 19c, a salesperson's drive in 20c), it counts toward that employee's work tally once both are in.
 - Most sub-phases add saved fields to `Employee`. Each takes the next free save version (`SAVE_VERSION` + 1) when it's built.

@@ -84,6 +84,7 @@ import {
   roleLimits,
   SALES_COMMISSION,
 } from '../sim/staff'
+import { RAISE_ASK_DAYS } from '../sim/growth'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -984,6 +985,21 @@ function PeopleTab({ touch, click }: TabProps) {
             more skilled, the quicker, and the more often clients say yes.
           </li>
         </ul>
+      </section>
+      <section>
+        <h3>Growth and raises</h3>
+        <p>
+          Staff get better with work. Every day they come in, and every sale, signing, wash,
+          check-in, call, job or chase, earns experience, and enough of it raises their skill a
+          star: a steady worker gains a level every three to four weeks. Each hire can only grow so
+          far, shown as hollow stars after their skill (applicants show theirs too), and a bar under
+          their name fills toward the next level.
+        </p>
+        <p>
+          A level-up comes with a request for the new level&apos;s wage, shown in the staff panel.{' '}
+          <b>Grant</b> pays it from the next closing; <b>Decline</b> keeps their old wage. Leave it
+          unanswered for {RAISE_ASK_DAYS} days and they give up asking, which counts as a no.
+        </p>
       </section>
       <section>
         <h3>The owner</h3>

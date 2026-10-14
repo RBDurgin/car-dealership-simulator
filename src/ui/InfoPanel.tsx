@@ -46,7 +46,7 @@ export function InfoPanel() {
           <dd>{ROLE_LABELS[employee.role]}</dd>
           <dt>Skill</dt>
           <dd>
-            <Skill skill={employee.skill} />
+            <Skill skill={employee.skill} potential={employee.potential} />
           </dd>
           <dt>Wage</dt>
           <dd className="price">{formatMoney(employee.wage)}/day</dd>

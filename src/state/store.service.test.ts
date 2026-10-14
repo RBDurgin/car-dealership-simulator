@@ -85,6 +85,10 @@ describe('reconditioning in the garage', () => {
     status: 'atPost',
     fired: false,
     quitting: false,
+    xp: 0,
+    potential: 5,
+    hiredDay: 1,
+    raiseAsk: null,
   }
   const usedCar = (): InventoryCar =>
     usedStockCar(
@@ -156,6 +160,7 @@ describe('reconditioning in the garage', () => {
     expect(after.msrp).toBeGreaterThan(before.msrp)
     expect(after.cost).toBe(before.cost + partsCost)
     expect(game().dayStats.service.recon).toBe(1)
+    expect(game().dayStats.staffWork['mech-1'].jobs).toBe(1)
   })
 
   it('finishes a started job at closing in overtime, and returns cars still waiting', () => {
@@ -171,6 +176,7 @@ describe('reconditioning in the garage', () => {
     game().tickClock({ day: 2, minute: CLOSE_MINUTE })
     const overtime = game().dayStats.service.overtime
     expect(overtime).toBeGreaterThan(0)
+    expect(game().dayStats.staffWork['mech-1'].jobs).toBe(1)
     expect(car().used!.condition).toBeCloseTo(0.6)
     expect(game().inventory.find((c) => c.id === 'used-1-2')).toMatchObject({
       status: 'available',

@@ -25,6 +25,7 @@ export const CONTROLS: [string, string][] = [
         ['R', 'Restock (dev)'],
         ['Shift R', 'Add a used car (dev)'],
         ['Shift L', 'Bring back a client, due ones first (dev)'],
+        ['Shift G', 'Level up the staff on the lot (dev)'],
         ['T', 'Game speed (dev)'],
       ] as [string, string][])
     : []),

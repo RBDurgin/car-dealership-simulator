@@ -279,6 +279,10 @@ describe('his moves and sabotage', () => {
       status: 'atPost',
       fired: false,
       quitting: true,
+      xp: 0,
+      potential: 5,
+      hiredDay: 1,
+      raiseAsk: null,
     }
     useGame.setState({ rival: open({ strength: 40 }), roster: [dana] })
     endDay()

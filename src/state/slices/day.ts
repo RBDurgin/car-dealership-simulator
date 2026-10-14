@@ -96,6 +96,7 @@ import {
   type Comeback,
   type ServiceJob,
 } from '../../sim/service'
+import { growStaff, levelUpNotice } from '../../sim/growth'
 import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, payroll, reduceStaff } from '../../sim/staff'
 import { stockPurchases } from '../../sim/sellers'
@@ -168,7 +169,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
       {},
       { scale: arrivalScale(1, weatherOn(1), eventOn(1), tuning, START_REPUTATION) },
     ),
-    candidates: generateCandidates(rng.staff, 1),
+    candidates: generateCandidates(rng.staff, 1, [], rng.growth),
   }
 }
 
@@ -304,8 +305,12 @@ export function settleDay(k: Kit): void {
     s.cash - charged - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
   // On Easy the bank covers the first time the day ends in the red.
   const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
+  // The day's work is experience: some grow a level and ask for a raise.
+  const grown = growStaff(s.roster, s.dayStats.staffWork, s.clock.day, level.staffGrowth)
   const settled: DayStats = {
     ...dayStats,
+    levelUps: [...dayStats.levelUps, ...grown.levelUps],
+    raisesLapsed: grown.lapsed,
     wages,
     commissions,
     interest,
@@ -360,6 +365,7 @@ export function settleDay(k: Kit): void {
     }),
     dayStats: { ...settled, newRecords: records.broken },
   })
+  setRoster(k, grown.roster)
 }
 
 /**
@@ -578,7 +584,12 @@ function morning(k: Kit, day: number): void {
       clients: { ...emptyClientStats(), defected: defectors.length },
     },
     missedYesterday: s.dayStats.missed,
-    candidates: generateCandidates(rng.staff, day, installedExpansions(s.expansions, day)),
+    candidates: generateCandidates(
+      rng.staff,
+      day,
+      installedExpansions(s.expansions, day),
+      rng.growth,
+    ),
     owner,
     nazma,
   })
@@ -589,6 +600,7 @@ function morning(k: Kit, day: number): void {
     s.dayStats.quota && tierNotice(s.dayStats.quota.tier.from, s.dayStats.quota.tier.to),
     s.dayStats.quota && heldByCsi(s.dayStats.quota) && heldNotice(s.dayStats.quota),
     s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
+    levelUpNotice(s.dayStats.levelUps, s.dayStats.raisesLapsed),
     chargebackNotice(dueChargebacks(s.chargebacks, day).due),
     opening.event && rivalNotice(rival, opening.event),
     eventNotice(day),

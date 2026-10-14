@@ -27,6 +27,10 @@ const mechanic: Employee = {
   status: 'atPost',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 }
 
 const DAY = 20

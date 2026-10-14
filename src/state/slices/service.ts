@@ -53,7 +53,7 @@ import {
 } from '../../sim/serviceClients'
 import { MIN_SKILL } from '../../sim/staff'
 import { mechanicWorking } from '../../sim/staffAi'
-import { commit, dispatch, notify, tuning, type Kit } from '../core'
+import { commit, dispatch, notify, tallyWork, tuning, type Kit } from '../core'
 import { advisorAtPost, mechanicCount, reconBook } from '../derived'
 import { rng } from '../rng'
 import type { GameState } from '../types'
@@ -82,7 +82,9 @@ export function serviceSlice(k: Kit): Pick<GameState, ServiceKeys> {
       const e = s.roster.find((x) => x.id === employeeId)
       if (e?.role !== 'advisor' || e.fired || e.status !== 'atPost') return
       if (s.activeAction?.targetId === customerId) return
+      const before = get().customers
       checkIn(k, customerId, employeeId)
+      if (get().customers !== before) tallyWork(k, employeeId, 'checkIns')
     },
     staffRecommend: (employeeId, jobId) => {
       const e = get().roster.find((x) => x.id === employeeId)
@@ -227,12 +229,18 @@ export function closeShop(k: Kit): void {
     ),
   })
   addService(k, { overtime })
+  creditJobs(k, late)
   jobsDone(k, late.map(finishedLate), true)
   for (const c of get().serviceAway) {
     const job = get().serviceJobs.find((j) => j.id === c.service?.jobId)
     if (job?.status === 'ready') collected(k, job, c)
   }
   set({ serviceAway: [] })
+}
+
+/** Counts each of `finished` (jobs that were in a bay) toward its mechanic's work today. */
+export function creditJobs(k: Kit, finished: readonly ServiceJob[]): void {
+  for (const j of finished) if (j.status === 'inBay') tallyWork(k, j.mechanicId, 'jobs')
 }
 
 /** Adds to today's service tally. */
@@ -325,6 +333,7 @@ export function offerFinding(k: Kit, jobId: string, by: string): void {
   const next = yes ? acceptFinding(job, mechanic) : declineFinding(job)
   set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
   addService(k, { offered: 1, upsold: yes ? 1 : 0 })
+  if (yes) tallyWork(k, by, 'findings')
   const promised = c.service.promisedMinute
   if (yes && promised !== null) {
     const ev = {

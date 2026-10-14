@@ -123,6 +123,10 @@ const staff = (id: string, role: Employee['role']): Employee => ({
   status: 'atPost',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 })
 
 const car = {

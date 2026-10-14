@@ -408,6 +408,10 @@ describe('the service advisor', () => {
     status: 'atPost',
     fired: false,
     quitting: false,
+    xp: 0,
+    potential: 5,
+    hiredDay: 1,
+    raiseAsk: null,
   }
 
   it('checks in whoever has waited longest at the counter, leaving the player theirs', () => {

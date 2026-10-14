@@ -26,6 +26,10 @@ const worker = (id: string, role: Role, skill = 3): Employee => ({
   status: 'atPost',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 })
 const mechanic = worker('mech-1', 'mechanic')
 

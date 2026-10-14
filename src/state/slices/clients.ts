@@ -40,6 +40,7 @@ import {
   endDeal,
   notify,
   tallyMissed,
+  tallyWork,
   tuning,
   withClientStats,
   type Kit,
@@ -179,6 +180,8 @@ export function endCall(k: Kit, clientId: string, by: string, skill: number): vo
     }),
   })
   if (by === PLAYER_ID) return notify(k, callLine(client.name, kind, result, minute))
+  tallyWork(k, by, 'calls')
+  if (result.outcome === 'booked') tallyWork(k, by, 'bookings')
   if (result.outcome !== 'booked') return
   const who = s.roster.find((e) => e.id === by)?.name ?? 'Your receptionist'
   notify(k, `${who} booked ${client.name} for ${formatTime(minute)} tomorrow.`)

@@ -26,6 +26,7 @@ const CONTRACT_SEED = 28_000
 const DRIVE_ASK_SEED = 29_000
 const TEST_DRIVE_SEED = 30_000
 const WEAR_SEED = 31_000
+const GROWTH_SEED = 32_000
 
 /** The rng streams, seeded per day, so a day plays out the same given the same choices. */
 export interface DayRngs {
@@ -59,6 +60,8 @@ export interface DayRngs {
   testDrive: Rng
   /** What test drives do to the cars: miles and dings. Apart, so the drives themselves play as before. */
   wear: Rng
+  /** Applicants' potential. Apart, so the rest of each applicant rolls as before. */
+  growth: Rng
 }
 
 function dayRngs(day: number): DayRngs {
@@ -78,6 +81,7 @@ function dayRngs(day: number): DayRngs {
     driveAsk: createRng(DRIVE_ASK_SEED + day),
     testDrive: createRng(TEST_DRIVE_SEED + day),
     wear: createRng(WEAR_SEED + day),
+    growth: createRng(GROWTH_SEED + day),
   }
 }
 

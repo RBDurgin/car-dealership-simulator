@@ -23,9 +23,10 @@ import {
   retentionRaise,
   ROLE_LABELS,
 } from '../../sim/staff'
+import { grow, levelUpNotice, withLevelUp, xpToLevel } from '../../sim/growth'
 import { freeSalesperson, leadChoice } from '../../sim/staffAi'
 import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
-import { commit, notify, setRoster, type Kit } from '../core'
+import { commit, notify, setRoster, tallyWork, type Kit } from '../core'
 import { rng } from '../rng'
 import type { GameState } from '../types'
 import { declineBuyer, sign, staffDeal, tradeAllowance, tradeLine } from './customers'
@@ -37,6 +38,8 @@ type StaffKeys =
   | 'fire'
   | 'keepEmployee'
   | 'dispatchStaff'
+  | 'answerRaise'
+  | 'devGrowStaff'
   | 'staffClaim'
   | 'staffGreet'
   | 'staffOffer'
@@ -80,7 +83,37 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       tallyNazma(k, { kept: [...get().dayStats.nazma.kept, { name: e.name, raise }] })
       notify(k, `${e.name} is staying, for ${formatMoney(raise)} a day more.`)
     },
-    dispatchStaff: (ev) => setRoster(k, reduceStaff(get().roster, ev)),
+    dispatchStaff: (ev) => {
+      const before = get().roster
+      setRoster(k, reduceStaff(before, ev))
+      if (ev.type === 'atPost' && get().roster !== before) tallyWork(k, ev.id, 'came')
+    },
+    answerRaise: (id, grant) => {
+      const e = get().roster.find((x) => x.id === id)
+      if (!e?.raiseAsk || e.fired) return
+      const wage = e.raiseAsk.wage
+      setRoster(k, reduceStaff(get().roster, { type: 'raise', id, grant }))
+      notify(
+        k,
+        grant
+          ? `${e.name} is on ${formatMoney(wage)} a day now.`
+          : `${e.name} stays on ${formatMoney(e.wage)} a day.`,
+      )
+    },
+    devGrowStaff: () => {
+      const s = get()
+      const levelUps = [...s.dayStats.levelUps]
+      const roster = s.roster.map((e) =>
+        e.fired || e.status === 'off'
+          ? e
+          : withLevelUp(grow(e, xpToLevel(e.skill) - e.xp), e.skill, s.clock.day, levelUps),
+      )
+      const grown = levelUps.slice(s.dayStats.levelUps.length)
+      if (grown.length === 0) return notify(k, 'Nobody on the lot can grow any further.')
+      setRoster(k, roster)
+      set({ dayStats: { ...get().dayStats, levelUps } })
+      notify(k, levelUpNotice(grown)!)
+    },
     staffClaim: (employeeId, customerId) => {
       const s = get()
       const e = s.roster.find((x) => x.id === employeeId)
@@ -147,6 +180,7 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const minutes = driveMinutes(rng.testDrive)
       const ev = { type: 'testDrive', id: c.id, carId: car.id, by: e.id, minutes } as const
       commit(k, reduceCustomers(s.customers, ev))
+      tallyWork(k, e.id, 'drives')
     },
     staffBoard: (employeeId) => {
       const c = staffCustomer(k, employeeId, ['talking'])
@@ -215,7 +249,9 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const e = get().roster.find((x) => x.id === employeeId)
       if (e?.role !== 'porter' || e.status !== 'atPost') return
       const inventory = washCar(get().inventory, carId)
-      if (inventory !== get().inventory) set({ inventory })
+      if (inventory === get().inventory) return
+      set({ inventory })
+      tallyWork(k, e.id, 'washes')
     },
   }
 }

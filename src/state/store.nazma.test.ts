@@ -21,6 +21,10 @@ const guard: Employee = {
   status: 'off',
   fired: false,
   quitting: false,
+  xp: 0,
+  potential: 5,
+  hiredDay: 1,
+  raiseAsk: null,
 }
 
 /** Resumes the game on the morning of `day`. */
@@ -235,6 +239,10 @@ describe('poaching', () => {
     status: 'atPost',
     fired: false,
     quitting: false,
+    xp: 0,
+    potential: 5,
+    hiredDay: 1,
+    raiseAsk: null,
   }
   const dana_ = () => game().roster.find((e) => e.id === dana.id)
 

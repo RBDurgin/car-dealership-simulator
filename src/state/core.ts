@@ -22,6 +22,7 @@ import {
 } from '../sim/deal'
 import type { Tuning } from '../sim/difficulty'
 import { eventOn } from '../sim/events'
+import { addWork, type WorkCount } from '../sim/growth'
 import { effectsOf, installed } from '../sim/improvements'
 import { carName } from '../sim/interactables'
 import { availableCars } from '../sim/inventory'
@@ -326,4 +327,13 @@ export function setRoster(k: Kit, roster: Employee[]): void {
   })
   const a = s.activeAction
   if (a && gone(a.targetId)) dispatch(k, { type: 'cancel' })
+}
+
+/** Counts `n` more of `count` toward employee `id`'s work today (not the player's). */
+export function tallyWork(k: Kit, id: string | null | undefined, count: WorkCount | 'came', n = 1) {
+  if (!id || id === PLAYER_ID || n <= 0) return
+  const stats = k.get().dayStats
+  if (!k.get().roster.some((e) => e.id === id)) return
+  const staffWork = addWork(stats.staffWork, id, count, n)
+  if (staffWork !== stats.staffWork) k.set({ dayStats: { ...stats, staffWork } })
 }
