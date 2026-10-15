@@ -28,6 +28,7 @@ import {
 } from '../sim/layout'
 import { findPathToAny } from '../sim/pathfinding'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
+import { drivePending } from '../sim/testDrive'
 import { customerById } from '../state/selectors'
 import { useGame } from '../state/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -136,9 +137,15 @@ const groups = new Map<string, Group>()
 const companions = new Map<string, Companion>()
 const companionGroups = new Map<string, Group>()
 
-/** Still driving in: they're in their car (scene/DrivenCar), not on foot. */
+/** Still driving in, or out on a test drive: they're in a car (scene/DrivenCar), not on foot. */
 const inCar = (c: Customer) =>
-  (!!c.vehicle && !c.vehicle.parked) || (!!c.service && !c.service.parked)
+  (!!c.vehicle && !c.vehicle.parked) || (!!c.service && !c.service.parked) || c.phase === 'driving'
+
+/** The stock car customer `c` is taking (or took) for a test drive, if it's in stock. */
+function driveCar(c: Customer) {
+  const id = c.drive?.carId
+  return id ? useGame.getState().inventory.find((x) => x.id === id) : undefined
+}
 
 /** The ids of the customers on foot, who are drawn here (the rest are in their cars). */
 const onFoot = (s: { customers: readonly Customer[] }) =>
@@ -157,18 +164,32 @@ function walkerFor(c: Customer): CustomerWalker {
   walkInSpawns.delete(c.id)
   // A service client steps out of their car, or walks back in for it later.
   const serviceDoor = c.service && !c.service.returned ? serviceDoorTile(c.service.spot) : null
-  const spawn = c.vehicle
-    ? doorTile(c.vehicle.spot)
-    : serviceDoor
-      ? serviceDoor
-      : walkIn
-        ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z)
-        : rng.pick(SIDEWALK_ENDS)
+  // Back from a test drive: they get out beside the car, away from the player.
+  const tested = driveCar(c)
+  const player = grid.worldToTile(playerPos.x, playerPos.z)
+  const besideCar =
+    tested &&
+    approachTilesFor(grid, tested.rect).sort(
+      (a, b) =>
+        Math.abs(b.tx - player.tx) +
+        Math.abs(b.tz - player.tz) -
+        (Math.abs(a.tx - player.tx) + Math.abs(a.tz - player.tz)),
+    )[0]
+  const spawn = besideCar
+    ? besideCar
+    : c.vehicle
+      ? doorTile(c.vehicle.spot)
+      : serviceDoor
+        ? serviceDoor
+        : walkIn
+          ? grid.worldToTile(walkIn.pos.x, walkIn.pos.z)
+          : rng.pick(SIDEWALK_ENDS)
   // They leave the way they came: back to their car, or on either lane of the
   // sidewalk; a passer-by carries on their way.
   const exit = c.vehicle
-    ? spawn
-    : (walkIn?.exit ?? rng.pick(SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx)))
+    ? doorTile(c.vehicle.spot)
+    : (walkIn?.exit ??
+      rng.pick(besideCar ? SIDEWALK_ENDS : SIDEWALK_ENDS.filter((t) => t.tx === spawn.tx)))
   w = {
     // A driver steps out facing the showroom.
     ...createWalker(c.id, spawn, c.vehicle ? Math.PI : (walkIn?.heading ?? inwardHeading(spawn))),
@@ -249,6 +270,8 @@ function serviceTask(c: Customer, ready: ReadonlySet<string>): string {
 /** What they're doing in the world. A new key means they need a new path. */
 function taskKey(c: Customer, player: PlayerIntent, ready: ReadonlySet<string>): string {
   if (c.service) return serviceTask(c, ready)
+  // Off to the car for a test drive.
+  if (c.phase === 'talking' && drivePending(c)) return `toCar:${c.drive!.carId}`
   switch (c.phase) {
     case 'arriving':
       return 'arrive'
@@ -294,6 +317,18 @@ function plan(c: Customer, w: CustomerWalker, task: string): void {
   if (task !== 'waitChair') leaveWaitChair(w)
   atCounter.delete(c.id)
   if (c.service) return planService(c, w, task)
+  if (task.startsWith('toCar:')) {
+    // To the side of the test drive car, facing it.
+    const car = driveCar(c)
+    if (!car) return
+    const centre = grid.tileToWorld(
+      car.rect.tx + (car.rect.w - 1) / 2,
+      car.rect.tz + (car.rect.h - 1) / 2,
+    )
+    w.faceTo = centre
+    pathTo(w, approachTilesFor(grid, car.rect))
+    return
+  }
 
   let goals: Tile[]
   switch (c.phase) {
@@ -489,6 +524,7 @@ function handlerPos(c: Customer): Vec2 {
  * a conversation, or a salesperson's buyer waiting to be shown to a desk.
  */
 function attending(c: Customer, task: string, player: PlayerIntent): boolean {
+  if (task.startsWith('toCar:')) return false
   if (player.targetId === c.id || CONVERSATION_PHASES.includes(c.phase)) return true
   if (task === 'awaitLead') return true
   return staffHandled(c) && (c.phase === 'browsing' || c.phase === 'waiting')

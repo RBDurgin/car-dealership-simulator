@@ -62,6 +62,8 @@ const base: Customer = {
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 }
 
@@ -464,11 +466,14 @@ describe('reduceCustomer', () => {
     // No patience lost, and closing time lets them finish.
     expect(run(menu, { type: 'tick', minutes: 30 })).toBe(menu)
     expect(run(menu, { type: 'close' })).toBe(menu)
+    // The deal they signed stays with them, for how the visit left them.
     expect(run(menu, { type: 'signed', id: 'c1' })).toMatchObject({
       phase: 'leaving',
       leaveReason: 'bought',
-      fi: null,
+      fi: deal,
     })
+    const staffDeal = { ...deal, lender: 'prime' as const }
+    expect(run(signing, { type: 'signed', id: 'c1', deal: staffDeal })?.fi).toBe(staffDeal)
     expect(run(menu, { type: 'declined', id: 'c1' })).toMatchObject({
       phase: 'leaving',
       leaveReason: 'declined',
@@ -476,6 +481,8 @@ describe('reduceCustomer', () => {
     expect(run(menu, { type: 'cancel', id: 'c1' })).toMatchObject({
       phase: 'waiting',
       fi: null,
+      wantsDrive: false,
+      drive: null,
       chairId: null,
       handlerId: null,
     })
@@ -525,6 +532,23 @@ describe('reduceCustomer', () => {
     const talking = at('talking', { handlerId: PLAYER_ID })
     expect(reduceCustomer(talking, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(talking)
     expect(reduceCustomer(following, { type: 'call', id: 'c1' })).toBe(following)
+  })
+
+  it('goes from a salesperson’s desk to finance, or home, when no lender takes them', () => {
+    const signing = at('signing', { handlerId: 'staff-2', chairId: 'sales-guest-1' })
+    expect(run(signing, { type: 'handOff', id: 'c1', to: 'staff-1' })).toMatchObject({
+      phase: 'queued',
+      handlerId: 'staff-1',
+      chairId: null,
+    })
+    expect(run(signing, { type: 'declined', id: 'c1' })).toMatchObject({
+      phase: 'leaving',
+      leaveReason: 'declined',
+    })
+    // The player's buyer signing goes to the menu instead.
+    const mine = at('signing', { handlerId: PLAYER_ID, chairId: GUEST_CHAIR_ID })
+    expect(reduceCustomer(mine, { type: 'handOff', id: 'c1', to: 'staff-1' })).toBe(mine)
+    expect(reduceCustomer(mine, { type: 'declined', id: 'c1' })).toBe(mine)
   })
 
   it('can be greeted while still browsing', () => {
@@ -796,6 +820,8 @@ describe('salespeople', () => {
       guest: false,
       credit: null,
       fi: null,
+      wantsDrive: false,
+      drive: null,
       service: null,
     })
   })
@@ -807,5 +833,98 @@ describe('salespeople', () => {
       handlerId: 'staff-9',
       sellerId: 'staff-1',
     })
+  })
+})
+
+describe('test drives', () => {
+  const talking = at('talking', { handlerId: PLAYER_ID, sellerId: PLAYER_ID })
+  const setOff: CustomerEvent = {
+    type: 'testDrive',
+    id: 'c1',
+    carId: 'lot-car-1',
+    by: PLAYER_ID,
+    minutes: 25,
+  }
+  const out = run(talking, setOff, { type: 'boarded', id: 'c1' })!
+
+  it('heads for the car still talking, and is driving once in', () => {
+    const walking = run(talking, setOff)!
+    expect(walking.phase).toBe('talking')
+    expect(walking.drive).toMatchObject({ carId: 'lot-car-1', by: PLAYER_ID, minutes: 25 })
+    expect(walking.drive?.back).toBe(false)
+    expect(out.phase).toBe('driving')
+    expect(moodOf(out)).toBe('happy')
+  })
+
+  it('comes back talking, with how it went and a smaller hope', () => {
+    const drive = { ...out.drive!, back: true, score: 0.8 }
+    const back = run(
+      out,
+      { type: 'cutDrive', id: 'c1' },
+      {
+        type: 'droveBack',
+        id: 'c1',
+        drive,
+        expect: 0.03,
+      },
+    )!
+    expect(back.phase).toBe('talking')
+    expect(back.drive).toEqual(drive)
+    expect(back.expect).toBe(0.03)
+    expect(run(out, { type: 'cutDrive', id: 'c1' })!.drive?.cut).toBe(true)
+  })
+
+  it('puts up talking points on the road, an open one counting as unanswered', () => {
+    const topics: CustomerEvent = { type: 'topics', id: 'c1', topics: ['safety', 'power', 'tech'] }
+    const asked = run(out, topics)!
+    expect(asked.drive?.offered).toEqual(['safety', 'power', 'tech'])
+    const point: CustomerEvent = { type: 'point', id: 'c1', point: { topic: 'power', fit: 'good' } }
+    const made = run(asked, point)!
+    expect(made.drive).toMatchObject({ offered: null, points: [{ topic: 'power', fit: 'good' }] })
+    // No point without a prompt up, and no prompt off the road.
+    expect(run(made, point)).toBe(made)
+    expect(run(talking, topics)).toBe(talking)
+    const twice = run(asked, { ...topics, topics: ['space', 'comfort', 'economy'] })!
+    expect(twice.drive?.points).toEqual([{ topic: null, fit: 'ok' }])
+    expect(twice.drive?.offered).toEqual(['space', 'comfort', 'economy'])
+  })
+
+  it('takes one drive a visit, only from talking, and only with whoever is talking to them', () => {
+    const back = { ...out, phase: 'talking' as const, drive: { ...out.drive!, back: true } }
+    expect(run(back, setOff)).toBe(back)
+    expect(run(at('waiting'), setOff)!.drive).toBeNull()
+    expect(run(talking, { ...setOff, by: 'emp-1' })!.drive).toBeNull()
+  })
+
+  it('takes no offer on the way to the car', () => {
+    const walking = run(talking, setOff)!
+    const offer: CustomerEvent = { type: 'offer', id: 'c1', carId: 'lot-car-1', price: 1 }
+    expect(run(walking, offer)).toBe(walking)
+  })
+
+  it('drains no patience and can’t be called off mid-drive', () => {
+    expect(run(out, { type: 'tick', minutes: 500 })).toBe(out)
+    expect(run(out, { type: 'cancel', id: 'c1' })).toBe(out)
+  })
+
+  it('calls off a drive not yet set off on, but keeps one they’ve had', () => {
+    const walking = run(talking, setOff)!
+    expect(run(walking, { type: 'cancel', id: 'c1' })).toMatchObject({
+      phase: 'waiting',
+      drive: null,
+    })
+    const had = { ...walking, drive: { ...walking.drive!, back: true } }
+    expect(run(had, { type: 'cancel', id: 'c1' })!.drive?.back).toBe(true)
+  })
+
+  it('heads home at closing like anyone talking', () => {
+    expect(run(out, { type: 'close' })).toMatchObject({ phase: 'leaving', leaveReason: 'closing' })
+  })
+
+  it('shows a key over a shopper who wants a drive until they’ve had one', () => {
+    expect(bubbleOf(at('waiting', { wantsDrive: true }))).toBe('drive')
+    expect(bubbleOf({ ...talking, wantsDrive: true })).toBe('drive')
+    expect(bubbleOf({ ...out, wantsDrive: true })).toBeNull()
+    expect(bubbleOf(at('waiting', { wantsDrive: true, patienceLeft: 1 }))).toBe('impatient')
   })
 })

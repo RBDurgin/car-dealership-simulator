@@ -9,7 +9,9 @@ import type { VisitOdds } from '../sim/nazma'
 import { loyaltyBonus } from '../sim/clients'
 import type { RepScale } from '../sim/reputation'
 import { bayCount, type ReconBook } from '../sim/service'
-import type { Employee } from '../sim/staff'
+import { financeSeconds, type Employee } from '../sim/staff'
+import { netPrice, staffPlan } from '../sim/fi'
+import { driveBonusFor } from '../sim/testDrive'
 import type { GameState } from './types'
 
 /**
@@ -86,9 +88,26 @@ export function orderInvoice(s: Pick<GameState, 'difficulty' | 'franchise'>): nu
 
 /**
  * What `c`'s seller adds to the odds of a yes: their skill bonus, plus what
- * the showroom improvements up today and the level add.
+ * the showroom improvements up today and the level add, and what a test
+ * drive did (or not having one they wanted, see `driveBonusFor`).
  */
 export function sellerBonusFor(
+  s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster' | 'clients' | 'inventory'>,
+  c: Pick<Customer, 'handlerId' | 'clientId' | 'drive' | 'wantsDrive' | 'targetCarId'>,
+): number {
+  return baseSellerBonus(s, c) + testDriveBonus(s, c)
+}
+
+/** What the test drive does to `c`'s odds of a yes, at the level's scale. */
+export function testDriveBonus(
+  s: Pick<GameState, 'difficulty' | 'inventory'>,
+  c: Pick<Customer, 'drive' | 'wantsDrive' | 'targetCarId'>,
+): number {
+  return driveBonusFor(c, s.inventory, levelTuning(s).driveBonus)
+}
+
+/** `sellerBonusFor` without the test drive: the seller, the showroom, the level and the book. */
+export function baseSellerBonus(
   s: Pick<GameState, 'improvements' | 'clock' | 'difficulty' | 'roster' | 'clients'>,
   c: Pick<Customer, 'handlerId' | 'clientId'>,
 ): number {
@@ -110,4 +129,17 @@ export function repScale(t: Tuning): RepScale {
 /** The level's odds of a visit from Nazma, scaled by his rival lot's `sabotageScale`. */
 export function visitOdds(t: Tuning, scale = 1): VisitOdds {
   return { chance: t.nazmaChance * scale, firstDay: t.firstNazmaDay }
+}
+
+/**
+ * Game seconds the finance manager `e` takes over `c`'s paperwork: longer
+ * for each product he'll present at the menu (see `staffPlan`).
+ */
+export function financePaperwork(
+  s: Pick<GameState, 'difficulty'>,
+  c: Pick<Customer, 'offer' | 'archetype' | 'credit' | 'budget'>,
+  e: Pick<Employee, 'skill'>,
+): number {
+  const plan = c.offer ? staffPlan(e.skill, c, netPrice(c.offer), levelTuning(s).productTake) : null
+  return financeSeconds(e.skill, plan?.presents.length ?? 0)
 }

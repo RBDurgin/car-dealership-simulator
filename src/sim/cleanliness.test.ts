@@ -56,6 +56,8 @@ const browser = (id: string, browsed: number, browseCarIds: string[]): Customer 
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 })
 
@@ -152,5 +154,11 @@ describe('cleanliness', () => {
     // Just at the threshold is clean enough.
     expect(dirtiestCar(withDirt({ 'display-1': WASH_BELOW }))).toBeNull()
     expect(dirtiestCar(inventory)).toBeNull()
+  })
+
+  it('needs a wash after one night on the lot, not one night in the showroom', () => {
+    const night = dirtyOvernight(inventory)
+    expect(dirtiestCar(night)?.location).toBe('lot')
+    expect(dirtiestCar(night.filter((c) => c.location === 'showroom'))).toBeNull()
   })
 })

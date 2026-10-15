@@ -8,8 +8,10 @@ import {
   dealReserve,
   financedAmount,
   fiGross,
+  fiWarmth,
   loanDeclined,
   loanOpen,
+  markupWarmth,
   moreDownFor,
   netPrice,
   pressureOf,
@@ -30,13 +32,35 @@ import {
   type DeclineReason,
   type Lender,
 } from '../sim/lenders'
-import { useGame } from '../state/store'
+import type { Warmth } from '../sim/negotiation'
+import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 /** How the markup stepper moves, in rate points. */
 const MARKUP_STEP = 0.25
 
 const pct = (rate: number) => `${(rate * 100).toFixed(2)}%`
+
+const PRODUCT_LABELS: Record<Warmth, string> = {
+  hot: 'Hot: likely to take it',
+  warm: 'Warm: they might',
+  cold: 'Cold: likely a no',
+}
+
+const MARKUP_LABELS: Record<Warmth, string> = {
+  hot: "Fair: they won't mind",
+  warm: 'Pricey: costs some goodwill',
+  cold: 'Steep: sours them, and may come back',
+}
+
+/** Easy's hint (`Tuning.dealHint`), as on the haggle stepper. */
+function Chip({ warmth, labels }: { warmth: Warmth; labels: Record<Warmth, string> }) {
+  return (
+    <div className={`warmth-chip warmth-${warmth}`} role="status">
+      {labels[warmth]}
+    </div>
+  )
+}
 
 function declineText(reason: DeclineReason, lender: Lender, c: Customer): string {
   switch (reason) {
@@ -57,6 +81,7 @@ function declineText(reason: DeclineReason, lender: Lender, c: Customer): string
  */
 function Loan({ c, deal, net }: { c: Customer; deal: FiDeal; net: number }) {
   const game = useGame.getState()
+  const hint = useGame((s) => levelTuning(s).dealHint)
   const amount = loanAmount(net, deal.down)
   const open = loanOpen(deal)
   const down = Math.round(deal.down * 100)
@@ -138,6 +163,7 @@ function Loan({ c, deal, net }: { c: Customer; deal: FiDeal; net: number }) {
           </button>
         </div>
       )}
+      {open && hint && <Chip warmth={markupWarmth(deal.markup)} labels={MARKUP_LABELS} />}
       <dl className="haggle-figures">
         <dt>Their rate</dt>
         <dd>
@@ -157,6 +183,8 @@ function Loan({ c, deal, net }: { c: Customer; deal: FiDeal; net: number }) {
 function ProductRow({ c, deal, product }: { c: Customer; deal: FiDeal; product: Product }) {
   const [price, setPrice] = useState(product.low)
   const game = useGame.getState()
+  const hint = useGame((s) => levelTuning(s).dealHint)
+  const bonus = useGame((s) => levelTuning(s).productTake)
   const answer = answerFor(deal, product.id)
   const step = (d: number) => setPrice((p) => clampProductPrice(product.id, p + d))
   if (answer?.taken) {
@@ -198,6 +226,12 @@ function ProductRow({ c, deal, product }: { c: Customer; deal: FiDeal; product: 
           +
         </button>
       </div>
+      {hint && canPresent(c, deal, product.id, price) && (
+        <Chip
+          warmth={fiWarmth(c, product, price, pressureOf(deal), bonus)}
+          labels={PRODUCT_LABELS}
+        />
+      )}
     </div>
   )
 }

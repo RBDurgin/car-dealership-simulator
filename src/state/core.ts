@@ -27,10 +27,19 @@ import { carName } from '../sim/interactables'
 import { availableCars } from '../sim/inventory'
 import { patienceFactor, type Employee } from '../sim/staff'
 import { JOB_WANTS } from '../sim/serviceClients'
+import { syncCarsOut } from '../sim/testDrive'
 import { advisorAtPost, levelTuning } from './derived'
 import { rng } from './rng'
 import { endCall, pitch } from './slices/clients'
-import { appraiseCar, closeDeal, greet, handOff, offer } from './slices/customers'
+import {
+  appraiseCar,
+  board,
+  closeDeal,
+  greet,
+  handOff,
+  offer,
+  startDrive,
+} from './slices/customers'
 import { wash } from './slices/economy'
 import { settleDay } from './slices/day'
 import { checkIn, offerFinding } from './slices/service'
@@ -134,7 +143,8 @@ export function commit(k: Kit, next: Customer[]): void {
   if (customers !== s.customers) {
     k.set({
       customers,
-      inventory: browseDirt(s.inventory, s.customers, customers),
+      // Cars go out for test drives and come back (or a drive is called off).
+      inventory: syncCarsOut(browseDirt(s.inventory, s.customers, customers), customers),
       ...departuresStep(k, s, customers),
       ...cleanupStep(s, customers),
     })
@@ -266,6 +276,10 @@ export function dispatch(k: Kit, ev: ActionEvent): void {
       return pitch(k, finished.targetId)
     case 'offer':
       return offer(k, finished.targetId)
+    case 'testDrive':
+      return startDrive(k, finished.targetId)
+    case 'ride':
+      return board(k, finished.targetId)
     case 'closeDeal':
       return closeDeal(k)
     case 'handOff':
@@ -279,6 +293,8 @@ export function dispatch(k: Kit, ev: ActionEvent): void {
     }
     case 'recondition':
       return void get().recondition(finished.targetId)
+    case 'fixDing':
+      return void get().fixDing(finished.targetId)
     case 'confront':
       return get().nazmaRunOff('player')
   }

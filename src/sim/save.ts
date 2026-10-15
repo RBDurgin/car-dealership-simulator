@@ -13,10 +13,13 @@ import {
   type MonthCsi,
 } from './clients'
 import type { GameTime } from './clock'
+import type { Chargeback } from './chargebacks'
+import { liveContracts, MAX_CONTRACTS, type Contract } from './contracts'
 import { isAchievementId, type EarnedAchievement } from './achievements'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
+import { emptyFiStats, PRODUCT_IDS, type FiStats } from './fi'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
 import { CAR_MODELS } from './customers'
@@ -55,7 +58,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 28
+export const SAVE_VERSION = 32
 
 export interface SaveData {
   version: number
@@ -108,6 +111,12 @@ export interface SaveData {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores so far, for the CSI. */
   monthCsi: MonthCsi
+  /** The month's F&I so far (see `sim/fi.ts`). */
+  monthFi: FiStats
+  /** Extended warranty contracts still in force (see `sim/contracts.ts`). */
+  contracts: Contract[]
+  /** Chargebacks still to land (see `sim/chargebacks.ts`). */
+  chargebacks: Chargeback[]
   /**
    * A record of each day settled since `statsFrom` (see `sim/stats.ts`), each
    * a tuple in `LOG_FIELDS` order to stay small (`tupleToRecord` reads one).
@@ -147,6 +156,9 @@ export interface SaveSource {
   clientPerks: ClientPerks
   appreciation: Appreciation | null
   monthCsi: MonthCsi
+  monthFi: FiStats
+  contracts: Contract[]
+  chargebacks: Chargeback[]
   log: DayRecord[]
   lifetime: Lifetime
   records: Records
@@ -167,7 +179,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     day: s.clock.day,
     cash: s.cash,
     // The shop hands every car back at closing; this is in case one wasn't.
-    inventory: s.inventory.map((c) => (c.status === 'recon' ? { ...c, status: 'available' } : c)),
+    // A car in the shop or out on a test drive is saved as back on the lot.
+    inventory: s.inventory.map((c) =>
+      c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' } : c,
+    ),
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off', quitting: false })),
     orders: s.orders,
     campaigns: unfinished(s.campaigns, s.clock.day + 1),
@@ -190,6 +205,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     clientPerks: s.clientPerks,
     appreciation: s.appreciation,
     monthCsi: s.monthCsi,
+    monthFi: s.monthFi,
+    // Those that run out tonight are gone by morning.
+    contracts: liveContracts(s.contracts, s.clock.day + 1),
+    chargebacks: s.chargebacks,
     log: s.log.map(recordToTuple),
     lifetime: s.lifetime,
     records: s.records,
@@ -364,6 +383,31 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   26: (raw) => ({ ...raw, achievements: [] }),
   // v28: the dealership's name. Every game before it had the default.
   27: (raw) => ({ ...raw, dealershipName: DEFAULT_DEALERSHIP_NAME }),
+  // v29: the month's F&I, starting from nothing.
+  28: (raw) => ({ ...raw, monthFi: emptyFiStats() }),
+  // v30: warranty contracts and chargebacks, none yet; the month's F&I counts chargebacks.
+  29: (raw) => ({
+    ...raw,
+    contracts: [],
+    chargebacks: [],
+    monthFi: isObject(raw.monthFi)
+      ? { ...raw.monthFi, chargebackCount: 0, chargebacks: 0, clawback: 0 }
+      : raw.monthFi,
+  }),
+  // v31: a client soured by an early chargeback. None yet.
+  30: (raw) => ({
+    ...raw,
+    clients: Array.isArray(raw.clients)
+      ? raw.clients.map((c) => (isObject(c) ? { ...c, chargedBack: false } : c))
+      : raw.clients,
+  }),
+  // v32: a dent from a test drive. None yet.
+  31: (raw) => ({
+    ...raw,
+    inventory: Array.isArray(raw.inventory)
+      ? raw.inventory.map((c) => (isObject(c) ? { ...c, ding: false } : c))
+      : raw.inventory,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -427,6 +471,10 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isPerks(clientPerks)) return null
   if (appreciation !== null && !isAppreciation(appreciation)) return null
   if (!isObject(monthCsi) || !isNumber(monthCsi.total) || !isNumber(monthCsi.count)) return null
+  if (!isFiStats(raw.monthFi)) return null
+  if (!Array.isArray(raw.contracts) || raw.contracts.length > MAX_CONTRACTS) return null
+  if (!raw.contracts.every(isContract)) return null
+  if (!Array.isArray(raw.chargebacks) || !raw.chargebacks.every(isChargeback)) return null
   if (!Number.isInteger(news) || (news as number) < 0) return null
   if (!isLog(raw.log)) return null
   if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
@@ -443,6 +491,50 @@ export function parseSave(input: unknown): SaveData | null {
     // One this build no longer has is dropped.
     achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
   } as unknown as SaveData
+}
+
+function isFiStats(v: unknown): boolean {
+  return isObject(v) && FI_COUNTS.every((k) => isNumber(v[k])) && isCounts(v.sold, PRODUCT_IDS)
+}
+
+const FI_COUNTS = [
+  'financed',
+  'cash',
+  'declined',
+  'menus',
+  'financedMenus',
+  'reserve',
+  'productGross',
+  'fees',
+  'chargebackCount',
+  'chargebacks',
+  'clawback',
+] as const satisfies readonly (keyof FiStats)[]
+
+function isContract(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.customerName === 'string' &&
+    isClientCar(v.car) &&
+    isNumber(v.soldDay) &&
+    isNumber(v.endDay) &&
+    isNumber(v.price)
+  )
+}
+
+const CHARGEBACK_KINDS: readonly unknown[] = [...PRODUCT_IDS, 'reserve']
+
+function isChargeback(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    isNumber(v.day) &&
+    isNumber(v.amount) &&
+    typeof v.customerName === 'string' &&
+    CHARGEBACK_KINDS.includes(v.kind) &&
+    (v.financeId === null || typeof v.financeId === 'string') &&
+    isNumber(v.clawback)
+  )
 }
 
 function isEarned(v: unknown): boolean {
@@ -509,7 +601,8 @@ function isCar(v: unknown): boolean {
     typeof v.floored === 'boolean' &&
     isObject(v.rect) &&
     (v.status === 'available' || v.status === 'sold' || v.status === 'recon') &&
-    (v.used === null || isUsedInfo(v.used))
+    (v.used === null || isUsedInfo(v.used)) &&
+    typeof v.ding === 'boolean'
   )
 }
 
@@ -559,7 +652,8 @@ function isClient(v: unknown): boolean {
     isNumber(v.referrals) &&
     isNumber(v.friendsSent) &&
     typeof v.thanked === 'boolean' &&
-    isDayOrNull(v.serviceDue)
+    isDayOrNull(v.serviceDue) &&
+    typeof v.chargedBack === 'boolean'
   )
 }
 

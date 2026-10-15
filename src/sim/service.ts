@@ -15,9 +15,17 @@ import { marketValue, usedListPrice } from './usedCars'
  * from car sales; the more cars the dealership has sold, the busier it is.
  */
 
-export type JobKind = 'oil' | 'tires' | 'brakes' | 'repair' | 'recall' | 'recon'
+export type JobKind = 'oil' | 'tires' | 'brakes' | 'repair' | 'recall' | 'recon' | 'ding'
 
-export const JOB_KINDS: readonly JobKind[] = ['oil', 'tires', 'brakes', 'repair', 'recall', 'recon']
+export const JOB_KINDS: readonly JobKind[] = [
+  'oil',
+  'tires',
+  'brakes',
+  'repair',
+  'recall',
+  'recon',
+  'ding',
+]
 
 export interface JobSpec {
   label: string
@@ -34,6 +42,8 @@ export const JOBS: Record<JobKind, JobSpec> = {
   repair: { label: 'Repair', minutes: 150, parts: { min: 200, max: 500 } },
   recall: { label: 'Recall work', minutes: 60, parts: { min: 50, max: 150 } },
   recon: { label: 'Reconditioning', minutes: 120, parts: { min: 300, max: 800 } },
+  // A dent from a test drive, in one of our own cars (see `sim/testDrive.ts`).
+  ding: { label: 'Dent repair', minutes: 45, parts: { min: 200, max: 500 } },
 }
 
 /** How often a client who drives in wants each kind of job. */
@@ -69,8 +79,13 @@ export interface ServiceJob {
   finding: Finding | null
   /** A free redo of a job that came back (see `comebackChance`): nobody pays for it. */
   redo: boolean
-  /** What the manufacturer pays for recall work (see `warrantyPay`), on top of what the client pays. */
+  /**
+   * What the manufacturer pays for recall work, or the warranty company for a
+   * claim on a contract (see `warrantyPay`), on top of what the client pays.
+   */
   warranty: number
+  /** The extended warranty contract (see `sim/contracts.ts`) paying for the job, or null. */
+  contractId: string | null
   /** A client's name and car, for the Service tab and the lift; null for our own. */
   client: { name: string; model: CarModel; condition: number } | null
   /** The game minute a client's car was ready, or null until it is. */
@@ -134,15 +149,16 @@ export function defaultService(): ServiceSettings {
 /** Parts are sold on at this much over cost. */
 export const PARTS_MARKUP = 0.4
 
-/** The manufacturer pays recall labor at this rate, $ an hour: below any shop rate. */
+/** The manufacturer (and a warranty company) pays labor at this rate, $ an hour: below any shop rate. */
 export const WARRANTY_HOURLY = 80
 
 /**
- * What the manufacturer pays for a recall job whose parts cost us
- * `partsCost`: the book time at `WARRANTY_HOURLY`, and the parts at cost.
+ * What the manufacturer pays for a recall job (or the warranty company for a
+ * `kind` claim) whose parts cost us `partsCost`: the book time at
+ * `WARRANTY_HOURLY`, and the parts at cost.
  */
-export function warrantyPay(partsCost: number): number {
-  return Math.round((JOBS.recall.minutes / 60) * WARRANTY_HOURLY) + partsCost
+export function warrantyPay(partsCost: number, kind: JobKind = 'recall'): number {
+  return Math.round((JOBS[kind].minutes / 60) * WARRANTY_HOURLY) + partsCost
 }
 
 /** A recall's quote: the client pays nothing, and the parts' cost is rolled like any quote's. */
@@ -230,11 +246,13 @@ export interface ServiceSchedule {
   kinds: JobKind[]
   /** The client from the book each visit is, or null for a stranger, by index into `minutes`. */
   clientIds: (string | null)[]
+  /** The warranty contract each visit claims on, or null, by index into `minutes`. */
+  contractIds: (string | null)[]
   spawned: number
 }
 
 export function emptySchedule(): ServiceSchedule {
-  return { minutes: [], kinds: [], clientIds: [], spawned: 0 }
+  return { minutes: [], kinds: [], clientIds: [], contractIds: [], spawned: 0 }
 }
 
 /**
@@ -260,6 +278,7 @@ export function planServiceVisits(rng: Rng, expected: number, recalls = 0): Serv
     minutes: visits.map((v) => v.minute),
     kinds: visits.map((v) => v.kind),
     clientIds: visits.map(() => null),
+    contractIds: visits.map(() => null),
     spawned: 0,
   }
 }
@@ -271,24 +290,42 @@ export interface BookServiceVisit {
   kind: JobKind
 }
 
-/** `schedule` (not started yet) with the book's `visits` merged in by minute. */
+/** A warranty claim due in today (see `contractVisits`): a repair the contract pays for. */
+export interface ClaimVisit {
+  contractId: string
+  minute: number
+}
+
+/**
+ * `schedule` (not started yet) with the book's `visits` and the warranty
+ * `claims` (repairs) merged in by minute.
+ */
 export function withBookVisits(
   schedule: ServiceSchedule,
   visits: readonly BookServiceVisit[],
+  claims: readonly ClaimVisit[] = [],
 ): ServiceSchedule {
-  if (visits.length === 0) return schedule
+  if (visits.length === 0 && claims.length === 0) return schedule
   const all = [
     ...schedule.minutes.map((minute, i) => ({
       minute,
       kind: schedule.kinds[i],
       clientId: schedule.clientIds[i],
+      contractId: schedule.contractIds[i],
     })),
-    ...visits,
+    ...visits.map((v) => ({ ...v, contractId: null })),
+    ...claims.map((v) => ({
+      minute: v.minute,
+      kind: 'repair' as const,
+      clientId: null,
+      contractId: v.contractId,
+    })),
   ].sort((a, b) => a.minute - b.minute)
   return {
     minutes: all.map((v) => v.minute),
     kinds: all.map((v) => v.kind),
     clientIds: all.map((v) => v.clientId),
+    contractIds: all.map((v) => v.contractId),
     spawned: 0,
   }
 }
@@ -312,7 +349,12 @@ export function takeDueVisits(
   schedule: ServiceSchedule,
   minute: number,
   max = Infinity,
-): { schedule: ServiceSchedule; due: JobKind[]; clientIds: (string | null)[] } {
+): {
+  schedule: ServiceSchedule
+  due: JobKind[]
+  clientIds: (string | null)[]
+  contractIds: (string | null)[]
+} {
   let spawned = schedule.spawned
   while (
     spawned < schedule.minutes.length &&
@@ -323,7 +365,13 @@ export function takeDueVisits(
   }
   const due = schedule.kinds.slice(schedule.spawned, spawned)
   const clientIds = schedule.clientIds.slice(schedule.spawned, spawned)
-  return { schedule: due.length > 0 ? { ...schedule, spawned } : schedule, due, clientIds }
+  const contractIds = schedule.contractIds.slice(schedule.spawned, spawned)
+  return {
+    schedule: due.length > 0 ? { ...schedule, spawned } : schedule,
+    due,
+    clientIds,
+    contractIds,
+  }
 }
 
 /** The odds a mechanic starting on a client's car finds something else it needs. */
@@ -353,7 +401,7 @@ export const FINDINGS: readonly FindingSpec[] = [
  * cars or on a free redo.
  */
 export function rollFinding(kind: JobKind, rate: RateLevel, rng: Rng): Finding | null {
-  if (kind === 'recon' || rng.next() >= FINDING_CHANCE) return null
+  if (kind === 'recon' || kind === 'ding' || rng.next() >= FINDING_CHANCE) return null
   const spec = rng.pick(FINDINGS.filter((f) => f.not !== kind))
   const partsCost = Math.round(rng.int(spec.parts.min, spec.parts.max) / 5) * 5
   return {
@@ -482,6 +530,9 @@ export interface ServiceStats {
   partsCost: number
   /** What the manufacturer paid for recall work. */
   warranty: number
+  /** Warranty claims on our contracts finished, and what the warranty company paid for them. */
+  claims: number
+  contract: number
   /** Paid to mechanics for work finished after closing. */
   overtime: number
   /** Clients sent away for lack of time, who declined the quote, collected late, or came back. */
@@ -503,6 +554,8 @@ export function emptyServiceStats(): ServiceStats {
     parts: 0,
     partsCost: 0,
     warranty: 0,
+    claims: 0,
+    contract: 0,
     overtime: 0,
     turnedAway: 0,
     declined: 0,
@@ -535,7 +588,7 @@ export function reconGain(car: InventoryCar, day: number): number {
 
 /**
  * Car `id` back from the shop on `day`: its condition up by `RECON_STEP`,
- * detailed (washed), re-listed at the price its new worth calls for (never
+ * detailed (washed), any dent fixed, re-listed at the price its new worth calls for (never
  * lower than it was) and for sale again. The `partsCost` goes on its cost, so
  * its gross when sold is honest. Returns the same array if it isn't in the shop.
  */
@@ -551,6 +604,8 @@ export function finishRecon(
   const done: InventoryCar = {
     ...car,
     used,
+    // A dent is seen to along the way.
+    ding: false,
     status: 'available',
     msrp: Math.max(car.msrp, usedListPrice(marketValue(car.model, used, day))),
     cost: car.cost + partsCost,
@@ -618,6 +673,7 @@ export function reconJob(id: string, carId: string, partsCost: number): ServiceJ
     finding: null,
     redo: false,
     warranty: 0,
+    contractId: null,
     client: null,
     readyMinute: null,
   }
@@ -628,12 +684,62 @@ export function reconPartsCost(rng: Rng): number {
   return quote('recon', 'standard', rng).partsCost
 }
 
+/** Why dinged car `id` can't go to the shop to have its dent fixed now, or null if it can. */
+export function dingBlocker(book: ReconBook, id: string): string | null {
+  if (book.bays === 0) return 'You need a service garage to fix dents.'
+  const car = book.inventory.find((c) => c.id === id)
+  if (!car || car.status === 'sold') return 'That car has been sold.'
+  if (car.status === 'recon') return "It's in the shop already."
+  if (car.status === 'out') return "It's out on a test drive."
+  if (!car.ding) return "There's no dent to fix."
+  if (book.closed) return 'The shop is closed for the day.'
+  if (book.mechanics === 0) return 'Hire a mechanic first.'
+  const wanted = book.customers.some(
+    (c) => c.phase !== 'leaving' && (c.targetCarId === id || c.offer?.carId === id),
+  )
+  if (wanted) return 'A customer is looking at it.'
+  return null
+}
+
+/** A job to fix the dent in car `carId`, its parts at `partsCost` (paid when it's booked). */
+export function dingJob(id: string, carId: string, partsCost: number): ServiceJob {
+  return { ...reconJob(id, carId, partsCost), kind: 'ding', minutes: JOBS.ding.minutes }
+}
+
+/** The parts fixing a dent needs. */
+export function dingPartsCost(rng: Rng): number {
+  return quote('ding', 'standard', rng).partsCost
+}
+
+/**
+ * Car `id` back from the shop with its dent fixed: washed, for sale again,
+ * the `partsCost` on its cost. Returns the same array if it isn't in the shop.
+ */
+export function finishDing(
+  inventory: InventoryCar[],
+  id: string,
+  partsCost: number,
+): InventoryCar[] {
+  const car = inventory.find((c) => c.id === id)
+  if (car?.status !== 'recon') return inventory
+  const done: InventoryCar = {
+    ...car,
+    ding: false,
+    status: 'available',
+    cost: car.cost + partsCost,
+  }
+  return washCar(
+    inventory.map((c) => (c === car ? done : c)),
+    id,
+  )
+}
+
 /**
  * Which waiting job a mechanic takes first: clients' cars (15c), then recalls
- * (15e), then our own reconditioning.
+ * (15e), then our own cars (reconditioning and dents).
  */
 export function jobPriority(job: Pick<ServiceJob, 'kind'>): number {
-  if (job.kind === 'recon') return 2
+  if (job.kind === 'recon' || job.kind === 'ding') return 2
   if (job.kind === 'recall') return 1
   return 0
 }
@@ -689,7 +795,8 @@ export function finishedLate(job: ServiceJob): ServiceJob {
 
 /**
  * A client's job, at the `quote` they took. Its time is set again by whoever
- * starts it. The manufacturer pays for recall work, except a redo.
+ * starts it. The manufacturer pays for recall work, and the warranty company
+ * for a claim on `contractId`, except on a redo.
  */
 export function clientJob(
   id: string,
@@ -698,7 +805,9 @@ export function clientJob(
   q: Quote,
   client: NonNullable<ServiceJob['client']>,
   redo = false,
+  contractId: string | null = null,
 ): ServiceJob {
+  const paid = !redo && (kind === 'recall' || contractId !== null)
   return {
     id,
     kind,
@@ -714,7 +823,8 @@ export function clientJob(
     partsCost: q.partsCost,
     finding: null,
     redo,
-    warranty: kind === 'recall' && !redo ? warrantyPay(q.partsCost) : 0,
+    warranty: paid ? warrantyPay(q.partsCost, kind) : 0,
+    contractId,
     client,
     readyMinute: null,
   }

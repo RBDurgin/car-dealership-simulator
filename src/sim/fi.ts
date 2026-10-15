@@ -1,16 +1,18 @@
 import type { Archetype } from './archetypes'
-import type { Credit } from './credit'
+import type { Credit, CreditTier } from './credit'
 import {
   acquisitionFee,
   approvingLenders,
   clampMarkup,
   lenderById,
   loanAmount,
+  MAX_MARKUP,
   reserve,
   saveByDown,
   type LenderId,
 } from './lenders'
 import type { Warmth } from './negotiation'
+import type { Rng } from './rng'
 
 /**
  * The F&I menu: once the price is agreed and the buyer is seated, the loan is
@@ -44,7 +46,7 @@ export const PRODUCTS: Record<ProductId, Product> = {
     high: 2500,
     costShare: 0.45,
     financedOnly: false,
-    base: 0.4,
+    base: 0.45,
   },
   gap: {
     id: 'gap',
@@ -92,6 +94,8 @@ export const PRESSURE_DROP = 0.06
 export const MARKUP_PRESSURE = 0.8
 /** Nobody is a sure thing. */
 export const MAX_TAKE = 0.85
+/** Taken off every take chance for a cash buyer: it's a cheque, not a few dollars on the payment. */
+export const CASH_TAKE = 0.15
 
 /** How each kind of buyer leans on each product: families like warranties, bargain hunters say no. */
 const TASTE: Record<Archetype, Partial<Record<ProductId, number>>> = {
@@ -161,9 +165,9 @@ export function pressureOf(deal: FiDeal): number {
 
 /**
  * The chance `c` takes `product` at `price` with `pressure` on them: the
- * product's base, their taste for it, less for a price toward its high end
- * and for every point of pressure, plus `bonus` (`Tuning.productTake`).
- * 0 for a product they aren't offered.
+ * product's base, their taste for it, less for a price toward its high end,
+ * for every point of pressure and for paying cash (`CASH_TAKE`), plus
+ * `bonus` (`Tuning.productTake`). 0 for a product they aren't offered.
  */
 export function productTake(
   c: FiBuyer,
@@ -178,7 +182,8 @@ export function productTake(
     product.base +
     (TASTE[c.archetype][product.id] ?? 0) -
     PRICE_DROP * along -
-    PRESSURE_DROP * pressure +
+    PRESSURE_DROP * pressure -
+    (financing(c) ? 0 : CASH_TAKE) +
     bonus
   return Math.max(0, Math.min(MAX_TAKE, chance))
 }
@@ -362,6 +367,11 @@ export interface FiStats {
   fees: number
   /** Products sold, by product. */
   sold: Partial<Record<ProductId, number>>
+  /** Chargebacks that landed (see `sim/chargebacks.ts`): how many, and what they took back. */
+  chargebackCount: number
+  chargebacks: number
+  /** Of those, the finance manager's commission share taken back off the day's commissions. */
+  clawback: number
 }
 
 export function emptyFiStats(): FiStats {
@@ -375,11 +385,24 @@ export function emptyFiStats(): FiStats {
     productGross: 0,
     fees: 0,
     sold: {},
+    chargebackCount: 0,
+    chargebacks: 0,
+    clawback: 0,
   }
 }
 
-/** The day's F&I with a sale to a buyer with `credit` added, and its menu if it had one. */
-export function addFiSale(stats: FiStats, credit: Credit | null, fi?: SaleFi): FiStats {
+/**
+ * The day's F&I with a sale to a buyer with `credit` added, and its loan if
+ * they had one. `menu`: the loan came with the F&I menu (the player's or the
+ * finance manager's), so it counts toward penetration; a salesperson's loan
+ * at the buy rate adds only its reserve and fee.
+ */
+export function addFiSale(
+  stats: FiStats,
+  credit: Credit | null,
+  fi?: SaleFi,
+  menu = true,
+): FiStats {
   const financed = !!credit?.finance
   const out = {
     ...stats,
@@ -387,22 +410,48 @@ export function addFiSale(stats: FiStats, credit: Credit | null, fi?: SaleFi): F
     cash: stats.cash + (financed ? 0 : 1),
   }
   if (!fi) return out
+  const money = { ...out, reserve: out.reserve + fi.reserve, fees: out.fees + fi.fee }
+  if (!menu) return money
   const sold = { ...stats.sold }
   for (const p of fi.products) sold[p.id] = (sold[p.id] ?? 0) + 1
   return {
-    ...out,
+    ...money,
     menus: out.menus + 1,
     financedMenus: out.financedMenus + (fi.financed ? 1 : 0),
-    reserve: out.reserve + fi.reserve,
     productGross: out.productGross + fi.products.reduce((sum, p) => sum + p.price - p.cost, 0),
-    fees: out.fees + fi.fee,
     sold,
   }
 }
 
-/** The day's F&I gross: reserve and products, less lenders' fees. */
+/** F&I over two spans added together, as the month's is from its days. */
+export function addFiStats(a: FiStats, b: FiStats): FiStats {
+  const sold = { ...a.sold }
+  for (const id of PRODUCT_IDS) if (b.sold[id]) sold[id] = (sold[id] ?? 0) + (b.sold[id] ?? 0)
+  return {
+    financed: a.financed + b.financed,
+    cash: a.cash + b.cash,
+    declined: a.declined + b.declined,
+    menus: a.menus + b.menus,
+    financedMenus: a.financedMenus + b.financedMenus,
+    reserve: a.reserve + b.reserve,
+    productGross: a.productGross + b.productGross,
+    fees: a.fees + b.fees,
+    sold,
+    chargebackCount: a.chargebackCount + b.chargebackCount,
+    chargebacks: a.chargebacks + b.chargebacks,
+    clawback: a.clawback + b.clawback,
+  }
+}
+
+/** F&I gross per deal sold (every buyer, cash or financed), or null with none. */
+export function fiPerDeal(stats: FiStats): number | null {
+  const deals = stats.financed + stats.cash
+  return deals > 0 ? fiDayGross(stats) / deals : null
+}
+
+/** The day's F&I gross: reserve and products, less lenders' fees and chargebacks. */
 export function fiDayGross(stats: FiStats): number {
-  return stats.reserve + stats.productGross - stats.fees
+  return stats.reserve + stats.productGross - stats.fees - stats.chargebacks
 }
 
 /** The share of menus that sold product `id` (GAP: of the financed ones), or null with none. */
@@ -424,4 +473,173 @@ export function soldLine(stats: FiStats): string {
 export function payLine(stats: FiStats): string {
   const declined = stats.declined > 0 ? `, ${stats.declined} declined` : ''
   return `${stats.financed} financed, ${stats.cash} cash${declined}`
+}
+
+/** How far the finance manager eases the markup for each tier: good credit shops its rate. */
+export const STAFF_MARKUP_EASE: Record<CreditTier, number> = { A: 0.5, B: 0.75, C: 1, D: 1 }
+/** Added to every take chance per skill level over `STAFF_PITCH_FROM`: a better pitch. */
+export const STAFF_PITCH = 0.06
+/** The skill whose pitch is the player's: an average finance manager does the menu for a living. */
+export const STAFF_PITCH_FROM = 2
+/** The take chance under which an average (skill 3) finance manager stops presenting. */
+export const STAFF_FLOOR = 0.12
+/** Added to the floor per skill level over average: a good one knows when to stop. */
+export const STAFF_FLOOR_STEP = 0.03
+/** Where in each product's price range an average finance manager prices it (0 low, 1 high). */
+export const STAFF_PRICE_ALONG = 0.25
+/** Added to that per skill level over average. */
+export const STAFF_PRICE_STEP = 0.05
+
+/** The markup a finance manager of `skill` puts on a buyer of `tier`, in quarter points. */
+export function staffMarkup(skill: number, tier: CreditTier): number {
+  return clampMarkup(Math.round((skill / 5) * MAX_MARKUP * STAFF_MARKUP_EASE[tier] * 4) / 4)
+}
+
+/** The take chance under which a finance manager of `skill` presents nothing more. */
+export function staffFloor(skill: number): number {
+  return STAFF_FLOOR + (skill - 3) * STAFF_FLOOR_STEP
+}
+
+/** What a finance manager of `skill` asks for `product`. */
+export function staffPrice(skill: number, product: Product): number {
+  const along = Math.max(0, Math.min(1, STAFF_PRICE_ALONG + (skill - 3) * STAFF_PRICE_STEP))
+  return clampProductPrice(product.id, product.low + along * (product.high - product.low))
+}
+
+/** What a finance manager of `skill` adds to a take chance on top of `bonus`. */
+function staffBonus(skill: number, bonus: number): number {
+  return bonus + (skill - STAFF_PITCH_FROM) * STAFF_PITCH
+}
+
+/** The loan a finance manager sets up and the products he'll present, in order. */
+export interface StaffPlan {
+  deal: FiDeal
+  presents: { id: ProductId; price: number }[]
+}
+
+/**
+ * What a finance manager of `skill` will do with `c`, who pays `net`: the
+ * down payment that gets them a loan (more if nobody takes them at theirs),
+ * the approving lender with the best reserve less its fee at his markup, and
+ * the products in order of likely take, until the next one's chance would be
+ * under his floor. Null when no lender takes them at any down payment they
+ * can reach. Deterministic, so the scene can time his paperwork from it.
+ */
+export function staffPlan(skill: number, c: FiBuyer, net: number, bonus = 0): StaffPlan | null {
+  let deal = openDeal(c, net)
+  if (loanDeclined(c, deal)) {
+    const down = moreDownFor(c, net)
+    if (down === null) return null
+    deal = withDown(c, deal, net, down)
+    if (loanDeclined(c, deal)) return null
+  }
+  if (deal.lender && c.credit) {
+    const credit = { ...c.credit, down: deal.down }
+    const markup = staffMarkup(skill, c.credit.tier)
+    const amount = financedAmount(c, deal, net)
+    const value = (id: LenderId) =>
+      reserve(amount, markup, lenderById(id)) - acquisitionFee(lenderById(id), credit)
+    const ids = approvingFor(c, net, deal.down)
+    const best = ids.reduce((a, b) => (value(b) > value(a) ? b : a), ids[0])
+    deal = { ...deal, lender: best, markup }
+  }
+  const more = staffBonus(skill, bonus)
+  const presents: StaffPlan['presents'] = []
+  let left = productsFor(c)
+  let pressure = pressureOf(deal)
+  while (left.length > 0) {
+    const odds = left.map((p) => {
+      const price = staffPrice(skill, p)
+      return { p, price, chance: productTake(c, p, price, pressure, more) }
+    })
+    const next = odds.reduce((a, b) => (b.chance > a.chance ? b : a))
+    if (next.chance < staffFloor(skill)) break
+    presents.push({ id: next.p.id, price: next.price })
+    left = left.filter((p) => p !== next.p)
+    pressure += 1
+  }
+  return { deal, presents }
+}
+
+/**
+ * The finance manager of `skill` runs `c`'s menu (see `staffPlan`), each
+ * answer rolled on `rng`. Null when no lender takes them.
+ */
+export function staffMenu(
+  skill: number,
+  c: FiBuyer,
+  net: number,
+  rng: Rng,
+  bonus = 0,
+): FiDeal | null {
+  const plan = staffPlan(skill, c, net, bonus)
+  if (!plan) return null
+  const more = staffBonus(skill, bonus)
+  let deal = plan.deal
+  for (const { id, price } of plan.presents) {
+    const chance = productTake(c, PRODUCTS[id], price, pressureOf(deal), more)
+    deal = answered(deal, id, price, rng.next() < chance)
+  }
+  return deal
+}
+
+/**
+ * A salesperson signing at their own desk: the loan from the first lender
+ * that takes the buyer at the buy rate, and no products. Null when no lender
+ * takes them at their down payment (a finance manager could ask for more).
+ */
+export function deskLoan(c: FiBuyer, net: number): FiDeal | null {
+  const deal = openDeal(c, net)
+  return loanDeclined(c, deal) ? null : deal
+}
+
+// Satisfaction (19e): how the menu leaves the buyer feeling, for the visit's score.
+
+/** Markup points a buyer takes as fair. */
+export const FAIR_FI_MARKUP = 1
+/** Products a buyer will hear about without feeling pushed. */
+export const FAIR_FI_PRESENTED = 2
+/** Added for a fair menu: a loan or products, at most a point of markup and two products shown. */
+export const FAIR_FI_POINTS = 3
+/** Taken off per markup point over `FAIR_FI_MARKUP`. */
+export const MARKUP_POINTS = 4
+/** Taken off per product turned down past the second. */
+export const PUSH_POINTS = 3
+
+/** What a menu did to the buyer's score: a fair one adds, markup and pushing take off. */
+export interface FiFeeling {
+  /** `FAIR_FI_POINTS` for a fair menu, else 0. */
+  fair: number
+  /** Off for markup over `FAIR_FI_MARKUP` (0 or less), and the points of it. */
+  markup: number
+  /** Off for products turned down past the second (0 or less), and how many. */
+  pushed: number
+  declined: number
+}
+
+/**
+ * How `fi` sat with the buyer. A menu that arranged a loan or showed a
+ * product, with markup up to `FAIR_FI_MARKUP` and no more than
+ * `FAIR_FI_PRESENTED` products shown, adds `FAIR_FI_POINTS`. Every markup
+ * point over it takes `MARKUP_POINTS` off, and every product turned down
+ * past the second (a re-presented one counts again) `PUSH_POINTS`. A cash
+ * buyer shown nothing is left as they were.
+ */
+export function fiSatisfaction(fi: SaleFi): FiFeeling {
+  const declined = Math.max(0, fi.presented - fi.products.length)
+  const overMarkup = Math.max(0, fi.markup - FAIR_FI_MARKUP)
+  const ran = fi.financed || fi.presented > 0
+  const fair = ran && overMarkup === 0 && fi.presented <= FAIR_FI_PRESENTED
+  return {
+    fair: fair ? FAIR_FI_POINTS : 0,
+    // 0 −, so nothing off is 0 and not −0.
+    markup: 0 - Math.round(overMarkup * MARKUP_POINTS),
+    pushed: 0 - PUSH_POINTS * Math.max(0, declined - FAIR_FI_PRESENTED),
+    declined,
+  }
+}
+
+/** Easy's chip on the markup stepper: fair, costing a little goodwill, or steep. */
+export function markupWarmth(markup: number): Warmth {
+  return markup <= FAIR_FI_MARKUP ? 'hot' : markup <= 2 ? 'warm' : 'cold'
 }

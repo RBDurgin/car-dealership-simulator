@@ -6,6 +6,7 @@ import type { Tile } from './grid'
 import { GUARD_PATROL_TILES, SALES_DESKS, type ExpansionId } from './layout'
 import { findingBlocker, jobPriority, openFinding, type ServiceJob } from './service'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
+import { staffDriveCar } from './testDrive'
 
 /**
  * Salespeople this skilled greet browsing customers as soon as they're on the
@@ -21,6 +22,9 @@ export const EARLY_GREET_SKILL = 4
 /**
  * A salesperson's next step with a customer:
  * - greet: they've claimed someone; walk over and greet them
+ * - drive: the customer asked for a test drive; take them out first (the
+ *   scene sets it off, walks to the car and gets in)
+ * - ride: on the way to the test drive car, or out on the road in it
  * - offer: talk up the car, make the offer, and wait for the answer
  * - lead: the customer said yes; hand them to finance or send them to the desk
  * - sign: sit at the desk the buyer was sent to and do the paperwork
@@ -29,6 +33,8 @@ export const EARLY_GREET_SKILL = 4
 export type SalesTask =
   | { kind: 'idle' }
   | { kind: 'greet'; customerId: string }
+  | { kind: 'drive'; customerId: string; carId: string }
+  | { kind: 'ride'; customerId: string; carId: string }
   | { kind: 'offer'; customerId: string }
   | { kind: 'lead'; customerId: string }
   | { kind: 'sign'; customerId: string; chairId: string }
@@ -46,6 +52,10 @@ export interface SalesContext {
   buying?: boolean
   /** The expansions up, which say which sales desks stand (just the showroom's if left out). */
   expansions?: readonly ExpansionId[]
+  /** The stock, for test drives; without it, nobody is taken for one. */
+  inventory?: readonly InventoryCar[]
+  /** Cars a test drive holds already (see `carsHeld`), which no other drive takes. */
+  carsOut?: ReadonlySet<string>
 }
 
 const IDLE: SalesTask = { kind: 'idle' }
@@ -73,6 +83,26 @@ export function pickSalesCustomer(
     if (c.selling && !buying) continue
     if (c.phase === 'browsing' && !canGreetBrowsing(c)) continue
     if (!best || c.patienceLeft < best.patienceLeft) best = c
+  }
+  return best
+}
+
+/**
+ * The salesperson the player could hand a shopper to: at work, with nobody
+ * in hand and somewhere to close a sale, the most skilled first. Null if
+ * none is free.
+ */
+export function freeSalesperson(
+  roster: readonly Employee[],
+  customers: readonly Customer[],
+  expansions: readonly ExpansionId[] = [],
+): Employee | null {
+  let best: Employee | null = null
+  for (const e of roster) {
+    if (e.role !== 'sales' || e.status !== 'atPost' || e.fired) continue
+    if (customers.some((c) => c.handlerId === e.id && c.phase !== 'leaving')) continue
+    if (!salesDeskOf(roster, e.id, expansions) && !financeOnDuty(roster)) continue
+    if (!best || e.skill > best.skill) best = e
   }
   return best
 }
@@ -118,7 +148,17 @@ export function nextSalesTask(
       case 'browsing':
       case 'waiting':
         return { kind: 'greet', customerId: c.id }
-      case 'talking':
+      case 'talking': {
+        // On the way to the car, or (with nothing else to do) taking them out.
+        if (c.drive && !c.drive.back) {
+          return { kind: 'ride', customerId: c.id, carId: c.drive.carId }
+        }
+        const car = ctx.inventory && staffDriveCar(c, ctx.inventory, ctx.carsOut)
+        if (car) return { kind: 'drive', customerId: c.id, carId: car.id }
+        return { kind: 'offer', customerId: c.id }
+      }
+      case 'driving':
+        return { kind: 'ride', customerId: c.id, carId: c.drive!.carId }
       case 'considering':
         return { kind: 'offer', customerId: c.id }
       case 'following':

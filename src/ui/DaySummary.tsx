@@ -14,6 +14,7 @@ import {
   netIncome,
   theftLoss,
   revenue,
+  salesByFinance,
   salesBySeller,
   salesBySource,
   walkOuts,
@@ -170,7 +171,7 @@ function SummaryPanel() {
               <dd className="price summary-sub">{formatMoney(split.used)}</dd>
             </>
           )}
-          {(stats.sales.length > 0 || stats.fi.declined > 0) && (
+          {(stats.sales.length > 0 || stats.fi.declined > 0 || stats.fi.chargebackCount > 0) && (
             <>
               <dt>
                 F&amp;I ({stats.fi.menus} menu{stats.fi.menus === 1 ? '' : 's'})
@@ -198,6 +199,17 @@ function SummaryPanel() {
                   <dd className="price summary-sub">{formatMoney(stats.fi.productGross)}</dd>
                 </>
               )}
+              {stats.fi.chargebackCount > 0 && (
+                <>
+                  <dt className="summary-sub">
+                    · {stats.fi.chargebackCount} chargeback
+                    {stats.fi.chargebackCount === 1 ? '' : 's'}
+                    {stats.fi.clawback > 0 &&
+                      `, ${formatMoney(stats.fi.clawback)} back from finance`}
+                  </dt>
+                  <dd className="price summary-sub">{formatMoney(-stats.fi.chargebacks)}</dd>
+                </>
+              )}
             </>
           )}
           {stats.service.jobs > 0 && (
@@ -210,7 +222,8 @@ function SummaryPanel() {
                   stats.service.labor +
                     stats.service.parts -
                     stats.service.partsCost +
-                    stats.service.warranty,
+                    stats.service.warranty +
+                    stats.service.contract,
                 )}
               </dd>
             </>
@@ -222,6 +235,15 @@ function SummaryPanel() {
                 by the manufacturer
               </dt>
               <dd className="price summary-sub">{formatMoney(stats.service.warranty)}</dd>
+            </>
+          )}
+          {stats.service.claims > 0 && (
+            <>
+              <dt className="summary-sub">
+                · {stats.service.claims} warranty claim{stats.service.claims === 1 ? '' : 's'}, paid
+                by our warranty company
+              </dt>
+              <dd className="price summary-sub">{formatMoney(stats.service.contract)}</dd>
             </>
           )}
           {stats.service.offered > 0 && (
@@ -334,6 +356,17 @@ function SummaryPanel() {
                     </li>
                   ))}
                 </ul>
+              </dd>
+            </>
+          )}
+          {stats.drives.taken > 0 && (
+            <>
+              <dt>Test drives</dt>
+              <dd>
+                {stats.drives.taken} ({stats.drives.bought} bought
+                {stats.drives.byStaff > 0 && `, ${stats.drives.byStaff} by salespeople`}
+                {stats.drives.cut > 0 && `, ${stats.drives.cut} cut short`}
+                {stats.drives.dings > 0 && `, ${stats.drives.dings} dinged`})
               </dd>
             </>
           )}
@@ -524,7 +557,7 @@ function SummaryPanel() {
             </tbody>
           </table>
         )}
-        {stats.sales.some((s) => s.soldBy !== null) && (
+        {stats.sales.some((s) => s.soldBy !== null || s.signedBy !== null) && (
           <table className="summary-sellers">
             <thead>
               <tr>
@@ -533,6 +566,7 @@ function SummaryPanel() {
                 <th>Revenue</th>
                 <th>Off MSRP</th>
                 <th>Gross</th>
+                <th title="Loans and products, at the seller's own desk">F&amp;I</th>
                 <th>Commission</th>
                 {traded && (
                   <th title="Trade allowances over (or under) the cars' value">Trades ±</th>
@@ -547,12 +581,25 @@ function SummaryPanel() {
                   <td className="price">{formatMoney(t.revenue)}</td>
                   <td>{(averageDiscount(t) * 100).toFixed(1)}%</td>
                   <td className="price">{formatMoney(t.gross)}</td>
+                  <td className="price">{formatMoney(t.fi)}</td>
                   <td className="price">{formatMoney(t.commission)}</td>
                   {traded && (
                     <td className={t.tradeOver > 0 ? 'price margin-loss' : 'price'}>
                       {t.trades > 0 ? formatMoney(t.tradeOver) : '—'}
                     </td>
                   )}
+                </tr>
+              ))}
+              {salesByFinance(stats).map((t) => (
+                <tr key={`finance-${t.name}`}>
+                  <td title="Finance manager: the deals they signed">{t.name} (F&amp;I)</td>
+                  <td>{t.deals}</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td className="price">{formatMoney(t.fi)}</td>
+                  <td className="price">{formatMoney(t.commission)}</td>
+                  {traded && <td>—</td>}
                 </tr>
               ))}
             </tbody>

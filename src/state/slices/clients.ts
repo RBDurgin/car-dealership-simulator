@@ -24,6 +24,7 @@ import { formatTime, isClosed } from '../../sim/clock'
 import { assignCredit } from '../../sim/credit'
 import { generateCustomer, PLAYER_ID, type Customer } from '../../sim/customers'
 import { CONVERSATION_PHASES, recordVisitors } from '../../sim/deal'
+import { playerRiding } from '../../sim/testDrive'
 import { freeSpot } from '../../sim/driving'
 import { formatMoney } from '../../sim/format'
 import { carName } from '../../sim/interactables'
@@ -64,6 +65,11 @@ export function clientsSlice(k: Kit): Pick<GameState, ClientKeys> {
   return {
     phoneClient: (clientId) => {
       const s = get()
+      // The desk phone is back at the dealership.
+      if (playerRiding(s.customers)) {
+        notify(k, "You're out on a test drive.")
+        return false
+      }
       const list = callList(s.clients, s.clock.day, notToCall(k))
       const entry = clientId ? list.find((x) => x.client.id === clientId) : list[0]
       if (!entry) {

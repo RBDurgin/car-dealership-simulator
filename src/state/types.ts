@@ -3,6 +3,9 @@ import type { AchievementId, EarnedAchievement } from '../sim/achievements'
 import type { AudioBus, AudioSettings } from '../sim/audioSettings'
 import type { GraphicsSetting } from '../sim/graphics'
 import type { CallKind, ClientVisit } from '../sim/calls'
+import type { Chargeback } from '../sim/chargebacks'
+import type { Contract } from '../sim/contracts'
+import type { FiStats } from '../sim/fi'
 import type { CustomerVariant } from '../sim/characters'
 import type { Appreciation, Client, ClientPerks, MonthCsi } from '../sim/clients'
 import type { GameTime } from '../sim/clock'
@@ -71,7 +74,15 @@ export interface ReceptionCall {
 
 /** The office computer panel's tabs. */
 export type ComputerTab =
-  'stock' | 'marketing' | 'upgrades' | 'calendar' | 'rival' | 'service' | 'clients' | 'stats'
+  | 'stock'
+  | 'marketing'
+  | 'upgrades'
+  | 'calendar'
+  | 'rival'
+  | 'service'
+  | 'clients'
+  | 'finance'
+  | 'stats'
 
 /**
  * The whole store: one state, built from the slices in `state/slices/`.
@@ -129,6 +140,12 @@ export interface GameState {
   appreciation: Appreciation | null
   /** The month's new-car buyers' visit scores, for the manufacturer's CSI. Saved. */
   monthCsi: MonthCsi
+  /** The month's F&I so far, for the Finance tab. Saved. */
+  monthFi: FiStats
+  /** Extended warranty contracts sold, until they run out (see `sim/contracts.ts`). Saved. */
+  contracts: Contract[]
+  /** Chargebacks still to land (see `sim/chargebacks.ts`). Saved. */
+  chargebacks: Chargeback[]
   /** Clients due in on an appointment today, still to come. Planned each morning, never saved. */
   clientVisits: ClientVisit[]
   /** Clients phoned today who didn't pick up, or did: not called again today. Never saved. */
@@ -307,12 +324,28 @@ export interface GameState {
   fiLetGo: () => void
   /** At the F&I menu: signs the contracts, and the sale goes through. */
   fiSign: () => void
+  /** The player takes customer `id`, whom they're talking to, for a test drive (see `sim/testDrive.ts`). */
+  testDrive: (id: string) => void
+  /** Out on a test drive with the player: turn back for the lot now (the drive counts as cut short). */
+  headBack: () => void
+  /** The world: customer `id`'s test drive car is back in its space, and they get out. */
+  driveBack: (id: string) => void
+  /** The world: customer `id`'s test drive has come to a talking point, so 3 topics come up (see `sim/talkingPoints.ts`). */
+  drivePrompt: (id: string) => void
+  /** Out on a test drive: the player points out topic `index` (0–2) of the prompt that's up. */
+  pickTopic: (index: number) => void
   /** Salesperson `employeeId` sets off to help customer `customerId`. False if they can't. */
   staffClaim: (employeeId: string, customerId: string) => boolean
   /** Salesperson `employeeId` reached the customer they claimed and greets them. */
   staffGreet: (employeeId: string) => void
   /** Salesperson `employeeId` makes their customer an offer. */
   staffOffer: (employeeId: string) => void
+  /** Salesperson `employeeId` takes the customer they're talking to for the test drive they asked for. */
+  staffTestDrive: (employeeId: string) => void
+  /** Salesperson `employeeId` got in the test drive car with their customer: off they go. */
+  staffBoard: (employeeId: string) => void
+  /** The player hands customer `customerId`, whom they're talking to, to salesperson `employeeId` for their test drive. */
+  sendWith: (customerId: string, employeeId: string) => void
   /** Salesperson `employeeId`'s customer said yes: off to finance, or to their desk. */
   staffLead: (employeeId: string) => void
   /** Finance, or a salesperson at their desk, finished the paperwork for the buyer opposite. */
@@ -349,6 +382,8 @@ export interface GameState {
   staffStartJob: (employeeId: string, jobId: string, bay: number) => void
   /** Sends used car `carId` to the shop for reconditioning, paying for the parts. False if it can't go. */
   recondition: (carId: string) => boolean
+  /** Sends dinged car `carId` to the shop to have the dent fixed, paying for the parts. False if it can't go. */
+  fixDing: (carId: string) => boolean
   /** Turns reconditioning used cars as they come in on or off. */
   setAutoRecon: (on: boolean) => void
   /** Sets the shop rate: quotes from now on, the number of clients from tomorrow. */

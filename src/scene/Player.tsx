@@ -12,9 +12,10 @@ import { interactableCenter, pathToInteractable } from '../sim/interactables'
 import { moveWithCollision, PLAYER_SPEED } from '../sim/movement'
 import { NAZMA_ID } from '../sim/nazma'
 import { findPath } from '../sim/pathfinding'
+import { playerRiding } from '../sim/testDrive'
 import { isPaused, useGame, type MoveOrder } from '../state/store'
 import { Character } from './Character'
-import { ambientPos, cameraState, findInteractable, grid, playerPos } from './runtime'
+import { ambientPos, cameraState, findInteractable, grid, playerPos, riding } from './runtime'
 
 const TURN_RATE = 14
 /** How closely the player must face an object before the action starts. */
@@ -110,6 +111,16 @@ export function Player() {
     let dx = 0
     let dz = 0
     let moved = 0
+
+    // Out on a test drive: in the car, by its door on the lot as far as the
+    // camera is concerned, until it's back.
+    riding.player = playerRiding(game.customers)
+    riding.with = riding.player ? (dealCustomer(game.customers, PLAYER_ID)?.id ?? null) : null
+    if (group.current) group.current.visible = !riding.player
+    if (riding.player) {
+      waypoints.current = []
+      return
+    }
 
     // Movement keys do nothing behind the title screen or the guide.
     const { forward, right } = isPaused(game) ? { forward: 0, right: 0 } : axes.current

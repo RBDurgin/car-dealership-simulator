@@ -19,8 +19,11 @@ export const SMUDGE_DIRT = 0.5
 export const MAX_CLEAN_BONUS = 0.08
 /** Clean enough that washing it again would make no difference. */
 export const SPOTLESS = 0.95
-/** The porter washes cars dirtier than this. */
-export const WASH_BELOW = 0.8
+/**
+ * The porter washes cars dirtier than this: a lot car after one night's dust
+ * (1 − `NIGHTLY_DIRT.lot`), but not a showroom car after one night.
+ */
+export const WASH_BELOW = 0.85
 
 export type Condition = 'Clean' | 'Dusty' | 'Dirty'
 
@@ -42,6 +45,14 @@ export function conditionOf(cleanliness: number): Condition {
  */
 export function cleanlinessBonus(cleanliness: number): number {
   return (clamp01(cleanliness) * 2 - 1) * MAX_CLEAN_BONUS
+}
+
+/** Off a customer's accept chance for a car with a ding in it (from a test drive, see `sim/testDrive.ts`). */
+export const DING_PENALTY = 0.08
+
+/** What a car's ding takes off a customer's accept chance. */
+export function dingPenalty(car: Pick<InventoryCar, 'ding'>): number {
+  return car.ding ? DING_PENALTY : 0
 }
 
 /** Maps the cars `fn` changes, returning the same array when it changes none. */

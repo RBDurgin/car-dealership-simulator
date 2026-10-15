@@ -1,3 +1,4 @@
+import { newDrive } from './testDrive'
 import { describe, expect, it } from 'vitest'
 import { PLAYER_ID, type Customer } from './customers'
 import {
@@ -26,6 +27,7 @@ import {
   recordMissed,
   recordVisitors,
   revenue,
+  salesByFinance,
   salesBySeller,
   salesBySource,
   theftLoss,
@@ -85,6 +87,8 @@ const base: Customer = {
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 }
 
@@ -98,17 +102,24 @@ const mine = (phase: Customer['phase'], extra: Partial<Customer> = {}): Customer
   at(phase, { handlerId: PLAYER_ID, ...extra })
 
 describe('customerActions', () => {
-  it('offers a greeting while browsing or waiting, an offer while talking', () => {
+  it('offers a greeting while browsing or waiting, an offer or a test drive while talking', () => {
     expect(customerActions(at('browsing'))).toEqual(['greet'])
     expect(customerActions(at('waiting'))).toEqual(['greet'])
-    expect(customerActions(at('talking'))).toEqual(['offer'])
+    expect(customerActions(at('talking'))).toEqual(['offer', 'testDrive'])
+  })
+
+  it('offers only the offer once they’ve driven, and nothing on the way to the car', () => {
+    const drive = newDrive('lot-car-1', PLAYER_ID, 25)
+    expect(customerActions(mine('talking', { drive }))).toEqual([])
+    expect(customerActions(mine('talking', { drive: { ...drive, back: true } }))).toEqual(['offer'])
+    expect(customerActions(mine('driving', { drive }))).toEqual([])
   })
 
   it('offers nothing while a salesperson has them, so the player can’t ask into their deal', () => {
     for (const phase of ['browsing', 'waiting', 'talking'] as const) {
       expect(customerActions(at(phase, { handlerId: 'emp-1' })), phase).toEqual([])
     }
-    expect(customerActions(mine('talking'))).toEqual(['offer'])
+    expect(customerActions(mine('talking'))).toEqual(['offer', 'testDrive'])
   })
 
   it('offers nothing while arriving, mid-deal or leaving', () => {
@@ -465,7 +476,7 @@ describe('day stats', () => {
       sales: [sale(28_000, 'Kim P.', 500, 30_000), sale(20_000, null), sale(10_000, 'Kim P.', 750)],
     }
     const tallies = salesBySeller(stats)
-    const none = { trades: 0, tradeOver: 0 }
+    const none = { trades: 0, tradeOver: 0, fi: 0 }
     expect(tallies).toEqual([
       {
         seller: null,
@@ -488,6 +499,51 @@ describe('day stats', () => {
     ])
     expect(tallies.map(averageDiscount)).toEqual([0, 0.05])
     expect(salesBySeller(emptyStats())).toEqual([])
+  })
+
+  it('gives the finance manager a row of his own, with his pay off the seller’s', () => {
+    const fi = (gross: number) => ({
+      financed: true,
+      lender: 'prime' as const,
+      markup: 1,
+      amount: 25_000,
+      reserve: gross,
+      fee: 0,
+      products: [],
+      presented: 0,
+      pressure: 0.8,
+      gross,
+    })
+    const sale = (soldBy: string | null, signedBy: string | null, extra: object) => ({
+      customerName: 'Pat',
+      carId: 'x',
+      model: 'sedan' as const,
+      msrp: 30_000,
+      cost: 27_000,
+      minute: 600,
+      price: 30_000,
+      soldBy,
+      signedBy,
+      commission: 0,
+      source: 'regular' as const,
+      ...extra,
+    })
+    const stats = {
+      ...emptyStats(),
+      sales: [
+        sale(null, null, { fi: fi(400) }),
+        sale('Kim P.', 'Jordan K.', { fi: fi(900), commission: 1_085, financeCommission: 335 }),
+        sale(null, 'Jordan K.', { fi: fi(600), commission: 290, financeCommission: 290 }),
+      ],
+    }
+    expect(salesBySeller(stats)).toMatchObject([
+      { seller: null, cars: 2, commission: 0, fi: 400 },
+      { seller: 'Kim P.', cars: 1, commission: 750, fi: 0 },
+    ])
+    expect(salesByFinance(stats)).toEqual([
+      { name: 'Jordan K.', deals: 2, fi: 1_500, commission: 625 },
+    ])
+    expect(salesByFinance(emptyStats())).toEqual([])
   })
 
   it('adds up how far over (or under) their value trade-ins were allowed, per seller', () => {

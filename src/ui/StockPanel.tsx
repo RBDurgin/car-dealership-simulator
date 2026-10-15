@@ -22,6 +22,7 @@ import { CalendarTab } from './CalendarTab'
 import { ClientsTab } from './ClientsTab'
 import { StatsTab } from './StatsTab'
 import { RivalTab } from './RivalTab'
+import { FinanceTab } from './FinanceTab'
 import { ServiceTab } from './ServiceTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
@@ -253,6 +254,8 @@ export function StockPanel() {
         <ServiceTab />
       ) : tab === 'clients' ? (
         <ClientsTab />
+      ) : tab === 'finance' ? (
+        <FinanceTab />
       ) : (
         <StatsTab />
       )}
@@ -272,6 +275,7 @@ const TABS: [ComputerTab, string][] = [
   ['rival', 'Rival'],
   ['service', 'Service'],
   ['clients', 'Clients'],
+  ['finance', 'Finance'],
   ['stats', 'Stats'],
 ]
 
@@ -283,6 +287,7 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   rival: { hint: 'Ads, reputation and fair prices win his buyers back.', key: 'K' },
   service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
   clients: { hint: 'Happy clients come back.', key: 'L' },
+  finance: { hint: 'Every deal is a chance at the F&I menu.', key: 'F' },
   stats: { hint: 'Every day closed is kept here.', key: 'P' },
 }
 

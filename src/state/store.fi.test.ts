@@ -64,6 +64,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   guest: false,
   credit: loan(),
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
   ...extra,
 })

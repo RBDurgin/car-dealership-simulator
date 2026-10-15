@@ -22,7 +22,7 @@ import { OWNER_ID } from '../sim/owner'
 import { createRng } from '../sim/rng'
 import { isPaused, useGame } from '../state/store'
 import { subscribeDiff, subscribeTo } from '../state/subscribe'
-import { ambientPos, cameraState, customerPos, playerPos, staffPos } from './runtime'
+import { ambientPos, cameraState, customerPos, playerPos, riding, staffPos } from './runtime'
 import { frameSeconds } from './walker'
 
 /** A line to say at `at` (chatter clock seconds), already worked out. */
@@ -62,7 +62,8 @@ function voiceFor(s: ChatterState, speaker: string): Voice | null {
 }
 
 function positionOf(speaker: string): Vec2 | undefined {
-  if (speaker === PLAYER_ID) return playerPos
+  // Out on a test drive, the shopper riding with the player is beside them.
+  if (speaker === PLAYER_ID || speaker === riding.with) return playerPos
   return customerPos.get(speaker) ?? staffPos.get(speaker) ?? ambientPos.get(speaker)
 }
 

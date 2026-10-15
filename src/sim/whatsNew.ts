@@ -376,6 +376,123 @@ export const UPDATES: readonly Update[] = [
       'The title screen, the day summary and the Dealer of the Year screen show it too. Games from before keep the old name.',
     ],
   },
+  {
+    id: 35,
+    phase: '19',
+    title: 'Porters wash the morning dust',
+    items: [
+      'Lot porters now wash a car after one night’s dust on the lot, instead of standing idle.',
+      'A lot they’d kept clean used to be just clean enough each morning for them to skip it.',
+    ],
+  },
+  {
+    id: 36,
+    phase: '19',
+    title: 'The finance manager runs the menu',
+    items: [
+      'Hand a buyer off to your finance manager and they run the F&I menu: the more skilled, the more they make.',
+      'They earn a fee plus a share of each deal’s F&I, and they ask a buyer no lender takes for more down.',
+      'Salespeople at their own desks set up loans at the lender’s rate but sell no products.',
+      'New Finance tab on the office computer (F): today’s and this month’s F&I, product sales and the lenders.',
+      'The day summary’s seller table has an F&I column, and the finance manager gets a row of their own.',
+    ],
+  },
+  {
+    id: 37,
+    phase: '19',
+    title: 'Warranty work and chargebacks',
+    items: [
+      'Each extended warranty you sell is a contract: covered cars come to your garage for repairs the warranty pays for.',
+      'Clients with one of our warranties say yes to extra work more often.',
+      'Products sold under pressure, with a big markup or on weak credit can come back weeks later as chargebacks.',
+      'On a deal the finance manager signed, their share of a chargeback comes out of their commissions.',
+      'The Finance tab counts the contracts in force and the chargebacks still to come.',
+    ],
+  },
+  {
+    id: 38,
+    phase: '19',
+    title: 'Fair finance keeps buyers happy',
+    items: [
+      'The F&I menu now counts toward a buyer’s visit score, and so toward your CSI.',
+      'A fair menu adds a little; a big markup, or product after product turned down, takes points off.',
+      'A client whose product is charged back soon after they buy comes in sour on their next visit.',
+      'Cash buyers take products less often than buyers who finance, and warranties sell a little better.',
+      'A finance manager now pitches better than you from the start, and a skilled one better still.',
+      'On Easy, warmth chips show on the markup and on every product.',
+      'New tips explain the menu, declined credit, chargebacks and when to hire a finance manager.',
+    ],
+  },
+  {
+    id: 39,
+    phase: '19',
+    title: 'Finance achievements',
+    items: [
+      'New Finance achievements: your first financed deal at your own desk, every product in one deal, and a big back end.',
+      'Also a month of financed deals with no chargebacks, and a warranty repair finished in your garage.',
+    ],
+  },
+  {
+    id: 40,
+    phase: '20',
+    title: 'Test drives',
+    items: [
+      'Some shoppers ask to drive the car first: look for a key over their head.',
+      'While you’re talking, Test drive takes them out in the car, with you riding along.',
+      'A showroom car stays on its platform, so they drive one of its model from the lot.',
+      'A drive makes them keener to buy, and they hope for less off.',
+      'Head back (✕ or Esc) brings you back early, for less of a lift.',
+      'You’re off the floor while you’re out, and the car can’t be sold until it’s back.',
+      'A shopper who wanted a drive and got a price instead is a little less keen.',
+      'The day summary counts the day’s test drives and how many of them bought.',
+    ],
+  },
+  {
+    id: 41,
+    phase: '20',
+    title: 'Talking points',
+    items: [
+      'Twice on each test drive you get 3 things to point out about the car: tap one, or press 1–3.',
+      'Pick what the buyer cares about and the car is good at, and the drive goes down better.',
+      'A couple wants safety and room, a bargain hunter economy; a truck is roomy and strong, a sports car handles.',
+      'How they took it shows under the drive bar. A prompt you leave counts as so-so.',
+      'On Easy, the best topic is marked.',
+    ],
+  },
+  {
+    id: 42,
+    phase: '20',
+    title: 'Salespeople take test drives',
+    items: [
+      'Salespeople now take a shopper who asked for a drive out themselves, before talking price.',
+      'They pick the talking points, the right one more often the more skilled they are.',
+      'Talking to a shopper with a key? Send with … hands them to your best free salesperson.',
+      'Drives bring cars back muddier (more in the rain), and used cars with a few more miles.',
+      'Now and then a car comes back with a ding, which puts buyers off. Fix dent sends it to the garage.',
+      'The day summary counts drives taken by salespeople, and any dings.',
+    ],
+  },
+  {
+    id: 43,
+    phase: '20',
+    title: 'Test drives tuned',
+    items: [
+      'A great test drive now does more: buyers hope for less off and haggle less.',
+      'A shopper who asked to drive the car and got a price instead is noticeably cooler.',
+      'Visit scores note a test drive the buyer loved, and one they asked for and never had.',
+      'New tips on Easy for test drives, dinged cars and handing drives to salespeople.',
+    ],
+  },
+  {
+    id: 44,
+    phase: '20',
+    title: 'Test drive achievements',
+    items: [
+      'Six achievements for test drives, in a new Test drives group of the Achievements list.',
+      'Ride along, make every talking point count, sell to five drivers in a day, and more.',
+      'One of them is hidden.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

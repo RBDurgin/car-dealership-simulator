@@ -161,6 +161,10 @@ export const MIN_COMMISSION = 100
 
 /** Flat fee the finance manager earns for each deal they sign. */
 export const FINANCE_FEE = 200
+/** Share of a deal's F&I gross the finance manager earns on top of the fee. */
+export const FI_COMMISSION = 0.15
+/** Game seconds of paperwork per product the finance manager presents. */
+export const FI_PRODUCT_SECONDS = 1
 
 /** Game seconds of paperwork per deal for an average (skill 3) finance manager. */
 export const FINANCE_SECONDS = 6
@@ -197,6 +201,11 @@ export function salesCommission(price: number, cost: number): number {
   return Math.max(MIN_COMMISSION, Math.round((price - cost) * SALES_COMMISSION))
 }
 
+/** What the finance manager earns for signing a deal with `fiGross` of F&I (none on a loss). */
+export function financeCommission(fiGross: number): number {
+  return FINANCE_FEE + Math.round(Math.max(0, fiGross) * FI_COMMISSION)
+}
+
 /** What keeping someone on `wage` from quitting adds to it each day. */
 export function retentionRaise(wage: number): number {
   return Math.max(MIN_RETENTION_RAISE, Math.round(wage * RETENTION_RAISE))
@@ -212,9 +221,12 @@ export function skillSeconds(base: number, skill: number): number {
   return base * (1 + (3 - skill) * SKILL_TIME_STEP)
 }
 
-/** Game seconds a finance manager of `skill` takes over one deal's paperwork. */
-export function financeSeconds(skill: number): number {
-  return skillSeconds(FINANCE_SECONDS, skill)
+/**
+ * Game seconds a finance manager of `skill` takes over one deal's paperwork,
+ * with `products` presented at the menu.
+ */
+export function financeSeconds(skill: number, products = 0): number {
+  return skillSeconds(FINANCE_SECONDS, skill) + products * FI_PRODUCT_SECONDS
 }
 
 /**

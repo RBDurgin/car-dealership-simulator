@@ -3,6 +3,7 @@ import type { Tile, Vec2 } from './grid'
 import {
   CUSTOMER_PARKING,
   GRID_WIDTH,
+  PARKING_SPACES,
   parkedCarRect,
   SERVICE_BAYS,
   SERVICE_SPOTS,
@@ -167,6 +168,79 @@ export function outboundRoute(spot: number, to: RoadEnd): Leg[] {
         p(GATE_OUT_X, AISLE_Z),
         p(GATE_OUT_X, lane),
         p(end, lane),
+      ]),
+      reverse: false,
+    },
+  ]
+}
+
+// Test drives (Phase 20): a stock car leaves its lot space for the road and
+// comes back to it, by the same gate and road legs as visitors' cars.
+
+/** The lane between the west row and the middle row, where their cars back out and turn. */
+const WEST_LANE_X = 6.5
+
+/** Where a stock car in lot space `space` stands, and which way it faces. */
+export function stockPose(space: number): { pos: Vec2; heading: number } {
+  return poseIn(PARKING_SPACES[space])
+}
+
+/**
+ * Where a car backed out of lot space `space` stands, ready to drive off,
+ * and the turns it takes from there to the aisle: a front or back row backs
+ * straight into the aisle, the west and middle rows into the lane between
+ * them, then down it.
+ */
+function stockExit(space: number): { back: Vec2; toAisle: Vec2[] } {
+  const { pos } = stockPose(space)
+  const { facing } = PARKING_SPACES[space]
+  if (facing === 0 || facing === 2) return { back: p(pos.x, AISLE_Z), toAisle: [] }
+  return { back: p(WEST_LANE_X, pos.z), toAisle: [p(WEST_LANE_X, AISLE_Z)] }
+}
+
+/**
+ * Backs out of lot space `space`, then down the aisle (and the lane, from
+ * the west and middle rows), out of the gate and off along the road toward
+ * `to`, keeping to that direction's lane.
+ */
+export function stockOutbound(space: number, to: RoadEnd): Leg[] {
+  const { pos } = stockPose(space)
+  const { back, toAisle } = stockExit(space)
+  const lane = to === 'west' ? LANE.westbound : LANE.eastbound
+  const end = to === 'west' ? ROAD_WEST : ROAD_EAST
+  return [
+    { points: [pos, back], reverse: true },
+    {
+      points: smoothCorners([
+        back,
+        ...toAisle,
+        p(GATE_OUT_X, AISLE_Z),
+        p(GATE_OUT_X, lane),
+        p(end, lane),
+      ]),
+      reverse: false,
+    },
+  ]
+}
+
+/**
+ * From a road end, through the gate, along the aisle (and up the lane, to
+ * the west and middle rows) and nose-first back into lot space `space`.
+ */
+export function stockInbound(space: number, from: RoadEnd): Leg[] {
+  const { pos } = stockPose(space)
+  const { back, toAisle } = stockExit(space)
+  const lane = from === 'west' ? LANE.eastbound : LANE.westbound
+  const start = from === 'west' ? ROAD_WEST : ROAD_EAST
+  return [
+    {
+      points: smoothCorners([
+        p(start, lane),
+        p(GATE_IN_X, lane),
+        p(GATE_IN_X, AISLE_Z),
+        ...toAisle,
+        ...(toAisle.length > 0 ? [back] : [p(pos.x, AISLE_Z)]),
+        pos,
       ]),
       reverse: false,
     },

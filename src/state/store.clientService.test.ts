@@ -67,6 +67,7 @@ const client = (id: string, extra: Partial<Client> = {}): Client => ({
   friendsSent: 0,
   thanked: false,
   serviceDue: DAY,
+  chargedBack: false,
   ...extra,
 })
 
@@ -84,6 +85,7 @@ function setUp(clients: Client[], visits: [number, JobKind, string | null][]) {
       minutes: visits.map((v) => v[0]),
       kinds: visits.map((v) => v[1]),
       clientIds: visits.map((v) => v[2]),
+      contractIds: visits.map(() => null),
       spawned: 0,
     },
     helpOpen: false,
@@ -282,6 +284,8 @@ function visitorLike(clientId: string) {
     guest: false,
     credit: null,
     fi: null,
+    wantsDrive: false,
+    drive: null,
     service: null,
   }
 }

@@ -4,7 +4,12 @@ import {
   ACHIEVEMENTS,
   achievementNotice,
   achievementsFor,
+  BACK_END_GROSS,
   BIG_TICKET_GROSS,
+  CLEAN_BOOKS_DEALS,
+  ROAD_SALES,
+  SCRATCH_FREE_DRIVES,
+  TEAM_DRIVES,
   CLOSER_SALES,
   dayAchievements,
   SIX_FIGURES,
@@ -17,6 +22,7 @@ import {
 import { DAYS_PER_MONTH } from './calendar'
 import { CAR_MODELS } from './customers'
 import { emptyStats, type DayStats, type Sale } from './deal'
+import { emptyFiStats, type SaleFi } from './fi'
 import { IMPROVEMENTS, type ImprovementId } from './improvements'
 import { buildInventory, type InventoryCar } from './inventory'
 import { freeSlots, slotPlacement } from './ordering'
@@ -90,6 +96,7 @@ const ctx = (patch: Partial<DayContext> = {}): DayContext => ({
   career: emptyCareer(),
   franchise: 'bronze',
   inventory,
+  monthFi: emptyFiStats(),
   ...patch,
 })
 const dayEarns = (c: DayContext, id: AchievementId) => dayAchievements(c, []).includes(id)
@@ -449,6 +456,99 @@ describe('dayAchievements', () => {
   it('never returns one already earned', () => {
     const c = ctx({ reputation: 99 })
     expect(dayAchievements(c, [{ id: 'beloved', day: 2, level: 'easy' }])).not.toContain('beloved')
+  })
+})
+
+describe('finance achievements', () => {
+  const fi = (extra: Partial<SaleFi> = {}): SaleFi => ({
+    financed: true,
+    lender: 'union',
+    markup: 1,
+    amount: 25_000,
+    reserve: 400,
+    fee: 0,
+    products: [],
+    presented: 1,
+    pressure: 1,
+    gross: 400,
+    ...extra,
+  })
+  const product = (id: SaleFi['products'][number]['id']) => ({ id, price: 1000, cost: 400 })
+
+  it('marks a financed deal closed at your own desk, not a salesperson’s or a cash one', () => {
+    expect(earns(base, selling(base, sale({ fi: fi() })), 'first-loan')).toBe(true)
+    expect(earns(base, selling(base, sale({ fi: fi(), soldBy: 'Sam T.' })), 'first-loan')).toBe(
+      false,
+    )
+    expect(earns(base, selling(base, sale({ fi: fi(), signedBy: 'e1' })), 'first-loan')).toBe(false)
+    const cash = fi({ financed: false, lender: null })
+    expect(earns(base, selling(base, sale({ fi: cash })), 'first-loan')).toBe(false)
+  })
+
+  it('marks every product taken in one deal', () => {
+    const all = fi({ products: (['warranty', 'gap', 'protection', 'tyre'] as const).map(product) })
+    expect(earns(base, selling(base, sale({ fi: all })), 'the-works')).toBe(true)
+    const three = fi({ products: all.products.slice(1) })
+    expect(earns(base, selling(base, sale({ fi: three })), 'the-works')).toBe(false)
+  })
+
+  it('marks a big back end', () => {
+    const big = sale({ fi: fi({ gross: BACK_END_GROSS }) })
+    expect(earns(base, selling(base, big), 'back-end')).toBe(true)
+    const small = sale({ fi: fi({ gross: BACK_END_GROSS - 1 }) })
+    expect(earns(base, selling(base, small), 'back-end')).toBe(false)
+  })
+
+  it('marks a finished warranty repair', () => {
+    const service = { ...base.dayStats.service, claims: 1 }
+    expect(earns(base, withStats(base, { service }), 'covered')).toBe(true)
+  })
+
+  it('marks a busy month with no chargebacks, on its last day only', () => {
+    const month = { ...emptyFiStats(), financed: CLEAN_BOOKS_DEALS }
+    expect(dayEarns(ctx({ day: DAYS_PER_MONTH, monthFi: month }), 'clean-books')).toBe(true)
+    expect(dayEarns(ctx({ day: DAYS_PER_MONTH - 1, monthFi: month }), 'clean-books')).toBe(false)
+    const charged = { ...month, chargebackCount: 1 }
+    expect(dayEarns(ctx({ day: DAYS_PER_MONTH, monthFi: charged }), 'clean-books')).toBe(false)
+    const quiet = { ...month, financed: CLEAN_BOOKS_DEALS - 1 }
+    expect(dayEarns(ctx({ day: DAYS_PER_MONTH, monthFi: quiet }), 'clean-books')).toBe(false)
+  })
+})
+
+describe('test drive achievements', () => {
+  const driving = (patch: Partial<DayStats['drives']>) =>
+    withStats(base, { drives: { ...base.dayStats.drives, ...patch } })
+
+  it('marks your first ride along, not a salesperson’s', () => {
+    expect(earns(base, driving({ taken: 1 }), 'first-drive')).toBe(true)
+    expect(earns(base, driving({ taken: 1, byStaff: 1 }), 'first-drive')).toBe(false)
+  })
+
+  it('marks a drive where every talking point counted', () => {
+    expect(earns(base, driving({ taken: 1, perfect: 1 }), 'perfect-pitch')).toBe(true)
+    expect(earns(base, driving({ taken: 1 }), 'perfect-pitch')).toBe(false)
+  })
+
+  it(`needs ${ROAD_SALES} buyers who drove, and ${TEAM_DRIVES} drives by salespeople, in a day`, () => {
+    expect(earns(base, driving({ bought: ROAD_SALES }), 'sold-on-the-road')).toBe(true)
+    expect(earns(base, driving({ bought: ROAD_SALES - 1 }), 'sold-on-the-road')).toBe(false)
+    expect(earns(base, driving({ byStaff: TEAM_DRIVES }), 'road-crew')).toBe(true)
+    expect(earns(base, driving({ byStaff: TEAM_DRIVES - 1 }), 'road-crew')).toBe(false)
+  })
+
+  it('marks a ding, and keeps it hidden', () => {
+    expect(earns(base, driving({ dings: 1 }), 'fender-bender')).toBe(true)
+    expect(ACHIEVEMENTS.find((a) => a.id === 'fender-bender')?.hidden).toBe(true)
+  })
+
+  it(`marks a day of ${SCRATCH_FREE_DRIVES}+ drives without a ding`, () => {
+    const day = (taken: number, dings = 0) =>
+      ctx({
+        stats: { ...emptyStats(), settled: true, drives: { ...emptyStats().drives, taken, dings } },
+      })
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES), 'not-a-scratch')).toBe(true)
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES - 1), 'not-a-scratch')).toBe(false)
+    expect(dayEarns(day(SCRATCH_FREE_DRIVES, 1), 'not-a-scratch')).toBe(false)
   })
 })
 

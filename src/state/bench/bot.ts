@@ -2,18 +2,22 @@ import { CLOCK_STEP_MINUTES, CLOSE_MINUTE, OPEN_MINUTE } from '../../sim/clock'
 import { CAR_MODELS, PLAYER_ID } from '../../sim/customers'
 import { customerActions, dealCustomer } from '../../sim/deal'
 import { EXPANSIONS } from '../../sim/expansions'
-import { loanDeclined, productsFor } from '../../sim/fi'
+import { answerFor, loanDeclined, productsFor } from '../../sim/fi'
+import { MAX_MARKUP } from '../../sim/lenders'
 import type { ActionId } from '../../sim/interactables'
 import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
+import { PROMPTS_PER_DRIVE, topicFit } from '../../sim/talkingPoints'
+import { driveBlocker } from '../../sim/testDrive'
 import { useGame } from '../store'
 
 /**
  * A headless player for the long-game bench: it stands in for the scene and
  * the player, so the store runs whole days with no renderer. It isn't a good
  * player, only a busy one: walkers get where they're going at once, the
- * player works one deal at a time, takes every counter and runs a fair F&I
- * menu at their own desk, and stock and ads
- * are bought each morning. Staff stand idle, as their work is the scene's. Every choice
+ * player works one deal at a time, gives a test drive to anyone who asks (back
+ * at once, see `setDriveStyle`), takes every counter and runs a fair F&I
+ * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
+ * ads are bought each morning. Staff stand idle, as their work is the scene's. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
  * level plays the same each time.
  */
@@ -44,6 +48,49 @@ function perform(targetId: string, action: ActionId): void {
   game().completeAction(id)
 }
 
+/**
+ * How the bot takes test drives: `plain` (the default) answers no talking
+ * points, `good` and `poor` answer each with the best or worst fit offered,
+ * `cut` heads back at once, and `none` never drives, giving a price instead.
+ */
+export type DriveStyle = 'plain' | 'good' | 'poor' | 'cut' | 'none'
+let driveStyle: DriveStyle = 'plain'
+
+export function setDriveStyle(style: DriveStyle): void {
+  driveStyle = style
+}
+
+const FIT_RANK = { good: 2, ok: 1, poor: 0 }
+
+/** Answers the talking point up now with the best (or worst) fit offered. */
+function pointOut(customerId: string, best: boolean): void {
+  const c = game().customers.find((x) => x.id === customerId)
+  const car = c?.drive && game().inventory.find((x) => x.id === c.drive!.carId)
+  const offered = c?.drive?.offered
+  if (!c || !car || !offered) return
+  const rank = (i: number) => FIT_RANK[topicFit(c, car, offered[i])] * (best ? 1 : -1)
+  let pick = 0
+  for (let i = 1; i < offered.length; i++) if (rank(i) > rank(pick)) pick = i
+  game().pickTopic(pick)
+}
+
+/** Takes `c` for the test drive they asked for: in the car, round the block and back at once. */
+function testDrive(customerId: string): void {
+  game().testDrive(customerId)
+  const id = game().activeAction?.id
+  if (id === undefined) return
+  game().arriveAction(id)
+  game().completeAction(id)
+  if (driveStyle === 'cut') game().headBack()
+  else if (driveStyle === 'good' || driveStyle === 'poor') {
+    for (let i = 0; i < PROMPTS_PER_DRIVE; i++) {
+      game().drivePrompt(customerId)
+      pointOut(customerId, driveStyle === 'good')
+    }
+  }
+  game().driveBack(customerId)
+}
+
 /** Takes a buyer to the player's own desk, and through the F&I menu to sign. */
 function closeDeal(customerId: string): void {
   game().requestAction(MANAGER_DESK.chairId, 'closeDeal')
@@ -56,9 +103,21 @@ function closeDeal(customerId: string): void {
 }
 
 /**
+ * How the bot runs the F&I menu: `fair` (the default) as below, `hard` at
+ * the most markup with every product presented at its top price, and again
+ * at its low one after a no.
+ */
+export type MenuStyle = 'fair' | 'hard'
+let menuStyle: MenuStyle = 'fair'
+
+export function setMenuStyle(style: MenuStyle): void {
+  menuStyle = style
+}
+
+/**
  * The F&I menu played fairly: a point of markup, then the warranty and (on
  * a loan) GAP at their low prices. A buyer no lender takes puts more down,
- * or goes home.
+ * or goes home. Played hard (see `MenuStyle`), it pushes everything.
  */
 function runMenu(): void {
   const c = dealCustomer(game().customers, PLAYER_ID)
@@ -66,6 +125,15 @@ function runMenu(): void {
   if (loanDeclined(c, c.fi)) game().fiMoreDown()
   const fi = dealCustomer(game().customers, PLAYER_ID)?.fi
   if (!fi || loanDeclined(c, fi)) return game().fiLetGo()
+  if (menuStyle === 'hard') {
+    if (fi.lender) game().fiLender(fi.lender, MAX_MARKUP)
+    for (const p of productsFor(c)) {
+      game().fiPresent(p.id, p.high)
+      const deal = dealCustomer(game().customers, PLAYER_ID)?.fi
+      if (deal && !answerFor(deal, p.id)?.taken) game().fiPresent(p.id, p.low)
+    }
+    return game().fiSign()
+  }
   if (fi.lender) game().fiLender(fi.lender, 1)
   for (const p of productsFor(c)) {
     if (p.id === 'warranty' || p.id === 'gap') game().fiPresent(p.id, p.low)
@@ -106,6 +174,10 @@ function workDeal(): boolean {
   if (!c) return false
   if (c.phase === 'following') closeDeal(c.id)
   else if (c.phase === 'talking') {
+    if (driveStyle !== 'none' && c.wantsDrive && !driveBlocker(c, game().inventory)) {
+      testDrive(c.id)
+      return true
+    }
     const h = c.haggle
     if (h) game().ask(h.counter + (h.allowance ?? 0), h.allowance)
     else perform(c.id, 'offer')

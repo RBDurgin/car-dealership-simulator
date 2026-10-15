@@ -10,6 +10,7 @@ import {
   approachTilesFor,
   buildInteractables,
   carName,
+  type ActionId,
   type Interactable,
 } from '../sim/interactables'
 import { applyToGrid, availableCars, carProp, type InventoryCar } from '../sim/inventory'
@@ -93,6 +94,21 @@ function syncWorld(inventory: readonly InventoryCar[], improvements: Improvement
 
 const spawn = grid.tileToWorld(SPAWN_TILE.tx, SPAWN_TILE.tz)
 export const playerPos = { x: spawn.x, z: spawn.z }
+
+/**
+ * The player is in a test drive car (or off the map in it): hidden, and out
+ * of the crowd, with the shopper `with` (whose voice comes from the player's
+ * spot). Set by scene/Player each frame. `playerPos` stays by the car's
+ * door, so the camera waits on the lot.
+ */
+export const riding: { player: boolean; with: string | null } = { player: false, with: null }
+
+/**
+ * Test drives on the road, by their customer's id: game minutes left until
+ * the car is back, and the drive's length. Kept by scene/DrivenCar for the
+ * HUD's drive bar.
+ */
+export const driveClock = new Map<string, { left: number; total: number }>()
 
 /** Builds the layout again if the expansions up have changed. True if it did. */
 function regrounded(ground: ExpansionId[]): boolean {
@@ -294,7 +310,7 @@ export function crowdAgents(): readonly Agent[] {
     a.pos = pos
     crowd.push(a)
   }
-  add(PLAYER_ID, playerPos)
+  if (!riding.player) add(PLAYER_ID, playerPos)
   for (const [id, pos] of customerPos) add(id, pos)
   for (const [id, pos] of staffPos) add(id, pos)
   for (const [id, pos] of ambientPos) add(id, pos)
@@ -363,9 +379,17 @@ export function findInteractable(id: string): Interactable | undefined {
   const it = interactables.get(id)
   // The finance manager works from the desk chair while they're on shift.
   if (it && id === DESK_CHAIR_ID) return { ...it, actions: deskActions(game.roster) }
-  // A worn used car can go to the service garage once there is one.
-  if (it?.kind === 'car' && canRecondition(game, id)) {
-    return { ...it, actions: [...it.actions, 'recondition'] }
+  // A worn used car can go to the service garage once there is one, and a
+  // dented one always offers its fix (greyed out without a garage).
+  if (it?.kind === 'car') {
+    const recon = canRecondition(game, id)
+    const ding = game.inventory.some((c) => c.id === id && c.ding)
+    if (recon || ding) {
+      const extra: ActionId[] = []
+      if (recon) extra.push('recondition')
+      if (ding) extra.push('fixDing')
+      return { ...it, actions: [...it.actions, ...extra] }
+    }
   }
   if (it) return it
   const c = game.customers.find((x) => x.id === id)
@@ -391,6 +415,19 @@ export function findInteractable(id: string): Interactable | undefined {
       facing: CUSTOMER_PARKING[owner.vehicle.spot].facing,
       approachTiles: approachTilesFor(grid, rect),
       actions: owner.selling || owner.trade ? ['appraise'] : [],
+    }
+  }
+  // A car out for a test drive, standing in its space while they walk to it.
+  const out = game.inventory.find((c) => c.id === id && c.status === 'out')
+  if (out) {
+    return {
+      id,
+      kind: 'car',
+      name: `The ${carName(out.model)}`,
+      rect: out.rect,
+      facing: out.facing,
+      approachTiles: approachTilesFor(grid, out.rect),
+      actions: ['ride'],
     }
   }
   const nPos = id === NAZMA_ID ? ambientPos.get(id) : undefined

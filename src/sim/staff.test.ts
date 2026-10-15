@@ -6,6 +6,9 @@ import {
   canHire,
   POSTS,
   FINANCE_FEE,
+  financeCommission,
+  FI_COMMISSION,
+  FI_PRODUCT_SECONDS,
   FINANCE_SECONDS,
   financeOnDuty,
   financeSeconds,
@@ -184,6 +187,16 @@ describe('finance', () => {
     expect(financeSeconds(1)).toBeGreaterThan(financeSeconds(3))
     expect(financeSeconds(5)).toBeLessThan(financeSeconds(3))
     expect(financeSeconds(5)).toBeGreaterThan(0)
+  })
+
+  it('takes a second longer for each product presented', () => {
+    expect(financeSeconds(3, 2)).toBe(FINANCE_SECONDS + 2 * FI_PRODUCT_SECONDS)
+  })
+
+  it('earns the fee plus a share of the F&I gross, never less than the fee', () => {
+    expect(financeCommission(0)).toBe(FINANCE_FEE)
+    expect(financeCommission(1_000)).toBe(FINANCE_FEE + 1_000 * FI_COMMISSION)
+    expect(financeCommission(-595)).toBe(FINANCE_FEE)
   })
 
   it('is on duty only on shift and not let go', () => {

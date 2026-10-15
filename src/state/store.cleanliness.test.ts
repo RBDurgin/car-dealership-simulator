@@ -40,6 +40,8 @@ const browser: Customer = {
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 }
 

@@ -30,7 +30,10 @@ export type ActionId =
   | 'office'
   | 'call'
   | 'recondition'
+  | 'fixDing'
   | 'confront'
+  | 'testDrive'
+  | 'ride'
 
 /** Real seconds the player spends looking a seller's car over. */
 export const APPRAISE_SECONDS = 4
@@ -38,6 +41,8 @@ export const APPRAISE_SECONDS = 4
 export const CHECK_IN_SECONDS = 2
 /** Real seconds the player spends telling a service client about extra work. */
 export const RECOMMEND_SECONDS = 2
+/** Real seconds the player takes getting into a test drive car, giving the shopper time to catch up. */
+export const RIDE_SECONDS = 1.2
 /** Real seconds the player spends pitching a trade-up to a service client. */
 export const PITCH_SECONDS = 3
 /** Real ms a call takes the player: `CALL_MINUTES` of game time at normal speed. */
@@ -139,6 +144,28 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     label: 'Recondition',
     verb: 'Sending it to the shop',
     mode: 'instant',
+  },
+  // A car with a dent from a test drive: off to the service garage to have it fixed.
+  fixDing: {
+    id: 'fixDing',
+    label: 'Fix dent',
+    verb: 'Sending it to the shop',
+    mode: 'instant',
+  },
+  // A shopper the player is talking to: off to the car for a test drive (see `sim/testDrive.ts`).
+  testDrive: {
+    id: 'testDrive',
+    label: 'Test drive',
+    verb: 'Off for a test drive',
+    mode: 'instant',
+  },
+  // At the test drive car with the shopper: get in, and off they go.
+  ride: {
+    id: 'ride',
+    label: 'Get in',
+    verb: 'Getting in',
+    mode: 'timed',
+    durationMs: RIDE_SECONDS * 1000,
   },
   // Reaching Nazma runs him off the lot (see scene/Player, which chases him as he moves).
   confront: { id: 'confront', label: 'Confront', verb: 'Confronting', mode: 'instant' },

@@ -248,6 +248,7 @@ describe('a client from the book', () => {
     friendsSent: 0,
     thanked: false,
     serviceDue: 17,
+    chargedBack: false,
   }
 
   it('drives in by name, alone, in the car we sold them', () => {
@@ -382,6 +383,7 @@ describe('booking a job', () => {
       minutes: [540, 550, 560],
       kinds: ['oil', 'tires', 'brakes'] as const,
       clientIds: [null, null, null],
+      contractIds: [null, null, null],
       spawned: 0,
     }
     const { schedule: next, due } = takeDueVisits(

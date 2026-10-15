@@ -29,7 +29,8 @@ import type { RecordKey } from './stats'
 import type { QuotaResult } from './quota'
 import { vehicleOwnerId, type BoughtCar } from './sellers'
 import { emptyServiceStats, openFinding, type ServiceJob, type ServiceStats } from './service'
-import { financeOnDuty, FINANCE_FEE, salesCommission, type Employee } from './staff'
+import { financeCommission, financeOnDuty, salesCommission, type Employee } from './staff'
+import { driveBlocker, drivePending } from './testDrive'
 import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 
 /**
@@ -41,6 +42,7 @@ import { tradeOver, tradeRecord, type TradeRecord } from './tradeIns'
 /** Phases in which a customer is dealing with their handler. */
 export const DEAL_PHASES: readonly CustomerPhase[] = [
   'talking',
+  'driving',
   'considering',
   'following',
   'signing',
@@ -157,7 +159,9 @@ export function customerActions(c: Customer, jobs: readonly ServiceJob[] = []): 
     case 'waiting':
       return c.selling ? ['makeOffer'] : ['greet']
     case 'talking':
-      return ['offer']
+      // On the way to a test drive, there's only the car to get to.
+      if (drivePending(c)) return []
+      return c.selling || c.drive ? ['offer'] : ['offer', 'testDrive']
     default:
       return []
   }
@@ -202,6 +206,7 @@ const CUSTOMER_ACTIONS: ReadonlySet<ActionId> = new Set([
   'checkIn',
   'recommend',
   'pitch',
+  'testDrive',
 ])
 
 export function isCustomerAction(action: ActionId): boolean {
@@ -229,12 +234,18 @@ export function actionBlocker(
       const by = roster.find((e) => e.id === c.handlerId)
       return by ? `${by.name} is helping ${c.name}.` : `${c.name} is being helped.`
     }
+    if (action === 'testDrive') return driveBlocker(c, inventory)
     if (action === 'recommend' && !customerActions(c, jobs).includes(action)) {
       return `There's nothing more to offer ${c.name}.`
     }
     return customerActions(c, jobs).includes(action) ? null : `${c.name} is busy.`
   }
   const deal = dealCustomer(customers, PLAYER_ID)
+  if (action === 'ride') {
+    return deal?.phase === 'talking' && deal.drive?.carId === targetId && !deal.drive.back
+      ? null
+      : 'Nobody is waiting to drive it.'
+  }
   if (action === 'closeDeal') {
     // The player's own desk is theirs alone: only the office desk is finance's.
     if (targetId === DESK_CHAIR_ID) {
@@ -282,6 +293,8 @@ export interface Sale {
   signedBy: string | null
   /** What staff earned on the sale, paid with the day's payroll. */
   commission: number
+  /** Of `commission`, what the finance manager earned for signing it, while `signedBy` is set. */
+  financeCommission?: number
   /** What brought the buyer in. */
   source: Source
   /** The car they traded in, if they did. */
@@ -292,7 +305,10 @@ export interface Sale {
   returning?: boolean
   /** Closed after the buyer's last counter, when they had no rounds left. */
   lastRound?: boolean
-  /** The F&I menu, when the player ran it: the loan, the products taken and their gross. */
+  /**
+   * The loan and the F&I menu: the player's or the finance manager's menu, or
+   * a salesperson's loan at the buy rate with no products.
+   */
   fi?: SaleFi
 }
 
@@ -310,7 +326,7 @@ export interface SaleTerms {
   book: readonly Client[]
   /** What we allowed for their trade-in, or null without one in the deal. */
   tradePrice: number | null
-  /** The F&I menu, when the player ran one. */
+  /** The loan and the F&I menu, when the buyer had them. */
   fi?: SaleFi
 }
 
@@ -322,6 +338,7 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
       ? (t.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
       : null
   const finance = t.signer?.role === 'finance' ? t.signer : null
+  const financePay = finance ? financeCommission(t.fi?.gross ?? 0) : 0
   const sale: Sale = {
     customerName: c.name,
     carId: car.id,
@@ -333,9 +350,10 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
     soldBy: seller,
     ...(seller && { sellerId: c.sellerId as string }),
     signedBy: finance?.name ?? null,
-    commission: (seller ? salesCommission(t.price, car.cost) : 0) + (finance ? FINANCE_FEE : 0),
+    commission: (seller ? salesCommission(t.price, car.cost) : 0) + financePay,
     source: c.source,
   }
+  if (finance) sale.financeCommission = financePay
   const trade = t.tradePrice !== null && tradeRecord(c, t.tradePrice, t.day)
   if (trade) sale.trade = trade
   if (car.used) sale.used = true
@@ -403,6 +421,20 @@ export interface DayStats {
   clients: ClientStats
   /** Loans and the F&I menu today (see `sim/fi.ts`). */
   fi: FiStats
+  /** Test drives today: back from the road, of those how many bought, how many were cut short and how many came back dinged. */
+  drives: DriveStats
+}
+
+/** A day's test drives (see `sim/testDrive.ts`). */
+export interface DriveStats {
+  taken: number
+  bought: number
+  cut: number
+  /** Taken by salespeople (the rest by the player). */
+  byStaff: number
+  dings: number
+  /** The player's drives where every talking point suited the buyer (see `perfectDrive`). */
+  perfect: number
 }
 
 export function emptyStats(): DayStats {
@@ -436,6 +468,7 @@ export function emptyStats(): DayStats {
     service: emptyServiceStats(),
     clients: emptyClientStats(),
     fi: emptyFiStats(),
+    drives: { taken: 0, bought: 0, cut: 0, byStaff: 0, dings: 0, perfect: 0 },
   }
 }
 
@@ -455,11 +488,11 @@ export function grossProfit(stats: DayStats): number {
 
 /**
  * The service department's gross: labor and parts billed less what the parts
- * cost, plus the manufacturer's warranty pay, less overtime.
+ * cost, plus the manufacturer's and warranty company's pay, less overtime.
  */
 export function serviceGross(stats: DayStats): number {
   const s = stats.service
-  return s.labor + s.parts - s.partsCost + s.warranty - s.overtime
+  return s.labor + s.parts - s.partsCost + s.warranty + s.contract - s.overtime
 }
 
 /** Gross profit on car sales, F&I and service together, for the career and the owner. */
@@ -589,11 +622,13 @@ export interface SellerTally {
   msrp: number
   /** Revenue less the cost of these cars. */
   gross: number
-  /** What staff earned on these sales (the salesperson's cut and any finance fee). */
+  /** What the salesperson earned on these sales (the finance manager's pay is his own row). */
   commission: number
   /** Trade-ins taken on these sales, and how much over their value they were allowed (under if negative). */
   trades: number
   tradeOver: number
+  /** F&I made at the seller's own desk: the player's menu, or a salesperson's loan. */
+  fi: number
 }
 
 /** The day's sales by who made them, the player first, then in order of first sale. */
@@ -612,6 +647,7 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       commission: 0,
       trades: 0,
       tradeOver: 0,
+      fi: 0,
     }
     tallies.set(s.soldBy, {
       ...t,
@@ -619,9 +655,34 @@ export function salesBySeller(stats: DayStats): SellerTally[] {
       revenue: t.revenue + s.price,
       msrp: t.msrp + s.msrp,
       gross: t.gross + s.price - s.cost,
-      commission: t.commission + s.commission,
+      commission: t.commission + s.commission - (s.financeCommission ?? 0),
       trades: t.trades + (s.trade ? 1 : 0),
       tradeOver: t.tradeOver + (s.trade ? tradeOver(s.trade) : 0),
+      fi: t.fi + (s.signedBy === null ? (s.fi?.gross ?? 0) : 0),
+    })
+  }
+  return [...tallies.values()]
+}
+
+/** The deals a finance manager signed today: how many, their F&I and his pay on them. */
+export interface FinanceTally {
+  name: string
+  deals: number
+  fi: number
+  commission: number
+}
+
+/** The day's deals by the finance manager who signed them, in order of first deal. */
+export function salesByFinance(stats: DayStats): FinanceTally[] {
+  const tallies = new Map<string, FinanceTally>()
+  for (const s of stats.sales) {
+    if (s.signedBy === null) continue
+    const t = tallies.get(s.signedBy) ?? { name: s.signedBy, deals: 0, fi: 0, commission: 0 }
+    tallies.set(s.signedBy, {
+      ...t,
+      deals: t.deals + 1,
+      fi: t.fi + (s.fi?.gross ?? 0),
+      commission: t.commission + (s.financeCommission ?? 0),
     })
   }
   return [...tallies.values()]

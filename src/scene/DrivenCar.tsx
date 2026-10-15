@@ -17,10 +17,16 @@ import {
   serviceOutbound,
   servicePose,
   spotToBay,
+  stockInbound,
+  stockOutbound,
+  stockPose,
   type Leg,
   type RoadEnd,
 } from '../sim/driving'
 import type { Vec2 } from '../sim/grid'
+import type { InventoryCar } from '../sim/inventory'
+import { promptsDue, promptsMade } from '../sim/talkingPoints'
+import { HEAD_BACK_MINUTES } from '../sim/testDrive'
 import type { CarModel } from '../sim/layout'
 import { createRng, hashSeed } from '../sim/rng'
 import { vehicleTargetId } from '../sim/sellers'
@@ -28,8 +34,16 @@ import type { ServiceJob } from '../sim/service'
 import { useGame } from '../state/store'
 import { CarBody } from './Props'
 import { Interactable } from './Interactable'
-import { crowdAgents, grid, lifts, serviceCarsHome, vehiclePos } from './runtime'
-import { frameSeconds, MAX_STEP_S } from './walker'
+import {
+  crowdAgents,
+  driveClock,
+  gameTime,
+  grid,
+  lifts,
+  serviceCarsHome,
+  vehiclePos,
+} from './runtime'
+import { frameSeconds, MAX_STEP_S, report } from './walker'
 
 /** Top speed on the road and on the lot, in tiles per game second. */
 const ROAD_SPEED = 5
@@ -49,6 +63,28 @@ const GIVE_UP_SECONDS = 4
 const PUSH_ON_SECONDS = 1.5
 
 type Stage = 'in' | 'parked' | 'out'
+
+/**
+ * A test drive's stage: standing in its space while they walk to it, on the
+ * road out, off the map, on the way back and back in its space.
+ */
+type DriveStage = 'waiting' | 'leaving' | 'away' | 'returning' | 'back'
+
+/** Game minutes a test drive car spends off the map at the least, however long the drive out took. */
+const MIN_AWAY_MINUTES = 2
+
+/** A stock car out on a test drive. */
+interface DriveTrip {
+  /** The shopper driving it. */
+  customerId: string
+  space: number
+  stage: DriveStage
+  /** Game minute it set off, and when it turns for home once off the map. */
+  departed: number
+  awayUntil: number
+  /** The store has been told it's back. */
+  reported: boolean
+}
 
 /** A visitor's car in the world. Lives here, never in the store. */
 interface DrivenCar {
@@ -80,6 +116,10 @@ interface DrivenCar {
   service: { place: 'spot' | number } | null
   /** Height off the ground: up with the lift while it's in a bay. */
   y: number
+  /** A stock car out on a test drive (keyed by the car's id, not a customer's). Null otherwise. */
+  drive: DriveTrip | null
+  /** A stock car with a dent in it. */
+  ding: boolean
 }
 
 const cars = new Map<string, DrivenCar>()
@@ -93,6 +133,7 @@ const toWorld = (legs: Leg[]): Leg[] =>
 function removeCar(id: string): void {
   const car = cars.get(id)
   if (typeof car?.service?.place === 'number') lifts.cars.delete(car.service.place)
+  if (car?.drive) driveClock.delete(car.drive.customerId)
   cars.delete(id)
   vehiclePos.delete(id)
   serviceCarsHome.delete(id)
@@ -128,9 +169,52 @@ function createCar(c: Customer): DrivenCar {
     bought: false,
     service: null,
     y: 0,
+    drive: null,
+    ding: false,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
+  return car
+}
+
+/**
+ * A stock car out for customer `c`'s test drive, on first sight: standing in
+ * its lot space while they walk to it. Keyed by the car's id.
+ */
+function createDriveCar(stock: InventoryCar, c: Customer): DrivenCar {
+  const space = stock.spaceIndex!
+  const rng = createRng(hashSeed(`${c.id}:drive`))
+  const pose = stockPose(space)
+  const car: DrivenCar = {
+    id: stock.id,
+    model: stock.model,
+    condition: stock.used?.condition ?? 1,
+    cleanliness: stock.cleanliness,
+    spot: -1,
+    end: rng.next() < 0.5 ? 'west' : 'east',
+    stage: 'parked',
+    legs: [],
+    leg: 0,
+    next: 1,
+    at: { pos: grid.tileToWorld(pose.pos.x, pose.pos.z), heading: pose.heading, moving: false },
+    speed: 0,
+    waited: 0,
+    pushOn: 0,
+    bought: false,
+    service: null,
+    y: 0,
+    drive: {
+      customerId: c.id,
+      space,
+      stage: 'waiting',
+      departed: 0,
+      awayUntil: 0,
+      reported: false,
+    },
+    ding: stock.ding,
+  }
+  cars.set(stock.id, car)
+  vehiclePos.set(stock.id, car.at)
   return car
 }
 
@@ -162,6 +246,8 @@ function createServiceCar(c: Customer): DrivenCar {
     bought: false,
     service: { place: 'spot' },
     y: 0,
+    drive: null,
+    ding: false,
   }
   cars.set(c.id, car)
   vehiclePos.set(c.id, car.at)
@@ -195,6 +281,9 @@ function legLeft(car: DrivenCar): number {
 
 /** The frame loop's lookups, cleared and refilled each frame instead of made anew. */
 const byId = new Map<string, Customer>()
+/** Stock cars out on a test drive, and the shopper driving each, by car id. */
+const outCars = new Map<string, InventoryCar>()
+const drivers = new Map<string, Customer>()
 const bought = new Set<string>()
 const jobs = new Map<string, ServiceJob>()
 
@@ -348,6 +437,87 @@ function updateService(
   return true
 }
 
+/**
+ * One test drive car's frame: it waits in its space until they're in, drives
+ * out of the gate and off the map, stays away for what's left of the drive
+ * (as long again as the drive out took is kept for the way back; Head back
+ * turns it round at once), then drives back into its space and tells the
+ * store they're back. Returns false once the drive is over (the car is no
+ * longer out) and it's in stock again.
+ */
+function updateDrive(
+  car: DrivenCar,
+  c: Customer | undefined,
+  out: boolean,
+  seconds: number,
+): boolean {
+  const trip = car.drive!
+  if (!out) return false
+  const now = gameTime.minute
+  const minutes = c?.drive?.minutes ?? 0
+  switch (trip.stage) {
+    case 'waiting':
+      if (c?.phase !== 'driving') break
+      trip.departed = now
+      trip.stage = 'leaving'
+      car.stage = 'out'
+      setOff(car, stockOutbound(trip.space, car.end))
+      break
+    case 'leaving': {
+      if (!drive(car, seconds)) break
+      // Off the map: gone until it's time to come back.
+      const took = now - trip.departed
+      trip.awayUntil = Math.max(now + MIN_AWAY_MINUTES, trip.departed + minutes - took)
+      trip.stage = 'away'
+      car.stage = 'parked'
+      car.at.moving = false
+      vehiclePos.delete(car.id)
+      break
+    }
+    case 'away':
+      if (c?.drive?.cut) trip.awayUntil = Math.min(trip.awayUntil, now + HEAD_BACK_MINUTES)
+      if (now < trip.awayUntil) break
+      trip.stage = 'returning'
+      car.stage = 'in'
+      setOff(car, stockInbound(trip.space, car.end))
+      car.at.pos = { ...car.legs[0].points[0] }
+      car.at.heading = car.end === 'west' ? Math.PI / 2 : -Math.PI / 2
+      vehiclePos.set(car.id, car.at)
+      break
+    case 'returning': {
+      if (!drive(car, seconds)) break
+      const pose = stockPose(trip.space)
+      car.at.heading = pose.heading
+      car.at.moving = false
+      car.stage = 'parked'
+      trip.stage = 'back'
+      break
+    }
+    case 'back':
+      // They get out; the store puts the car back in stock.
+      if (!trip.reported && c?.phase === 'driving') {
+        trip.reported = true
+        useGame.getState().driveBack(c.id)
+      }
+      break
+  }
+  // Talking points at a third and two thirds of the way, until it's back (or Head back).
+  const onRoad = trip.stage === 'leaving' || trip.stage === 'away' || trip.stage === 'returning'
+  if (c?.drive && onRoad && !c.drive.cut && c.phase === 'driving') {
+    const due = promptsDue(now - trip.departed, minutes)
+    if (due > promptsMade(c.drive)) {
+      const id = c.id
+      report(trip, `prompt:${due}`, () => useGame.getState().drivePrompt(id))
+    }
+  }
+  if (c && trip.stage !== 'waiting' && trip.stage !== 'back') {
+    const total = Math.max(minutes, 1)
+    const left = trip.stage === 'returning' ? 0 : Math.max(0, trip.departed + total - now)
+    driveClock.set(c.id, { left, total })
+  } else if (c) driveClock.delete(c.id)
+  return true
+}
+
 /** How high a car stands: on the lift's arms in a bay, else on the ground. */
 function heightOf(car: DrivenCar): number {
   const bay = car.service?.place
@@ -394,6 +564,17 @@ export function DrivenCars() {
     for (const p of game.purchases) bought.add(p.customerId)
     jobs.clear()
     for (const j of game.serviceJobs) if (j.customerId) jobs.set(j.customerId, j)
+    outCars.clear()
+    for (const car of game.inventory) if (car.status === 'out') outCars.set(car.id, car)
+    drivers.clear()
+    for (const c of game.customers) {
+      const stock = c.drive && outCars.get(c.drive.carId)
+      if (!stock) continue
+      drivers.set(stock.id, c)
+      if (cars.has(stock.id) || stock.spaceIndex === null) continue
+      createDriveCar(stock, c)
+      changed = true
+    }
     for (const c of game.customers) {
       if (c.vehicle && !cars.has(c.id)) {
         createCar(c)
@@ -407,9 +588,11 @@ export function DrivenCars() {
     // Only the car being updated is ever removed, which a Map's iteration allows.
     for (const car of cars.values()) {
       const c = byId.get(car.id)
-      const going = car.service
-        ? updateService(car, c, jobs.get(car.id), seconds)
-        : update(car, c, bought.has(car.id), seconds)
+      const going = car.drive
+        ? updateDrive(car, drivers.get(car.id), outCars.has(car.id), seconds)
+        : car.service
+          ? updateService(car, c, jobs.get(car.id), seconds)
+          : update(car, c, bought.has(car.id), seconds)
       if (going) continue
       removeCar(car.id)
       changed = true
@@ -420,6 +603,8 @@ export function DrivenCars() {
       car.y = heightOf(car)
       g.position.set(car.at.pos.x, car.y, car.at.pos.z)
       g.rotation.y = car.at.heading
+      // Off the map on a test drive: not drawn.
+      g.visible = car.drive?.stage !== 'away'
     }
     if (changed) setIds([...cars.keys()])
   })
@@ -439,15 +624,26 @@ export function DrivenCars() {
               else groups.delete(id)
             }}
           >
-            <Interactable id={vehicleTargetId(id)} disabled={!appraisable.includes(id)}>
+            {car.drive ? (
               <Suspense fallback={null}>
                 <CarBody
                   model={car.model}
                   cleanliness={car.cleanliness}
                   condition={car.condition}
+                  ding={car.ding}
                 />
               </Suspense>
-            </Interactable>
+            ) : (
+              <Interactable id={vehicleTargetId(id)} disabled={!appraisable.includes(id)}>
+                <Suspense fallback={null}>
+                  <CarBody
+                    model={car.model}
+                    cleanliness={car.cleanliness}
+                    condition={car.condition}
+                  />
+                </Suspense>
+              </Interactable>
+            )}
           </group>
         )
       })}

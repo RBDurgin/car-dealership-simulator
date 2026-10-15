@@ -12,6 +12,9 @@ import {
   routeLength,
   smoothCorners,
   spotsInUse,
+  stockInbound,
+  stockOutbound,
+  stockPose,
   type Vehicle,
 } from './driving'
 import type { Vec2 } from './grid'
@@ -181,6 +184,57 @@ describe('routes', () => {
             for (const s of PARKING_SPACES)
               expect(inRect(parkedCarRect(s), t.tx, t.tz), at).toBe(false)
             if (t.tz < gate.tz) expect(grid.isWalkable(t.tx, t.tz), at).toBe(true)
+          }
+        }
+      })
+    })
+  }
+})
+
+describe('test drive routes', () => {
+  // Every space open: the east lot, the wing and the garage up.
+  const grid = createGrid(buildLayout(['east-lot', 'showroom-wing', 'service-bay']))
+  const gate = OPENINGS[2]
+  const inRect = (r: Rect, tx: number, tz: number) =>
+    tx >= r.tx && tx < r.tx + r.w && tz >= r.tz && tz < r.tz + r.h
+  const tilesOf = (pts: Vec2[]) =>
+    pts.slice(1).flatMap((b, i) => {
+      const a = pts[i]
+      const steps = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) * 4)
+      return Array.from({ length: steps + 1 }, (_, s) => ({
+        tx: Math.round(a.x + ((b.x - a.x) * s) / Math.max(1, steps)),
+        tz: Math.round(a.z + ((b.z - a.z) * s) / Math.max(1, steps)),
+      }))
+    })
+
+  for (const end of ['west', 'east'] as const) {
+    it(`leaves every lot space for the road ${end} by the gate, and comes back to it`, () => {
+      PARKING_SPACES.forEach((space, n) => {
+        const { pos } = stockPose(n)
+        const out = stockOutbound(n, end)
+        const back = stockInbound(n, end).flatMap((l) => l.points)
+        // Backs out of its space, and drives back nose-first into it.
+        expect(out[0].reverse, `space ${n}`).toBe(true)
+        expect(out[0].points[0]).toEqual(pos)
+        expect(back[back.length - 1]).toEqual(pos)
+        // Off the map at the road's `end`, both ways.
+        const gone = out[out.length - 1].points.at(-1)!
+        expect(end === 'west' ? gone.x < 0 : gone.x >= GRID_WIDTH, `space ${n}`).toBe(true)
+        expect(end === 'west' ? back[0].x < 0 : back[0].x >= GRID_WIDTH, `space ${n}`).toBe(true)
+
+        const own = parkedCarRect(space)
+        for (const route of [back, out.flatMap((l) => l.points)]) {
+          for (const t of tilesOf(route)) {
+            if (t.tx < 0 || t.tx >= GRID_WIDTH || t.tz >= GRID_HEIGHT) continue
+            const at = `space ${n} at ${t.tx},${t.tz}`
+            // Through the fence only at the gate.
+            if (t.tz === gate.tz) expect(inRect(gate, t.tx, t.tz), at).toBe(true)
+            if (t.tz > gate.tz || inRect(own, t.tx, t.tz)) continue
+            // Never over another car's space, a prop or a wall inside the lot.
+            for (const s of PARKING_SPACES) {
+              if (s !== space) expect(inRect(parkedCarRect(s), t.tx, t.tz), at).toBe(false)
+            }
+            expect(grid.isWalkable(t.tx, t.tz), at).toBe(true)
           }
         }
       })

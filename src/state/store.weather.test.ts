@@ -62,6 +62,8 @@ const waiter = (id: string, carId: string): Customer => ({
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
 })
 

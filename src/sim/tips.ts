@@ -1,8 +1,9 @@
 import { CSI_FLOOR } from './csi'
 import { WASH_BELOW } from './cleanliness'
 import { dueCount, type Client } from './clients'
-import { PLAYER_ID, type Customer } from './customers'
-import type { DayStats } from './deal'
+import { bubbleOf, PLAYER_ID, type Customer } from './customers'
+import type { DayStats, DriveStats } from './deal'
+import { financing, loanDeclined, type FiStats } from './fi'
 import { installedExpansions, unlockedBy, type OwnedExpansion } from './expansions'
 import type { FranchiseTier } from './franchise'
 import type { InventoryCar } from './inventory'
@@ -51,8 +52,21 @@ export type TipId =
   | 'referral'
   | 'appreciation'
   | 'csi'
+  | 'declinedCredit'
+  | 'fiMenu'
+  | 'chargeback'
+  | 'financeManager'
+  | 'testDrive'
+  | 'ding'
+  | 'driveStaff'
   | 'stats'
   | 'achievement'
+
+/** Financed deals in a day that make a finance manager worth hiring. */
+export const FINANCE_TIP_DEALS = 5
+
+/** Drives the player takes in a day, with a salesperson free, that make it worth sending them instead. */
+export const DRIVE_STAFF_TIP_DRIVES = 3
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -106,6 +120,17 @@ export const TIPS: Record<TipId, string> = {
   appreciation:
     'Your book has 10 clients. Book a client appreciation day in the Calendar tab: a cookout on the lot that brings clients back, leaves them happier and brings in clients due to trade up.',
   csi: `This month's CSI came in under ${CSI_FLOOR}, so the manufacturer cut the holdback by a quarter. Every new-car buyer's visit counts: keep waits short, haggle less, and hand over clean cars at a fair price.`,
+  declinedCredit:
+    'No lender will take this buyer at what they meant to put down. Ask for more down if their budget reaches it, or let them go. Weaker credit needs more down, and Subprime Auto lends only up to $40,000.',
+  fiMenu:
+    'Your buyer is financing. Pick a lender and the markup (each point earns a reserve), then present products one at a time. Every product shown and every point of markup makes the next yes harder, and a buyer pushed hard is less happy and more likely to cancel later.',
+  chargeback:
+    'A chargeback landed: a buyer cancelled a product or paid off their loan early, and the dealer gives back what it made. Deals sold with heavy markup or too many products come back more often, and a client charged back soon after buying comes in sour next time.',
+  financeManager: `${FINANCE_TIP_DEALS} buyers financed today with no finance manager. Hire one from the staff panel: he runs the F&I menu by his skill while you stay on the floor, and salespeople hand him the buyers banks won't take at the buy rate.`,
+  testDrive:
+    'A shopper with a key over their head wants to drive the car. Choose Test drive on them to ride along: a good drive makes a yes likelier and a smaller discount. Point out what suits them when asked. Give them a price without the drive and they’re cooler on it.',
+  ding: 'A car came back from a test drive with a dent, and dinged cars sell less often. Choose Fix dent on it to book the garage, or Recondition a used one.',
+  driveStaff: `You’ve taken ${DRIVE_STAFF_TIP_DRIVES} test drives today while a salesperson stood free. Choose Send with … in the shopper's panel to hand the drive to them, and stay on the floor to sell.`,
   stats:
     'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
   achievement:
@@ -127,7 +152,12 @@ export interface TipState {
   cash: number
   inventory: readonly InventoryCar[]
   customers: readonly Customer[]
-  dayStats: Pick<DayStats, 'missed' | 'quota'> & { newRecords?: readonly RecordKey[] }
+  dayStats: Pick<DayStats, 'missed' | 'quota'> & {
+    newRecords?: readonly RecordKey[]
+    fi?: Pick<FiStats, 'financed' | 'declined' | 'chargebackCount'>
+    drives?: Pick<DriveStats, 'taken' | 'byStaff' | 'dings'>
+  }
+  roster?: readonly { id: string; role: string; status: string; fired: boolean }[]
   achievements?: readonly unknown[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
@@ -144,6 +174,35 @@ const booked = (s: TipState) => s.clients.filter((c) => c.appointment).length
 const clientCount = (s: TipState) => s.clients.filter((c) => c.status === 'client').length
 /** Clients in the book that make an appreciation day worth booking. */
 export const APPRECIATION_TIP_CLIENTS = 10
+
+/** The player's buyer at the F&I menu who wasn't there before, matching `test`. */
+function newToMenu(prev: TipState, next: TipState, test: (c: Customer) => boolean): boolean {
+  if (next.customers === prev.customers) return false
+  return next.customers.some(
+    (c) =>
+      c.phase === 'menu' &&
+      c.handlerId === PLAYER_ID &&
+      prev.customers.find((p) => p.id === c.id)?.phase !== 'menu' &&
+      test(c),
+  )
+}
+
+const fiCount = (s: TipState, key: 'financed' | 'declined' | 'chargebackCount') =>
+  s.dayStats.fi?.[key] ?? 0
+
+/** Drives the player took today (back from the road). */
+const playerDrives = (s: TipState) =>
+  (s.dayStats.drives?.taken ?? 0) - (s.dayStats.drives?.byStaff ?? 0)
+
+/** A salesperson at their post with nobody to look after. */
+const idleSalesperson = (s: TipState) =>
+  !!s.roster?.some(
+    (e) =>
+      e.role === 'sales' &&
+      e.status === 'atPost' &&
+      !e.fired &&
+      !s.customers.some((c) => c.handlerId === e.id && c.phase !== 'leaving'),
+  )
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
@@ -285,6 +344,37 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       const csi = next.dayStats.quota?.csi
       return !prev.dayStats.quota && csi !== undefined && csi !== null && csi < CSI_FLOOR
     }
+    case 'declinedCredit':
+      return (
+        fiCount(next, 'declined') > fiCount(prev, 'declined') ||
+        newToMenu(prev, next, (c) => !!c.fi && loanDeclined(c, c.fi))
+      )
+    case 'fiMenu':
+      return newToMenu(prev, next, (c) => financing(c) && !!c.fi && !loanDeclined(c, c.fi))
+    case 'chargeback':
+      return fiCount(next, 'chargebackCount') > fiCount(prev, 'chargebackCount')
+    case 'financeManager':
+      return (
+        fiCount(next, 'financed') >= FINANCE_TIP_DEALS &&
+        fiCount(prev, 'financed') < FINANCE_TIP_DEALS &&
+        !next.roster?.some((e) => e.role === 'finance' && !e.fired)
+      )
+    case 'testDrive': {
+      if (next.customers === prev.customers) return false
+      return next.customers.some((c) => {
+        if (bubbleOf(c) !== 'drive') return false
+        const before = prev.customers.find((p) => p.id === c.id)
+        return !before || bubbleOf(before) !== 'drive'
+      })
+    }
+    case 'ding':
+      return (next.dayStats.drives?.dings ?? 0) > (prev.dayStats.drives?.dings ?? 0)
+    case 'driveStaff':
+      return (
+        playerDrives(next) >= DRIVE_STAFF_TIP_DRIVES &&
+        playerDrives(prev) < DRIVE_STAFF_TIP_DRIVES &&
+        idleSalesperson(next)
+      )
     case 'stats':
       return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
     case 'achievement':

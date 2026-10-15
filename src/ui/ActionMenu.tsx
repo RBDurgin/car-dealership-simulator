@@ -3,8 +3,9 @@ import { useEffect, useRef } from 'react'
 import { actionBlocker } from '../sim/deal'
 import { ACTIONS, type ActionId, type Interactable } from '../sim/interactables'
 import { suggestedAsk, suggestedBuy } from '../sim/negotiation'
+import { dingBlocker } from '../sim/service'
 import { findInteractable } from '../scene/runtime'
-import { useGame } from '../state/store'
+import { reconBook, useGame } from '../state/store'
 import { formatMoney } from './format'
 
 const RADIUS = 58
@@ -48,7 +49,10 @@ function menuFor(targetId: string): { it: Interactable; items: MenuItem[] } | nu
   const items = it.actions.map((id) => ({
     id,
     label: labelFor(id, it),
-    blocked: actionBlocker(id, it.id, s.customers, s.roster, s.inventory, s.serviceJobs) !== null,
+    blocked:
+      (id === 'fixDing'
+        ? dingBlocker(reconBook(s), it.id)
+        : actionBlocker(id, it.id, s.customers, s.roster, s.inventory, s.serviceJobs)) !== null,
   }))
   return { it, items }
 }

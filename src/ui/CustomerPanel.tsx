@@ -26,6 +26,9 @@ import { estimateRange, SELLER_HINTS } from '../sim/sellers'
 import { quoteTotal } from '../sim/service'
 import { JOB_WANTS } from '../sim/serviceClients'
 import { financeOnDuty } from '../sim/staff'
+import { freeSalesperson } from '../sim/staffAi'
+import { expansionsUp } from '../sim/expansions'
+import { driveBlocker, drivePending } from '../sim/testDrive'
 import { stockValue, usedTag } from '../sim/usedCars'
 import { buyBlockerFor, lotRoom, sellerBonusOf } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
@@ -366,7 +369,9 @@ function ServicePanel({ c }: { c: Customer }) {
       <div className="info-kicker">Service client</div>
       <h2>{c.name}</h2>
       <p className="customer-quote">
-        “My {carName(visit.car.model)} needs {JOB_WANTS[visit.kind]}. How much?”
+        {visit.contractId
+          ? `“My ${carName(visit.car.model)} needs ${JOB_WANTS[visit.kind]}. It’s under the warranty you sold me.”`
+          : `“My ${carName(visit.car.model)} needs ${JOB_WANTS[visit.kind]}. How much?”`}
       </p>
       <dl>
         <dt className="customer-car">Car</dt>
@@ -379,6 +384,12 @@ function ServicePanel({ c }: { c: Customer }) {
         <dd className="price">{formatMoney(visit.quote.parts)}</dd>
         <dt>Quote</dt>
         <dd className="price">{formatMoney(quoteTotal(visit.quote))}</dd>
+        {visit.contractId && (
+          <>
+            <dt>Paid by</dt>
+            <dd>Our extended warranty</dd>
+          </>
+        )}
       </dl>
       <div className="customer-status">Thinking it over…</div>
     </div>
@@ -400,6 +411,73 @@ function TradeFigures({ c }: { c: Customer }) {
         {formatMoney(low)}–{formatMoney(high)}
       </dd>
     </>
+  )
+}
+
+/**
+ * The test drive, while talking: a button to take them out (greyed with the
+ * reason when there's no car to drive), on the way to the car a way to get
+ * in, and once they've driven how it went.
+ */
+function TestDrive({ c }: { c: Customer }) {
+  const blocker = useGame((s) => driveBlocker(c, s.inventory))
+  // A salesperson free to take them out instead, if they asked.
+  const free = useGame((s) =>
+    c.wantsDrive ? freeSalesperson(s.roster, s.customers, expansionsUp(s)) : null,
+  )
+  const carModel = useGame((s) => s.inventory.find((x) => x.id === c.drive?.carId)?.model)
+  const game = useGame.getState()
+  if (c.drive?.back) {
+    return (
+      <div className="customer-history drive-note">
+        Took the {carModel ? carName(carModel) : 'car'} for a drive
+        {c.drive.cut ? ' (cut short)' : ''}.
+      </div>
+    )
+  }
+  if (drivePending(c)) {
+    return (
+      <div className="customer-status">
+        Walking to the {carModel ? carName(carModel) : 'car'} for a test drive…
+        <div className="customer-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => game.requestAction(c.drive!.carId, 'ride')}
+          >
+            Get in
+          </button>
+          <button className="btn btn-small" onClick={() => game.walkAway()}>
+            Never mind
+          </button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="customer-actions test-drive">
+      <button
+        className={c.wantsDrive ? 'btn btn-primary' : 'btn'}
+        disabled={!!blocker}
+        title={blocker ?? undefined}
+        onClick={() => game.testDrive(c.id)}
+      >
+        🔑 Test drive
+      </button>
+      {free && !blocker && (
+        <button
+          className="btn"
+          title={`${free.name} takes them out and carries on with the sale.`}
+          onClick={() => game.sendWith(c.id, free.id)}
+        >
+          Send with {free.name}
+        </button>
+      )}
+      {blocker ? (
+        <span className="status-hint">{blocker}</span>
+      ) : (
+        c.wantsDrive && <span className="status-hint">They&apos;d like to drive it first.</span>
+      )}
+    </div>
   )
 }
 
@@ -488,7 +566,11 @@ export function CustomerPanel() {
           {touch ? 'Tap' : 'Click'} their car and choose <b>Appraise</b> for a closer estimate.
         </div>
       )}
-      {c.phase === 'talking' && <Haggle key={c.haggle?.round ?? 1} c={c} car={car} />}
+      {c.phase === 'talking' && <TestDrive c={c} />}
+      {c.phase === 'talking' && !drivePending(c) && (
+        <Haggle key={c.haggle?.round ?? 1} c={c} car={car} />
+      )}
+      {c.phase === 'driving' && <div className="customer-status">Out on a test drive…</div>}
       {c.phase === 'considering' && c.offer && (
         <>
           <dl className="haggle-figures">

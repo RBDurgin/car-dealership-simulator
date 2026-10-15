@@ -13,8 +13,11 @@ import {
 import type { Rng } from './rng'
 import type { UsedInfo } from './usedCars'
 
-/** For sale, sold (gone overnight), or in the service garage being reconditioned. */
-export type CarStatus = 'available' | 'sold' | 'recon'
+/**
+ * For sale, sold (gone overnight), in the service garage being
+ * reconditioned, or out on a test drive (see `sim/testDrive.ts`).
+ */
+export type CarStatus = 'available' | 'sold' | 'recon' | 'out'
 export type CarLocation = 'showroom' | 'lot'
 
 export interface InventoryCar {
@@ -37,6 +40,8 @@ export interface InventoryCar {
   floored: boolean
   /** A used car's year, miles and condition (see `sim/usedCars`), or null for a new one. */
   used: UsedInfo | null
+  /** Came back from a test drive with a dent, until the garage fixes it (see `sim/testDrive.ts`). */
+  ding: boolean
 }
 
 /** List price per model before per-car variation (trim, options). */
@@ -69,7 +74,7 @@ function rollCost(msrp: number, rng: Rng): number {
   return roundTo100(msrp * (min + rng.next() * (max - min)))
 }
 
-type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used'>
+type Uncosted = Omit<InventoryCar, 'cost' | 'arrivedDay' | 'floored' | 'used' | 'ding'>
 
 /**
  * Opening stock: the showroom displays plus the lot cars, priced from `rng`.
@@ -108,6 +113,7 @@ export function buildInventory(rng: Rng): InventoryCar[] {
     arrivedDay: 1,
     floored: false,
     used: null,
+    ding: false,
   }))
 }
 
@@ -126,9 +132,14 @@ export function carProp(car: InventoryCar): Prop {
   }
 }
 
-/** Blocks the footprints of cars in stock and frees those of sold cars. */
+/**
+ * Blocks the footprints of cars in stock and frees those of sold cars (and
+ * of cars in the shop). A car out on a test drive keeps its space blocked,
+ * so nobody is standing in it when the car comes back.
+ */
 export function applyToGrid(grid: Grid, inventory: readonly InventoryCar[]): void {
-  for (const c of inventory) grid.setRectBlocked(c.rect, c.status === 'available')
+  for (const c of inventory)
+    grid.setRectBlocked(c.rect, c.status === 'available' || c.status === 'out')
 }
 
 /**

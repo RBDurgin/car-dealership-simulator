@@ -1,12 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { PLAYER_ID } from '../sim/customers'
 import { dealCustomer } from '../sim/deal'
 import { ACTIONS } from '../sim/interactables'
-import { findInteractable } from '../scene/runtime'
+import { driveClock, findInteractable } from '../scene/runtime'
 import { useGame, winShowing } from '../state/store'
 import { ActionMenu } from './ActionMenu'
 import { ControlsHint } from './ControlsHint'
+import { DrivePrompt } from './DrivePrompt'
 import { CustomerPanel } from './CustomerPanel'
 import { InfoPanel } from './InfoPanel'
 import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
@@ -37,6 +38,7 @@ function ActionStatus() {
   if (performing) label = person ? `${def.verb} ${it.name}` : def.verb
   else if (action.action === 'closeDeal' && dealName) label = `Taking ${dealName} to your desk`
   else if (action.action === 'handOff' && dealName) label = `Taking ${dealName} to finance`
+  else if (action.action === 'ride' && dealName) label = `Walking ${dealName} to the car`
   else label = `Heading to ${person ? it.name : it.name.toLowerCase()}`
   const cancel = touch ? 'Tap ✕' : 'Esc'
   const hint =
@@ -63,6 +65,55 @@ function ActionStatus() {
         </div>
       )}
       <div className="status-hint">{hint}</div>
+    </div>
+  )
+}
+
+/**
+ * Out on a test drive: who with, a bar of the time left (from scene/DrivenCar,
+ * read each animation frame) and Head back (✕ or Esc).
+ */
+function DriveStatus() {
+  const c = useGame((s) => {
+    const deal = dealCustomer(s.customers, PLAYER_ID)
+    return deal?.phase === 'driving' ? deal : null
+  })
+  const touch = useMediaQuery(COARSE)
+  const fill = useRef<HTMLDivElement>(null)
+  const id = c?.id
+  useEffect(() => {
+    if (!id) return
+    let frame = requestAnimationFrame(function draw() {
+      const clock = driveClock.get(id)
+      if (fill.current && clock) {
+        fill.current.style.width = `${Math.round((1 - clock.left / clock.total) * 100)}%`
+      }
+      frame = requestAnimationFrame(draw)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [id])
+  if (!c) return null
+  const cut = !!c.drive?.cut
+  return (
+    <div className="panel status drive-status">
+      {!cut && (
+        <button
+          className="close status-cancel"
+          aria-label="Head back"
+          title="Head back (Esc)"
+          onClick={() => useGame.getState().headBack()}
+        >
+          ✕
+        </button>
+      )}
+      <div className="status-label">
+        {cut ? `Heading back with ${c.name}` : `Test drive with ${c.name}`}
+      </div>
+      <DrivePrompt c={c} />
+      <div className="progress">
+        <div ref={fill} className="drive-fill" />
+      </div>
+      {!cut && <div className="status-hint">{touch ? 'Tap ✕' : 'Esc'} to head back early</div>}
     </div>
   )
 }
@@ -116,7 +167,10 @@ export function HUD() {
       // The win screen waits for Keep playing.
       if (winShowing(game)) return
       if (e.code === 'Escape') game.cancelAll()
-      else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
+      // 1–3 point out a topic on a test drive (does nothing without a prompt up).
+      else if (/^(Digit|Numpad)[1-3]$/.test(e.code) && !e.repeat) {
+        game.pickTopic(Number(e.code.slice(-1)) - 1)
+      } else if (e.code === 'KeyH' && !e.repeat) game.toggleStaffPanel()
       else if (e.code === 'KeyI' && !e.repeat) game.toggleStockPanel(undefined, 'stock')
       else if (e.code === 'KeyM' && !e.repeat) game.toggleStockPanel(undefined, 'marketing')
       else if (e.code === 'KeyU' && !e.repeat) game.toggleStockPanel(undefined, 'upgrades')
@@ -128,6 +182,7 @@ export function HUD() {
         game.devReturnClient()
       else if (e.code === 'KeyL' && !e.repeat) game.toggleStockPanel(undefined, 'clients')
       else if (e.code === 'KeyP' && !e.repeat) game.toggleStockPanel(undefined, 'stats')
+      else if (e.code === 'KeyF' && !e.repeat) game.toggleStockPanel(undefined, 'finance')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -141,6 +196,7 @@ export function HUD() {
         <ControlsHint />
       </div>
       <ActionStatus />
+      <DriveStatus />
       <NoticeToast />
       <InfoPanel />
       <CustomerPanel />

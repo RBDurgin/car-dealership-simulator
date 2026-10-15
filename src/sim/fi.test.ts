@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import type { Credit } from './credit'
+import { rollCredit, type Credit } from './credit'
 import {
   addFiSale,
+  addFiStats,
   answered,
   canPresent,
+  deskLoan,
   emptyFiStats,
+  FAIR_FI_POINTS,
   fiDayGross,
+  financedAmount,
   fiGross,
+  fiPerDeal,
+  fiSatisfaction,
   fiWarmth,
   loanDeclined,
   loanOpen,
+  MARKUP_POINTS,
   MARKUP_PRESSURE,
+  markupWarmth,
+  CASH_TAKE,
   MAX_TAKE,
   moreDownFor,
   netPrice,
@@ -20,14 +29,22 @@ import {
   pressureOf,
   PRODUCTS,
   productsFor,
+  PUSH_POINTS,
   productTake,
   saleFi,
   soldLine,
+  staffFloor,
+  staffMarkup,
+  staffMenu,
+  STAFF_PITCH,
+  STAFF_PITCH_FROM,
+  staffPlan,
   withDown,
   withLoan,
   type FiBuyer,
 } from './fi'
 import { lenderById, loanAmount, MAX_MARKUP, reserve } from './lenders'
+import { createRng } from './rng'
 
 const credit = (extra: Partial<Credit> = {}): Credit => ({
   tier: 'A',
@@ -59,6 +76,12 @@ describe('products', () => {
     )
     expect(productTake(c, warranty, warranty.low, 3)).toBeLessThan(
       productTake(c, warranty, warranty.low, 1),
+    )
+  })
+
+  it('is taken less by a cash buyer', () => {
+    expect(productTake(cash, warranty, warranty.low, 0)).toBeCloseTo(
+      productTake(buyer(), warranty, warranty.low, 0) - CASH_TAKE,
     )
   })
 
@@ -224,5 +247,203 @@ describe('the day’s F&I', () => {
     expect(penetration(emptyFiStats(), 'gap')).toBeNull()
     expect(soldLine(stats)).toBe('Extended warranty 1 of 2')
     expect(payLine({ ...stats, declined: 1 })).toBe('2 financed, 1 cash, 1 declined')
+  })
+})
+
+describe('the finance manager’s menu', () => {
+  const net = 30_000
+
+  it('marks up by skill, easing off good credit, never over the cap', () => {
+    expect(staffMarkup(5, 'D')).toBe(MAX_MARKUP)
+    expect(staffMarkup(3, 'C')).toBe(1.5)
+    expect(staffMarkup(3, 'A')).toBeLessThan(staffMarkup(3, 'B'))
+    expect(staffMarkup(3, 'B')).toBeLessThan(staffMarkup(3, 'C'))
+    for (let skill = 1; skill <= 5; skill++) {
+      expect(staffMarkup(skill, 'D')).toBeLessThanOrEqual(MAX_MARKUP)
+      expect(staffPlan(skill, buyer({ credit: credit({ tier: 'C' }) }), net)!.deal.markup).toBe(
+        staffMarkup(skill, 'C'),
+      )
+    }
+  })
+
+  it('picks the lender with the best reserve less its fee', () => {
+    // Tier A: Prime Bank and the credit union both take them, and the
+    // union's higher buy rate pays more on the same markup.
+    const c = buyer()
+    const plan = staffPlan(3, c, net)!
+    const amount = loanAmount(net, plan.deal.down)
+    const value = (id: 'prime' | 'union') => reserve(amount, plan.deal.markup, lenderById(id))
+    expect(value('union')).toBeGreaterThan(value('prime'))
+    expect(plan.deal.lender).toBe('union')
+    // Tier D pays the acquisition fee wherever it goes: only subprime takes them.
+    expect(staffPlan(3, buyer({ credit: credit({ tier: 'D' }) }), net)?.deal.lender).toBe(
+      'subprime',
+    )
+  })
+
+  it('presents in order of likely take and stops under his floor', () => {
+    const c = buyer()
+    const plan = staffPlan(3, c, net)!
+    expect(plan.presents.length).toBeGreaterThan(0)
+    let pressure = pressureOf(plan.deal)
+    // His pitch adds a level's worth over the player's at skill 3.
+    const pitch = (3 - STAFF_PITCH_FROM) * STAFF_PITCH
+    for (const p of plan.presents) {
+      expect(productTake(c, PRODUCTS[p.id], p.price, pressure, pitch)).toBeGreaterThanOrEqual(
+        staffFloor(3),
+      )
+      pressure += 1
+    }
+    // A bargain hunter under a full markup hears fewer pitches than a family.
+    const hard = buyer({ archetype: 'bargain', credit: credit({ tier: 'D', down: 0.1 }) })
+    const keen = buyer({ archetype: 'couple' })
+    expect(staffPlan(3, hard, net)!.presents.length).toBeLessThan(
+      staffPlan(3, keen, net)!.presents.length,
+    )
+  })
+
+  it('offers no GAP to a cash buyer', () => {
+    for (let skill = 1; skill <= 5; skill++) {
+      const plan = staffPlan(skill, cash, net)!
+      expect(plan.deal.lender).toBeNull()
+      expect(plan.presents.some((p) => p.id === 'gap')).toBe(false)
+    }
+  })
+
+  it('asks for more down when nobody takes them, or gives up', () => {
+    const d = buyer({ credit: credit({ tier: 'D', down: 0 }) })
+    expect(staffPlan(3, d, net)?.deal).toMatchObject({ lender: 'subprime', down: 0.1 })
+    expect(staffPlan(3, { ...d, budget: net }, net)).toBeNull()
+    expect(staffMenu(3, { ...d, budget: net }, net, createRng(1))).toBeNull()
+  })
+
+  it('makes more F&I the more skilled he is', () => {
+    const buyers: FiBuyer[] = []
+    const rng = createRng(7)
+    const kinds = ['regular', 'couple', 'bargain', 'decisive', 'used-shopper'] as const
+    for (let i = 0; i < 2_000; i++) {
+      const archetype = kinds[i % kinds.length]
+      buyers.push({ archetype, credit: rollCredit(archetype, rng), budget: 60_000 })
+    }
+    const average = (skill: number) => {
+      const r = createRng(11)
+      let gross = 0
+      for (const c of buyers) {
+        const deal = staffMenu(skill, c, net, r)
+        if (deal) gross += fiGross(deal, financedAmount(c, deal, net), c.credit)
+      }
+      return gross / buyers.length
+    }
+    const bySkill = [1, 2, 3, 4, 5].map(average)
+    for (let i = 1; i < bySkill.length; i++) expect(bySkill[i]).toBeGreaterThan(bySkill[i - 1])
+    // About $700–800 a deal from an average one (see the plan's tuning targets).
+    expect(bySkill[2]).toBeGreaterThan(550)
+    expect(bySkill[2]).toBeLessThan(950)
+  })
+
+  it('records each answer, never above the markup cap', () => {
+    const deal = staffMenu(
+      5,
+      buyer({ credit: credit({ tier: 'D', down: 0.1 }) }),
+      net,
+      createRng(3),
+    )!
+    expect(deal.markup).toBeLessThanOrEqual(MAX_MARKUP)
+    expect(deal.presented).toBe(deal.products.length)
+  })
+})
+
+describe('a salesperson’s loan', () => {
+  it('takes the cheapest lender at the buy rate, with nothing on the menu', () => {
+    expect(deskLoan(buyer(), 30_000)).toMatchObject({
+      lender: 'prime',
+      markup: 0,
+      products: [],
+      presented: 0,
+    })
+    expect(deskLoan(cash, 30_000)).toMatchObject({ lender: null })
+    expect(deskLoan(buyer({ credit: credit({ tier: 'D', down: 0 }) }), 30_000)).toBeNull()
+  })
+
+  it('adds its reserve and fee to the day, but no menu', () => {
+    const d = buyer({ credit: credit({ tier: 'D', down: 0.1 }) })
+    const deal = deskLoan(d, 30_000)!
+    const fi = saleFi(d, deal, 30_000)
+    const stats = addFiSale(emptyFiStats(), d.credit, fi, false)
+    expect(stats).toMatchObject({ financed: 1, menus: 0, financedMenus: 0, fees: 595 })
+    expect(fiDayGross(stats)).toBe(-595)
+  })
+})
+
+describe('the month’s F&I', () => {
+  it('adds two spans together', () => {
+    const a = { ...emptyFiStats(), financed: 2, cash: 1, menus: 2, reserve: 500, sold: { gap: 1 } }
+    const b = {
+      ...emptyFiStats(),
+      financed: 1,
+      declined: 1,
+      productGross: 800,
+      sold: { gap: 2, warranty: 1 },
+    }
+    expect(addFiStats(a, b)).toEqual({
+      ...emptyFiStats(),
+      financed: 3,
+      cash: 1,
+      declined: 1,
+      menus: 2,
+      reserve: 500,
+      productGross: 800,
+      sold: { gap: 3, warranty: 1 },
+    })
+    expect(fiPerDeal(addFiStats(a, b))).toBe(1_300 / 4)
+    expect(fiPerDeal(emptyFiStats())).toBeNull()
+  })
+})
+
+describe('how the menu leaves the buyer', () => {
+  const net = 30_000
+  const c = buyer()
+  const loanAt = (markup: number) => withLoan(c, openDeal(c, net), net, 'prime', markup)
+  const feel = (deal: ReturnType<typeof openDeal>, who = c) =>
+    fiSatisfaction(saleFi(who, deal, net))
+
+  it('adds a little for a fair menu: a point of markup and two products', () => {
+    const fair = answered(answered(loanAt(1), 'warranty', 1500, true), 'gap', 600, false)
+    expect(feel(fair)).toMatchObject({ fair: FAIR_FI_POINTS, markup: 0, pushed: 0 })
+    expect(feel(loanAt(0)).fair).toBe(FAIR_FI_POINTS)
+  })
+
+  it('leaves a cash buyer shown nothing as they were', () => {
+    expect(feel(openDeal(cash, net), cash)).toMatchObject({ fair: 0, markup: 0, pushed: 0 })
+    const shown = answered(openDeal(cash, net), 'warranty', 1500, false)
+    expect(feel(shown, cash).fair).toBe(FAIR_FI_POINTS)
+  })
+
+  it('takes off for every markup point over one', () => {
+    expect(feel(loanAt(2))).toMatchObject({ fair: 0, markup: -MARKUP_POINTS })
+    expect(feel(loanAt(MAX_MARKUP)).markup).toBe(-Math.round((MAX_MARKUP - 1) * MARKUP_POINTS))
+  })
+
+  it('takes off for every product turned down past the second, again for one re-presented', () => {
+    let deal = loanAt(0)
+    for (const id of ['warranty', 'gap', 'protection', 'tyre'] as const) {
+      deal = answered(deal, id, PRODUCTS[id].low, false)
+    }
+    expect(feel(deal)).toMatchObject({ fair: 0, pushed: -2 * PUSH_POINTS, declined: 4 })
+    deal = answered(deal, 'tyre', PRODUCTS.tyre.low, true)
+    expect(feel(deal)).toMatchObject({ pushed: -2 * PUSH_POINTS, declined: 4 })
+    // Presented four, all taken: pushy, but nobody said no.
+    let taken = loanAt(0)
+    for (const id of ['warranty', 'gap', 'protection', 'tyre'] as const) {
+      taken = answered(taken, id, PRODUCTS[id].low, true)
+    }
+    expect(feel(taken)).toMatchObject({ fair: 0, pushed: 0 })
+  })
+
+  it('warms Easy’s markup chip to fair up to a point', () => {
+    expect(markupWarmth(0)).toBe('hot')
+    expect(markupWarmth(1)).toBe('hot')
+    expect(markupWarmth(1.75)).toBe('warm')
+    expect(markupWarmth(MAX_MARKUP)).toBe('cold')
   })
 })

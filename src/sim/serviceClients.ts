@@ -13,6 +13,7 @@ import {
 import { rollUsedCar, type UsedInfo } from './usedCars'
 import { clientCarInfo, type Client } from './clients'
 import { canPitch } from './clientService'
+import { claimQuote, contractCar, type Contract } from './contracts'
 
 /**
  * Service clients (Phase 15c): people who drive their own car in for a job.
@@ -56,6 +57,8 @@ export interface ServiceVisit {
   comeback: boolean
   /** A client from the book due to trade up soon, not pitched yet (see `canPitch`). */
   pitch: boolean
+  /** In on a claim on our extended warranty (see `sim/contracts.ts`): the contract pays. */
+  contractId: string | null
 }
 
 /** What a client drove in for, in a sentence: "for an oil change". */
@@ -66,6 +69,7 @@ export const JOB_WANTS: Record<JobKind, string> = {
   repair: 'a repair',
   recall: 'recall work',
   recon: 'reconditioning',
+  ding: 'a dent fixed',
 }
 
 /** A client told the car will be ready within this many game minutes waits for it. */
@@ -117,6 +121,7 @@ export function serviceClient(
       returned: false,
       comeback: false,
       pitch: false,
+      contractId: null,
     },
   }
 }
@@ -146,6 +151,39 @@ export function bookServiceClient(
     archetype: client.archetype === 'couple' ? 'regular' : client.archetype,
     clientId: client.id,
     service: { ...c.service!, ...(car && { car }), pitch: canPitch(client, day) },
+  }
+}
+
+/**
+ * The holder of warranty `contract` driving in on `day` with a repair it
+ * covers: the client from the book (`holder`) when they're still in it,
+ * otherwise a stranger by the buyer's name in the car we sold them. They pay
+ * nothing: the warranty company does (see `warrantyPay`).
+ */
+export function claimClient(
+  contract: Contract,
+  holder: Client | null,
+  id: string,
+  spot: number,
+  rng: Rng,
+  day: number,
+  rate: RateLevel,
+  patienceFactor = 1,
+): Customer {
+  const c = holder?.car
+    ? bookServiceClient(holder, id, 'repair', spot, rng, day, rate, patienceFactor)
+    : {
+        ...serviceClient(id, 'repair', spot, rng, day, rate, patienceFactor),
+        name: contract.customerName,
+      }
+  return {
+    ...c,
+    service: {
+      ...c.service!,
+      ...(!holder?.car && { car: contractCar(contract, day) }),
+      quote: claimQuote(rng),
+      contractId: contract.id,
+    },
   }
 }
 

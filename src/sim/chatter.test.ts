@@ -19,6 +19,7 @@ import { NAZMA_ID, NAZMA_VARIANT, type NazmaVisit } from './nazma'
 import { OWNER_ID } from './owner'
 import { createRng } from './rng'
 import { generateCandidates, type Employee } from './staff'
+import { newDrive, type TestDrive } from './testDrive'
 
 const inventory = buildInventory(createRng(42))
 const customer = (id: string, patch: Partial<Customer> = {}): Customer => ({
@@ -110,6 +111,21 @@ describe('conversationsOf', () => {
       [{ speaker: 'c1', tone: 'grumble', syllables: 1 }],
     ])
     expect(reactionsFor(at(deal), at({ ...deal, markup: 1 }), createRng(1))).toEqual([])
+  })
+
+  it('has a keen shopper ask about the car on the way to a test drive, then back to the pitch', () => {
+    const walking = customer('c1', {
+      phase: 'talking',
+      handlerId: PLAYER_ID,
+      drive: newDrive('car', PLAYER_ID, 30),
+    })
+    expect(conversationsOf(state({ customers: [walking] }))).toEqual([
+      { key: 'drive:c1', kind: 'drive', speakers: ['c1', PLAYER_ID] },
+    ])
+    const back = { ...walking, drive: { ...walking.drive!, back: true } }
+    expect(conversationsOf(state({ customers: [back] }))[0].kind).toBe('pitch')
+    const driving = { ...walking, phase: 'driving' as const }
+    expect(conversationsOf(state({ customers: [driving] }))).toEqual([])
   })
 
   it('lets a couple chat while they browse or wait, but not once they are being sold to', () => {
@@ -322,6 +338,39 @@ describe('reactionsFor', () => {
     const said = lines(prev, state({ nazma: { ...visit, status: 'runOff' } }))
     expect(said).toEqual([[expect.objectContaining({ speaker: NAZMA_ID, tone: 'grumble' })]])
     expect(lines(prev, state({ nazma: { ...visit, status: 'done' } }))).toEqual([])
+  })
+
+  it('reacts to each talking point on a test drive by how it went down', () => {
+    const drive = (points: TestDrive['points'], offered: TestDrive['offered'] = null) =>
+      state({
+        customers: [
+          customer('c1', {
+            phase: 'driving',
+            handlerId: PLAYER_ID,
+            drive: { ...newDrive('car', PLAYER_ID, 30), points, offered },
+          }),
+        ],
+      })
+    const open = drive([], ['safety', 'power', 'tech'])
+    expect(lines(open, drive([{ topic: 'safety', fit: 'good' }]))).toEqual([
+      [{ speaker: 'c1', tone: 'happy', syllables: 3 }],
+    ])
+    expect(lines(open, drive([{ topic: 'tech', fit: 'poor' }]))).toEqual([
+      [{ speaker: 'c1', tone: 'murmur', syllables: 1 }],
+    ])
+    // A prompt left unanswered says nothing.
+    expect(lines(open, drive([{ topic: null, fit: 'ok' }]))).toEqual([])
+  })
+
+  it('is happy getting out after a good drive, and polite after a flat one', () => {
+    const c = (patch: Partial<Customer>) =>
+      state({ customers: [customer('c1', { handlerId: PLAYER_ID, ...patch })] })
+    const out = c({ phase: 'driving', drive: newDrive('car', PLAYER_ID, 30) })
+    const back = (score: number) =>
+      c({ phase: 'talking', drive: { ...newDrive('car', PLAYER_ID, 30), back: true, score } })
+    expect(lines(out, back(0.9))[0][0]).toMatchObject({ speaker: 'c1', tone: 'happy' })
+    expect(lines(out, back(0.3))[0][0]).toMatchObject({ speaker: 'c1', tone: 'neutral' })
+    expect(lines(out, back(0.3))[0][1]).toMatchObject({ speaker: PLAYER_ID, tone: 'happy' })
   })
 
   it('is quiet when nothing changed', () => {

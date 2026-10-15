@@ -1,16 +1,20 @@
 import { CSI_FACTORS, CSI_FLOOR, CSI_PAR, CSI_TIER_MIN, CSI_TOP } from '../sim/csi'
+import { CHARGEBACK_DAYS } from '../sim/chargebacks'
+import { CLAIM_EVERY, WARRANTY_DAYS } from '../sim/contracts'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
 import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
 import {
   DUE_SOON,
+  EARLY_CHARGEBACK_DAYS,
   LAPSE_DAYS,
   LOYAL,
   PROSPECT_DAYS,
   SERVICE_INTERVAL,
   TRADE_UP_DAYS,
 } from '../sim/clients'
+import { FAIR_FI_MARKUP } from '../sim/fi'
 import { FLOOR_PLAN_DAILY_RATE, FLOOR_PLAN_LIMIT } from '../sim/floorPlan'
 import { APPRAISE_SECONDS } from '../sim/interactables'
 import { MAX_MARKUP } from '../sim/lenders'
@@ -23,6 +27,8 @@ import {
 import { CLOSEOUT_REBATE, EVENTS } from '../sim/events'
 import { CHANNEL_IDS, CHANNELS } from '../sim/marketing'
 import { DAILY_DEPRECIATION, STALE_DAYS, USED_MARKUP } from '../sim/usedCars'
+import { DING_PENALTY } from '../sim/cleanliness'
+import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
@@ -69,6 +75,7 @@ import { MAX_DAILY_CHANGE, REPUTATION_POINTS } from '../sim/reputation'
 import { FEE_REFER, MAX_FRIENDS, REFER_MIN, REFER_WINDOW } from '../sim/referrals'
 import { APPRECIATION_COST, BOOK_AHEAD, COST_PER_GUEST } from '../sim/appreciation'
 import {
+  FI_COMMISSION,
   FINANCE_FEE,
   MIN_COMMISSION,
   MIN_RETENTION_RAISE,
@@ -150,10 +157,10 @@ function BasicsTab({ touch, click }: TabProps) {
         <p>
           Easy also helps you learn. While you haggle, a chip shows how warm the customer (or a
           seller) is to the numbers on the steppers, after any trade-in: <b>hot</b> (likely to take
-          it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk). The first time a day
-          ends in the red, the bank tops your cash back up to $0; it only does this once. And tips
-          pop up the first time things happen, such as a counter-offer, a dirty car or a visit from
-          Nazma.
+          it), <b>warm</b> (they&apos;ll talk) or <b>cold</b> (likely to walk), and on a test drive
+          the best talking point is marked. The first time a day ends in the red, the bank tops your
+          cash back up to $0; it only does this once. And tips pop up the first time things happen,
+          such as a counter-offer, a dirty car or a visit from Nazma.
         </p>
         <p>
           <b>Hard</b> starts with {formatMoney(TUNING.hard.startingCash)}, cars cost{' '}
@@ -275,6 +282,34 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Test drives</h3>
+        <p>
+          Some shoppers want to drive the car first: a key (🔑) over their head. While you&apos;re
+          talking, <b>Test drive</b> in the customer panel (or the customer&apos;s menu) walks you
+          both to the car, and you ride along while they drive it out of the gate and down the road.
+          A showroom car stays on its platform, so they drive one of the same model off the lot;
+          with none there, the button says why.
+        </p>
+        <p>
+          A drive takes 20–35 game minutes, shown by a bar at the top. You&apos;re off the floor
+          until it&apos;s back, and the car can&apos;t be looked at or sold while it&apos;s out.{' '}
+          <b>Head back</b> ({touch ? '✕' : '✕ or Esc'}) turns round early, for a smaller lift. Back
+          on the lot they&apos;re keener to buy and hope for less off, more so in a clean car (or a
+          used one in good shape). Name a price to someone who wanted a drive without giving them
+          one and they&apos;re less keen, and they leave less happy. A drive takes you off the floor
+          for a while, so with customers waiting, a salesperson is often the better driver.
+        </p>
+        <p>
+          Twice on each drive you get three <b>talking points</b> to choose from (
+          {touch ? 'tap one' : 'click one or press 1–3'}). A topic the buyer cares about that the
+          car is good at goes down best: a couple likes safety and room, a bargain hunter economy, a
+          tire-kicker the fun stuff; a truck is roomy and strong, a sedan comfortable and thrifty, a
+          sports car quick and nimble. One or the other is fine, neither falls flat, and a prompt
+          left alone counts as so-so. How they took it shows under the drive bar, and on Easy the
+          best topic is marked.
+        </p>
+      </section>
+      <section>
         <h3>The F&amp;I menu</h3>
         <p>
           Once the paperwork is signed, the F&amp;I menu opens at the desk. For a buyer who
@@ -295,7 +330,30 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
         <p>
           With a finance manager on shift you can still close at your own desk and run the menu
-          yourself. They earn nothing on those deals.
+          yourself. They earn nothing on those deals. Hand a buyer off at the office desk and they
+          run the menu for you (see <b>Staff</b>). A salesperson closing at their own desk arranges
+          the loan at the lender&apos;s rate, with no markup and no products, and sends a buyer no
+          lender will take over to finance (or home, with nobody there).
+        </p>
+        <p>
+          An extended warranty is a contract for {WARRANTY_DAYS} days. With a service garage, a
+          covered car comes in for a repair about every {CLAIM_EVERY} days: check it in like any
+          other, the client pays nothing and the warranty company pays for the work (book time at{' '}
+          {formatMoney(WARRANTY_HOURLY)} an hour, the parts at cost). Clients with a warranty say
+          yes to extra work more often.
+        </p>
+        <p>
+          A deal sold hard can come back. {CHARGEBACK_DAYS.min} to {CHARGEBACK_DAYS.max} days after
+          the sale, a product the buyer cancels, or a loan they pay off or refinance, is a{' '}
+          <i>chargeback</i>: you give back what it made. Pressure, a markup over a point and weak
+          credit (tiers C and D) all make one likelier. The morning notice tells you when one lands.
+        </p>
+        <p>
+          The menu counts toward how happy the buyer leaves. A fair one, a loan or a product or two
+          at no more than {FAIR_FI_MARKUP} point of markup, adds a little to their visit score. Each
+          markup point over that, and each product turned down past the second, takes points off. A
+          client charged back within {EARLY_CHARGEBACK_DAYS} days of buying comes in sour on their
+          next visit. Cash buyers take products less often than buyers who finance.
         </p>
         <p>
           Someone <i>after a good used car</i> has about half a new car&apos;s budget, is open to
@@ -393,9 +451,10 @@ function SellingTab({ touch, click }: TabProps) {
         </p>
         <p>
           Each visit is scored out of 100. Waiting long, haggling many rounds, paying more than they
-          hoped, a dirty car or a low trade-in offer take points off; quick service, a good price, a
-          clean car and a fair trade-in add them. The score is blended into how happy they are with
-          you, so one bad visit hurts without wiping out the good ones.
+          hoped, a dirty car, a low trade-in offer, a pushy F&amp;I menu or a test drive they asked
+          for and never had take points off; quick service, a good price, a clean car, a fair
+          trade-in, fair finance and a test drive they loved add them. The score is blended into how
+          happy they are with you, so one bad visit hurts without wiping out the good ones.
         </p>
         <p>
           The <b>Clients</b> tab on the office computer (<OfficeKey touch={touch} keyName="L" />)
@@ -593,6 +652,22 @@ function BusinessTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Finance</h3>
+        <p>
+          The office computer&apos;s <b>Finance</b> tab{touch ? '' : ' (F)'} shows today&apos;s and
+          this month&apos;s F&amp;I: buyers who financed or paid cash, those every lender declined,
+          the lenders&apos; reserve, the products&apos; margin, the F&amp;I gross per deal and how
+          often each product sells. It also lists the lenders, the credit tiers each takes and their
+          rates. The day summary&apos;s seller table shows the F&amp;I each seller made at their own
+          desk, and the finance manager gets a row for the deals they signed.
+        </p>
+        <p>
+          The tab also counts the warranty contracts in force and the chargebacks still to land. A
+          chargeback comes off the day&apos;s F&amp;I gross and your cash. On a deal the finance
+          manager signed, their share of it comes back out of the day&apos;s commissions.
+        </p>
+      </section>
+      <section>
         <h3>Service garage</h3>
         <p>
           The {EXPANSIONS[GARAGE_EXPANSION].label.toLowerCase()} has {GARAGE_BAYS} bays. Hire a
@@ -648,6 +723,25 @@ function BusinessTab({ touch, click }: TabProps) {
           in overtime, at {formatMoney(OVERTIME_HOURLY)} an hour, taken off the day&apos;s net.
           Clients who left their car collect it after hours. Your own cars still waiting for a bay
           go back on sale and the parts money comes back.
+        </p>
+      </section>
+      <section>
+        <h3>Wear from test drives</h3>
+        <p>
+          Every test drive brings the car back dirtier ({Math.round(DRIVE_DIRT.dry * 100)} points of
+          clean, {Math.round(DRIVE_DIRT.rain * 100)} in the rain), and a used car comes back with{' '}
+          {DRIVE_MILES.min}–{DRIVE_MILES.max} more miles, so it&apos;s worth a little less. About
+          one drive in {Math.round(1 / DING_BASE)} comes back with a <b>ding</b>: a dent you can see
+          on its side, and buyers are {Math.round(DING_PENALTY * 100)} points less likely to take
+          it. It&apos;s rarer with a skilled salesperson or you riding along, and more likely in the
+          rain.
+        </p>
+        <p>
+          {click} a dented car and choose <b>Fix dent</b> to send it to the garage: you pay for the
+          parts ({formatMoney(JOBS.ding.parts.min)}–{formatMoney(JOBS.ding.parts.max)}) and a
+          mechanic fixes it in about {JOBS.ding.minutes} minutes, with the parts on its cost.
+          Reconditioning a used car fixes a dent too. Without a garage you can still sell it as it
+          is, at the lower odds.
         </p>
       </section>
       <section>
@@ -847,7 +941,13 @@ function PeopleTab({ touch, click }: TabProps) {
             {formatMoney(MIN_COMMISSION)}). Seasoned ones hold nearer MSRP, get more yeses and greet
             customers on arrival; green ones open lower and give in sooner. None sell below cost.
             They take trade-ins and buy from sellers too (see <b>Selling</b>). They leave alone a
-            customer you&apos;re walking to, and a tick marks someone they&apos;re helping.
+            customer you&apos;re walking to, and a tick marks someone they&apos;re helping. A
+            shopper who asked for a test drive (🔑) gets one before any talk of price: the
+            salesperson rides along, off the floor until it&apos;s back, and picks the talking
+            points, the right one more often the more skilled they are. While you&apos;re talking to
+            a 🔑 shopper, <b>Send with …</b> in the customer panel hands them to your best free
+            salesperson, who takes them out and carries on with the sale, so you can stay on the
+            floor.
           </li>
           <li>
             A <b>receptionist</b> keeps waiting customers patient. With nobody waiting, they call
@@ -855,10 +955,15 @@ function PeopleTab({ touch, click }: TabProps) {
             books. Turn their calls off in the Clients tab.
           </li>
           <li>
-            A <b>finance manager</b> signs buyers at the office desk for {formatMoney(FINANCE_FEE)}{' '}
-            a deal, while your own desk stays yours: lead a buyer to the office,{' '}
-            {click.toLowerCase()} them and choose <b>Hand off to finance</b>, and you&apos;re free
-            for the next customer. Buyers wait in the lounge if finance is busy.
+            A <b>finance manager</b> takes the office desk while your own desk stays yours: lead a
+            buyer to the office, {click.toLowerCase()} them and choose <b>Hand off to finance</b>,
+            and you&apos;re free for the next customer. Buyers wait in the lounge if finance is
+            busy. They run the F&amp;I menu by skill, and even an average one pitches products
+            better than you do: they pick the lender that pays the best reserve, mark up more the
+            more skilled they are (less for good credit) and present products until a yes gets
+            unlikely, taking a little longer for each. A buyer no lender takes is asked for more
+            down. They earn {formatMoney(FINANCE_FEE)} a deal plus {Math.round(FI_COMMISSION * 100)}
+            % of its F&amp;I gross.
           </li>
           <li>
             A <b>lot porter</b> washes the dirtiest cars all day.

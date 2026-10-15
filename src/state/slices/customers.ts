@@ -1,6 +1,8 @@
 import { pickArchetype, skewWeights } from '../../sim/archetypes'
 import { isClosed } from '../../sim/clock'
-import { loyalIds } from '../../sim/clients'
+import { rollChargebacks } from '../../sim/chargebacks'
+import { clientCarOf, loyalIds } from '../../sim/clients'
+import { addContracts, newContract } from '../../sim/contracts'
 import { assignCredit } from '../../sim/credit'
 import {
   chooseTarget,
@@ -15,6 +17,8 @@ import {
   addFiSale,
   answered,
   canPresent,
+  deskLoan,
+  type FiDeal,
   loanDeclined,
   moreDownFor,
   netPrice,
@@ -23,6 +27,7 @@ import {
   PRODUCTS,
   productTake,
   saleFi,
+  staffMenu,
   withDown,
   withLoan,
 } from '../../sim/fi'
@@ -57,10 +62,39 @@ import {
 } from '../../sim/sellers'
 import { LAST_ARRIVAL_MINUTE } from '../../sim/spawner'
 import { financeOnDuty, type Employee } from '../../sim/staff'
+import {
+  assignDriveAsk,
+  drivableCar,
+  driveBlocker,
+  driveExpect,
+  driveLine,
+  driveMinutes,
+  driveScore,
+  perfectDrive,
+  rollWear,
+  wearCar,
+} from '../../sim/testDrive'
+import {
+  closePrompt,
+  offerTopics,
+  PROMPTS_PER_DRIVE,
+  promptsMade,
+  staffTopic,
+  topicFit,
+} from '../../sim/talkingPoints'
 import { nextUsedId } from '../../sim/usedCars'
-import { arrivalOpts, commit, endDeal, notify, tallyMissed, tuning, type Kit } from '../core'
+import {
+  arrivalOpts,
+  commit,
+  dispatch,
+  endDeal,
+  notify,
+  tallyMissed,
+  tuning,
+  type Kit,
+} from '../core'
 import { sellerBonusFor } from '../derived'
-import { nextCustomerId, rng } from '../rng'
+import { nextActionId, nextCustomerId, rng } from '../rng'
 import { answerService } from './service'
 import type { GameState } from '../types'
 
@@ -76,6 +110,11 @@ type CustomerKeys =
   | 'fiSign'
   | 'walkIn'
   | 'devSpawnCustomers'
+  | 'testDrive'
+  | 'headBack'
+  | 'driveBack'
+  | 'drivePrompt'
+  | 'pickTopic'
 
 /** Everyone on the lot, and the player's side of the deal. */
 export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
@@ -145,7 +184,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const c = menuCustomer(k)
       if (!c?.fi) return
       if (loanDeclined(c, c.fi)) return notify(k, 'No lender has approved the loan yet.')
-      const sale = sign(k, c, null)
+      const sale = sign(k, c, null, c.fi)
       if (!sale) {
         endDeal(k, ['menu'])
         return notify(k, 'The deal fell through.')
@@ -155,6 +194,81 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
         k,
         `Sold the ${carName(sale.model)} to ${sale.customerName} for ${formatMoney(sale.price)}!${fi}${tradeLine(sale)}`,
       )
+    },
+    testDrive: (id) => startDrive(k, id),
+    headBack: () => {
+      const c = dealCustomer(get().customers, PLAYER_ID)
+      if (c?.phase !== 'driving' || c.drive?.cut) return
+      commit(k, reduceCustomers(get().customers, { type: 'cutDrive', id: c.id }))
+      notify(k, `Heading back to the lot with ${c.name}`)
+    },
+    driveBack: (id) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === id)
+      const car = c?.drive && s.inventory.find((x) => x.id === c.drive!.carId)
+      if (c?.phase !== 'driving' || !c.drive || !car) return
+      // A prompt still up when they're back counts as unanswered.
+      const closed = closePrompt(c.drive)
+      const score = driveScore(closed, c, car)
+      // The road leaves its mark: dirt, miles on a used car, now and then a ding.
+      const rider = s.roster.find((e) => e.id === c.drive!.by)
+      const wear = rollWear(
+        car,
+        c.drive.by,
+        rider?.skill ?? 3,
+        s.weather,
+        rng.wear,
+        tuning(k).dingChance,
+      )
+      const drive = { ...closed, back: true, score, ding: wear.ding }
+      const ev = { type: 'droveBack', id, drive, expect: driveExpect(c, score) } as const
+      const { drives } = s.dayStats
+      set({
+        inventory: wearCar(s.inventory, car.id, wear),
+        dayStats: {
+          ...s.dayStats,
+          drives: {
+            taken: drives.taken + 1,
+            bought: drives.bought,
+            cut: drives.cut + (drive.cut ? 1 : 0),
+            byStaff: drives.byStaff + (rider ? 1 : 0),
+            dings: drives.dings + (wear.ding ? 1 : 0),
+            perfect: drives.perfect + (!rider && perfectDrive(drive) ? 1 : 0),
+          },
+        },
+      })
+      commit(k, reduceCustomers(get().customers, ev))
+      // Their salesperson was let go while they were out: they're back to waiting.
+      if (rider?.fired) commit(k, reduceCustomers(get().customers, { type: 'cancel', id }))
+      const dinged = wear.ding ? ` The ${carName(car.model)} came back with a ding.` : ''
+      if (c.handlerId === PLAYER_ID)
+        notify(k, `${c.name}: "${driveLine(score, drive.cut)}"${dinged}`)
+      else if (dinged)
+        notify(k, `${rider?.name ?? 'A salesperson'} is back from a test drive.${dinged}`)
+    },
+    drivePrompt: (id) => {
+      const s = get()
+      const c = s.customers.find((x) => x.id === id)
+      const car = c?.drive && s.inventory.find((x) => x.id === c.drive!.carId)
+      if (c?.phase !== 'driving' || !c.drive || c.drive.cut || !car) return
+      if (promptsMade(c.drive) >= PROMPTS_PER_DRIVE) return
+      const topics = offerTopics(c, car, rng.testDrive)
+      commit(k, reduceCustomers(s.customers, { type: 'topics', id, topics }))
+      // A salesperson riding along picks one at once, the better the more skilled.
+      const rider = s.roster.find((e) => e.id === c.drive!.by)
+      if (!rider) return
+      const topic = staffTopic(rider.skill, c, car, topics, rng.testDrive)
+      const point = { topic, fit: topicFit(c, car, topic) }
+      commit(k, reduceCustomers(get().customers, { type: 'point', id, point }))
+    },
+    pickTopic: (index) => {
+      const s = get()
+      const c = dealCustomer(s.customers, PLAYER_ID)
+      const topic = c?.phase === 'driving' ? c.drive?.offered?.[index] : undefined
+      const car = topic && s.inventory.find((x) => x.id === c!.drive!.carId)
+      if (!topic || !car) return
+      const point = { topic, fit: topicFit(c!, car, topic) }
+      commit(k, reduceCustomers(s.customers, { type: 'point', id: c!.id, point }))
     },
     walkIn: (variant) => {
       const s = get()
@@ -166,7 +280,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const picked = pickArchetype(rng.walkIn, opts.skew && skewWeights(opts.skew))
       const archetype = picked === 'couple' ? 'regular' : picked
       const id = nextCustomerId()
-      const [c] = withCredit(
+      const [c] = withShopperRolls(
         k,
         withQuotes(k, [
           generateCustomer(id, availableCars(s.inventory), rng.walkIn, {
@@ -185,7 +299,7 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const s = get()
       if (isClosed(s.clock) || n <= 0) return
       const stock = availableCars(s.inventory)
-      const arrived = withCredit(
+      const arrived = withShopperRolls(
         k,
         Array.from({ length: n }, () =>
           generateCustomer(nextCustomerId(), stock, rng.customer, arrivalOpts(k)),
@@ -200,6 +314,14 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
 /** Gives each shopper in `arrived` their credit, on its own rng. */
 export function withCredit(k: Kit, arrived: readonly Customer[]): Customer[] {
   return assignCredit(arrived, rng.credit, tuning(k).creditMix)
+}
+
+/**
+ * What every new shopper gets rolled on arrival, each on its own rng: their
+ * credit, and whether they'll ask for a test drive.
+ */
+export function withShopperRolls(k: Kit, arrived: readonly Customer[]): Customer[] {
+  return assignDriveAsk(withCredit(k, arrived), rng.driveAsk)
 }
 
 /** Some of `arrived` have been to the rival's lot first and carry his price. */
@@ -339,10 +461,16 @@ export function appraiseCar(k: Kit, targetId: string): void {
 /**
  * Signs `c`'s paperwork: sells the car at the offer price, logs the sale and
  * sends them home happy. `signer` is the employee at the desk (finance, or
- * the salesperson), null for the player. Returns the sale, or null if the car
- * can't be sold.
+ * the salesperson), null for the player. `deal` is the loan and the F&I
+ * menu, when they had them: an extended warranty taken becomes a contract,
+ * and its chargebacks are rolled. Returns the sale, or null if the car can't be sold.
  */
-export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null {
+export function sign(
+  k: Kit,
+  c: Customer,
+  signer: Employee | null,
+  deal?: FiDeal | null,
+): Sale | null {
   const { get, set } = k
   const s = get()
   const car = s.inventory.find((x) => x.id === c.offer?.carId)
@@ -355,8 +483,9 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
       : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
   if (allowance !== undefined && !traded) return null
   if (!get().sellCar(car.id, price)) return null
-  // The player's buyer comes from the F&I menu, with the loan and the products taken.
-  const fi = c.phase === 'menu' && c.fi ? saleFi(c, c.fi, netPrice(c.offer)) : undefined
+  // The loan and the products taken; a salesperson's loan comes without the menu.
+  const fi = deal ? saleFi(c, deal, netPrice(c.offer)) : undefined
+  const menu = signer === null || signer.role === 'finance'
   const quote = quoteFor(c, car)
   if (quote !== null && price <= quote) tallyRival(k, 'matched')
   const sale = saleRecord(c, car, {
@@ -371,15 +500,43 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
   })
   // The client who sent them gets the referral fee.
   const fee = s.clients.some((x) => x.id === c.referredBy) ? s.clientPerks.referralFee : 0
+  // Some of the F&I will come back as chargebacks, the harder sold the likelier.
+  const chargebacks = fi
+    ? rollChargebacks(
+        fi,
+        {
+          day: s.clock.day,
+          customerName: c.name,
+          tier: c.credit?.finance ? c.credit.tier : null,
+          financeId: signer?.role === 'finance' ? signer.id : null,
+          scale: tuning(k).chargebackScale,
+        },
+        rng.chargeback,
+      )
+    : []
+  // An extended warranty is a contract: the car comes back for repairs it pays for.
+  const warranty = fi?.products.find((p) => p.id === 'warranty')
+  const contract =
+    warranty &&
+    newContract(
+      `contract-${s.clock.day}-${s.contracts.filter((x) => x.soldDay === s.clock.day).length + 1}`,
+      c.name,
+      clientCarOf(car, price, s.clock.day),
+      s.clock.day,
+      warranty.price,
+    )
   const stats = get().dayStats
+  const drove = c.drive?.back ? 1 : 0
   set({
     dayStats: {
       ...stats,
       sales: [...stats.sales, sale],
+      drives: { ...stats.drives, bought: stats.drives.bought + drove },
       bought: traded ? [...stats.bought, boughtRecord(traded, s.clock.day, true)] : stats.bought,
       clients: { ...stats.clients, referralFees: stats.clients.referralFees + fee },
-      fi: addFiSale(stats.fi, c.credit, fi),
+      fi: addFiSale(stats.fi, c.credit, fi, menu),
     },
+    monthFi: addFiSale(get().monthFi, c.credit, fi, menu),
     // Less the referral fee and their trade-in, which we pay for out of the
     // price, and with the F&I gross (the lender's reserve and the products).
     cash: get().cash - fee - (traded?.price ?? 0) + (fi?.gross ?? 0),
@@ -387,8 +544,10 @@ export function sign(k: Kit, c: Customer, signer: Employee | null): Sale | null 
     monthSales: car.used ? get().monthSales : addSale(get().monthSales, car.msrp),
     // Their car goes on the lot tonight.
     ...(traded && { purchases: [...get().purchases, traded] }),
+    ...(chargebacks.length > 0 && { chargebacks: [...get().chargebacks, ...chargebacks] }),
+    ...(contract && { contracts: addContracts(get().contracts, [contract]) }),
   })
-  commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded }))
+  commit(k, reduceCustomers(get().customers, { type: 'signed', id: c.id, traded: !!traded, deal }))
   return sale
 }
 
@@ -417,16 +576,68 @@ function menuCustomer(k: Kit): Customer | null {
 }
 
 /** No lender will take `c`, and they can't put more down: they go home without the car. */
-function declineBuyer(k: Kit, c: Customer): void {
+export function declineBuyer(
+  k: Kit,
+  c: Customer,
+  line = `No lender will take ${c.name}'s loan, and they can't put more down. They went home.`,
+): void {
   commit(k, reduceCustomers(k.get().customers, { type: 'declined', id: c.id }))
-  const stats = k.get().dayStats
-  k.set({ dayStats: { ...stats, fi: { ...stats.fi, declined: stats.fi.declined + 1 } } })
-  notify(k, `No lender will take ${c.name}'s loan, and they can't put more down. They went home.`)
+  const { dayStats: stats, monthFi } = k.get()
+  k.set({
+    dayStats: { ...stats, fi: { ...stats.fi, declined: stats.fi.declined + 1 } },
+    monthFi: { ...monthFi, declined: monthFi.declined + 1 },
+  })
+  notify(k, line)
+}
+
+/**
+ * The loan employee `e` arranges for `c` at their desk: the finance manager
+ * runs the whole menu by his skill, a salesperson takes the first lender at
+ * the buy rate and presents nothing. Null when no lender takes them (a
+ * finance manager has already tried more down).
+ */
+export function staffDeal(k: Kit, c: Customer, e: Employee): FiDeal | null {
+  if (!c.offer) return null
+  const net = netPrice(c.offer)
+  return e.role === 'finance'
+    ? staffMenu(e.skill, c, net, rng.fi, tuning(k).productTake)
+    : deskLoan(c, net)
 }
 
 /** " Their Summit Sedan goes on the lot tonight." after a sale with a trade-in. */
 export function tradeLine(sale: Sale): string {
   return sale.trade ? ` Their ${carName(sale.trade.model)} goes on the lot tonight.` : ''
+}
+
+/**
+ * The player takes customer `id`, whom they're talking to, for a test drive:
+ * the drive's length is rolled, the car goes out (see `syncCarsOut`) and the
+ * player heads for it, the shopper walking along.
+ */
+export function startDrive(k: Kit, id: string): void {
+  const s = k.get()
+  const c = s.customers.find((x) => x.id === id)
+  if (!c) return
+  const blocker = c.handlerId === PLAYER_ID ? driveBlocker(c, s.inventory) : `${c.name} is busy.`
+  const car = drivableCar(c, s.inventory).car
+  if (blocker || !car) return notify(k, blocker ?? "There's nothing to drive.")
+  const minutes = driveMinutes(rng.testDrive)
+  commit(
+    k,
+    reduceCustomers(s.customers, { type: 'testDrive', id, carId: car.id, by: PLAYER_ID, minutes }),
+  )
+  k.set({ moveOrder: null, menu: null, inspectedId: null })
+  dispatch(k, { type: 'request', id: nextActionId(), targetId: car.id, action: 'ride' })
+  // A showroom car stays on its platform: they drive its twin off the lot.
+  const twin = car.id !== c.targetCarId ? ' The one on the lot, then.' : ''
+  notify(k, `${c.name}: "Let's take the ${carName(car.model)} out!${twin}"`)
+}
+
+/** The player got in the test drive car `carId`: their shopper gets in and they're off. */
+export function board(k: Kit, carId: string): void {
+  const c = dealCustomer(k.get().customers, PLAYER_ID)
+  if (c?.phase !== 'talking' || c.drive?.carId !== carId || c.drive.back) return
+  commit(k, reduceCustomers(k.get().customers, { type: 'boarded', id: c.id }))
 }
 
 /** At the desk with a buyer: the finance manager takes them from here. */

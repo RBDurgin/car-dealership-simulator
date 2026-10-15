@@ -5,6 +5,7 @@ import {
   AdditiveBlending,
   Box3,
   CanvasTexture,
+  CircleGeometry,
   Color,
   type InstancedMesh,
   Matrix4,
@@ -221,15 +222,58 @@ interface ModelProps {
   footprint: Footprint
   cleanliness?: number
   condition?: number
+  /** A car with a dent from a test drive. */
+  ding?: boolean
 }
 
-function LoadedModel({ def, footprint, cleanliness, condition }: ModelProps) {
+function LoadedModel({ def, footprint, cleanliness, condition, ding }: ModelProps) {
   const { object, size } = useCenteredModel(def.url, def.shadow ?? true)
   useDirt(object, cleanliness, condition)
   return (
     <group rotation-y={def.yaw ?? 0} scale={fitScale(size, def, footprint)}>
       <primitive object={object} />
+      {ding && <Dents size={size} />}
     </group>
+  )
+}
+
+/** A dent: a dark smudge on the bodywork, shared by every dinged car. */
+const DENT_GEOMETRY = new CircleGeometry(1, 12)
+const DENT_MATERIAL = new MeshStandardMaterial({
+  color: '#2b2b2e',
+  roughness: 1,
+  transparent: true,
+  opacity: 0.75,
+  polygonOffset: true,
+  polygonOffsetFactor: -2,
+})
+
+/**
+ * A dent on either flank of a car `size` (model space, nose along z): by the
+ * front door on one side and the back wheel on the other, so it shows from
+ * any side of the lot.
+ */
+function Dents({ size }: { size: Vector3 }) {
+  const r = size.z * 0.05
+  const y = size.y * 0.38
+  const x = size.x / 2 - size.x * 0.06
+  return (
+    <>
+      <mesh
+        geometry={DENT_GEOMETRY}
+        material={DENT_MATERIAL}
+        position={[x, y, size.z * 0.12]}
+        rotation-y={Math.PI / 2}
+        scale={[r, r * 0.7, 1]}
+      />
+      <mesh
+        geometry={DENT_GEOMETRY}
+        material={DENT_MATERIAL}
+        position={[-x, y, -size.z * 0.22]}
+        rotation-y={-Math.PI / 2}
+        scale={[r * 0.8, r * 0.6, 1]}
+      />
+    </>
   )
 }
 
@@ -490,6 +534,8 @@ interface PropViewProps {
   condition?: number
   /** Its display platform is a turntable (the turntables upgrade). */
   turntable?: boolean
+  /** A car with a dent from a test drive. */
+  ding?: boolean
 }
 
 /** Same prop, drawn the same: `carProp` makes a fresh prop for each car whenever the stock changes. */
@@ -506,7 +552,8 @@ function samePropView(a: PropViewProps, b: PropViewProps): boolean {
         p.elevation === q.elevation)) &&
     a.cleanliness === b.cleanliness &&
     a.condition === b.condition &&
-    a.turntable === b.turntable
+    a.turntable === b.turntable &&
+    a.ding === b.ding
   )
 }
 
@@ -526,7 +573,7 @@ const PropView = memo(function PropView(props: PropViewProps) {
   )
 }, samePropView)
 
-function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps) {
+function PropContent({ prop, cleanliness, condition, turntable, ding }: PropViewProps) {
   const b = rectBounds(prop.rect)
   const turned = prop.facing % 2 === 1
   const y = (prop.elevation ?? 0) + (prop.platform ? PLATFORM_HEIGHT : 0)
@@ -544,6 +591,7 @@ function PropContent({ prop, cleanliness, condition, turntable }: PropViewProps)
           footprint={turned ? { w: b.h, h: b.w } : { w: b.w, h: b.h }}
           cleanliness={cleanliness}
           condition={condition}
+          ding={ding}
         />
       )}
     </group>
@@ -588,10 +636,12 @@ export function CarBody({
   model,
   cleanliness,
   condition,
+  ding,
 }: {
   model: CarModel
   cleanliness: number
   condition: number
+  ding?: boolean
 }) {
   return (
     <group onPointerDown={swallowClick} onPointerUp={swallowClick}>
@@ -600,6 +650,7 @@ export function CarBody({
         footprint={{ w: 2, h: 3 }}
         cleanliness={cleanliness}
         condition={condition}
+        ding={ding}
       />
     </group>
   )
@@ -757,6 +808,7 @@ function Cars({ turntables }: { turntables: boolean }) {
           cleanliness={car.cleanliness}
           condition={car.used?.condition}
           turntable={turntables}
+          ding={car.ding}
         />
       ))}
     </>

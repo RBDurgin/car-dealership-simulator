@@ -159,6 +159,12 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
       if (c.service?.parked && !was.service?.parked) {
         out.push({ cue: 'door', subject: serviceCar(c) })
       }
+      // Off on a test drive: doors shut and the engine starts. Back: doors.
+      if (c.drive && (c.phase === 'driving') !== (was.phase === 'driving')) {
+        const testCar: SfxSubject = { kind: 'car', id: c.drive.carId }
+        out.push({ cue: 'door', subject: testCar })
+        if (c.phase === 'driving') out.push({ cue: 'engine', subject: testCar })
+      }
       if (c.phase !== 'leaving' || was.phase === 'leaving') continue
       if (c.leaveReason === 'bought') out.push({ cue: 'sale', subject })
       // We bought their car, or they paid for a job.

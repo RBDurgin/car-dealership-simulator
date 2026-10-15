@@ -56,6 +56,8 @@ const shopper = (extra: Partial<Customer> = {}): Customer => ({
   guest: false,
   credit: null,
   fi: null,
+  wantsDrive: false,
+  drive: null,
   service: null,
   ...extra,
 })
@@ -226,6 +228,7 @@ function withAlexInBook() {
     friendsSent: 0,
     thanked: false,
     serviceDue: null,
+    chargedBack: false,
   }
   useGame.setState({ clients: [alex] })
 }

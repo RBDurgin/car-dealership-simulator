@@ -208,6 +208,7 @@ export function usedStockCar(
     arrivedDay: day,
     floored: false,
     used,
+    ding: false,
   }
 }
 
