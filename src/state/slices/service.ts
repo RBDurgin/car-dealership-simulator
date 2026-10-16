@@ -58,6 +58,7 @@ import { advisorAtPost, mechanicCount, reconBook } from '../derived'
 import { workPace } from '../../sim/morale'
 import { rng } from '../rng'
 import type { GameState } from '../types'
+import { seniorComebackScale, seniorUpsellBonus } from '../../sim/growth'
 
 type ServiceKeys =
   | 'staffCheckIn'
@@ -299,8 +300,9 @@ function serviceBook(k: Kit, c: Customer, outcome: ServiceOutcome): void {
  */
 function rollComeback(k: Kit, job: ServiceJob, c: Customer): void {
   const s = k.get()
-  const skill = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
-  if (rng.service.next() >= comebackChance(skill, tuning(k).comebackScale)) return
+  const mechanic = s.roster.find((e) => e.id === job.mechanicId)
+  const scale = tuning(k).comebackScale * seniorComebackScale(mechanic)
+  if (rng.service.next() >= comebackChance(mechanic?.skill ?? MIN_SKILL, scale)) return
   addService(k, { comebacks: 1 })
   tallyWork(k, job.mechanicId, 'comebacks')
   serviceBook(k, c, 'comeback')
@@ -327,10 +329,12 @@ export function offerFinding(k: Kit, jobId: string, by: string): void {
     return
   }
   const f = job.finding!
-  const skill = player ? PLAYER_SKILL : (s.roster.find((e) => e.id === by)?.skill ?? MIN_SKILL)
+  const advisor = player ? null : s.roster.find((e) => e.id === by)
+  const skill = player ? PLAYER_SKILL : (advisor?.skill ?? MIN_SKILL)
   // Someone whose warranty is paying for the job is in a mood to say yes.
   const covered = c.service.contractId !== null ? CONTRACT_UPSELL : 0
-  const yes = rng.service.next() < upsellChance(s.service.rate, c.archetype, skill) + covered
+  const odds = upsellChance(s.service.rate, c.archetype, skill) + seniorUpsellBonus(advisor)
+  const yes = rng.service.next() < odds + covered
   const mechanic = s.roster.find((e) => e.id === job.mechanicId)
   const next = yes
     ? acceptFinding(job, mechanic?.skill ?? MIN_SKILL, mechanic ? workPace(mechanic) : 1)

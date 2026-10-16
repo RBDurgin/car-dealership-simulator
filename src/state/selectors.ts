@@ -2,7 +2,7 @@ import type { Customer } from '../sim/customers'
 import { installedExpansions } from '../sim/expansions'
 import { installed, type ImprovementId } from '../sim/improvements'
 import type { ExpansionId } from '../sim/layout'
-import { coverageGaps, gapText } from '../sim/rota'
+import { courseGaps, courseGapText, coverageGaps, gapText } from '../sim/rota'
 import { buyBlocker, lotSlotFor } from '../sim/sellers'
 import { baseSellerBonus, testDriveBonus } from './derived'
 import type { GameState } from './types'
@@ -55,6 +55,22 @@ const gapsOf = memoLast((roster: GameState['roster']) => {
   }
   return byDay
 })
+
+const courseGapsOf = memoLast((roster: GameState['roster'], today: number) => {
+  const byDay = new Map<number, string[]>()
+  for (const g of courseGaps(roster, today)) {
+    const list = byDay.get(g.day)
+    if (list) list.push(courseGapText(g))
+    else byDay.set(g.day, [courseGapText(g)])
+  }
+  return byDay
+})
+
+/** The gaps booked courses leave on `day`, or undefined if none: worked out once per roster and day. */
+export const courseGapsOn = (
+  s: Pick<GameState, 'roster' | 'clock'>,
+  day: number,
+): string[] | undefined => courseGapsOf(s.roster, s.clock.day).get(day)
 
 /** The rota's gaps on `weekday` ("No salesperson on Tuesday"), or undefined if none: worked out once per roster. */
 export const rotaGaps = (s: Pick<GameState, 'roster'>, weekday: number): string[] | undefined =>

@@ -14,6 +14,7 @@ import { financeSeconds, type Employee } from '../sim/staff'
 import { netPrice, staffPlan } from '../sim/fi'
 import { driveBonusFor } from '../sim/testDrive'
 import type { GameState } from './types'
+import { seniorAcceptBonus } from '../sim/growth'
 
 /**
  * Values read off the store's state: pure, so the slices, the UI and the
@@ -119,7 +120,7 @@ export function baseSellerBonus(
   const extra = showroom + (client ? loyaltyBonus(client.satisfaction) : 0)
   if (c.handlerId === PLAYER_ID) return skillBonus(PLAYER_SKILL) + extra
   const e = s.roster.find((x) => x.id === c.handlerId)
-  return (e ? skillBonus(e.skill) : 0) + extra
+  return (e ? skillBonus(e.skill) + seniorAcceptBonus(e) : 0) + extra
 }
 
 /** The level's scale on reputation gains and losses. */

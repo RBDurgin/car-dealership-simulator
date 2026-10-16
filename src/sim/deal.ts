@@ -9,7 +9,7 @@ import {
 import { washBlocker } from './cleanliness'
 import { emptyClientStats, type Client, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
-import type { LevelUp, StaffWork } from './growth'
+import { seniorFeeBonus, type CourseDone, type LevelUp, type StaffWork } from './growth'
 import {
   approachTilesFor,
   carName,
@@ -339,7 +339,7 @@ export function saleRecord(c: Customer, car: InventoryCar, t: SaleTerms): Sale {
       ? (t.roster.find((e) => e.id === c.sellerId)?.name ?? 'Former staff')
       : null
   const finance = t.signer?.role === 'finance' ? t.signer : null
-  const financePay = finance ? financeCommission(t.fi?.gross ?? 0) : 0
+  const financePay = finance ? financeCommission(t.fi?.gross ?? 0, seniorFeeBonus(finance)) : 0
   const sale: Sale = {
     customerName: c.name,
     carId: car.id,
@@ -442,6 +442,10 @@ export interface DayStats {
   off: string[]
   /** The day's wages of those who quit at closing, paid with the rest though they've gone. */
   quitWages: number
+  /** Course fees paid this morning for those away training today (see `sim/growth.ts`). */
+  training: number
+  /** Courses finished when the day was settled. */
+  courses: CourseDone[]
 }
 
 /** A day's test drives (see `sim/testDrive.ts`). */
@@ -497,6 +501,8 @@ export function emptyStats(): DayStats {
     moraleQuits: [],
     off: [],
     quitWages: 0,
+    training: 0,
+    courses: [],
   }
 }
 
@@ -557,6 +563,7 @@ export function netIncome(stats: DayStats): number {
     stats.expansions -
     stats.clients.referralFees -
     stats.clients.appreciation -
+    stats.training -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

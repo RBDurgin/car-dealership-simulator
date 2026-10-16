@@ -23,8 +23,19 @@ import {
   retentionRaise,
   ROLE_LABELS,
 } from '../../sim/staff'
-import { autoRota, rotaForHire, toggleDayOff } from '../../sim/rota'
-import { grow, levelUpNotice, withLevelUp, xpToLevel } from '../../sim/growth'
+import { autoRota, courseDay, rotaForHire, toggleDayOff } from '../../sim/rota'
+import { shortDate } from '../../sim/calendar'
+import {
+  grow,
+  levelUpNotice,
+  promoteBlocker,
+  SENIOR_TITLES,
+  seniorWage,
+  trainingBlocker,
+  trainingFee,
+  withLevelUp,
+  xpToLevel,
+} from '../../sim/growth'
 import { freeSalesperson, leadChoice } from '../../sim/staffAi'
 import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
 import { commit, lostCoworkers, notify, setRoster, tallyWork, type Kit } from '../core'
@@ -42,6 +53,9 @@ type StaffKeys =
   | 'answerRaise'
   | 'toggleDayOff'
   | 'autoSchedule'
+  | 'bookTraining'
+  | 'cancelTraining'
+  | 'promote'
   | 'devGrowStaff'
   | 'staffClaim'
   | 'staffGreet'
@@ -123,6 +137,38 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       )
     },
     autoSchedule: () => setRoster(k, autoRota(get().roster)),
+    bookTraining: (id, course) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === id)
+      if (!e) return
+      const blocker = trainingBlocker(e, course)
+      if (blocker) return notify(k, blocker)
+      const fee = trainingFee(e.role, course)
+      if (fee > s.cash) return notify(k, `A course costs ${formatMoney(fee)}.`)
+      const day = courseDay(e, s.clock.day)
+      setRoster(k, reduceStaff(s.roster, { type: 'train', id, training: { day, course } }))
+      notify(
+        k,
+        `${e.name} is booked on ${course === 'advanced' ? 'the advanced course' : 'a course'} on ${shortDate(day)}, for ${formatMoney(fee)} paid that morning.`,
+      )
+    },
+    cancelTraining: (id) => {
+      const e = get().roster.find((x) => x.id === id)
+      if (!e?.training) return
+      // A course under way today can't be called off.
+      if (e.training.day <= get().clock.day) return
+      setRoster(k, reduceStaff(get().roster, { type: 'train', id, training: null }))
+    },
+    promote: (id) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === id)
+      if (!e) return
+      const blocker = promoteBlocker(e, s.roster, s.clock.day)
+      if (blocker) return notify(k, blocker)
+      const wage = seniorWage(e.wage)
+      setRoster(k, reduceStaff(s.roster, { type: 'promote', id, wage }))
+      notify(k, `${e.name} is your ${SENIOR_TITLES[e.role]} now, on ${formatMoney(wage)} a day.`)
+    },
     devGrowStaff: () => {
       const s = get()
       const levelUps = [...s.dayStats.levelUps]

@@ -30,6 +30,9 @@ const guard: Employee = {
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
 }
 
 /** Resumes the game on the morning of `day`. */
@@ -253,6 +256,9 @@ describe('poaching', () => {
     moraleWhy: [],
     daysOff: [],
     streak: 0,
+    training: null,
+    trained: false,
+    senior: false,
   }
   const dana_ = () => game().roster.find((e) => e.id === dana.id)
 

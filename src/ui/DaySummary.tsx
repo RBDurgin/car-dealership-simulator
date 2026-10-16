@@ -39,6 +39,7 @@ import { rankLine } from './rankText'
 import { newRecordLine } from './statsText'
 import { achievementOf } from '../sim/achievements'
 import { PERF, PERF_BUSY } from '../state/perf'
+import { courseLine } from '../sim/growth'
 
 /** The `?perf` readings for the day, loaded only with the flag. */
 const PerfReport = lazy(() => import('./PerfReport'))
@@ -307,6 +308,12 @@ function SummaryPanel() {
               <dd className="price">{formatMoney(-stats.expansions)}</dd>
             </>
           )}
+          {stats.training > 0 && (
+            <>
+              <dt>Training</dt>
+              <dd className="price">{formatMoney(-stats.training)}</dd>
+            </>
+          )}
           {stats.clients.referralFees > 0 && (
             <>
               <dt>Referral fees</dt>
@@ -502,6 +509,7 @@ function SummaryPanel() {
           </div>
         )}
         {(stats.levelUps.length > 0 ||
+          stats.courses.length > 0 ||
           stats.raisesLapsed.length > 0 ||
           stats.moraleQuits.length > 0) && (
           <div className="summary-level-ups">
@@ -510,6 +518,9 @@ function SummaryPanel() {
                 ★ {u.name} grew to skill {u.skill} as {ROLE_LABELS[u.role].toLowerCase()}
                 {u.ask !== null && <> and asks for {formatMoney(u.ask)}/day</>}.
               </div>
+            ))}
+            {stats.courses.map((c) => (
+              <div key={c.id}>📚 {courseLine(c)}</div>
             ))}
             {stats.raisesLapsed.length > 0 && (
               <div className="muted">

@@ -137,10 +137,10 @@ export function receptionCallTime(skill: number): number {
  * The odds an answered `kind` call to `c` books, from a caller of `skill`:
  * the happier they are the likelier, × `scale` (`Tuning.clientReturn`).
  */
-export function bookChance(c: Client, kind: CallKind, skill: number, scale = 1): number {
+export function bookChance(c: Client, kind: CallKind, skill: number, scale = 1, bonus = 0): number {
   const mood = 0.6 + (c.satisfaction / 100) * 0.8
   const craft = 1 + (skill - 3) * SKILL_STEP
-  return Math.min(MAX_BOOK, Math.max(0, BOOK_ODDS[kind] * mood * craft * scale))
+  return Math.min(MAX_BOOK, Math.max(0, BOOK_ODDS[kind] * mood * craft * scale + bonus))
 }
 
 export interface CallResult {
@@ -167,7 +167,7 @@ export function callOutcome(
   kind: CallKind,
   skill: number,
   rng: Rng,
-  opts: { scale?: number } = {},
+  opts: { scale?: number; bonus?: number } = {},
 ): CallResult {
   if (rng.next() < NO_ANSWER) return { outcome: 'noAnswer', change: 0 }
   if (c.callsThisCycle >= MAX_CALLS) return { outcome: 'annoyed', change: -ANNOY_POINTS }
@@ -176,7 +176,8 @@ export function callOutcome(
     const won = rng.next() < winBackChance(c, skill, opts.scale)
     return won ? { outcome: 'wonBack', change: WIN_BACK_POINTS } : { outcome: 'notNow', change: 0 }
   }
-  if (rng.next() < bookChance(c, kind, skill, opts.scale)) return { outcome: 'booked', change: 0 }
+  if (rng.next() < bookChance(c, kind, skill, opts.scale, opts.bonus))
+    return { outcome: 'booked', change: 0 }
   return { outcome: 'notNow', change: 0 }
 }
 

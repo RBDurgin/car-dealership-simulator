@@ -36,6 +36,9 @@ const mechanic: Employee = {
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
 }
 
 const DAY = 20

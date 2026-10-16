@@ -530,6 +530,17 @@ export const UPDATES: readonly Update[] = [
       'Existing staff got their days off from the new schedule.',
     ],
   },
+  {
+    id: 48,
+    phase: '21',
+    title: 'Training and promotions',
+    items: [
+      'Send staff on a training course from the staff panel: a day away, paid, for about two weeks of experience.',
+      'The advanced course, once each, also lets them grow a star further.',
+      'Promote someone at skill 5 with four weeks on the team to their role’s Senior title, one per role.',
+      'A senior earns more, is harder for Nazma to poach, helps the rest of their role learn faster and brings a small perk.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

@@ -62,6 +62,9 @@ const fm: Employee = {
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
 }
 
 const base: Customer = {

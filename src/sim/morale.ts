@@ -29,6 +29,8 @@ export const QUIT_WARN_DAYS = 3
 export const NOTICE_DAYS = 2
 /** What being kept with a raise (see `retentionRaise`) does for their morale. */
 export const KEEP_MORALE = 15
+/** What a promotion to Senior does for their morale. */
+export const PROMOTE_MORALE = 15
 
 /** Morale per day for each 10% they're paid under (or over) the wage for their skill. */
 const PAY_STEP = 1.5

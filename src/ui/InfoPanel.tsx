@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
+import { shortDate } from '../sim/calendar'
 import { conditionOf } from '../sim/cleanliness'
+import { COURSE_LABELS, SENIOR_PERKS, titleOf } from '../sim/growth'
 import { isWarned, moraleFace, moraleLabel, moraleLines, tiredDays } from '../sim/morale'
 import { daysOffText } from '../sim/rota'
-import { ROLE_LABELS } from '../sim/staff'
 import type { CarStatus } from '../sim/inventory'
 import { shapeLabel, usedTag } from '../sim/usedCars'
 import { useGame } from '../state/store'
@@ -45,7 +46,13 @@ export function InfoPanel() {
         <h2>{employee.name}</h2>
         <dl>
           <dt>Role</dt>
-          <dd>{ROLE_LABELS[employee.role]}</dd>
+          <dd>{titleOf(employee)}</dd>
+          {employee.senior && (
+            <>
+              <dt>Perk</dt>
+              <dd>{SENIOR_PERKS[employee.role].text}</dd>
+            </>
+          )}
           <dt>Skill</dt>
           <dd>
             <Skill skill={employee.skill} potential={employee.potential} />
@@ -59,6 +66,14 @@ export function InfoPanel() {
               <span className="staff-quitting"> · {employee.streak} days straight</span>
             )}
           </dd>
+          {employee.training && (
+            <>
+              <dt>Training</dt>
+              <dd>
+                {COURSE_LABELS[employee.training.course]} on {shortDate(employee.training.day)}
+              </dd>
+            </>
+          )}
           <dt>Morale</dt>
           <dd>
             {moraleFace(employee.morale)} {moraleLabel(employee.morale)}

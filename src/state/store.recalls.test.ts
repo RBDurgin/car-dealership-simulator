@@ -34,6 +34,9 @@ const mechanic: Employee = {
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
 }
 
 /** The 8th of the first month (from the second) with a recall. */

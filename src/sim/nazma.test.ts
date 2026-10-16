@@ -123,6 +123,9 @@ const hand = (id: string, role: Role, skill: number, over: Partial<Employee> = {
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
   ...over,
 })
 
@@ -175,6 +178,7 @@ describe('planVisit with staff', () => {
   it('weighs the unhappy up to half again', () => {
     expect(poachWeight(hand('a', 'sales', 3))).toBe(9)
     expect(poachWeight(hand('b', 'sales', 3, { morale: 10 }))).toBe(13.5)
+    expect(poachWeight(hand('c', 'sales', 3, { senior: true }))).toBe(4.5)
     const roster = [hand('happy', 'sales', 3), hand('glum', 'sales', 3, { morale: 10 })]
     const targets = seeds
       .map((seed) => planVisit(createRng(seed), inventory, roster)!)

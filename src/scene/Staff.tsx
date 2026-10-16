@@ -72,6 +72,7 @@ import {
   type Walker,
   report,
 } from './walker'
+import { seniorWashScale } from '../sim/growth'
 
 /** Just above a ~1.2 unit tall character's head, like customer bubbles. */
 const BADGE_HEIGHT = 1.5
@@ -497,7 +498,8 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
   }
   w.anim.current = 'interact-right'
   w.timer += seconds
-  if (w.timer >= workSeconds(PORTER_WASH_SECONDS, e)) game.staffWash(e.id, task.carId)
+  if (w.timer >= workSeconds(PORTER_WASH_SECONDS * seniorWashScale(e), e))
+    game.staffWash(e.id, task.carId)
 }
 
 const JOB_PREFIX = 'job:'
@@ -656,15 +658,18 @@ function StaffBadge({
   role,
   quitting,
   warned,
+  senior,
 }: {
   role: Role
   quitting: boolean
   warned: boolean
+  senior: boolean
 }) {
   return (
     <Html position={[0, BADGE_HEIGHT, 0]} center zIndexRange={[1, 0]} pointerEvents="none">
       <div className={quitting ? 'staff-badge quitting-badge' : 'staff-badge'}>
         {warned && !quitting && <span aria-label="Unhappy">😟 </span>}
+        {senior && <span aria-label="Senior">★ </span>}
         {ROLE_BADGES[role]}
       </div>
     </Html>
@@ -690,7 +695,12 @@ const StaffFigure = memo(function StaffFigure({
           <Character variant={employee.variant} anim={anim} moveSpeed={STAFF_SPEED} />
         </Suspense>
       </Interactable>
-      <StaffBadge role={employee.role} quitting={employee.quitting} warned={isWarned(employee)} />
+      <StaffBadge
+        role={employee.role}
+        quitting={employee.quitting}
+        warned={isWarned(employee)}
+        senior={employee.senior}
+      />
     </group>
   )
 })

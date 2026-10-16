@@ -12,7 +12,7 @@ import {
 } from './layout'
 import { calendarOf } from './calendar'
 import { potentialOf } from './growth'
-import { KEEP_MORALE, START_MORALE, withMorale, type MoraleReason } from './morale'
+import { KEEP_MORALE, PROMOTE_MORALE, START_MORALE, withMorale, type MoraleReason } from './morale'
 import { createRng, type Rng } from './rng'
 
 /**
@@ -160,6 +160,21 @@ export interface Employee {
   daysOff: number[]
   /** Days in a row they've worked, up to the last day settled; a day off resets it. */
   streak: number
+  /** A training course booked for a coming day, or null (see `sim/growth.ts`). */
+  training: TrainingBooking | null
+  /** Has taken the advanced course (once each). */
+  trained: boolean
+  /** Promoted to their role's Senior title (one per role). */
+  senior: boolean
+}
+
+/** A basic course (experience) or the advanced one (a higher potential too). */
+export type CourseKind = 'basic' | 'advanced'
+
+export interface TrainingBooking {
+  /** The day they're away on it. */
+  day: number
+  course: CourseKind
 }
 
 export interface RaiseAsk {
@@ -228,9 +243,12 @@ export function salesCommission(price: number, cost: number): number {
   return Math.max(MIN_COMMISSION, Math.round((price - cost) * SALES_COMMISSION))
 }
 
-/** What the finance manager earns for signing a deal with `fiGross` of F&I (none on a loss). */
-export function financeCommission(fiGross: number): number {
-  return FINANCE_FEE + Math.round(Math.max(0, fiGross) * FI_COMMISSION)
+/**
+ * What the finance manager earns for signing a deal with `fiGross` of F&I
+ * (none on a loss), plus a senior's `bonus` on the fee.
+ */
+export function financeCommission(fiGross: number, bonus = 0): number {
+  return FINANCE_FEE + bonus + Math.round(Math.max(0, fiGross) * FI_COMMISSION)
 }
 
 /** What keeping someone on `wage` from quitting adds to it each day. */
@@ -340,6 +358,9 @@ export function generateCandidates(
       moraleWhy: [],
       daysOff: [],
       streak: 0,
+      training: null,
+      trained: false,
+      senior: false,
     }
   })
 }
@@ -365,9 +386,17 @@ export function canHire(
     : `You already have ${limit} ${ROLE_PLURALS[role]}.`
 }
 
-/** Whether `e` works on `day`, or it's their day off. */
-export function onShift(e: Pick<Employee, 'daysOff'>, day: number): boolean {
-  return !e.daysOff.includes(calendarOf(day).weekday)
+/** Whether `e` is away on a training course on `day` (paid, but off the floor). */
+export function onCourse(e: Partial<Pick<Employee, 'training'>>, day: number): boolean {
+  return e.training?.day === day
+}
+
+/** Whether `e` works on `day`: not their day off, and not away on a course. */
+export function onShift(
+  e: Pick<Employee, 'daysOff'> & Partial<Pick<Employee, 'training'>>,
+  day: number,
+): boolean {
+  return !e.daysOff.includes(calendarOf(day).weekday) && !onCourse(e, day)
 }
 
 /**
@@ -464,6 +493,10 @@ export type StaffEvent =
   | { type: 'raise'; id: string; grant: boolean }
   /** Unhappy too long: they hand in notice, and leave at closing unless kept. */
   | { type: 'resign'; id: string }
+  /** Given their role's Senior title, on `wage` (see `promoteBlocker` in `sim/growth.ts`). */
+  | { type: 'promote'; id: string; wage: number }
+  /** Booked on a course (or the booking dropped, with null). */
+  | { type: 'train'; id: string; training: TrainingBooking | null }
 
 /**
  * The roster after `ev`. Returns the same array when nothing changed, and
@@ -524,6 +557,22 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
       break
     case 'resign':
       if (!e.fired && !e.quitting) n = { ...e, quitting: true }
+      break
+    case 'promote':
+      if (!e.fired && !e.senior) {
+        // A raise to the title that covers what they asked for answers that too.
+        const asked = e.raiseAsk && e.raiseAsk.wage > ev.wage ? e.raiseAsk : null
+        n = {
+          ...e,
+          senior: true,
+          wage: ev.wage,
+          raiseAsk: asked,
+          morale: withMorale(e.morale, PROMOTE_MORALE),
+        }
+      }
+      break
+    case 'train':
+      if (!e.fired && (ev.training || e.training)) n = { ...e, training: ev.training }
       break
     case 'raise':
       if (e.raiseAsk && !e.fired) {

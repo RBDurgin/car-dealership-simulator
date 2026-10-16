@@ -6,6 +6,7 @@ import type { CarModel } from './layout'
 import { moralePoachWeight } from './morale'
 import { createRng, type Rng } from './rng'
 import { isPoachable, type Employee, type Role } from './staff'
+import { SENIOR_POACH } from './growth'
 
 /**
  * Nazma, a disgruntled former employee (he/him), out to ruin the business.
@@ -146,8 +147,8 @@ function arrivalMinute(rng: Rng): number {
 }
 
 /** How likely Nazma is to pick `e`: skill squared, more if they're unhappy (see `moralePoachWeight`). */
-export function poachWeight(e: Pick<Employee, 'skill' | 'morale'>): number {
-  return e.skill ** 2 * moralePoachWeight(e.morale)
+export function poachWeight(e: Pick<Employee, 'skill' | 'morale' | 'senior'>): number {
+  return e.skill ** 2 * moralePoachWeight(e.morale) * (e.senior ? SENIOR_POACH : 1)
 }
 
 /** Someone from `staff` to poach, the more skilled (and the unhappier) the likelier. */

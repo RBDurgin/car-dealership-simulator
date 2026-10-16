@@ -59,7 +59,7 @@ import {
 } from '../sim/recalls'
 import { bayCount } from '../sim/service'
 import { forecastFor, WEATHER_EFFECTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
-import { rotaGaps } from '../state/selectors'
+import { courseGapsOn, rotaGaps } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -82,7 +82,9 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const recall = !!recallOn(today, bays) && !!recallOn(day, bays) && sameMonth(day, today)
   const party = useGame((s) => s.appreciation?.day === day)
   // A day the rota leaves a role with nobody in, from today on.
-  const gaps = useGame((s) => (day >= today ? rotaGaps(s, c.weekday) : undefined))
+  const rota = useGame((s) => (day >= today ? rotaGaps(s, c.weekday) : undefined))
+  const courses = useGame((s) => (day >= today ? courseGapsOn(s, day) : undefined))
+  const gaps = rota || courses ? [...(rota ?? []), ...(courses ?? [])] : undefined
   // What happened, or what the forecast says for the next few days.
   const weather = forecastFor(day, today)
   const event = eventOn(day)

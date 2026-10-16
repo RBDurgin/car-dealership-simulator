@@ -48,6 +48,7 @@ import {
 import { nextActionId, nextCustomerId, rng } from '../rng'
 import type { GameState } from '../types'
 import { amendLog } from './career'
+import { seniorBookBonus } from '../../sim/growth'
 
 type ClientKeys =
   | 'phoneClient'
@@ -167,7 +168,12 @@ export function endCall(k: Kit, clientId: string, by: string, skill: number): vo
   const client = s.clients.find((c) => c.id === clientId)
   const kind = client && callKind(client, s.clock.day)
   if (!client || !kind) return
-  const result = callOutcome(client, kind, skill, rng.client, { scale: tuning(k).clientReturn })
+  // A head receptionist books a few more.
+  const bonus = seniorBookBonus(s.roster.find((e) => e.id === by))
+  const result = callOutcome(client, kind, skill, rng.client, {
+    scale: tuning(k).clientReturn,
+    bonus,
+  })
   const minute = result.outcome === 'booked' ? appointmentMinute(rng.client) : 0
   const stats = s.dayStats.clients
   k.set({

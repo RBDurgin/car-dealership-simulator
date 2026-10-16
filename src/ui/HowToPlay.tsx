@@ -84,7 +84,17 @@ import {
   roleLimits,
   SALES_COMMISSION,
 } from '../sim/staff'
-import { RAISE_ASK_DAYS } from '../sim/growth'
+import {
+  ADVANCED_FEE,
+  MENTOR_XP,
+  RAISE_ASK_DAYS,
+  SENIOR_DAYS,
+  SENIOR_MORALE,
+  SENIOR_PERKS,
+  SENIOR_RAISE,
+  SENIOR_TITLES,
+  TRAINING_FEES,
+} from '../sim/growth'
 import {
   FATIGUE_DAYS,
   LOW_MORALE,
@@ -1048,6 +1058,34 @@ function PeopleTab({ touch, click }: TabProps) {
           day off isn&apos;t paid. Work someone more than {FATIGUE_DAYS} days in a row and they
           tire: each extra day costs them a little morale and slows their work, until a day off.
         </p>
+      </section>
+      <section>
+        <h3>Training and promotion</h3>
+        <p>
+          <b>Train</b> in the staff panel books someone on a course on their next working day (clear
+          of Friday and Saturday when it can), for a fee from{' '}
+          {formatMoney(Math.min(...Object.values(TRAINING_FEES)))} to{' '}
+          {formatMoney(Math.max(...Object.values(TRAINING_FEES)))} by role, paid that morning. They
+          spend the day away, paid, and come back with about two weeks of experience, up to their
+          potential. The <b>Advanced</b> course costs {ADVANCED_FEE}× as much, can be taken once,
+          and raises how far they can grow by a star as well. A course leaves the role short that
+          day: the Schedule view shows it (📚), and a day it leaves nobody in counts as a gap. You
+          can call a course off until the day.
+        </p>
+        <p>
+          At skill 5, after {SENIOR_DAYS} days on the team and with morale of {SENIOR_MORALE} or
+          more, you can <b>Promote</b> someone to their role&apos;s Senior title (★), one per role:
+          a {Math.round((SENIOR_RAISE - 1) * 100)}% raise and a lift in morale. Nazma finds a senior
+          half as easy to poach, the rest of their role learns {Math.round((MENTOR_XP - 1) * 100)}%
+          faster on days they&apos;re in, and each title brings a perk:
+        </p>
+        <ul>
+          {(Object.keys(SENIOR_TITLES) as (keyof typeof SENIOR_TITLES)[]).map((role) => (
+            <li key={role}>
+              <b>{SENIOR_TITLES[role]}</b>: {SENIOR_PERKS[role].text}.
+            </li>
+          ))}
+        </ul>
       </section>
       <section>
         <h3>The owner</h3>

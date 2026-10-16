@@ -7,6 +7,7 @@ import { GUARD_PATROL_TILES, SALES_DESKS, type ExpansionId } from './layout'
 import { findingBlocker, jobPriority, openFinding, type ServiceJob } from './service'
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 import { staffDriveCar } from './testDrive'
+import { seniorSightBonus } from './growth'
 
 /**
  * Salespeople this skilled greet browsing customers as soon as they're on the
@@ -266,7 +267,8 @@ export function nextGuardTask(e: Employee, ctx: GuardContext): GuardTask {
   if (e.status !== 'atPost' || e.fired) return { kind: 'idle' }
   const { nazma, at } = ctx
   if (nazma) {
-    const seen = Math.hypot(nazma.tx - at.tx, nazma.tz - at.tz) <= guardSight(e.skill)
+    const seen =
+      Math.hypot(nazma.tx - at.tx, nazma.tz - at.tz) <= guardSight(e.skill) + seniorSightBonus(e)
     if (seen || ctx.chasing) return { kind: 'chase' }
   }
   const stops = ctx.patrol ?? GUARD_PATROL_TILES

@@ -96,11 +96,11 @@ import {
   type Comeback,
   type ServiceJob,
 } from '../../sim/service'
-import { askLapses, growStaff, levelUpNotice } from '../../sim/growth'
+import { askLapses, courseNotice, growStaff, levelUpNotice, trainingFee } from '../../sim/growth'
 import { moraleDay, moraleNotice, newlyWarned, resignsToday } from '../../sim/morale'
 import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
-import { countStreaks, offNotice, offOn } from '../../sim/rota'
+import { countStreaks, offNotice, offOn, onCourseOn } from '../../sim/rota'
 import { stockPurchases } from '../../sim/sellers'
 import {
   addDay as addToLifetime,
@@ -330,6 +330,7 @@ export function settleDay(k: Kit): void {
     ...dayStats,
     levelUps: [...dayStats.levelUps, ...grown.levelUps],
     raisesLapsed: grown.lapsed,
+    courses: grown.courses,
     wages,
     commissions,
     interest,
@@ -631,6 +632,10 @@ function morning(k: Kit, day: number): void {
   // Those with the day off stay home, unpaid.
   const off = offOn(get().roster, day)
   if (off.length > 0) set({ dayStats: { ...get().dayStats, off: off.map((e) => e.id) } })
+  // Those away on a course are paid, and the course is paid for now.
+  const training = onCourseOn(get().roster, day)
+  const fees = training.reduce((sum, e) => sum + trainingFee(e.role, e.training!.course), 0)
+  if (fees > 0) set({ cash: get().cash - fees, dayStats: { ...get().dayStats, training: fees } })
   // Unhappy too long (where the level allows it): a warning, then notice.
   const warned = level.moraleQuits ? newlyWarned(get().roster) : []
   const resigning = level.moraleQuits ? get().roster.filter(resignsToday) : []
@@ -652,6 +657,7 @@ function morning(k: Kit, day: number): void {
       resigning.map((e) => e.name),
     ),
     offNotice(off),
+    courseNotice(training),
     chargebackNotice(dueChargebacks(s.chargebacks, day).due),
     opening.event && rivalNotice(rival, opening.event),
     eventNotice(day),

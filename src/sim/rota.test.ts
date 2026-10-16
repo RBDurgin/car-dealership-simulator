@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   autoRota,
   countStreaks,
+  courseDay,
+  courseGaps,
+  courseGapText,
   coverageGaps,
   FULL_DAYS,
   gapText,
@@ -13,7 +16,7 @@ import {
 } from './rota'
 import type { Employee, Role } from './staff'
 
-type Person = Pick<Employee, 'id' | 'name' | 'role' | 'fired' | 'daysOff' | 'streak'>
+type Person = Pick<Employee, 'id' | 'name' | 'role' | 'fired' | 'daysOff' | 'streak' | 'training'>
 
 let n = 0
 const person = (role: Role, extra: Partial<Person> = {}): Person => ({
@@ -23,6 +26,7 @@ const person = (role: Role, extra: Partial<Person> = {}): Person => ({
   fired: false,
   daysOff: [],
   streak: 0,
+  training: null,
   ...extra,
 })
 
@@ -124,5 +128,36 @@ describe('streaks', () => {
     expect(offNotice([{ name: 'Ana' }, { name: 'Bo' }, { name: 'Cy' }])).toBe(
       'Ana, Bo and Cy have the day off.',
     )
+  })
+})
+
+describe('courses', () => {
+  // Day 1 is a Monday.
+  const MONDAY = 1
+
+  it('books their next working day, clear of Friday and Saturday', () => {
+    expect(courseDay(person('porter'), MONDAY)).toBe(MONDAY + 1)
+    expect(courseDay(person('porter', { daysOff: [1] }), MONDAY)).toBe(MONDAY + 2)
+    // From a Thursday: past the busy days to Sunday.
+    expect(courseDay(person('porter'), MONDAY + 3)).toBe(MONDAY + 6)
+    const busyOnly = person('porter', { daysOff: [0, 1, 2, 3, 6] })
+    expect(courseDay(busyOnly, MONDAY)).toBe(MONDAY + 4)
+  })
+
+  it('pays a day away on a course, and leaves them off the floor', () => {
+    const away = person('porter', { training: { day: MONDAY, course: 'basic' } })
+    expect(offOn([away], MONDAY)).toEqual([])
+    expect(offOn([{ ...away, daysOff: [0] }], MONDAY)).toEqual([])
+  })
+
+  it('finds a role left with nobody on a course day', () => {
+    const away = person('receptionist', { name: 'Dana', training: { day: 9, course: 'basic' } })
+    const gaps = courseGaps([away], MONDAY)
+    expect(gaps).toEqual([{ role: 'receptionist', day: 9, name: 'Dana' }])
+    expect(courseGapText(gaps[0])).toBe("No receptionist on Tue 9 Jan (Dana's course)")
+    // Someone else in, a day gone by, or a gap the rota leaves anyway: none.
+    expect(courseGaps([away, person('receptionist')], MONDAY)).toEqual([])
+    expect(courseGaps([away], 10)).toEqual([])
+    expect(courseGaps([{ ...away, daysOff: [1] }], MONDAY)).toEqual([])
   })
 })

@@ -37,7 +37,7 @@ import type {
   ServiceSettings,
 } from '../sim/service'
 import type { ArrivalSchedule } from '../sim/spawner'
-import type { Employee, StaffEvent } from '../sim/staff'
+import type { CourseKind, Employee, StaffEvent } from '../sim/staff'
 import type { DayRecord, Lifetime, Records } from '../sim/stats'
 import type { TipId } from '../sim/tips'
 import type { WallMode } from '../sim/walls'
@@ -402,6 +402,12 @@ export interface GameState {
   toggleDayOff: (id: string, weekday: number) => void
   /** Gives everyone days off afresh with `autoRota`. */
   autoSchedule: () => void
+  /** Books employee `id` on a training `course` on their next working day (see `courseDay`). */
+  bookTraining: (id: string, course: CourseKind) => void
+  /** Drops employee `id`'s course booking (nothing's paid until the day). */
+  cancelTraining: (id: string) => void
+  /** Gives employee `id` their role's Senior title (see `promoteBlocker`). */
+  promote: (id: string) => void
   /** Dev: everyone on the lot gains a level's worth of experience now (Shift+G). */
   devGrowStaff: () => void
   /** Shift progress reported by the world for one employee. */

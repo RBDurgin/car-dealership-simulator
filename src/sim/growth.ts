@@ -1,7 +1,7 @@
 import { formatMoney } from './format'
 import { moraleXp } from './morale'
 import { createRng, hashSeed, type Rng } from './rng'
-import { MAX_SKILL, wageFor, type Employee, type Role } from './staff'
+import { MAX_SKILL, ROLE_LABELS, wageFor, type CourseKind, type Employee, type Role } from './staff'
 
 /**
  * Staff growth: the work each employee does in a day earns experience, and
@@ -10,6 +10,11 @@ import { MAX_SKILL, wageFor, type Employee, type Role } from './staff'
  * which the player grants or declines (unanswered, it lapses).
  *
  * Worked out once a day, in `settleDay`, from the day's `WorkTally`s.
+ *
+ * The player invests in them too: a training course is a day away for
+ * experience (the advanced one, once each, also raises their potential),
+ * and someone seasoned can be promoted to their role's Senior title, which
+ * mentors the rest of the role and brings a small perk (`SENIOR_PERKS`).
  */
 
 /** What one employee did today, counted by the store actions that do the work. */
@@ -180,20 +185,33 @@ export interface LevelUp {
   ask: number | null
 }
 
+/** A course someone finished today, for the summary. */
+export interface CourseDone {
+  id: string
+  name: string
+  course: CourseKind
+}
+
 /**
  * The roster at the end of `day`, from the day's `work`: raise requests left
  * unanswered `RAISE_ASK_DAYS` lapse, everyone still on the payroll gains the
- * day's experience, and each who levels up asks for the new level's wage
- * (unless they're already paid that). The same roster when nothing changed.
+ * day's experience (× `MENTOR_XP` with a senior of their role in today), those
+ * back from a course gain `TRAINING_XP` (and potential, from the advanced one),
+ * and each who levels up asks for the new level's wage (unless they're
+ * already paid that). The same roster when nothing changed.
  */
 export function growStaff(
   roster: Employee[],
   work: StaffWork,
   day: number,
   scale = 1,
-): { roster: Employee[]; levelUps: LevelUp[]; lapsed: string[] } {
+): { roster: Employee[]; levelUps: LevelUp[]; lapsed: string[]; courses: CourseDone[] } {
   const levelUps: LevelUp[] = []
   const lapsed: string[] = []
+  const courses: CourseDone[] = []
+  const mentored = new Set(
+    roster.filter((e) => e.senior && !e.fired && work[e.id]?.came).map((e) => e.role),
+  )
   let changed = false
   const next = roster.map((e) => {
     if (e.fired) return e
@@ -202,13 +220,24 @@ export function growStaff(
       lapsed.push(n.name)
       n = { ...n, raiseAsk: null }
     }
-    // Happier staff learn a little quicker (see `moraleXp`).
-    const xp = xpFor(work[e.id]) * moraleXp(e.morale)
-    n = withLevelUp(grow(n, xp, scale), n.skill, day, levelUps)
+    // Happier staff learn a little quicker (see `moraleXp`), and a senior shows them how.
+    const mentor = mentored.has(e.role) && !e.senior ? MENTOR_XP : 1
+    let xp = xpFor(work[e.id]) * moraleXp(e.morale) * mentor
+    const course = n.training && n.training.day <= day ? n.training : null
+    if (course) {
+      n = { ...n, training: null }
+      // A booking for a day gone by (it can't be taken now) just lapses.
+      if (course.day === day) {
+        n = takeCourse(n, course.course)
+        xp += TRAINING_XP
+        courses.push({ id: e.id, name: e.name, course: course.course })
+      }
+    }
+    n = withLevelUp(grow(n, xp, scale), e.skill, day, levelUps)
     if (n !== e) changed = true
     return n
   })
-  return { roster: changed ? next : roster, levelUps, lapsed }
+  return { roster: changed ? next : roster, levelUps, lapsed, courses }
 }
 
 /**
@@ -239,4 +268,167 @@ export function levelUpNotice(levelUps: readonly LevelUp[], lapsed: readonly str
     parts.push(`${lapsed.join(' and ')} gave up waiting for an answer on a raise.`)
   }
   return parts.length > 0 ? parts.join(' ') : null
+}
+
+/** Experience a course is worth: about two weeks of steady work. */
+export const TRAINING_XP = 140
+
+/** A basic course's fee, per role (the advanced one costs `ADVANCED_FEE` × this). */
+export const TRAINING_FEES: Record<Role, number> = {
+  sales: 400,
+  receptionist: 250,
+  finance: 500,
+  porter: 200,
+  security: 300,
+  mechanic: 450,
+  advisor: 350,
+}
+/** × the basic fee for the advanced course. */
+export const ADVANCED_FEE = 2.5
+
+export const COURSE_LABELS: Record<CourseKind, string> = {
+  basic: 'Course',
+  advanced: 'Advanced course',
+}
+
+/** What sending someone in `role` on `course` costs, paid the morning they go. */
+export function trainingFee(role: Role, course: CourseKind): number {
+  const fee = TRAINING_FEES[role]
+  return course === 'advanced' ? Math.round(fee * ADVANCED_FEE) : fee
+}
+
+/**
+ * Why `e` can't be booked on `course`: let go or leaving, a course already
+ * booked, the advanced course taken or nothing it could raise, or (for the
+ * basic one) nothing left to learn below their potential. Null if they can.
+ */
+export function trainingBlocker(
+  e: Pick<Employee, 'fired' | 'quitting' | 'training' | 'trained' | 'skill' | 'xp' | 'potential'>,
+  course: CourseKind,
+): string | null {
+  if (e.fired) return 'They’ve been let go.'
+  if (e.quitting) return 'They’re on their way out.'
+  if (e.training) return 'They’re already booked on a course.'
+  if (course === 'advanced') {
+    if (e.trained) return 'They’ve taken the advanced course.'
+    if (e.potential >= MAX_SKILL) return 'They can already grow to the top skill.'
+    return null
+  }
+  if (e.skill >= MAX_SKILL) return 'They’re at the top skill.'
+  if (e.skill >= ceilingOf(e) && e.xp >= xpToLevel(e.skill)) {
+    return 'Nothing left to learn below their potential. Try the advanced course.'
+  }
+  return null
+}
+
+/** `e` back from `course`: the advanced one raises their potential a step (once). */
+export function takeCourse(e: Employee, course: CourseKind): Employee {
+  if (course !== 'advanced') return e
+  return { ...e, potential: Math.min(MAX_SKILL, e.potential + 1), trained: true }
+}
+
+/** Days on the payroll before someone can be promoted to Senior. */
+export const SENIOR_DAYS = 28
+/** The least morale a promotion asks for. */
+export const SENIOR_MORALE = 50
+/** × their wage for the title. */
+export const SENIOR_RAISE = 1.15
+/** × the experience of others in a senior's role, on a day the senior's in. */
+export const MENTOR_XP = 1.25
+/** × the odds Nazma picks a senior to poach. */
+export const SENIOR_POACH = 0.5
+
+/** The title a senior in each role holds. */
+export const SENIOR_TITLES: Record<Role, string> = {
+  sales: 'Senior Salesperson',
+  receptionist: 'Head Receptionist',
+  finance: 'Finance Director',
+  porter: 'Head Porter',
+  security: 'Head of Security',
+  mechanic: 'Lead Mechanic',
+  advisor: 'Senior Service Advisor',
+}
+
+/** The small perk each role's senior brings, read through the helpers below. */
+export const SENIOR_PERKS: Record<Role, { value: number; text: string }> = {
+  sales: { value: 0.02, text: 'Customers a little likelier to say yes to them (+2%)' },
+  receptionist: { value: 0.05, text: 'Books more of the calls they make (+5%)' },
+  finance: { value: 50, text: '+$50 on their fee per deal' },
+  porter: { value: 0.75, text: 'Washes cars a quarter faster' },
+  security: { value: 2, text: 'Spots Nazma 2 tiles further off' },
+  mechanic: { value: 0.7, text: 'Fewer comebacks (×0.7)' },
+  advisor: { value: 0.03, text: 'Sells a little more extra work (+3%)' },
+}
+
+/** The role's title for `e`: their Senior title once promoted. */
+export function titleOf(e: Pick<Employee, 'role' | 'senior'>): string {
+  return e.senior ? SENIOR_TITLES[e.role] : ROLE_LABELS[e.role]
+}
+
+type Perked = Pick<Employee, 'role' | 'senior'> | null | undefined
+
+/** The perk `e` brings in `role`, or `none` if they're not its senior. */
+function perk(e: Perked, role: Role, none: number): number {
+  return e?.senior && e.role === role ? SENIOR_PERKS[role].value : none
+}
+
+/** Added to the odds of a yes on a senior salesperson's deals. */
+export const seniorAcceptBonus = (e: Perked) => perk(e, 'sales', 0)
+/** Added to the odds a senior receptionist's call books. */
+export const seniorBookBonus = (e: Perked) => perk(e, 'receptionist', 0)
+/** Added to a senior finance manager's fee per deal. */
+export const seniorFeeBonus = (e: Perked) => perk(e, 'finance', 0)
+/** × a senior porter's wash time. */
+export const seniorWashScale = (e: Perked) => perk(e, 'porter', 1)
+/** Tiles added to a senior guard's sight. */
+export const seniorSightBonus = (e: Perked) => perk(e, 'security', 0)
+/** × the comeback odds on a senior mechanic's jobs. */
+export const seniorComebackScale = (e: Perked) => perk(e, 'mechanic', 1)
+/** Added to the odds a senior advisor sells extra work. */
+export const seniorUpsellBonus = (e: Perked) => perk(e, 'advisor', 0)
+
+/**
+ * Why `e` can't be promoted on `day`: they need the top skill, `SENIOR_DAYS`
+ * on the payroll and `SENIOR_MORALE`, and their role can't have a senior
+ * already. Null if they can.
+ */
+export function promoteBlocker(
+  e: Employee,
+  roster: readonly Employee[],
+  day: number,
+): string | null {
+  if (e.fired) return 'They’ve been let go.'
+  if (e.senior) return `They’re already ${SENIOR_TITLES[e.role]}.`
+  if (e.quitting) return 'They’re on their way out.'
+  if (e.skill < MAX_SKILL) return `Needs skill ${MAX_SKILL}.`
+  const left = SENIOR_DAYS - (day - e.hiredDay)
+  if (left > 0) return `Needs ${left} more day${left === 1 ? '' : 's'} on the team.`
+  if (e.morale < SENIOR_MORALE) return 'Needs to be happier in the job first.'
+  const other = roster.find((x) => x.id !== e.id && x.role === e.role && x.senior && !x.fired)
+  if (other) return `${other.name} is already ${SENIOR_TITLES[e.role]}.`
+  return null
+}
+
+/** Whether `e` can be promoted to Senior on `day`. */
+export function canPromote(e: Employee, roster: readonly Employee[], day: number): boolean {
+  return promoteBlocker(e, roster, day) === null
+}
+
+/** The wage a promotion puts someone on `wage` on. */
+export function seniorWage(wage: number): number {
+  return Math.round(wage * SENIOR_RAISE)
+}
+
+/** The morning's word on who's away on a course today, or null. */
+export function courseNotice(away: readonly Pick<Employee, 'name'>[]): string | null {
+  if (away.length === 0) return null
+  const who = away.map((e) => e.name).join(' and ')
+  return `${who} ${away.length === 1 ? 'is' : 'are'} away on a training course today.`
+}
+
+/** The summary's word on a finished course. */
+export function courseLine(c: CourseDone): string {
+  return c.course === 'advanced'
+    ? `${c.name} finished the advanced course and can grow further.`
+    : `${c.name} finished a training course.`
 }

@@ -1,8 +1,8 @@
-import { DAYS_PER_WEEK, weekdayLabel, WEEKDAY_TRAFFIC } from './calendar'
+import { calendarOf, DAYS_PER_WEEK, shortDate, weekdayLabel, WEEKDAY_TRAFFIC } from './calendar'
 import { SERVICE_WEEKDAY } from './service'
-import { onShift, ROLE_LABELS, type Employee, type Role } from './staff'
+import { onCourse, onShift, ROLE_LABELS, type Employee, type Role } from './staff'
 
-export { onShift }
+export { onCourse, onShift }
 
 /**
  * The weekly rota: the weekdays each employee doesn't come in. The pattern
@@ -33,9 +33,36 @@ const QUIET_DAYS = WEEK.filter((w) => !FULL_DAYS.includes(w)).sort(
 
 type RotaPerson = Pick<Employee, 'id' | 'role' | 'fired' | 'daysOff'>
 
-/** Those on the payroll (not let go) whose day off `day` is. */
-export function offOn<E extends RotaPerson>(roster: readonly E[], day: number): E[] {
-  return roster.filter((e) => !e.fired && !onShift(e, day))
+/**
+ * Those on the payroll (not let go) whose day off `day` is. Someone away on a
+ * course isn't off: the day is paid, even if it falls on their day off.
+ */
+export function offOn<E extends RotaPerson & Partial<Pick<Employee, 'training'>>>(
+  roster: readonly E[],
+  day: number,
+): E[] {
+  return roster.filter((e) => !e.fired && !onShift(e, day) && !onCourse(e, day))
+}
+
+/** Those on the payroll away on a course on `day`. */
+export function onCourseOn<E extends Pick<Employee, 'fired' | 'training'>>(
+  roster: readonly E[],
+  day: number,
+): E[] {
+  return roster.filter((e) => !e.fired && onCourse(e, day))
+}
+
+/** Days ahead a course can be booked. */
+export const COURSE_AHEAD = 7
+
+/**
+ * The day after `today` to send `e` on a course: the first they'd work in
+ * the next `COURSE_AHEAD`, keeping clear of the busy days if it can.
+ */
+export function courseDay(e: Pick<Employee, 'daysOff'>, today: number): number {
+  const ahead = Array.from({ length: COURSE_AHEAD }, (_, i) => today + 1 + i)
+  const works = ahead.filter((d) => onShift(e, d))
+  return works.find((d) => !FULL_DAYS.includes(calendarOf(d).weekday)) ?? works[0] ?? today + 1
 }
 
 function isShopRole(role: Role): boolean {
@@ -155,6 +182,40 @@ export function coverageGaps(roster: readonly RotaPerson[]): CoverageGap[] {
     }
   }
   return gaps
+}
+
+export interface CourseGap {
+  role: Role
+  day: number
+  /** Who's away on the course. */
+  name: string
+}
+
+/**
+ * The booked courses from `today` on that leave a role with nobody in on the
+ * day (where the rota alone wouldn't), in day order.
+ */
+export function courseGaps(
+  roster: readonly (RotaPerson & Pick<Employee, 'name' | 'training'>)[],
+  today: number,
+): CourseGap[] {
+  const gaps: CourseGap[] = []
+  for (const e of roster) {
+    const day = e.training?.day
+    if (e.fired || day === undefined || day < today) continue
+    const weekday = calendarOf(day).weekday
+    if (isShopRole(e.role) && SHOP_SHUT.includes(weekday)) continue
+    const mates = roster.filter((x) => !x.fired && x.role === e.role)
+    // A gap the rota leaves anyway is told as that.
+    if (mates.every((x) => x.daysOff.includes(weekday))) continue
+    if (mates.every((x) => !onShift(x, day))) gaps.push({ role: e.role, day, name: e.name })
+  }
+  return gaps.sort((a, b) => a.day - b.day)
+}
+
+/** "No salesperson on Tue 3 Feb (Dana's course)". */
+export function courseGapText(g: CourseGap): string {
+  return `No ${ROLE_LABELS[g.role].toLowerCase()} on ${shortDate(g.day)} (${g.name}'s course)`
 }
 
 /** "Sun" or "Tue, Thu", or "None". */

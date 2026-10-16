@@ -78,6 +78,12 @@ export function formatDate(day: number): string {
   return `${weekdayLabel(c.weekday)} · Wk ${c.week} · ${monthLabel(c.month)}`
 }
 
+/** "Tue 14 Jan": the weekday, day of the month and month. */
+export function shortDate(day: number): string {
+  const c = calendarOf(day)
+  return `${weekdayLabel(c.weekday)} ${c.dayOfMonth} ${monthLabel(c.month)}`
+}
+
 /** "Saturday, week 2 of March", with the year from year 2 on. */
 export function longDate(day: number): string {
   const c = calendarOf(day)

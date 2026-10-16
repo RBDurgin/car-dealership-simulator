@@ -65,6 +65,9 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   // As the auto rota gives a lone receptionist, and an older save's staff come up.
   daysOff: [6],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
   ...extra,
 })
 
@@ -683,6 +686,9 @@ describe('save data', () => {
       moraleWhy: [],
       daysOff: [6],
       streak: 0,
+      training: null,
+      trained: false,
+      senior: false,
     })
     expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
     expect(parseSave({ ...save, roster: old })).toBeNull()
@@ -740,6 +746,30 @@ describe('save data', () => {
     ])
     expect(parseSave({ ...save, roster: old })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], daysOff: [7] }] })).toBeNull()
+  })
+
+  it('keeps courses, the advanced course and seniors, and upgrades a version 35 save with none', () => {
+    const senior = employee('staff-1-1', {
+      training: { day: 130, course: 'advanced' },
+      trained: true,
+      senior: true,
+    })
+    const save = createSave({ ...source(), roster: [senior] }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.roster[0]).toMatchObject({
+      training: { day: 130, course: 'advanced' },
+      trained: true,
+      senior: true,
+    })
+    const old = save.roster.map((e) => {
+      const { training: _, trained: __, senior: ___, ...rest } = e
+      return rest
+    })
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...save, version: 35, roster: old })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster[0]).toMatchObject({ training: null, trained: false, senior: false })
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    const bad = { ...save.roster[0], training: { day: 130, course: 'nap' } }
+    expect(parseSave({ ...save, roster: [bad] })).toBeNull()
   })
 
   it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {

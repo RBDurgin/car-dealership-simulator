@@ -7,11 +7,22 @@ import {
   retentionRaise,
   ROLE_BADGES,
   ROLE_BLURBS,
-  ROLE_LABELS,
   type Employee,
   type StaffStatus,
 } from '../sim/staff'
-import { ceilingOf, levelProgress } from '../sim/growth'
+import {
+  ceilingOf,
+  COURSE_LABELS,
+  levelProgress,
+  promoteBlocker,
+  SENIOR_PERKS,
+  SENIOR_TITLES,
+  seniorWage,
+  titleOf,
+  TRAINING_XP,
+  trainingBlocker,
+  trainingFee,
+} from '../sim/growth'
 import {
   isWarned,
   moraleFace,
@@ -20,8 +31,17 @@ import {
   tiredDays,
   FATIGUE_DAYS,
 } from '../sim/morale'
-import { calendarOf, weekdayLabel } from '../sim/calendar'
-import { coverageGaps, FULL_DAYS, gapText, WEEK } from '../sim/rota'
+import { calendarOf, shortDate, weekdayLabel } from '../sim/calendar'
+import {
+  COURSE_AHEAD,
+  courseGaps,
+  courseGapText,
+  coverageGaps,
+  FULL_DAYS,
+  gapText,
+  onCourse,
+  WEEK,
+} from '../sim/rota'
 import { groundUp } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -100,7 +120,8 @@ function StaffRow({
           {!blurb && <Mood e={e} />}
         </div>
         <div className="staff-meta">
-          {ROLE_LABELS[e.role]} · <Skill skill={e.skill} potential={e.potential} />
+          {e.senior && <span aria-hidden>★ </span>}
+          {titleOf(e)} · <Skill skill={e.skill} potential={e.potential} />
           {!blurb && <Growth e={e} />}
         </div>
         {blurb && <div className="staff-blurb muted">{ROLE_BLURBS[e.role]}</div>}
@@ -108,6 +129,73 @@ function StaffRow({
       <div className="staff-wage price">{formatMoney(e.wage)}/day</div>
       {children}
     </li>
+  )
+}
+
+/**
+ * Training and promotion for one employee: the course they're booked on (to
+ * call off), or the courses they can take, and **Promote** once they're at
+ * the top skill. A button that can't be used says why on hover.
+ */
+function Develop({ e, roster, day }: { e: Employee; roster: Employee[]; day: number }) {
+  const game = useGame.getState()
+  if (e.quitting) return null
+  const promote =
+    e.skill >= MAX_SKILL && !e.senior ? (
+      <button
+        className="btn btn-small btn-primary"
+        disabled={!!promoteBlocker(e, roster, day)}
+        title={
+          promoteBlocker(e, roster, day) ??
+          `${SENIOR_TITLES[e.role]}, on ${formatMoney(seniorWage(e.wage))}/day. ${SENIOR_PERKS[e.role].text}, and the rest of the role learns faster.`
+        }
+        onClick={() => game.promote(e.id)}
+      >
+        Promote
+      </button>
+    ) : null
+  if (e.training) {
+    const today = e.training.day <= day
+    return (
+      <>
+        <span className="staff-course muted">
+          📚 {COURSE_LABELS[e.training.course]} {today ? 'today' : shortDate(e.training.day)}
+        </span>
+        {!today && (
+          <button className="btn btn-small" onClick={() => game.cancelTraining(e.id)}>
+            Call off
+          </button>
+        )}
+        {promote}
+      </>
+    )
+  }
+  const course = (kind: 'basic' | 'advanced') => {
+    const blocker = trainingBlocker(e, kind)
+    const what =
+      kind === 'advanced'
+        ? `Raises what they can grow to by one, once, plus a course's experience.`
+        : `About two weeks' experience (${TRAINING_XP}).`
+    return (
+      <button
+        className="btn btn-small"
+        disabled={!!blocker}
+        title={
+          blocker ??
+          `${what} ${formatMoney(trainingFee(e.role, kind))}, paid on their next working day, which they spend away.`
+        }
+        onClick={() => game.bookTraining(e.id, kind)}
+      >
+        {kind === 'advanced' ? 'Advanced' : 'Train'}
+      </button>
+    )
+  }
+  return (
+    <>
+      {e.skill < MAX_SKILL && course('basic')}
+      {!e.trained && e.potential < MAX_SKILL && course('advanced')}
+      {promote}
+    </>
   )
 }
 
@@ -122,7 +210,10 @@ function Schedule({ employed }: { employed: Employee[] }) {
   if (employed.length === 0) {
     return <p className="muted staff-empty">Nobody to schedule yet.</p>
   }
-  const gaps = coverageGaps(employed)
+  const gaps = [
+    ...coverageGaps(employed).map(gapText),
+    ...courseGaps(employed, day).map(courseGapText),
+  ]
   return (
     <>
       <table className="rota">
@@ -155,15 +246,24 @@ function Schedule({ employed }: { employed: Employee[] }) {
               </th>
               {WEEK.map((w) => {
                 const off = e.daysOff.includes(w)
+                // A course booked in the week ahead shows on its weekday.
+                const course =
+                  e.training &&
+                  e.training.day - day < COURSE_AHEAD &&
+                  calendarOf(e.training.day).weekday === w
+                const state = course ? 'on a course' : off ? 'day off' : 'working'
                 return (
                   <td key={w}>
                     <button
-                      className={`rota-cell${off ? ' rota-off' : ''}`}
+                      className={`rota-cell${off ? ' rota-off' : ''}${course ? ' rota-course' : ''}`}
                       aria-pressed={off}
-                      aria-label={`${e.name}, ${weekdayLabel(w, true)}: ${off ? 'day off' : 'working'}`}
+                      aria-label={`${e.name}, ${weekdayLabel(w, true)}: ${state}`}
+                      title={
+                        course ? `Away on a course on ${shortDate(e.training!.day)}` : undefined
+                      }
                       onClick={() => game.toggleDayOff(e.id, w)}
                     >
-                      {off ? 'Off' : '●'}
+                      {course ? '📚' : off ? 'Off' : '●'}
                     </button>
                   </td>
                 )
@@ -177,7 +277,7 @@ function Schedule({ employed }: { employed: Employee[] }) {
       ) : (
         <ul className="rota-gaps staff-quitting">
           {gaps.map((g) => (
-            <li key={`${g.role}-${g.weekday}`}>{gapText(g)}</li>
+            <li key={g}>{g}</li>
           ))}
         </ul>
       )}
@@ -209,6 +309,7 @@ function StaffList() {
   const candidates = useGame((s) => s.candidates)
   const ground = useGame(useShallow(groundUp))
   const offToday = useGame((s) => s.dayStats.off)
+  const day = useGame((s) => s.clock.day)
   const touch = useMediaQuery(COARSE)
   const [view, setView] = useState<'team' | 'schedule'>('team')
 
@@ -266,7 +367,11 @@ function StaffList() {
                     </span>
                   ) : (
                     <span className="staff-status muted">
-                      {offToday.includes(e.id) ? 'Day off today' : STATUS_LABELS[e.status]}
+                      {onCourse(e, day)
+                        ? 'On a course today'
+                        : offToday.includes(e.id)
+                          ? 'Day off today'
+                          : STATUS_LABELS[e.status]}
                     </span>
                   )}
                   <div className="staff-actions">
@@ -297,6 +402,7 @@ function StaffList() {
                         Keep (+{formatMoney(retentionRaise(e.wage))}/day)
                       </button>
                     )}
+                    <Develop e={e} roster={employed} day={day} />
                     <button className="btn btn-small" onClick={() => game.fire(e.id)}>
                       Fire
                     </button>

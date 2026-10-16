@@ -61,7 +61,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 35
+export const SAVE_VERSION = 36
 
 export interface SaveData {
   version: number
@@ -446,6 +446,16 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
     const rota = roster.every((e) => isObject(e) && (ROLES as readonly unknown[]).includes(e.role))
     return { ...raw, roster: rota ? autoRota(roster as unknown as Employee[]) : roster }
   },
+  // v36: training and promotions. Nobody's booked on a course, taken the
+  // advanced one or been promoted yet.
+  35: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e) =>
+          isObject(e) ? { ...e, training: null, trained: false, senior: false } : e,
+        )
+      : raw.roster,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -786,7 +796,13 @@ function isEmployee(v: unknown): boolean {
     v.moraleWhy.every(isMoraleReason) &&
     Array.isArray(v.daysOff) &&
     v.daysOff.every((w) => Number.isInteger(w) && w >= 0 && w < DAYS_PER_WEEK) &&
-    isNumber(v.streak)
+    isNumber(v.streak) &&
+    (v.training === null ||
+      (isObject(v.training) &&
+        isNumber(v.training.day) &&
+        (v.training.course === 'basic' || v.training.course === 'advanced'))) &&
+    typeof v.trained === 'boolean' &&
+    typeof v.senior === 'boolean'
   )
 }
 

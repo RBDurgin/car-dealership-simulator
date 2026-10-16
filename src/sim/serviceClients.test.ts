@@ -417,6 +417,9 @@ describe('the service advisor', () => {
     moraleWhy: [],
     daysOff: [],
     streak: 0,
+    training: null,
+    trained: false,
+    senior: false,
   }
 
   it('checks in whoever has waited longest at the counter, leaving the player theirs', () => {

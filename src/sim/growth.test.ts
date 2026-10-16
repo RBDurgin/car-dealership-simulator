@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   addWork,
+  canPromote,
+  MENTOR_XP,
+  promoteBlocker,
+  SENIOR_DAYS,
+  SENIOR_PERKS,
+  seniorAcceptBonus,
+  seniorComebackScale,
+  seniorFeeBonus,
+  seniorSightBonus,
+  seniorWage,
+  seniorWashScale,
+  titleOf,
+  TRAINING_XP,
+  trainingBlocker,
+  trainingFee,
   emptyTally,
   grow,
   growStaff,
@@ -16,7 +31,14 @@ import {
   xpToLevel,
 } from './growth'
 import { createRng } from './rng'
-import { generateCandidates, MAX_SKILL, wageFor, type Employee } from './staff'
+import {
+  financeCommission,
+  generateCandidates,
+  MAX_SKILL,
+  reduceStaff,
+  wageFor,
+  type Employee,
+} from './staff'
 
 const employee = (extra: Partial<Employee> = {}): Employee => ({
   id: 'staff-1-1',
@@ -37,6 +59,9 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   moraleWhy: [],
   daysOff: [],
   streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
   ...extra,
 })
 
@@ -193,5 +218,110 @@ describe('levelUpNotice', () => {
     expect(text).toContain('Dana grew to skill 2 and asks for $150 a day')
     expect(text).toContain('Lee grew to skill 3.')
     expect(text).toContain('Kim gave up waiting')
+  })
+})
+
+describe('training', () => {
+  const came = { ...emptyTally(), came: true }
+
+  it('grants a course’s experience on the day, up to potential', () => {
+    const e = employee({ training: { day: 9, course: 'basic' } })
+    const { roster, courses } = growStaff([e], {}, 9)
+    expect(roster[0]).toMatchObject({ xp: TRAINING_XP, training: null })
+    expect(courses).toEqual([{ id: e.id, name: 'Dana', course: 'basic' }])
+    const capped = employee({
+      skill: 3,
+      potential: 3,
+      xp: 200,
+      training: { day: 9, course: 'basic' },
+    })
+    expect(growStaff([capped], {}, 9).roster[0]).toMatchObject({ skill: 3, xp: 280 })
+  })
+
+  it('raises potential once with the advanced course, and grows into it', () => {
+    const e = employee({
+      skill: 3,
+      potential: 3,
+      xp: 280,
+      training: { day: 9, course: 'advanced' },
+    })
+    const { roster, levelUps } = growStaff([e], {}, 9)
+    expect(roster[0]).toMatchObject({ potential: 4, trained: true, skill: 4 })
+    expect(levelUps).toHaveLength(1)
+    expect(trainingBlocker(roster[0], 'advanced')).toMatch(/taken the advanced/)
+  })
+
+  it('drops a booking for a day gone by, with nothing learned', () => {
+    const e = employee({ training: { day: 8, course: 'basic' } })
+    const { roster, courses } = growStaff([e], { [e.id]: came }, 9)
+    expect(roster[0]).toMatchObject({ training: null, xp: XP_PER_DAY })
+    expect(courses).toEqual([])
+  })
+
+  it('refuses a course with nothing to learn or one already booked', () => {
+    expect(trainingBlocker(employee(), 'basic')).toBeNull()
+    expect(trainingBlocker(employee({ skill: 3, potential: 3, xp: 280 }), 'basic')).toMatch(
+      /Nothing left/,
+    )
+    expect(trainingBlocker(employee({ skill: 3, potential: 3, xp: 100 }), 'basic')).toBeNull()
+    expect(trainingBlocker(employee({ skill: MAX_SKILL, potential: MAX_SKILL }), 'basic')).toMatch(
+      /top skill/,
+    )
+    expect(trainingBlocker(employee({ potential: MAX_SKILL }), 'advanced')).toMatch(/already grow/)
+    const booked = employee({ training: { day: 9, course: 'basic' } })
+    expect(trainingBlocker(booked, 'advanced')).toMatch(/already booked/)
+    expect(trainingFee('sales', 'advanced')).toBeGreaterThan(trainingFee('sales', 'basic'))
+  })
+})
+
+describe('promotion', () => {
+  const came = { ...emptyTally(), came: true }
+  const seasoned = (extra: Partial<Employee> = {}) =>
+    employee({ skill: MAX_SKILL, potential: MAX_SKILL, hiredDay: 1, ...extra })
+  const day = 1 + SENIOR_DAYS
+
+  it('needs the top skill, four weeks’ service, good morale and no other senior', () => {
+    expect(canPromote(seasoned(), [], day)).toBe(true)
+    expect(promoteBlocker(seasoned({ skill: 4 }), [], day)).toMatch(/skill 5/)
+    expect(promoteBlocker(seasoned(), [], day - 1)).toMatch(/1 more day /)
+    expect(promoteBlocker(seasoned({ morale: 40 }), [], day)).toMatch(/happier/)
+    const other = seasoned({ id: 'staff-1-2', name: 'Lee', senior: true })
+    expect(promoteBlocker(seasoned(), [other], day)).toMatch(/Lee is already Senior Salesperson/)
+    expect(canPromote(seasoned(), [{ ...other, role: 'porter' }], day)).toBe(true)
+    expect(promoteBlocker(seasoned({ senior: true }), [], day)).toMatch(/already/)
+  })
+
+  it('gives the title, a raise and a lift', () => {
+    const e = seasoned({ morale: 60, raiseAsk: { wage: seniorWage(120) - 1, day: 3 } })
+    const [n] = reduceStaff([e], { type: 'promote', id: e.id, wage: seniorWage(e.wage) })
+    expect(n).toMatchObject({ senior: true, wage: seniorWage(e.wage), morale: 75, raiseAsk: null })
+    expect(titleOf(n)).toBe('Senior Salesperson')
+    expect(titleOf({ role: 'mechanic', senior: true })).toBe('Lead Mechanic')
+    expect(titleOf(e)).toBe('Salesperson')
+  })
+
+  it('mentors the rest of the role on a day the senior comes in', () => {
+    const senior = seasoned({ id: 's', senior: true })
+    const junior = employee({ id: 'j' })
+    const porter = employee({ id: 'p', role: 'porter' })
+    const work = { s: came, j: came, p: came }
+    const { roster } = growStaff([senior, junior, porter], work, day)
+    expect(roster[1].xp).toBe(Math.round(XP_PER_DAY * MENTOR_XP))
+    expect(roster[2].xp).toBe(XP_PER_DAY)
+    const home = growStaff([senior, junior], { j: came }, day).roster
+    expect(home[1].xp).toBe(XP_PER_DAY)
+  })
+
+  it('brings each role’s perk only to its senior', () => {
+    const senior = (role: Employee['role']) => ({ role, senior: true })
+    expect(seniorAcceptBonus(senior('sales'))).toBe(SENIOR_PERKS.sales.value)
+    expect(seniorAcceptBonus({ role: 'sales', senior: false })).toBe(0)
+    expect(seniorAcceptBonus(senior('porter'))).toBe(0)
+    expect(seniorAcceptBonus(null)).toBe(0)
+    expect(seniorComebackScale(senior('mechanic'))).toBe(0.7)
+    expect(seniorComebackScale(undefined)).toBe(1)
+    expect(seniorSightBonus(senior('security'))).toBe(2)
+    expect(seniorWashScale(senior('porter'))).toBeLessThan(1)
+    expect(financeCommission(0, seniorFeeBonus(senior('finance')))).toBe(financeCommission(0) + 50)
   })
 })

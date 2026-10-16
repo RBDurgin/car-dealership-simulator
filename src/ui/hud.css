@@ -903,6 +903,8 @@ kbd {
 }
 .staff-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 .staff-quitting {
@@ -984,6 +986,13 @@ kbd {
 .rota-off {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.55);
+}
+.rota-course {
+  background: rgba(120, 170, 255, 0.16);
+}
+.staff-course {
+  font-size: 12px;
+  align-self: center;
 }
 .rota-gaps {
   margin: 8px 0;

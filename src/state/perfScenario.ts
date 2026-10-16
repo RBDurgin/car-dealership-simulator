@@ -44,6 +44,9 @@ export function busyDay(): void {
       moraleWhy: [],
       daysOff: [],
       streak: 0,
+      training: null,
+      trained: false,
+      senior: false,
     })),
   )
   useGame.setState({
