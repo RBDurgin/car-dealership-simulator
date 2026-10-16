@@ -10,6 +10,7 @@ import {
   type ExpansionId,
   type SalesDesk,
 } from './layout'
+import { calendarOf } from './calendar'
 import { potentialOf } from './growth'
 import { KEEP_MORALE, START_MORALE, withMorale, type MoraleReason } from './morale'
 import { createRng, type Rng } from './rng'
@@ -22,6 +23,7 @@ import { createRng, type Rng } from './rng'
  *   off ─open─► arriving ─atPost─► atPost ─close─► leaving ─left─► off
  *                   └─────────────close────────────────┘
  *
+ * On their day off (see `sim/rota.ts`) `open` leaves them `off` all day.
  * `open` also sends anyone still walking out back to work (a new day started
  * before they reached the sidewalk). Firing an idle employee sends them home
  * now; a fired employee is removed once they've left. Someone Nazma poached is
@@ -154,6 +156,10 @@ export interface Employee {
   lowDays: number
   /** What moved their morale when the last day was settled. */
   moraleWhy: MoraleReason[]
+  /** Weekdays they don't come in (0 = Monday), every week (see `sim/rota.ts`). */
+  daysOff: number[]
+  /** Days in a row they've worked, up to the last day settled; a day off resets it. */
+  streak: number
 }
 
 export interface RaiseAsk {
@@ -332,6 +338,8 @@ export function generateCandidates(
       morale: START_MORALE,
       lowDays: 0,
       moraleWhy: [],
+      daysOff: [],
+      streak: 0,
     }
   })
 }
@@ -357,16 +365,26 @@ export function canHire(
     : `You already have ${limit} ${ROLE_PLURALS[role]}.`
 }
 
+/** Whether `e` works on `day`, or it's their day off. */
+export function onShift(e: Pick<Employee, 'daysOff'>, day: number): boolean {
+  return !e.daysOff.includes(calendarOf(day).weekday)
+}
+
 /**
  * What the day's staff cost, paid at closing: wages for everyone still on the
- * payroll (and anyone who quit at closing, as they worked the day), and what
- * staff earned on today's `sales` (even if let go since).
+ * payroll but those who had the day `off` (ids), plus `departed` (the wages of
+ * those who quit at closing, as they worked the day and may be gone from the
+ * roster by now), and what staff earned on today's `sales` (even if let go since).
  */
 export function payroll(
   roster: readonly Employee[],
   sales: readonly Sale[],
+  off: readonly string[] = [],
+  departed = 0,
 ): { wages: number; commissions: number } {
-  const wages = roster.filter((e) => !e.fired || e.quitting).reduce((sum, e) => sum + e.wage, 0)
+  const wages = roster
+    .filter((e) => !e.fired && !off.includes(e.id))
+    .reduce((sum, e) => sum + e.wage, departed)
   const commissions = sales.reduce((sum, s) => sum + s.commission, 0)
   return { wages, commissions }
 }
@@ -383,9 +401,14 @@ export function financeOnDuty(roster: readonly Employee[]): Employee | null {
   )
 }
 
-/** Whether a security guard is on the payroll (not let go), which keeps Nazma away more often. */
-export function isGuarded(roster: readonly Employee[]): boolean {
-  return roster.some((e) => e.role === 'security' && !e.fired)
+/**
+ * Whether a security guard is on the payroll (not let go), which keeps Nazma
+ * away more often; with a `day`, only if one works that day.
+ */
+export function isGuarded(roster: readonly Employee[], day?: number): boolean {
+  return roster.some(
+    (e) => e.role === 'security' && !e.fired && (day === undefined || onShift(e, day)),
+  )
 }
 
 /**
@@ -425,8 +448,8 @@ export type StaffEvent =
   /** Joins the payroll; comes straight in if the doors are open. */
   | { type: 'hire'; employee: Employee; open: boolean }
   | { type: 'fire'; id: string }
-  /** Doors open: everyone heads in, and the fired are gone for good. */
-  | { type: 'open' }
+  /** Doors open on `day`: everyone working it heads in, and the fired are gone for good. */
+  | { type: 'open'; day: number }
   /** Reached their post. */
   | { type: 'atPost'; id: string }
   /** Closing time: everyone heads home, and anyone still quitting leaves for good. */
@@ -457,15 +480,21 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
     case 'open': {
       const kept = roster.filter((e) => !e.fired)
       const next = mapChanged(kept, (e) =>
-        e.status === 'off' || e.status === 'leaving' ? { ...e, status: 'arriving' } : e,
+        (e.status === 'off' || e.status === 'leaving') && onShift(e, ev.day)
+          ? { ...e, status: 'arriving' }
+          : e,
       )
       return next === kept && kept.length === roster.length ? roster : next
     }
-    case 'close':
-      return mapChanged(roster, (e) => {
+    case 'close': {
+      // A quitter who had the day off just doesn't come back.
+      const kept = roster.filter((e) => !(e.quitting && !e.fired && e.status === 'off'))
+      const next = mapChanged(kept, (e) => {
         if (e.quitting && !e.fired) return { ...e, fired: true, status: 'leaving' }
         return e.status === 'arriving' || e.status === 'atPost' ? { ...e, status: 'leaving' } : e
       })
+      return next === kept && kept.length === roster.length ? roster : next
+    }
   }
   const e = roster.find((x) => x.id === ev.id)
   if (!e) return roster

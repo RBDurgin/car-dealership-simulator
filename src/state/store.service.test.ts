@@ -92,6 +92,8 @@ describe('reconditioning in the garage', () => {
     morale: 70,
     lowDays: 0,
     moraleWhy: [],
+    daysOff: [],
+    streak: 0,
   }
   const usedCar = (): InventoryCar =>
     usedStockCar(

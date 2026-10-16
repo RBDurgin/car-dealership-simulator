@@ -130,6 +130,8 @@ const staff = (id: string, role: Employee['role']): Employee => ({
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
 })
 
 const car = {

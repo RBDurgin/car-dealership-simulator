@@ -9,7 +9,7 @@ import type { VisitOdds } from '../sim/nazma'
 import { loyaltyBonus } from '../sim/clients'
 import type { RepScale } from '../sim/reputation'
 import { bayCount, type ReconBook } from '../sim/service'
-import { moralePace } from '../sim/morale'
+import { workPace } from '../sim/morale'
 import { financeSeconds, type Employee } from '../sim/staff'
 import { netPrice, staffPlan } from '../sim/fi'
 import { driveBonusFor } from '../sim/testDrive'
@@ -139,8 +139,8 @@ export function visitOdds(t: Tuning, scale = 1): VisitOdds {
 export function financePaperwork(
   s: Pick<GameState, 'difficulty'>,
   c: Pick<Customer, 'offer' | 'archetype' | 'credit' | 'budget'>,
-  e: Pick<Employee, 'skill' | 'morale'>,
+  e: Pick<Employee, 'skill' | 'morale' | 'streak'>,
 ): number {
   const plan = c.offer ? staffPlan(e.skill, c, netPrice(c.offer), levelTuning(s).productTake) : null
-  return financeSeconds(e.skill, plan?.presents.length ?? 0) * moralePace(e.morale)
+  return financeSeconds(e.skill, plan?.presents.length ?? 0) * workPace(e)
 }

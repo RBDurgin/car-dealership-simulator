@@ -42,6 +42,8 @@ export function busyDay(): void {
       morale: 70,
       lowDays: 0,
       moraleWhy: [],
+      daysOff: [],
+      streak: 0,
     })),
   )
   useGame.setState({

@@ -62,6 +62,9 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  // As the auto rota gives a lone receptionist, and an older save's staff come up.
+  daysOff: [6],
+  streak: 0,
   ...extra,
 })
 
@@ -678,6 +681,8 @@ describe('save data', () => {
       morale: 70,
       lowDays: 0,
       moraleWhy: [],
+      daysOff: [6],
+      streak: 0,
     })
     expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
     expect(parseSave({ ...save, roster: old })).toBeNull()
@@ -704,6 +709,37 @@ describe('save data', () => {
     expect(upgraded?.roster[0]).toMatchObject({ morale: 70, lowDays: 0, moraleWhy: [] })
     expect(parseSave({ ...save, roster: old })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], moraleWhy: [5] }] })).toBeNull()
+  })
+
+  it('keeps days off and the streak, and upgrades a version 34 save with the auto rota', () => {
+    const save = createSave(
+      {
+        ...source(),
+        roster: [
+          employee('staff-1-1', { daysOff: [1, 3], streak: 9 }),
+          employee('staff-1-2', { role: 'sales' }),
+          employee('staff-1-3', { role: 'sales' }),
+        ],
+      },
+      123,
+    )
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.roster[0]).toMatchObject({
+      daysOff: [1, 3],
+      streak: 9,
+    })
+    const old = save.roster.map((e) => {
+      const { daysOff: _, streak: __, ...rest } = e
+      return rest
+    })
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...save, version: 34, roster: old })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster.map((e) => [e.daysOff, e.streak])).toEqual([
+      [[6], 0],
+      [[0], 0],
+      [[1], 0],
+    ])
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    expect(parseSave({ ...save, roster: [{ ...save.roster[0], daysOff: [7] }] })).toBeNull()
   })
 
   it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {

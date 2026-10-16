@@ -99,7 +99,8 @@ import {
 import { askLapses, growStaff, levelUpNotice } from '../../sim/growth'
 import { moraleDay, moraleNotice, newlyWarned, resignsToday } from '../../sim/morale'
 import { planArrivals } from '../../sim/spawner'
-import { generateCandidates, isGuarded, payroll, reduceStaff } from '../../sim/staff'
+import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
+import { countStreaks, offNotice, offOn } from '../../sim/rota'
 import { stockPurchases } from '../../sim/sellers'
 import {
   addDay as addToLifetime,
@@ -256,7 +257,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
 export function settleDay(k: Kit): void {
   const s = k.get()
   if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
-  const pay = payroll(s.roster, s.dayStats.sales)
+  const pay = payroll(s.roster, s.dayStats.sales, s.dayStats.off, s.dayStats.quitWages)
   // Chargebacks due take back F&I gross, and the finance manager's share of it.
   const { due, later } = dueChargebacks(s.chargebacks, s.clock.day)
   const charged = chargebackTotal(due)
@@ -311,12 +312,15 @@ export function settleDay(k: Kit): void {
   // for a raise.
   const lapsing = s.roster.filter((e) => askLapses(e, s.clock.day)).map((e) => e.id)
   const declined = new Set([...s.dayStats.raisesDeclined, ...lapsing])
+  // A day off resets their run of days worked; past a week's worth it tires them.
+  const rested = countStreaks(s.roster, s.dayStats.off)
   const moved = moraleDay(
-    s.roster,
+    rested,
     (e) => ({
       tally: s.dayStats.staffWork[e.id],
       raiseDeclined: declined.has(e.id),
       coworkersLost: s.dayStats.coworkersLost,
+      streak: e.streak,
       shift: level.moraleShift,
     }),
     level.moraleQuits,
@@ -401,11 +405,15 @@ export function closeUp(k: Kit): void {
   const joined = rival === s.rival ? [] : quitters.map((e) => ({ name: e.name, role: e.role }))
   // Those who handed in notice this morning left over morale, not Nazma.
   const fedUp = quitters.filter((e) => s.dayStats.resigned.includes(e.id)).map((e) => e.name)
+  // They worked the day (unless it was their day off), so it's paid, though
+  // they may be off the roster by the time it is.
+  const worked = quitters.filter((e) => !s.dayStats.off.includes(e.id))
   k.set({
     rival,
     dayStats: {
       ...s.dayStats,
       coworkersLost: s.dayStats.coworkersLost + quitters.length,
+      quitWages: s.dayStats.quitWages + worked.reduce((sum, e) => sum + e.wage, 0),
       moraleQuits: [...s.dayStats.moraleQuits, ...fedUp],
     },
   })
@@ -460,7 +468,9 @@ function morning(k: Kit, day: number): void {
     c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' as const } : c,
   )
   const level = tuning(k)
+  // A guard keeps thieves off overnight, and Nazma away only on a day he works.
   const guarded = isGuarded(s.roster)
+  const working = s.roster.filter((e) => onShift(e, day))
   const opening = rivalMorning(s.rival, day, s.career.rank, {
     strength: level.rivalStrength,
     undercut: level.rivalUndercut,
@@ -489,9 +499,9 @@ function morning(k: Kit, day: number): void {
     ...dirtyOvernight(stolen ? kept.filter((c) => c !== stolen) : kept, effects.lotDirt),
     ...delivered,
   ]
-  const salesStaff = s.roster.filter((e) => e.role === 'sales' && !e.fired).length
-  const nazma = isNazmaDay(day, guarded, visitOdds(level, sabotage))
-    ? planVisit(createRng(visitSeed(day)), inventory, s.roster, level.poachChance * sabotage)
+  const salesStaff = working.filter((e) => e.role === 'sales' && !e.fired).length
+  const nazma = isNazmaDay(day, isGuarded(working), visitOdds(level, sabotage))
+    ? planVisit(createRng(visitSeed(day)), inventory, working, level.poachChance * sabotage)
     : null
   const newMonth = date.dayOfMonth === 1
   const bays = bayCount(installedExpansions(s.expansions, day))
@@ -617,7 +627,10 @@ function morning(k: Kit, day: number): void {
     owner,
     nazma,
   })
-  setRoster(k, reduceStaff(get().roster, { type: 'open' }))
+  setRoster(k, reduceStaff(get().roster, { type: 'open', day }))
+  // Those with the day off stay home, unpaid.
+  const off = offOn(get().roster, day)
+  if (off.length > 0) set({ dayStats: { ...get().dayStats, off: off.map((e) => e.id) } })
   // Unhappy too long (where the level allows it): a warning, then notice.
   const warned = level.moraleQuits ? newlyWarned(get().roster) : []
   const resigning = level.moraleQuits ? get().roster.filter(resignsToday) : []
@@ -638,6 +651,7 @@ function morning(k: Kit, day: number): void {
       warned.map((e) => e.name),
       resigning.map((e) => e.name),
     ),
+    offNotice(off),
     chargebackNotice(dueChargebacks(s.chargebacks, day).due),
     opening.event && rivalNotice(rival, opening.event),
     eventNotice(day),

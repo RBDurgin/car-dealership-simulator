@@ -946,6 +946,55 @@ kbd {
   background: #fde047;
 }
 
+/* Staff panel: the weekly schedule */
+.rota {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.rota th {
+  font-weight: 600;
+  text-align: center;
+  padding: 2px;
+}
+.rota th[scope='row'] {
+  text-align: left;
+  font-weight: normal;
+  padding-right: 6px;
+}
+.rota td {
+  padding: 2px;
+  text-align: center;
+}
+.rota-today {
+  color: #93c5fd;
+}
+.rota-cell {
+  width: 100%;
+  min-width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.rota-off {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+}
+.rota-gaps {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.cal-gap {
+  color: #fca5a5;
+}
+
 /* Stock panel: the staff panel's frame, a little wider for the catalog */
 .stock-panel {
   width: min(460px, calc(100vw - var(--edge-l) - var(--edge-r)));

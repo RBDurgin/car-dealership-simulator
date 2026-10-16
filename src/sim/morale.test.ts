@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { emptyTally } from './growth'
 import {
+  fatiguePace,
+  FATIGUE_DAYS,
   isWarned,
   LOW_MORALE,
   MAX_DAILY_MORALE,
@@ -38,6 +40,8 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   morale: MORALE_HOME,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
   ...extra,
 })
 
@@ -105,7 +109,9 @@ describe('the effects of morale', () => {
     expect(moralePace(70)).toBe(1)
     expect(moralePace(100)).toBeCloseTo(0.95)
     expect(moralePace(0)).toBeCloseTo(1.15)
-    expect(workSeconds(10, { skill: 3, morale: 0 })).toBeCloseTo(skillSeconds(10, 3) * 1.15)
+    expect(workSeconds(10, { skill: 3, morale: 0, streak: 0 })).toBeCloseTo(
+      skillSeconds(10, 3) * 1.15,
+    )
   })
 
   it('learns a little quicker when happy and slower when low', () => {
@@ -166,5 +172,27 @@ describe('warning and notice', () => {
     expect(moraleNotice([], [])).toBeNull()
     expect(moraleNotice(['Dana'], [])).toContain('Dana is unhappy')
     expect(moraleNotice([], ['Lee'])).toContain('Lee handed in notice and leaves')
+  })
+})
+
+describe('fatigue', () => {
+  const ctx: MoraleContext = { tally: undefined, raiseDeclined: false, coworkersLost: 0 }
+
+  it('tires them a little more each day past a week without a day off', () => {
+    const reason = (streak: number) =>
+      moraleChange(employee(), { ...ctx, streak }).reasons.find((r) => r.id === 'tired')
+    expect(reason(FATIGUE_DAYS)).toBeUndefined()
+    expect(reason(FATIGUE_DAYS + 1)?.delta).toBe(-1)
+    expect(reason(FATIGUE_DAYS + 2)?.delta).toBe(-2)
+    expect(reason(FATIGUE_DAYS + 10)?.delta).toBe(-3)
+  })
+
+  it('slows their work once today is past a week in a row', () => {
+    expect(fatiguePace(0)).toBe(1)
+    expect(fatiguePace(FATIGUE_DAYS - 1)).toBe(1)
+    expect(fatiguePace(FATIGUE_DAYS)).toBeCloseTo(1.03)
+    expect(fatiguePace(FATIGUE_DAYS + 20)).toBeCloseTo(1.09)
+    const tired = employee({ streak: FATIGUE_DAYS + 1 })
+    expect(workSeconds(10, tired)).toBeCloseTo(skillSeconds(10, 3) * 1.06)
   })
 })

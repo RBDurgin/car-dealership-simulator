@@ -23,6 +23,7 @@ import {
   retentionRaise,
   ROLE_LABELS,
 } from '../../sim/staff'
+import { autoRota, rotaForHire, toggleDayOff } from '../../sim/rota'
 import { grow, levelUpNotice, withLevelUp, xpToLevel } from '../../sim/growth'
 import { freeSalesperson, leadChoice } from '../../sim/staffAi'
 import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
@@ -39,6 +40,8 @@ type StaffKeys =
   | 'keepEmployee'
   | 'dispatchStaff'
   | 'answerRaise'
+  | 'toggleDayOff'
+  | 'autoSchedule'
   | 'devGrowStaff'
   | 'staffClaim'
   | 'staffGreet'
@@ -62,7 +65,9 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const blocker = canHire(s.roster, c.role, expansionsUp(s))
       if (blocker) return notify(k, blocker)
       set({ candidates: s.candidates.filter((x) => x !== c) })
-      setRoster(k, reduceStaff(s.roster, { type: 'hire', employee: c, open: !isClosed(s.clock) }))
+      // Their day off fits round everyone else's; they come in today regardless.
+      const employee = { ...c, daysOff: rotaForHire(s.roster, c) }
+      setRoster(k, reduceStaff(s.roster, { type: 'hire', employee, open: !isClosed(s.clock) }))
       notify(k, `${c.name} joins as ${ROLE_LABELS[c.role].toLowerCase()}.`)
     },
     fire: (id) => {
@@ -109,6 +114,15 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
           : `${e.name} stays on ${formatMoney(e.wage)} a day.`,
       )
     },
+    toggleDayOff: (id, weekday) => {
+      const roster = get().roster
+      if (!roster.some((e) => e.id === id && !e.fired)) return
+      setRoster(
+        k,
+        roster.map((e) => (e.id === id ? { ...e, daysOff: toggleDayOff(e.daysOff, weekday) } : e)),
+      )
+    },
+    autoSchedule: () => setRoster(k, autoRota(get().roster)),
     devGrowStaff: () => {
       const s = get()
       const levelUps = [...s.dayStats.levelUps]

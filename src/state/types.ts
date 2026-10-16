@@ -398,6 +398,10 @@ export interface GameState {
   keepEmployee: (id: string) => void
   /** Grants (the asked wage) or declines an employee's raise request after a level-up. */
   answerRaise: (id: string, grant: boolean) => void
+  /** Switches `weekday` (0 = Monday) on or off as employee `id`'s day off, from the next morning. */
+  toggleDayOff: (id: string, weekday: number) => void
+  /** Gives everyone days off afresh with `autoRota`. */
+  autoSchedule: () => void
   /** Dev: everyone on the lot gains a level's worth of experience now (Shift+G). */
   devGrowStaff: () => void
   /** Shift progress reported by the world for one employee. */

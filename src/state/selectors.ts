@@ -2,6 +2,7 @@ import type { Customer } from '../sim/customers'
 import { installedExpansions } from '../sim/expansions'
 import { installed, type ImprovementId } from '../sim/improvements'
 import type { ExpansionId } from '../sim/layout'
+import { coverageGaps, gapText } from '../sim/rota'
 import { buyBlocker, lotSlotFor } from '../sim/sellers'
 import { baseSellerBonus, testDriveBonus } from './derived'
 import type { GameState } from './types'
@@ -44,6 +45,20 @@ const groundOf = memoLast(installedExpansions)
 /** Expansions up today, recomputed only when `expansions` or the day change. */
 export const groundUp = (s: Pick<GameState, 'expansions' | 'clock'>): ExpansionId[] =>
   groundOf(s.expansions, s.clock.day)
+
+const gapsOf = memoLast((roster: GameState['roster']) => {
+  const byDay = new Map<number, string[]>()
+  for (const g of coverageGaps(roster)) {
+    const list = byDay.get(g.weekday)
+    if (list) list.push(gapText(g))
+    else byDay.set(g.weekday, [gapText(g)])
+  }
+  return byDay
+})
+
+/** The rota's gaps on `weekday` ("No salesperson on Tuesday"), or undefined if none: worked out once per roster. */
+export const rotaGaps = (s: Pick<GameState, 'roster'>, weekday: number): string[] | undefined =>
+  gapsOf(s.roster).get(weekday)
 
 const customerIndex = memoLast(
   (customers: readonly Customer[]) => new Map(customers.map((c) => [c.id, c])),

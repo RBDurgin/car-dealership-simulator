@@ -35,6 +35,8 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
   ...extra,
 })
 

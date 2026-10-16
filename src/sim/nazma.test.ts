@@ -121,6 +121,8 @@ const hand = (id: string, role: Role, skill: number, over: Partial<Employee> = {
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
   ...over,
 })
 

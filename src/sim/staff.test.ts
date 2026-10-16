@@ -19,6 +19,7 @@ import {
   MIN_COMMISSION,
   MIN_SKILL,
   patienceFactor,
+  onShift,
   payroll,
   postChairId,
   salesCommission,
@@ -53,6 +54,8 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
   ...over,
 })
 
@@ -274,7 +277,7 @@ describe('reduceStaff', () => {
     const e = hand('receptionist')
     let r = reduceStaff([], { type: 'hire', employee: e, open: false })
     expect(r[0].status).toBe('off')
-    r = reduceStaff(r, { type: 'open' })
+    r = reduceStaff(r, { type: 'open', day: 1 })
     expect(r[0].status).toBe('arriving')
     r = reduceStaff(r, { type: 'atPost', id: e.id })
     expect(r[0].status).toBe('atPost')
@@ -298,7 +301,7 @@ describe('reduceStaff', () => {
     const off = [hand('sales')]
     expect(reduceStaff(off, { type: 'close' })).toBe(off)
     const working = [hand('sales', { status: 'atPost' })]
-    expect(reduceStaff(working, { type: 'open' })).toBe(working)
+    expect(reduceStaff(working, { type: 'open', day: 1 })).toBe(working)
   })
 
   it('removes someone fired while off the lot at once', () => {
@@ -312,14 +315,14 @@ describe('reduceStaff', () => {
     expect(r[0]).toMatchObject({ fired: true, status: 'leaving' })
     expect(reduceStaff(r, { type: 'fire', id: e.id })).toBe(r)
     // Doors opening again before they're gone doesn't bring them back.
-    expect(reduceStaff(r, { type: 'open' })).toEqual([])
+    expect(reduceStaff(r, { type: 'open', day: 1 })).toEqual([])
     r = reduceStaff(r, { type: 'left', id: e.id })
     expect(r).toEqual([])
   })
 
   it('sends someone still walking out back to work when the doors open', () => {
     const r = [hand('receptionist', { status: 'leaving' })]
-    expect(reduceStaff(r, { type: 'open' })[0].status).toBe('arriving')
+    expect(reduceStaff(r, { type: 'open', day: 1 })[0].status).toBe('arriving')
   })
 })
 
@@ -370,11 +373,45 @@ describe('poaching', () => {
     let r = reduceStaff([q, stay], { type: 'close' })
     expect(r[0]).toMatchObject({ fired: true, status: 'leaving' })
     expect(r[1]).toMatchObject({ fired: false, status: 'leaving' })
-    expect(payroll(r, []).wages).toBe(q.wage + stay.wage)
+    // Their day is paid through `departed` (closing records it), gone or not.
+    expect(payroll(r, [], [], q.wage).wages).toBe(q.wage + stay.wage)
     // The slot is free again for a new hire.
     expect(canHire([...r, hand('sales')], 'sales')).toBeNull()
     r = reduceStaff(r, { type: 'left', id: q.id })
     expect(r.map((e) => e.id)).toEqual([stay.id])
+    expect(payroll(r, [], [], q.wage).wages).toBe(q.wage + stay.wage)
+  })
+
+  it('drops a quitter who had the day off at closing, with nothing to walk out', () => {
+    const q = hand('sales', { quitting: true, daysOff: [0] })
+    const stay = hand('porter', { status: 'atPost' })
+    const r = reduceStaff([q, stay], { type: 'close' })
+    expect(r.map((e) => e.id)).toEqual([stay.id])
+  })
+})
+
+describe('days off', () => {
+  // Day 2 is a Tuesday (weekday 1).
+  it('leaves those with the day off at home when the doors open', () => {
+    const off = hand('sales', { daysOff: [1] })
+    const on = hand('porter', { daysOff: [0] })
+    const r = reduceStaff([off, on], { type: 'open', day: 2 })
+    expect(r.map((e) => e.status)).toEqual(['off', 'arriving'])
+    expect(onShift(off, 2)).toBe(false)
+    expect(onShift(off, 3)).toBe(true)
+  })
+
+  it("doesn't pay a day off", () => {
+    const a = hand('sales')
+    const b = hand('porter')
+    expect(payroll([a, b], [], [a.id]).wages).toBe(b.wage)
+  })
+
+  it('counts a guard as guarding only on a day he works', () => {
+    const guard = hand('security', { daysOff: [1] })
+    expect(isGuarded([guard])).toBe(true)
+    expect(isGuarded([guard], 2)).toBe(false)
+    expect(isGuarded([guard], 3)).toBe(true)
   })
 
   it('does not pay a quitter who is let go before closing', () => {

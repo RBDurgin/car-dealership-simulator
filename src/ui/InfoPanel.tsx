@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
 import { conditionOf } from '../sim/cleanliness'
-import { isWarned, moraleFace, moraleLabel, moraleLines } from '../sim/morale'
+import { isWarned, moraleFace, moraleLabel, moraleLines, tiredDays } from '../sim/morale'
+import { daysOffText } from '../sim/rota'
 import { ROLE_LABELS } from '../sim/staff'
 import type { CarStatus } from '../sim/inventory'
 import { shapeLabel, usedTag } from '../sim/usedCars'
@@ -51,6 +52,13 @@ export function InfoPanel() {
           </dd>
           <dt>Wage</dt>
           <dd className="price">{formatMoney(employee.wage)}/day</dd>
+          <dt>Days off</dt>
+          <dd>
+            {daysOffText(employee.daysOff)}
+            {tiredDays(employee.streak) > 0 && (
+              <span className="staff-quitting"> · {employee.streak} days straight</span>
+            )}
+          </dd>
           <dt>Morale</dt>
           <dd>
             {moraleFace(employee.morale)} {moraleLabel(employee.morale)}

@@ -517,6 +517,19 @@ export const UPDATES: readonly Update[] = [
       'Nobody quits over morale on Easy.',
     ],
   },
+  {
+    id: 47,
+    phase: '21',
+    title: 'Days off',
+    items: [
+      'Every employee has a day off a week, picked to keep each role covered and Friday and Saturday full.',
+      'Days off aren’t paid, and the morning notice says who’s off.',
+      'The staff panel’s Schedule view lets you change anyone’s days off, or pick them again with Auto.',
+      'Days a role has nobody in show under the schedule, and as a gap in the Calendar tab.',
+      'Work someone more than six days in a row and they tire: a little slower and less happy each day.',
+      'Existing staff got their days off from the new schedule.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

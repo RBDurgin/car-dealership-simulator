@@ -85,7 +85,13 @@ import {
   SALES_COMMISSION,
 } from '../sim/staff'
 import { RAISE_ASK_DAYS } from '../sim/growth'
-import { LOW_MORALE, MAX_DAILY_MORALE, NOTICE_DAYS, QUIT_WARN_DAYS } from '../sim/morale'
+import {
+  FATIGUE_DAYS,
+  LOW_MORALE,
+  MAX_DAILY_MORALE,
+  NOTICE_DAYS,
+  QUIT_WARN_DAYS,
+} from '../sim/morale'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -928,8 +934,8 @@ function PeopleTab({ touch, click }: TabProps) {
               Press <kbd>H</kbd> or click Staff
             </>
           )}{' '}
-          to hire from the day&apos;s applicants. Everyone on the payroll is paid at closing. You
-          can have up to {ROLE_LIMITS.sales} salespeople and one of each other role; the{' '}
+          to hire from the day&apos;s applicants. Everyone who came in is paid at closing. You can
+          have up to {ROLE_LIMITS.sales} salespeople and one of each other role; the{' '}
           {EXPANSIONS['showroom-wing'].label.toLowerCase()} makes room for{' '}
           {roleLimits(['showroom-wing']).sales} salespeople and{' '}
           {roleLimits(['showroom-wing']).porter} lot porters, and the{' '}
@@ -1024,6 +1030,23 @@ function PeopleTab({ touch, click }: TabProps) {
           ) : (
             <>On Easy, nobody quits over morale.</>
           )}
+        </p>
+      </section>
+      <section>
+        <h3>Schedule and days off</h3>
+        <p>
+          Each employee has a day off a week, two in a role with three or more of them. The game
+          picks them: quiet days first, never Friday or Saturday, spread so each role has someone in
+          every day it can (with only one of a role, their day off leaves a gap), and Sundays for
+          the garage&apos;s staff, when it&apos;s shut. A new hire gets theirs when they join, and
+          the morning notice says who&apos;s off.
+        </p>
+        <p>
+          The staff panel&apos;s <b>Schedule</b> shows the week: {click.toLowerCase()} a day to give
+          it off or take it back (from tomorrow), or <b>Auto</b> to let the game pick again. Under
+          the grid are the days a role has nobody in, and the Calendar tab marks them as a gap. A
+          day off isn&apos;t paid. Work someone more than {FATIGUE_DAYS} days in a row and they
+          tire: each extra day costs them a little morale and slows their work, until a day off.
         </p>
       </section>
       <section>

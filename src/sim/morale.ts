@@ -48,8 +48,18 @@ const MAX_ROUGH = -3
 const COWORKER_LEFT = -2
 /** The most coworkers leaving takes off in a day. */
 const MAX_COWORKERS = -4
+/** Days in a row anyone can work before it tells (see `sim/rota.ts`). */
+export const FATIGUE_DAYS = 6
+/** Each day in a row past `FATIGUE_DAYS`. */
+const TIRED = -1
+/** The most tiredness takes off in a day. */
+const MAX_TIRED = -3
+/** Extra work time for each day in a row past `FATIGUE_DAYS`. */
+const FATIGUE_PACE = 0.03
+/** The most tiredness adds to work time. */
+const MAX_FATIGUE_PACE = 0.09
 
-export type MoraleReasonId = 'pay' | 'raise' | 'wins' | 'rough' | 'coworkers' | 'drift'
+export type MoraleReasonId = 'pay' | 'raise' | 'wins' | 'rough' | 'coworkers' | 'tired' | 'drift'
 
 export interface MoraleReason {
   id: MoraleReasonId
@@ -65,6 +75,8 @@ export interface MoraleContext {
   raiseDeclined: boolean
   /** Coworkers who left today, let go or quitting. */
   coworkersLost: number
+  /** Days in a row they've worked, today included (0 on a day off). */
+  streak?: number
   /** The level's `moraleShift`, added to the day's change (not shown as a reason). */
   shift?: number
 }
@@ -92,6 +104,7 @@ export function moraleChange(
     { id: 'wins', delta: Math.min(MAX_WINS, wins * WIN) },
     { id: 'rough', delta: Math.max(MAX_ROUGH, rough * ROUGH) },
     { id: 'coworkers', delta: Math.max(MAX_COWORKERS, ctx.coworkersLost * COWORKER_LEFT) },
+    { id: 'tired', delta: Math.max(MAX_TIRED, tiredDays(ctx.streak ?? 0) * TIRED) },
     { id: 'drift', delta: (MORALE_HOME - e.morale) * DRIFT },
   ]
   const reasons = raw.map((r) => ({ ...r, delta: round1(r.delta) })).filter((r) => r.delta !== 0)
@@ -132,12 +145,33 @@ export function moralePoachWeight(morale: number): number {
   return 1 + 0.5 * Math.min(1, (MORALE_HOME - morale) / (MORALE_HOME - LOW_MORALE))
 }
 
+/** Days past `FATIGUE_DAYS` in a `streak` of days worked. */
+export function tiredDays(streak: number): number {
+  return Math.max(0, streak - FATIGUE_DAYS)
+}
+
+/**
+ * Work-time scale for someone who'd worked `streak` days in a row before
+ * today: ×1 until today is past `FATIGUE_DAYS`, then 3% more a day, up to ×1.09.
+ */
+export function fatiguePace(streak: number): number {
+  return 1 + Math.min(MAX_FATIGUE_PACE, tiredDays(streak + 1) * FATIGUE_PACE)
+}
+
+/** Work-time scale from `e`'s morale (`moralePace`) and how tired they are (`fatiguePace`). */
+export function workPace(e: Pick<Employee, 'morale' | 'streak'>): number {
+  return moralePace(e.morale) * fatiguePace(e.streak)
+}
+
 /**
  * Game seconds `e` takes over a task an average employee does in `base`:
- * their skill (`skillSeconds`) and their morale (`moralePace`).
+ * their skill (`skillSeconds`), morale and tiredness (`workPace`).
  */
-export function workSeconds(base: number, e: Pick<Employee, 'skill' | 'morale'>): number {
-  return skillSeconds(base, e.skill) * moralePace(e.morale)
+export function workSeconds(
+  base: number,
+  e: Pick<Employee, 'skill' | 'morale' | 'streak'>,
+): number {
+  return skillSeconds(base, e.skill) * workPace(e)
 }
 
 /** Whether they've warned they're unhappy: `QUIT_WARN_DAYS` or more under `LOW_MORALE`. */
@@ -164,6 +198,8 @@ export function moraleReasonText(r: MoraleReason): string {
       return 'Things went wrong'
     case 'coworkers':
       return 'A coworker left'
+    case 'tired':
+      return 'Worn out without a day off'
     case 'drift':
       return up ? 'Perking up' : 'Settling down'
   }

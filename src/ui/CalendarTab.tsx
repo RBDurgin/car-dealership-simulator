@@ -59,6 +59,7 @@ import {
 } from '../sim/recalls'
 import { bayCount } from '../sim/service'
 import { forecastFor, WEATHER_EFFECTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
+import { rotaGaps } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -80,6 +81,8 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const bays = useGame((s) => bayCount(expansionsUp(s)))
   const recall = !!recallOn(today, bays) && !!recallOn(day, bays) && sameMonth(day, today)
   const party = useGame((s) => s.appreciation?.day === day)
+  // A day the rota leaves a role with nobody in, from today on.
+  const gaps = useGame((s) => (day >= today ? rotaGaps(s, c.weekday) : undefined))
   // What happened, or what the forecast says for the next few days.
   const weather = forecastFor(day, today)
   const event = eventOn(day)
@@ -89,7 +92,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const sky = weather
     ? `${day > today ? 'Forecast: ' : ''}${WEATHER_LABELS[weather].toLowerCase()}`
     : 'No forecast yet'
-  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}${party ? ' · client appreciation day' : ''}`
+  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}${party ? ' · client appreciation day' : ''}${gaps ? ` · ${gaps.join(', ')}` : ''}`
   return (
     <li
       className={`cal-day cal-${when}${event ? ' cal-sale' : ''}`}
@@ -109,6 +112,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
         {event ? 'Sale · ' : ''}
         {recall ? 'Recall · ' : ''}
         {party ? 'Cookout · ' : ''}
+        {gaps ? <span className="cal-gap">Gap · </span> : ''}
         {trafficLabel(traffic)}
       </span>
     </li>
@@ -407,7 +411,8 @@ export function CalendarTab() {
       <h2>{longDate(day)}</h2>
       <p className="muted cal-intro">
         Weekends are busiest: Saturday brings the most visitors, Sunday the fewest. Rain keeps
-        people away; the forecast covers the next three days and is usually right.
+        people away; the forecast covers the next three days and is usually right. A gap is a day
+        the staff schedule leaves a role with nobody in.
       </p>
       <Week title="This week" start={start} today={day} />
       <Week title="Next week" start={start + DAYS_PER_WEEK} today={day} />

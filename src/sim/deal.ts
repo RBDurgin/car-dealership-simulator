@@ -438,6 +438,10 @@ export interface DayStats {
   resigned: string[]
   /** Names of those who left at closing over low morale (the rest of `nazma.quit` were poached). */
   moraleQuits: string[]
+  /** Ids of those who had the day off (see `sim/rota.ts`): not paid, and their streak resets. */
+  off: string[]
+  /** The day's wages of those who quit at closing, paid with the rest though they've gone. */
+  quitWages: number
 }
 
 /** A day's test drives (see `sim/testDrive.ts`). */
@@ -491,6 +495,8 @@ export function emptyStats(): DayStats {
     coworkersLost: 0,
     resigned: [],
     moraleQuits: [],
+    off: [],
+    quitWages: 0,
   }
 }
 

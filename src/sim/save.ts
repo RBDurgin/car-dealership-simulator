@@ -1,5 +1,5 @@
 import { ARCHETYPES } from './archetypes'
-import { calendarOf } from './calendar'
+import { calendarOf, DAYS_PER_WEEK } from './calendar'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
   defaultPerks,
@@ -35,6 +35,7 @@ import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { potentialFromId } from './growth'
 import { START_MORALE } from './morale'
+import { autoRota } from './rota'
 import { dressFor, ROLES, type Employee } from './staff'
 import {
   emptyLifetime,
@@ -60,7 +61,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 34
+export const SAVE_VERSION = 35
 
 export interface SaveData {
   version: number
@@ -437,6 +438,14 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         )
       : raw.roster,
   }),
+  // v35: staff have days off. The auto rota gives everyone theirs, and
+  // nobody has been working long enough to tire.
+  34: (raw) => {
+    if (!Array.isArray(raw.roster)) return raw
+    const roster = raw.roster.map((e) => (isObject(e) ? { ...e, daysOff: [], streak: 0 } : e))
+    const rota = roster.every((e) => isObject(e) && (ROLES as readonly unknown[]).includes(e.role))
+    return { ...raw, roster: rota ? autoRota(roster as unknown as Employee[]) : roster }
+  },
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -774,7 +783,10 @@ function isEmployee(v: unknown): boolean {
     isNumber(v.morale) &&
     isNumber(v.lowDays) &&
     Array.isArray(v.moraleWhy) &&
-    v.moraleWhy.every(isMoraleReason)
+    v.moraleWhy.every(isMoraleReason) &&
+    Array.isArray(v.daysOff) &&
+    v.daysOff.every((w) => Number.isInteger(w) && w >= 0 && w < DAYS_PER_WEEK) &&
+    isNumber(v.streak)
   )
 }
 

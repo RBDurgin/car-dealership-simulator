@@ -78,6 +78,8 @@ const staff = (id: string, role: Role, over: Partial<Employee> = {}): Employee =
   morale: 70,
   lowDays: 0,
   moraleWhy: [],
+  daysOff: [],
+  streak: 0,
   ...over,
 })
 
