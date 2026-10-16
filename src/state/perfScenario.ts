@@ -39,6 +39,9 @@ export function busyDay(): void {
       potential: 5,
       hiredDay: 1,
       raiseAsk: null,
+      morale: 70,
+      lowDays: 0,
+      moraleWhy: [],
     })),
   )
   useGame.setState({

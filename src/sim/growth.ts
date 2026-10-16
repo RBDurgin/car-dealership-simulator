@@ -1,4 +1,5 @@
 import { formatMoney } from './format'
+import { moraleXp } from './morale'
 import { createRng, hashSeed, type Rng } from './rng'
 import { MAX_SKILL, wageFor, type Employee, type Role } from './staff'
 
@@ -35,6 +36,10 @@ export interface WorkTally {
   jobs: number
   /** Times a guard ran Nazma off. */
   chases: number
+  /** Shoppers who walked out on a salesperson's offer (no experience, but it hurts morale). */
+  lost: number
+  /** Jobs of a mechanic's that came back for a redo (likewise). */
+  comebacks: number
 }
 
 export type WorkCount = Exclude<keyof WorkTally, 'came'>
@@ -52,6 +57,8 @@ export function emptyTally(): WorkTally {
     bookings: 0,
     jobs: 0,
     chases: 0,
+    lost: 0,
+    comebacks: 0,
   }
 }
 
@@ -77,6 +84,8 @@ export const XP_VALUES: Record<WorkCount, number> = {
   bookings: 2,
   jobs: 3,
   chases: 5,
+  lost: 0,
+  comebacks: 0,
 }
 
 /** Experience for coming in at all, so a quiet day (or role) still counts. */
@@ -156,6 +165,11 @@ export function potentialFromId(id: string, skill: number): number {
   return potentialOf(createRng(hashSeed(`potential-${id}`)), skill)
 }
 
+/** Whether `e`'s raise request goes unanswered too long at the end of `day`. */
+export function askLapses(e: Pick<Employee, 'raiseAsk'>, day: number): boolean {
+  return !!e.raiseAsk && day - e.raiseAsk.day >= RAISE_ASK_DAYS
+}
+
 /** Someone who levelled up today, for the summary and the next morning's notice. */
 export interface LevelUp {
   id: string
@@ -184,11 +198,13 @@ export function growStaff(
   const next = roster.map((e) => {
     if (e.fired) return e
     let n = e
-    if (n.raiseAsk && day - n.raiseAsk.day >= RAISE_ASK_DAYS) {
+    if (askLapses(n, day)) {
       lapsed.push(n.name)
       n = { ...n, raiseAsk: null }
     }
-    n = withLevelUp(grow(n, xpFor(work[e.id]), scale), n.skill, day, levelUps)
+    // Happier staff learn a little quicker (see `moraleXp`).
+    const xp = xpFor(work[e.id]) * moraleXp(e.morale)
+    n = withLevelUp(grow(n, xp, scale), n.skill, day, levelUps)
     if (n !== e) changed = true
     return n
   })

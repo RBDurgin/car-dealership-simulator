@@ -75,6 +75,10 @@ export interface Tuning {
   dingChance: number
   /** × the experience staff earn (see `sim/growth.ts`). */
   staffGrowth: number
+  /** Added to each employee's daily morale change (see `sim/morale.ts`). */
+  moraleShift: number
+  /** Whether staff kept unhappy too long hand in notice. */
+  moraleQuits: boolean
   /** How far under the holdback floor (as a share of the quota) a month may fall and keep the franchise tier. */
   franchiseSlack: number
   /** Show how warm a customer is to the ask (or a seller to the offer) while haggling. */
@@ -119,6 +123,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     driveBonus: 1.2,
     dingChance: 0.6,
     staffGrowth: 1.3,
+    moraleShift: 2,
+    moraleQuits: false,
     franchiseSlack: 0.1,
     dealHint: true,
     safetyNet: true,
@@ -157,6 +163,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     driveBonus: 1,
     dingChance: 1,
     staffGrowth: 1,
+    moraleShift: 0,
+    moraleQuits: true,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,
@@ -195,6 +203,8 @@ export const TUNING: Record<Difficulty, Tuning> = {
     driveBonus: 0.85,
     dingChance: 1.4,
     staffGrowth: 0.85,
+    moraleShift: -1,
+    moraleQuits: true,
     franchiseSlack: 0,
     dealHint: false,
     safetyNet: false,

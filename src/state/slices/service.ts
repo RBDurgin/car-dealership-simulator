@@ -55,6 +55,7 @@ import { MIN_SKILL } from '../../sim/staff'
 import { mechanicWorking } from '../../sim/staffAi'
 import { commit, dispatch, notify, tallyWork, tuning, type Kit } from '../core'
 import { advisorAtPost, mechanicCount, reconBook } from '../derived'
+import { moralePace } from '../../sim/morale'
 import { rng } from '../rng'
 import type { GameState } from '../types'
 
@@ -139,7 +140,7 @@ export function serviceSlice(k: Kit): Pick<GameState, ServiceKeys> {
           status: 'inBay',
           bay,
           mechanicId: e.id,
-          minutes: jobMinutesFor(job, e.skill),
+          minutes: jobMinutesFor(job, e.skill, moralePace(e.morale)),
           // Clients' cars get looked over: there may be more that needs doing.
           finding:
             job.customerId && !job.redo ? rollFinding(job.kind, s.service.rate, rng.service) : null,
@@ -301,6 +302,7 @@ function rollComeback(k: Kit, job: ServiceJob, c: Customer): void {
   const skill = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
   if (rng.service.next() >= comebackChance(skill, tuning(k).comebackScale)) return
   addService(k, { comebacks: 1 })
+  tallyWork(k, job.mechanicId, 'comebacks')
   serviceBook(k, c, 'comeback')
   const minute = isClosed(s.clock) ? null : comebackMinute(s.clock.minute)
   if (minute === null) return
@@ -329,8 +331,10 @@ export function offerFinding(k: Kit, jobId: string, by: string): void {
   // Someone whose warranty is paying for the job is in a mood to say yes.
   const covered = c.service.contractId !== null ? CONTRACT_UPSELL : 0
   const yes = rng.service.next() < upsellChance(s.service.rate, c.archetype, skill) + covered
-  const mechanic = s.roster.find((e) => e.id === job.mechanicId)?.skill ?? MIN_SKILL
-  const next = yes ? acceptFinding(job, mechanic) : declineFinding(job)
+  const mechanic = s.roster.find((e) => e.id === job.mechanicId)
+  const next = yes
+    ? acceptFinding(job, mechanic?.skill ?? MIN_SKILL, mechanic ? moralePace(mechanic.morale) : 1)
+    : declineFinding(job)
   set({ serviceJobs: s.serviceJobs.map((j) => (j === job ? next : j)) })
   addService(k, { offered: 1, upsold: yes ? 1 : 0 })
   if (yes) tallyWork(k, by, 'findings')

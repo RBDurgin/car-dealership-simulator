@@ -283,6 +283,9 @@ describe('his moves and sabotage', () => {
       potential: 5,
       hiredDay: 1,
       raiseAsk: null,
+      morale: 70,
+      lowDays: 0,
+      moraleWhy: [],
     }
     useGame.setState({ rival: open({ strength: 40 }), roster: [dana] })
     endDay()

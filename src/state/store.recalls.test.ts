@@ -29,6 +29,9 @@ const mechanic: Employee = {
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
 }
 
 /** The 8th of the first month (from the second) with a recall. */

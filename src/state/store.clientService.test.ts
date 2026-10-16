@@ -31,6 +31,9 @@ const mechanic: Employee = {
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
 }
 
 const DAY = 20

@@ -34,6 +34,7 @@ import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { potentialFromId } from './growth'
+import { START_MORALE } from './morale'
 import { dressFor, ROLES, type Employee } from './staff'
 import {
   emptyLifetime,
@@ -59,7 +60,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 33
+export const SAVE_VERSION = 34
 
 export interface SaveData {
   version: number
@@ -427,6 +428,15 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         )
       : raw.roster,
   }),
+  // v34: staff have a morale. Everyone starts where a new hire does.
+  33: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e) =>
+          isObject(e) ? { ...e, morale: START_MORALE, lowDays: 0, moraleWhy: [] } : e,
+        )
+      : raw.roster,
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -742,6 +752,10 @@ function isUsedInfo(v: unknown): boolean {
   )
 }
 
+function isMoraleReason(v: unknown): boolean {
+  return isObject(v) && typeof v.id === 'string' && isNumber(v.delta)
+}
+
 function isEmployee(v: unknown): boolean {
   return (
     isObject(v) &&
@@ -756,7 +770,11 @@ function isEmployee(v: unknown): boolean {
     v.potential >= v.skill &&
     isNumber(v.hiredDay) &&
     (v.raiseAsk === null ||
-      (isObject(v.raiseAsk) && isNumber(v.raiseAsk.wage) && isNumber(v.raiseAsk.day)))
+      (isObject(v.raiseAsk) && isNumber(v.raiseAsk.wage) && isNumber(v.raiseAsk.day))) &&
+    isNumber(v.morale) &&
+    isNumber(v.lowDays) &&
+    Array.isArray(v.moraleWhy) &&
+    v.moraleWhy.every(isMoraleReason)
   )
 }
 

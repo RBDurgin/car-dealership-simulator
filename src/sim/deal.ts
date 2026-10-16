@@ -430,6 +430,14 @@ export interface DayStats {
   levelUps: LevelUp[]
   /** Whose raise request lapsed unanswered when the day was settled. */
   raisesLapsed: string[]
+  /** Ids of those whose raise request the player turned down today (see `sim/morale.ts`). */
+  raisesDeclined: string[]
+  /** Staff who left today, let go or quitting: it gets the rest down. */
+  coworkersLost: number
+  /** Ids of those who handed in notice this morning over low morale. */
+  resigned: string[]
+  /** Names of those who left at closing over low morale (the rest of `nazma.quit` were poached). */
+  moraleQuits: string[]
 }
 
 /** A day's test drives (see `sim/testDrive.ts`). */
@@ -479,6 +487,10 @@ export function emptyStats(): DayStats {
     staffWork: {},
     levelUps: [],
     raisesLapsed: [],
+    raisesDeclined: [],
+    coworkersLost: 0,
+    resigned: [],
+    moraleQuits: [],
   }
 }
 

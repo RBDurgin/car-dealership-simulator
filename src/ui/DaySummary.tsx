@@ -501,7 +501,9 @@ function SummaryPanel() {
             ★ Your dealership is now a <b>{rankById(stats.rankUp).name}</b>.
           </div>
         )}
-        {(stats.levelUps.length > 0 || stats.raisesLapsed.length > 0) && (
+        {(stats.levelUps.length > 0 ||
+          stats.raisesLapsed.length > 0 ||
+          stats.moraleQuits.length > 0) && (
           <div className="summary-level-ups">
             {stats.levelUps.map((u) => (
               <div key={u.id}>
@@ -513,6 +515,9 @@ function SummaryPanel() {
               <div className="muted">
                 {stats.raisesLapsed.join(' and ')} gave up waiting on a raise.
               </div>
+            )}
+            {stats.moraleQuits.length > 0 && (
+              <div className="muted">{stats.moraleQuits.join(' and ')} quit over low morale.</div>
             )}
           </div>
         )}

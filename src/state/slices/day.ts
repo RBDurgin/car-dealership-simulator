@@ -96,7 +96,8 @@ import {
   type Comeback,
   type ServiceJob,
 } from '../../sim/service'
-import { growStaff, levelUpNotice } from '../../sim/growth'
+import { askLapses, growStaff, levelUpNotice } from '../../sim/growth'
+import { moraleDay, moraleNotice, newlyWarned, resignsToday } from '../../sim/morale'
 import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, payroll, reduceStaff } from '../../sim/staff'
 import { stockPurchases } from '../../sim/sellers'
@@ -305,8 +306,22 @@ export function settleDay(k: Kit): void {
     s.cash - charged - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
   // On Easy the bank covers the first time the day ends in the red.
   const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
-  // The day's work is experience: some grow a level and ask for a raise.
-  const grown = growStaff(s.roster, s.dayStats.staffWork, s.clock.day, level.staffGrowth)
+  // The day moves everyone's morale (a raise turned down, or left to lapse,
+  // among it), then the day's work is experience: some grow a level and ask
+  // for a raise.
+  const lapsing = s.roster.filter((e) => askLapses(e, s.clock.day)).map((e) => e.id)
+  const declined = new Set([...s.dayStats.raisesDeclined, ...lapsing])
+  const moved = moraleDay(
+    s.roster,
+    (e) => ({
+      tally: s.dayStats.staffWork[e.id],
+      raiseDeclined: declined.has(e.id),
+      coworkersLost: s.dayStats.coworkersLost,
+      shift: level.moraleShift,
+    }),
+    level.moraleQuits,
+  )
+  const grown = growStaff(moved, s.dayStats.staffWork, s.clock.day, level.staffGrowth)
   const settled: DayStats = {
     ...dayStats,
     levelUps: [...dayStats.levelUps, ...grown.levelUps],
@@ -384,7 +399,16 @@ export function closeUp(k: Kit): void {
   const s = k.get()
   const rival = rivalHired(s.rival, quitters, tuning(k).rivalStrength)
   const joined = rival === s.rival ? [] : quitters.map((e) => ({ name: e.name, role: e.role }))
-  k.set({ rival })
+  // Those who handed in notice this morning left over morale, not Nazma.
+  const fedUp = quitters.filter((e) => s.dayStats.resigned.includes(e.id)).map((e) => e.name)
+  k.set({
+    rival,
+    dayStats: {
+      ...s.dayStats,
+      coworkersLost: s.dayStats.coworkersLost + quitters.length,
+      moraleQuits: [...s.dayStats.moraleQuits, ...fedUp],
+    },
+  })
   tallyNazma(k, {
     quit: [...s.dayStats.nazma.quit, ...quit],
     joined: [...s.dayStats.nazma.joined, ...joined],
@@ -594,6 +618,15 @@ function morning(k: Kit, day: number): void {
     nazma,
   })
   setRoster(k, reduceStaff(get().roster, { type: 'open' }))
+  // Unhappy too long (where the level allows it): a warning, then notice.
+  const warned = level.moraleQuits ? newlyWarned(get().roster) : []
+  const resigning = level.moraleQuits ? get().roster.filter(resignsToday) : []
+  if (resigning.length > 0) {
+    let roster = get().roster
+    for (const e of resigning) roster = reduceStaff(roster, { type: 'resign', id: e.id })
+    setRoster(k, roster)
+    set({ dayStats: { ...get().dayStats, resigned: resigning.map((e) => e.id) } })
+  }
   const shop = autoRecon(k, day)
   const notices = [
     s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
@@ -601,6 +634,10 @@ function morning(k: Kit, day: number): void {
     s.dayStats.quota && heldByCsi(s.dayStats.quota) && heldNotice(s.dayStats.quota),
     s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
     levelUpNotice(s.dayStats.levelUps, s.dayStats.raisesLapsed),
+    moraleNotice(
+      warned.map((e) => e.name),
+      resigning.map((e) => e.name),
+    ),
     chargebackNotice(dueChargebacks(s.chargebacks, day).due),
     opening.event && rivalNotice(rival, opening.event),
     eventNotice(day),

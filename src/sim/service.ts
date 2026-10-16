@@ -450,14 +450,14 @@ export function findingBlocker(job: ServiceJob, now: number): string | null {
 
 /**
  * `job` with its finding taken: the work and the bill grow, the extra time at
- * the speed of the mechanic of `skill` on it.
+ * the speed of the mechanic of `skill` on it (× their morale's `pace`).
  */
-export function acceptFinding(job: ServiceJob, skill: number): ServiceJob {
+export function acceptFinding(job: ServiceJob, skill: number, pace = 1): ServiceJob {
   const f = job.finding
   if (!f || f.status !== 'found') return job
   return {
     ...job,
-    minutes: job.minutes + Math.round(skillSeconds(f.minutes, skill)),
+    minutes: job.minutes + Math.round(skillSeconds(f.minutes, skill) * pace),
     labor: job.labor + f.labor,
     parts: job.parts + f.parts,
     partsCost: job.partsCost + f.partsCost,
@@ -510,10 +510,17 @@ export interface Comeback {
   client: Customer
 }
 
-/** Game minutes a mechanic of `skill` takes over `job`: half the time on a redo. */
-export function jobMinutesFor(job: Pick<ServiceJob, 'kind' | 'redo'>, skill: number): number {
-  const minutes = jobMinutes(job.kind, skill)
-  return job.redo ? Math.round(minutes * REDO_SHARE) : minutes
+/**
+ * Game minutes a mechanic of `skill` takes over `job`: half the time on a
+ * redo, and × `pace` (their morale's, see `moralePace`).
+ */
+export function jobMinutesFor(
+  job: Pick<ServiceJob, 'kind' | 'redo'>,
+  skill: number,
+  pace = 1,
+): number {
+  const minutes = skillSeconds(JOBS[job.kind].minutes, skill) * pace
+  return Math.round(job.redo ? Math.round(minutes) * REDO_SHARE : minutes)
 }
 
 /** The day's service department, for the summary. */

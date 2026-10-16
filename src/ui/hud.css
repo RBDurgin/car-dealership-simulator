@@ -916,6 +916,17 @@ kbd {
   color: #fde047;
   letter-spacing: 1px;
 }
+.mood {
+  margin-left: 6px;
+  font-size: 13px;
+  cursor: help;
+}
+.mood-why {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .staff-raise {
   color: #86efac;
   font-weight: 600;

@@ -16,6 +16,7 @@ import {
   SERVICE_BAYS,
   SIDEWALK_ENDS,
 } from '../sim/layout'
+import { isWarned, workSeconds } from '../sim/morale'
 import { NAZMA_ID } from '../sim/nazma'
 import { createRng, hashSeed, type Rng } from '../sim/rng'
 import { buyBlocker } from '../sim/sellers'
@@ -29,7 +30,6 @@ import {
   SALES_COUNTER_SECONDS,
   SALES_PITCH_SECONDS,
   SALES_SIGN_SECONDS,
-  skillSeconds,
   STAFF_SPEED,
   type Employee,
   type Role,
@@ -248,7 +248,7 @@ function doCheckIns(
   const c = nextCheckIn(e, customers, atCounter, game.activeAction?.targetId ?? null)
   if (!c) return doFindings(e, w, seconds, customers)
   if (w.paperwork?.customerId !== c.id) {
-    w.paperwork = { customerId: c.id, left: skillSeconds(ADVISOR_CHECK_IN_SECONDS, e.skill) }
+    w.paperwork = { customerId: c.id, left: workSeconds(ADVISOR_CHECK_IN_SECONDS, e) }
   }
   w.paperwork.left -= seconds
   if (w.paperwork.left > 0) return
@@ -275,7 +275,7 @@ function doFindings(
   }
   const key = `finding:${job.id}`
   if (w.paperwork?.customerId !== key) {
-    w.paperwork = { customerId: key, left: skillSeconds(ADVISOR_CALL_SECONDS, e.skill) }
+    w.paperwork = { customerId: key, left: workSeconds(ADVISOR_CALL_SECONDS, e) }
   }
   w.paperwork.left -= seconds
   if (w.paperwork.left > 0) return
@@ -366,7 +366,7 @@ function updateSales(
     }
     w.timer += seconds
     const base = c.haggle ? SALES_COUNTER_SECONDS : SALES_PITCH_SECONDS
-    if (w.timer >= skillSeconds(base, e.skill)) game.staffOffer(e.id)
+    if (w.timer >= workSeconds(base, e)) game.staffOffer(e.id)
     return
   }
   // sign: to their desk chair, then the paperwork once the buyer sits down.
@@ -381,7 +381,7 @@ function updateSales(
   const c = customers.find((x) => x.id === task.customerId)
   if (c?.phase !== 'signing') return
   w.timer += seconds
-  if (w.timer >= skillSeconds(SALES_SIGN_SECONDS, e.skill)) game.staffSign(e.id, c.id)
+  if (w.timer >= workSeconds(SALES_SIGN_SECONDS, e)) game.staffSign(e.id, c.id)
 }
 
 /** Sets off on a salesperson's new task. */
@@ -497,7 +497,7 @@ function updatePorter(e: Employee, w: StaffWalker, seconds: number): void {
   }
   w.anim.current = 'interact-right'
   w.timer += seconds
-  if (w.timer >= skillSeconds(PORTER_WASH_SECONDS, e.skill)) game.staffWash(e.id, task.carId)
+  if (w.timer >= workSeconds(PORTER_WASH_SECONDS, e)) game.staffWash(e.id, task.carId)
 }
 
 const JOB_PREFIX = 'job:'
@@ -651,10 +651,20 @@ function update(
 }
 
 /** Role label over an employee's head, so staff read as staff; a "?" while they think of quitting. */
-function StaffBadge({ role, quitting }: { role: Role; quitting: boolean }) {
+/** Their role over their head: red while quitting, with 😟 once they've warned they're unhappy. */
+function StaffBadge({
+  role,
+  quitting,
+  warned,
+}: {
+  role: Role
+  quitting: boolean
+  warned: boolean
+}) {
   return (
     <Html position={[0, BADGE_HEIGHT, 0]} center zIndexRange={[1, 0]} pointerEvents="none">
       <div className={quitting ? 'staff-badge quitting-badge' : 'staff-badge'}>
+        {warned && !quitting && <span aria-label="Unhappy">😟 </span>}
         {ROLE_BADGES[role]}
       </div>
     </Html>
@@ -680,7 +690,7 @@ const StaffFigure = memo(function StaffFigure({
           <Character variant={employee.variant} anim={anim} moveSpeed={STAFF_SPEED} />
         </Suspense>
       </Interactable>
-      <StaffBadge role={employee.role} quitting={employee.quitting} />
+      <StaffBadge role={employee.role} quitting={employee.quitting} warned={isWarned(employee)} />
     </group>
   )
 })

@@ -28,6 +28,9 @@ const employee = (id: string, role: Role, name: string): Employee => ({
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
 })
 const sam = employee('e1', 'sales', 'Sam R.')
 const fran = employee('e2', 'finance', 'Fran T.')

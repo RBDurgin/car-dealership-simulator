@@ -11,6 +11,7 @@ import {
   type SalesDesk,
 } from './layout'
 import { potentialOf } from './growth'
+import { KEEP_MORALE, START_MORALE, withMorale, type MoraleReason } from './morale'
 import { createRng, type Rng } from './rng'
 
 /**
@@ -147,6 +148,12 @@ export interface Employee {
   hiredDay: number
   /** After a level-up: the wage they've asked for, and the day they asked. Null otherwise. */
   raiseAsk: RaiseAsk | null
+  /** How they feel about the job, 0–100 (see `sim/morale.ts`). */
+  morale: number
+  /** Days in a row their morale has ended under `LOW_MORALE`. */
+  lowDays: number
+  /** What moved their morale when the last day was settled. */
+  moraleWhy: MoraleReason[]
 }
 
 export interface RaiseAsk {
@@ -322,6 +329,9 @@ export function generateCandidates(
       potential: potentialOf(growth, skill),
       hiredDay: day,
       raiseAsk: null,
+      morale: START_MORALE,
+      lowDays: 0,
+      moraleWhy: [],
     }
   })
 }
@@ -429,6 +439,8 @@ export type StaffEvent =
   | { type: 'left'; id: string }
   /** Their raise request answered: the asked wage if `grant`, otherwise as they were. */
   | { type: 'raise'; id: string; grant: boolean }
+  /** Unhappy too long: they hand in notice, and leave at closing unless kept. */
+  | { type: 'resign'; id: string }
 
 /**
  * The roster after `ev`. Returns the same array when nothing changed, and
@@ -471,8 +483,18 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
       if (e.quitting && !e.fired) {
         // A raise to stay that covers what they asked for answers that too.
         const asked = e.raiseAsk && e.raiseAsk.wage > ev.wage ? e.raiseAsk : null
-        n = { ...e, quitting: false, wage: ev.wage, raiseAsk: asked }
+        n = {
+          ...e,
+          quitting: false,
+          wage: ev.wage,
+          raiseAsk: asked,
+          morale: withMorale(e.morale, KEEP_MORALE),
+          lowDays: 0,
+        }
       }
+      break
+    case 'resign':
+      if (!e.fired && !e.quitting) n = { ...e, quitting: true }
       break
     case 'raise':
       if (e.raiseAsk && !e.fired) {

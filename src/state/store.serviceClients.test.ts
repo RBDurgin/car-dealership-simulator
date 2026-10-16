@@ -30,6 +30,9 @@ const worker = (id: string, role: Role, skill = 3): Employee => ({
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
 })
 const mechanic = worker('mech-1', 'mechanic')
 

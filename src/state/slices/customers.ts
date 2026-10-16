@@ -140,6 +140,8 @@ export function customersSlice(k: Kit): Pick<GameState, CustomerKeys> {
       const ev = { type: 'respond', id, answer: res.answer, counter, insulted } as const
       commit(k, reduceCustomers(s.customers, ev))
       if (res.answer === 'walk' && res.reason === 'rival') tallyRival(k, 'lost')
+      // A shopper walking out on a salesperson's offer gets them down.
+      if (res.answer === 'walk') tallyWork(k, c.handlerId, 'lost')
       // Staff deals go on quietly; the sale itself is announced.
       if (c.handlerId !== PLAYER_ID) return
       if (res.answer === 'accept') notify(k, `${c.name}: "Deal! Lead the way."`)

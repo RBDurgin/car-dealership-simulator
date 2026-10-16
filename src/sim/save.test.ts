@@ -59,6 +59,9 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   potential: potentialFromId(id, 3),
   hiredDay: 3,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
   ...extra,
 })
 
@@ -672,11 +675,35 @@ describe('save data', () => {
       potential: potentialFromId('staff-1-1', 2),
       hiredDay: 3,
       raiseAsk: null,
+      morale: 70,
+      lowDays: 0,
+      moraleWhy: [],
     })
     expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
     expect(parseSave({ ...save, roster: old })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], potential: 1 }] })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], raiseAsk: 110 }] })).toBeNull()
+  })
+
+  it('keeps morale and its reasons, and upgrades a version 33 save without them', () => {
+    const glum = employee('staff-1-1', {
+      morale: 22.5,
+      lowDays: 2,
+      moraleWhy: [{ id: 'pay', delta: -2.5 }],
+    })
+    const save = createSave({ ...source(), roster: [glum] }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.roster).toEqual([
+      { ...glum, status: 'off' },
+    ])
+    const old = save.roster.map((e) => {
+      const { morale: _, lowDays: __, moraleWhy: ___, ...rest } = e
+      return rest
+    })
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...save, version: 33, roster: old })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster[0]).toMatchObject({ morale: 70, lowDays: 0, moraleWhy: [] })
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    expect(parseSave({ ...save, roster: [{ ...save.roster[0], moraleWhy: [5] }] })).toBeNull()
   })
 
   it('keeps a client soured by a chargeback, and upgrades a version 30 save with none', () => {

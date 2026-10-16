@@ -504,6 +504,19 @@ export const UPDATES: readonly Update[] = [
       'A level-up comes with a request for a raise. Grant or decline it in the staff panel.',
     ],
   },
+  {
+    id: 46,
+    phase: '21',
+    title: 'Staff morale',
+    items: [
+      'Every employee has a morale, a face in the staff panel. Hover it, or click them, to see why it moved.',
+      'Fair pay, sales, finished jobs and running Nazma off lift it.',
+      'Pay under their skill, a turned-down raise, walk-outs, comebacks and coworkers leaving lower it.',
+      'Happy staff work and learn a little faster. Unhappy ones slow down, and Nazma finds them easier to poach.',
+      'Leave someone unhappy for days and they warn you (😟), then hand in notice. Keep them with a raise.',
+      'Nobody quits over morale on Easy.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

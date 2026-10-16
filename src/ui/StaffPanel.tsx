@@ -11,6 +11,7 @@ import {
   type StaffStatus,
 } from '../sim/staff'
 import { ceilingOf, levelProgress } from '../sim/growth'
+import { isWarned, moraleFace, moraleLabel, moraleLines } from '../sim/morale'
 import { groundUp } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -60,6 +61,17 @@ function Growth({ e }: { e: Employee }) {
   )
 }
 
+/** A face for their morale; hover (or the info panel) for the number and why. */
+export function Mood({ e }: { e: Pick<Employee, 'morale' | 'moraleWhy'> }) {
+  const why = moraleLines(e.moraleWhy)
+  const label = `Morale: ${moraleLabel(e.morale)}`
+  return (
+    <span className="mood" role="img" aria-label={label} title={[label, ...why].join('\n')}>
+      {moraleFace(e.morale)}
+    </span>
+  )
+}
+
 function StaffRow({
   e,
   blurb = false,
@@ -73,7 +85,10 @@ function StaffRow({
   return (
     <li className="staff-row">
       <div className="staff-who">
-        <div className="staff-name">{e.name}</div>
+        <div className="staff-name">
+          {e.name}
+          {!blurb && <Mood e={e} />}
+        </div>
         <div className="staff-meta">
           {ROLE_LABELS[e.role]} · <Skill skill={e.skill} potential={e.potential} />
           {!blurb && <Growth e={e} />}
@@ -119,6 +134,8 @@ function StaffList() {
             <StaffRow key={e.id} e={e}>
               {e.quitting ? (
                 <span className="staff-status staff-quitting">Thinking of quitting</span>
+              ) : isWarned(e) ? (
+                <span className="staff-status staff-quitting">Unhappy</span>
               ) : e.raiseAsk ? (
                 <span className="staff-status staff-raise">
                   Asks for {formatMoney(e.raiseAsk.wage)}/day
@@ -186,7 +203,8 @@ function StaffList() {
         </ul>
       )}
       <div className="status-hint">
-        Wages are paid at closing. Hollow stars are skill they can grow into.
+        Wages are paid at closing. Hollow stars are skill they can grow into; hover a face for their
+        morale.
         {touch ? '' : ' H or Esc to close.'}
       </div>
     </div>

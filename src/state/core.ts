@@ -337,3 +337,9 @@ export function tallyWork(k: Kit, id: string | null | undefined, count: WorkCoun
   const staffWork = addWork(stats.staffWork, id, count, n)
   if (staffWork !== stats.staffWork) k.set({ dayStats: { ...stats, staffWork } })
 }
+
+/** `n` more staff left today, let go or quitting, which gets the rest down at closing. */
+export function lostCoworkers(k: Kit, n: number): void {
+  const stats = k.get().dayStats
+  k.set({ dayStats: { ...stats, coworkersLost: stats.coworkersLost + n } })
+}

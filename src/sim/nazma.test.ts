@@ -13,6 +13,7 @@ import {
   nextTarget,
   planTheft,
   planVisit,
+  poachWeight,
   POACH_CHANCE,
   SMUDGE_TARGETS,
   stolenRecord,
@@ -117,6 +118,9 @@ const hand = (id: string, role: Role, skill: number, over: Partial<Employee> = {
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
   ...over,
 })
 
@@ -164,6 +168,19 @@ describe('planVisit with staff', () => {
     expect(targets.filter((t) => t === 'pro').length).toBeGreaterThan(
       targets.filter((t) => t === 'green').length * 5,
     )
+  })
+
+  it('weighs the unhappy up to half again', () => {
+    expect(poachWeight(hand('a', 'sales', 3))).toBe(9)
+    expect(poachWeight(hand('b', 'sales', 3, { morale: 10 }))).toBe(13.5)
+    const roster = [hand('happy', 'sales', 3), hand('glum', 'sales', 3, { morale: 10 })]
+    const targets = seeds
+      .map((seed) => planVisit(createRng(seed), inventory, roster)!)
+      .filter((v) => v.scheme === 'poach')
+      .map((v) => v.targets[0])
+    const glum = targets.filter((t) => t === 'glum').length / targets.length
+    expect(glum).toBeGreaterThan(0.5)
+    expect(glum).toBeLessThan(0.75)
   })
 
   it('can still come to poach with nothing in stock to spoil', () => {

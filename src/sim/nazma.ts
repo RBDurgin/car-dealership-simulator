@@ -3,6 +3,7 @@ import { carName } from './interactables'
 import { CLOSE_MINUTE, CLOCK_STEP_MINUTES, OPEN_MINUTE } from './clock'
 import { availableCars, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
+import { moralePoachWeight } from './morale'
 import { createRng, type Rng } from './rng'
 import { isPoachable, type Employee, type Role } from './staff'
 
@@ -144,10 +145,15 @@ function arrivalMinute(rng: Rng): number {
   return ARRIVAL_WINDOW.from + rng.int(0, steps) * CLOCK_STEP_MINUTES
 }
 
-/** Someone from `staff` to poach, the more skilled the likelier (skill squared). */
+/** How likely Nazma is to pick `e`: skill squared, more if they're unhappy (see `moralePoachWeight`). */
+export function poachWeight(e: Pick<Employee, 'skill' | 'morale'>): number {
+  return e.skill ** 2 * moralePoachWeight(e.morale)
+}
+
+/** Someone from `staff` to poach, the more skilled (and the unhappier) the likelier. */
 function pickPoachTarget(rng: Rng, staff: readonly Employee[]): Employee {
-  let roll = rng.next() * staff.reduce((sum, e) => sum + e.skill ** 2, 0)
-  return staff.find((e) => (roll -= e.skill ** 2) < 0) ?? staff[staff.length - 1]
+  let roll = rng.next() * staff.reduce((sum, e) => sum + poachWeight(e), 0)
+  return staff.find((e) => (roll -= poachWeight(e)) < 0) ?? staff[staff.length - 1]
 }
 
 /**

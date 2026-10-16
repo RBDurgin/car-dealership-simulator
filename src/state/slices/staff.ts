@@ -26,7 +26,7 @@ import {
 import { grow, levelUpNotice, withLevelUp, xpToLevel } from '../../sim/growth'
 import { freeSalesperson, leadChoice } from '../../sim/staffAi'
 import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
-import { commit, notify, setRoster, tallyWork, type Kit } from '../core'
+import { commit, lostCoworkers, notify, setRoster, tallyWork, type Kit } from '../core'
 import { rng } from '../rng'
 import type { GameState } from '../types'
 import { declineBuyer, sign, staffDeal, tradeAllowance, tradeLine } from './customers'
@@ -69,6 +69,7 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const e = get().roster.find((x) => x.id === id)
       if (!e || e.fired) return
       setRoster(k, reduceStaff(get().roster, { type: 'fire', id }))
+      lostCoworkers(k, 1)
       // A salesperson still talking someone round lets them go back to waiting.
       commit(k, departingOnFire(get().customers, id))
       if (hasBuyersInHand(get().customers, id)) {
@@ -80,7 +81,10 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       if (!e?.quitting || e.fired) return
       const raise = retentionRaise(e.wage)
       setRoster(k, reduceStaff(get().roster, { type: 'keep', id, wage: e.wage + raise }))
-      tallyNazma(k, { kept: [...get().dayStats.nazma.kept, { name: e.name, raise }] })
+      // Nazma's summary line lists those he poached and were kept.
+      if (!get().dayStats.resigned.includes(id)) {
+        tallyNazma(k, { kept: [...get().dayStats.nazma.kept, { name: e.name, raise }] })
+      }
       notify(k, `${e.name} is staying, for ${formatMoney(raise)} a day more.`)
     },
     dispatchStaff: (ev) => {
@@ -93,6 +97,11 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       if (!e?.raiseAsk || e.fired) return
       const wage = e.raiseAsk.wage
       setRoster(k, reduceStaff(get().roster, { type: 'raise', id, grant }))
+      // Turned down, it costs them some morale at closing.
+      if (!grant) {
+        const stats = get().dayStats
+        set({ dayStats: { ...stats, raisesDeclined: [...stats.raisesDeclined, id] } })
+      }
       notify(
         k,
         grant

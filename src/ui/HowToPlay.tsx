@@ -85,6 +85,7 @@ import {
   SALES_COMMISSION,
 } from '../sim/staff'
 import { RAISE_ASK_DAYS } from '../sim/growth'
+import { LOW_MORALE, MAX_DAILY_MORALE, NOTICE_DAYS, QUIT_WARN_DAYS } from '../sim/morale'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -999,6 +1000,30 @@ function PeopleTab({ touch, click }: TabProps) {
           A level-up comes with a request for the new level&apos;s wage, shown in the staff panel.{' '}
           <b>Grant</b> pays it from the next closing; <b>Decline</b> keeps their old wage. Leave it
           unanswered for {RAISE_ASK_DAYS} days and they give up asking, which counts as a no.
+        </p>
+      </section>
+      <section>
+        <h3>Morale</h3>
+        <p>
+          Each employee has a morale, the face by their name in the staff panel. Hover it, or{' '}
+          {click.toLowerCase()} them on the lot, to see what moved it at the last closing. Fair pay,
+          sales, finished jobs and running Nazma off lift it; pay under the wage for their skill, a
+          raise turned down (or left to lapse), shoppers walking out on them, comebacks and
+          coworkers leaving bring it down. Left alone, it drifts back toward the middle, and no
+          single day moves it more than {MAX_DAILY_MORALE} points.
+        </p>
+        <p>
+          Happy staff work and learn a little faster; unhappy ones a little slower, and Nazma finds
+          them easier to poach.{' '}
+          {level.moraleQuits ? (
+            <>
+              Someone who ends {QUIT_WARN_DAYS} days in a row under {LOW_MORALE} warns you (😟 over
+              their head), and {NOTICE_DAYS} days later hands in notice. <b>Keep</b> them with a
+              raise, which cheers them up too, or they leave at closing.
+            </>
+          ) : (
+            <>On Easy, nobody quits over morale.</>
+          )}
         </p>
       </section>
       <section>

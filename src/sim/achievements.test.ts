@@ -62,6 +62,9 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   potential: 5,
   hiredDay: 1,
   raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
   ...extra,
 })
 

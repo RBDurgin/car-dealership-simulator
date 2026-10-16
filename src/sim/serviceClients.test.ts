@@ -412,6 +412,9 @@ describe('the service advisor', () => {
     potential: 5,
     hiredDay: 1,
     raiseAsk: null,
+    morale: 70,
+    lowDays: 0,
+    moraleWhy: [],
   }
 
   it('checks in whoever has waited longest at the counter, leaving the player theirs', () => {
