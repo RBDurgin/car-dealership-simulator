@@ -166,6 +166,10 @@ export interface Employee {
   trained: boolean
   /** Promoted to their role's Senior title (one per role). */
   senior: boolean
+  /** The last day the player praised them, or null (see `praiseMorale`). */
+  praisedDay: number | null
+  /** Experience earned so far this month, for Employee of the Month (see `sim/growth.ts`). */
+  monthXp: number
 }
 
 /** A basic course (experience) or the advanced one (a higher potential too). */
@@ -361,6 +365,8 @@ export function generateCandidates(
       training: null,
       trained: false,
       senior: false,
+      praisedDay: null,
+      monthXp: 0,
     }
   })
 }
@@ -497,6 +503,8 @@ export type StaffEvent =
   | { type: 'promote'; id: string; wage: number }
   /** Booked on a course (or the booking dropped, with null). */
   | { type: 'train'; id: string; training: TrainingBooking | null }
+  /** Praised by the player on `day`, which lifts their morale by `delta` (see `praiseMorale`). */
+  | { type: 'praise'; id: string; day: number; delta: number }
 
 /**
  * The roster after `ev`. Returns the same array when nothing changed, and
@@ -573,6 +581,11 @@ export function reduceStaff(roster: Employee[], ev: StaffEvent): Employee[] {
       break
     case 'train':
       if (!e.fired && (ev.training || e.training)) n = { ...e, training: ev.training }
+      break
+    case 'praise':
+      if (!e.fired && e.praisedDay !== ev.day) {
+        n = { ...e, praisedDay: ev.day, morale: withMorale(e.morale, ev.delta) }
+      }
       break
     case 'raise':
       if (e.raiseAsk && !e.fired) {

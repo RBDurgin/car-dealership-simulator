@@ -203,7 +203,7 @@ export function Player() {
         if (Math.abs(angleDiff(heading.current, face)) < FACE_TOLERANCE) {
           approach.current = null
           const a = game.activeAction
-          if (a?.action === 'sit' || a?.action === 'closeDeal') {
+          if (a?.action === 'sit' || a?.action === 'closeDeal' || a?.action === 'huddle') {
             const it = findInteractable(a.targetId)!
             seat.current = { stand: { x: playerPos.x, z: playerPos.z } }
             playerPos.x = ap.faceTo.x

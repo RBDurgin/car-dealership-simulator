@@ -33,6 +33,8 @@ const guard: Employee = {
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 }
 
 /** Resumes the game on the morning of `day`. */
@@ -259,6 +261,8 @@ describe('poaching', () => {
     training: null,
     trained: false,
     senior: false,
+    praisedDay: null,
+    monthXp: 0,
   }
   const dana_ = () => game().roster.find((e) => e.id === dana.id)
 

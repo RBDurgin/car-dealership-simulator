@@ -39,7 +39,7 @@ import { rankLine } from './rankText'
 import { newRecordLine } from './statsText'
 import { achievementOf } from '../sim/achievements'
 import { PERF, PERF_BUSY } from '../state/perf'
-import { courseLine } from '../sim/growth'
+import { courseLine, eotmLine } from '../sim/growth'
 
 /** The `?perf` readings for the day, loaded only with the flag. */
 const PerfReport = lazy(() => import('./PerfReport'))
@@ -314,6 +314,12 @@ function SummaryPanel() {
               <dd className="price">{formatMoney(-stats.training)}</dd>
             </>
           )}
+          {stats.staffBonus > 0 && (
+            <>
+              <dt>Employee of the Month</dt>
+              <dd className="price">{formatMoney(-stats.staffBonus)}</dd>
+            </>
+          )}
           {stats.clients.referralFees > 0 && (
             <>
               <dt>Referral fees</dt>
@@ -509,10 +515,12 @@ function SummaryPanel() {
           </div>
         )}
         {(stats.levelUps.length > 0 ||
+          stats.eotm ||
           stats.courses.length > 0 ||
           stats.raisesLapsed.length > 0 ||
           stats.moraleQuits.length > 0) && (
           <div className="summary-level-ups">
+            {stats.eotm && <div>🏆 {eotmLine(stats.eotm)}</div>}
             {stats.levelUps.map((u) => (
               <div key={u.id}>
                 ★ {u.name} grew to skill {u.skill} as {ROLE_LABELS[u.role].toLowerCase()}

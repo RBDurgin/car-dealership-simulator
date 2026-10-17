@@ -37,6 +37,8 @@ const mechanic: Employee = {
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 }
 
 /** The 8th of the first month (from the second) with a recall. */

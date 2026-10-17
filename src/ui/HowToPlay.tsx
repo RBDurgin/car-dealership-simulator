@@ -94,14 +94,24 @@ import {
   SENIOR_RAISE,
   SENIOR_TITLES,
   TRAINING_FEES,
+  EOTM_BONUS,
 } from '../sim/growth'
 import {
+  EOTM_MORALE,
+  EOTM_TEAM_MORALE,
   FATIGUE_DAYS,
+  HUDDLE_LATEST,
+  HUDDLE_MORALE,
   LOW_MORALE,
   MAX_DAILY_MORALE,
   NOTICE_DAYS,
+  PRAISE_GAP,
+  PRAISE_MORALE,
   QUIT_WARN_DAYS,
 } from '../sim/morale'
+import { formatTime } from '../sim/clock'
+import { HUDDLE_MINUTES } from '../sim/interactables'
+import { BREAK_MINUTES, MAX_ON_BREAK } from '../sim/staffAi'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -904,7 +914,8 @@ function BusinessTab({ touch, click }: TabProps) {
           )}
           : you pay once, it goes up overnight and stays for good. Out front, a sign or a tube man
           draws more people in. In the showroom, buyers hope for less off and say yes a little more
-          often. A done-up waiting area keeps waiting customers there longer.
+          often. A done-up waiting area keeps waiting customers there longer, and a staff room keeps
+          the staff happier.
         </p>
         {(Object.keys(AREA_LABELS) as ImprovementArea[]).map((area) => (
           <Fragment key={area}>
@@ -1086,6 +1097,39 @@ function PeopleTab({ touch, click }: TabProps) {
             </li>
           ))}
         </ul>
+      </section>
+      <section>
+        <h3>Keeping the team happy</h3>
+        <p>
+          {click} an employee and choose <b>Praise</b> for +{PRAISE_MORALE} morale, once a day each.
+          Praise again within {PRAISE_GAP} days is worth half.
+        </p>
+        <p>
+          Mornings until {formatTime(HUDDLE_LATEST)}, {click.toLowerCase()} your desk and choose{' '}
+          <b>Morning huddle</b>: you&apos;re at the desk for {HUDDLE_MINUTES} game minutes, and
+          everyone at their post gets +{HUDDLE_MORALE} morale. One a day.
+        </p>
+        <p>
+          The <b>Staff break room</b> on the Upgrades tab
+          {touch ? (
+            ''
+          ) : (
+            <>
+              {' '}
+              (<kbd>U</kbd>)
+            </>
+          )}{' '}
+          puts a table, chairs and a fridge in the office: {effectLabel('break-room')}. When
+          it&apos;s quiet, idle staff take a {`${BREAK_MINUTES}-minute`} break there once in the
+          morning and once in the afternoon (☕ in the staff panel), {MAX_ON_BREAK} at a time, never
+          while customers are waiting.
+        </p>
+        <p>
+          On the month&apos;s last day, whoever did the most work that month (weighed by role, so
+          every role has a chance) is <b>Employee of the Month</b> (🏆): a {formatMoney(EOTM_BONUS)}{' '}
+          bonus, +{EOTM_MORALE} morale, +{EOTM_TEAM_MORALE} for everyone else, and their name on the
+          plaque in the showroom.
+        </p>
       </section>
       <section>
         <h3>The owner</h3>

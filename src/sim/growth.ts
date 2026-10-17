@@ -195,7 +195,7 @@ export interface CourseDone {
 /**
  * The roster at the end of `day`, from the day's `work`: raise requests left
  * unanswered `RAISE_ASK_DAYS` lapse, everyone still on the payroll gains the
- * day's experience (× `MENTOR_XP` with a senior of their role in today), those
+ * day's experience (added to their `monthXp` too) (× `MENTOR_XP` with a senior of their role in today), those
  * back from a course gain `TRAINING_XP` (and potential, from the advanced one),
  * and each who levels up asks for the new level's wage (unless they're
  * already paid that). The same roster when nothing changed.
@@ -234,6 +234,9 @@ export function growStaff(
       }
     }
     n = withLevelUp(grow(n, xp, scale), e.skill, day, levelUps)
+    // Counted for Employee of the Month whether or not it fills a bar.
+    const earned = Math.round(xp * scale)
+    if (earned > 0) n = { ...n, monthXp: n.monthXp + earned }
     if (n !== e) changed = true
     return n
   })
@@ -431,4 +434,73 @@ export function courseLine(c: CourseDone): string {
   return c.course === 'advanced'
     ? `${c.name} finished the advanced course and can grow further.`
     : `${c.name} finished a training course.`
+}
+
+/**
+ * × each role's experience when Employee of the Month is picked, so a quiet
+ * role (a guard, a receptionist) has as fair a chance as a busy one: about
+ * what it takes to bring a steady day's work in each to the same.
+ */
+export const ROLE_XP_SCALE: Record<Role, number> = {
+  sales: 1,
+  receptionist: 1.3,
+  finance: 0.9,
+  porter: 0.9,
+  security: 1.6,
+  mechanic: 0.8,
+  advisor: 0.9,
+}
+
+/** Employee of the Month's cash bonus, paid on the month's last day. */
+export const EOTM_BONUS = 250
+/** Winners kept, the latest last. */
+export const MAX_EOTM = 12
+
+/** An Employee of the Month. */
+export interface EotmWin {
+  id: string
+  name: string
+  role: Role
+  /** The day they were named: the last of the month it was for. */
+  day: number
+}
+
+/**
+ * This month's Employee of the Month: whoever on the payroll (not let go or
+ * leaving) earned the most experience this month, scaled by `ROLE_XP_SCALE`.
+ * The first on the roster wins a tie; nobody, if nobody earned any.
+ */
+export function employeeOfMonth(roster: readonly Employee[]): Employee | null {
+  let best: Employee | null = null
+  let top = 0
+  for (const e of roster) {
+    if (e.fired || e.quitting) continue
+    const score = e.monthXp * ROLE_XP_SCALE[e.role]
+    if (score > top) {
+      best = e
+      top = score
+    }
+  }
+  return best
+}
+
+/** `wins` with `win` added at the end, keeping the last `MAX_EOTM`. */
+export function addEotm(wins: readonly EotmWin[], win: EotmWin): EotmWin[] {
+  return [...wins, win].slice(-MAX_EOTM)
+}
+
+/** Everyone's month's experience back to 0, for the 1st (the same roster if it already is). */
+export function newMonthXp(roster: Employee[]): Employee[] {
+  if (roster.every((e) => e.monthXp === 0)) return roster
+  return roster.map((e) => (e.monthXp === 0 ? e : { ...e, monthXp: 0 }))
+}
+
+/** How many times employee `id` has been Employee of the Month (of the wins kept). */
+export function eotmCount(wins: readonly EotmWin[], id: string): number {
+  return wins.filter((w) => w.id === id).length
+}
+
+/** The summary's and the morning's word on a new Employee of the Month. */
+export function eotmLine(win: Pick<EotmWin, 'name' | 'role'>): string {
+  return `${win.name} (${ROLE_LABELS[win.role].toLowerCase()}) is Employee of the Month, with a ${formatMoney(EOTM_BONUS)} bonus. Their plaque is up in the showroom.`
 }

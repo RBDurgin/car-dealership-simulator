@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { interactables } from '../scene/runtime'
 import { shortDate } from '../sim/calendar'
 import { conditionOf } from '../sim/cleanliness'
-import { COURSE_LABELS, SENIOR_PERKS, titleOf } from '../sim/growth'
+import { COURSE_LABELS, eotmCount, SENIOR_PERKS, titleOf } from '../sim/growth'
 import { isWarned, moraleFace, moraleLabel, moraleLines, tiredDays } from '../sim/morale'
 import { daysOffText } from '../sim/rota'
 import type { CarStatus } from '../sim/inventory'
@@ -38,6 +38,9 @@ export function InfoPanel() {
   const inspectedId = useGame((s) => s.inspectedId)
   const stock = useGame((s) => s.inventory.find((c) => c.id === inspectedId))
   const employee = useGame((s) => s.roster.find((e) => e.id === inspectedId))
+  const day = useGame((s) => s.clock.day)
+  const resting = useGame((s) => !!inspectedId && s.onBreak.includes(inspectedId))
+  const wins = useGame((s) => (inspectedId ? eotmCount(s.eotm, inspectedId) : 0))
   const car = inspectedId ? interactables.get(inspectedId)?.car : undefined
   if (employee) {
     return (
@@ -46,7 +49,16 @@ export function InfoPanel() {
         <h2>{employee.name}</h2>
         <dl>
           <dt>Role</dt>
-          <dd>{titleOf(employee)}</dd>
+          <dd>
+            {titleOf(employee)}
+            {resting && <span className="muted"> · on a break ☕</span>}
+          </dd>
+          {wins > 0 && (
+            <>
+              <dt>Honours</dt>
+              <dd>🏆 Employee of the Month{wins > 1 && ` ×${wins}`}</dd>
+            </>
+          )}
           {employee.senior && (
             <>
               <dt>Perk</dt>
@@ -80,6 +92,7 @@ export function InfoPanel() {
             {isWarned(employee) && !employee.quitting && (
               <span className="staff-quitting"> · thinking of leaving</span>
             )}
+            {employee.praisedDay === day && <span className="muted"> · praised today</span>}
           </dd>
         </dl>
         {employee.moraleWhy.length > 0 && (

@@ -44,6 +44,8 @@ const worker = (id: string, role: Role, skill = 3): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 })
 const mechanic = worker('mech-1', 'mechanic')
 

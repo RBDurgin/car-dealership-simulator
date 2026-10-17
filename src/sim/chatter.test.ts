@@ -399,3 +399,27 @@ describe('voiceMix', () => {
     expect(MAX_VOICES).toBe(3)
   })
 })
+
+describe('the morale tools', () => {
+  it('has the player rally the team in the huddle, and someone at their post answer', () => {
+    const huddle = { action: 'huddle', phase: 'performing' }
+    expect(conversationsOf(state({ roster: [seller], activeAction: huddle }))).toEqual([
+      { key: `huddle:${PLAYER_ID}`, kind: 'huddle', speakers: [PLAYER_ID, 'e-sales'] },
+    ])
+    const walking = { action: 'huddle', phase: 'approaching' }
+    expect(conversationsOf(state({ roster: [seller], activeAction: walking }))).toEqual([])
+    expect(conversationsOf(state({ roster: [], activeAction: huddle }))).toEqual([])
+  })
+
+  it('thanks someone praised, and they answer happily', () => {
+    const before = state({ roster: [seller] })
+    const after = state({ roster: [{ ...seller, praisedDay: 4 }] })
+    expect(lines(before, after)).toEqual([
+      [
+        { speaker: PLAYER_ID, tone: 'happy', syllables: expect.any(Number) },
+        { speaker: 'e-sales', tone: 'happy', syllables: expect.any(Number) },
+      ],
+    ])
+    expect(lines(after, state({ roster: [{ ...seller, praisedDay: 4, morale: 80 }] }))).toEqual([])
+  })
+})

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { emptyTally } from './growth'
 import {
+  cheer,
+  EOTM_MORALE,
   fatiguePace,
+  HUDDLE_LATEST,
+  huddleBlocker,
+  moraleLines,
+  PRAISE_GAP,
+  PRAISE_MORALE,
+  praiseBlocker,
+  praiseMorale,
   FATIGUE_DAYS,
   isWarned,
   LOW_MORALE,
@@ -45,6 +54,8 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...extra,
 })
 
@@ -197,5 +208,72 @@ describe('fatigue', () => {
     expect(fatiguePace(FATIGUE_DAYS + 20)).toBeCloseTo(1.09)
     const tired = employee({ streak: FATIGUE_DAYS + 1 })
     expect(workSeconds(10, tired)).toBeCloseTo(skillSeconds(10, 3) * 1.06)
+  })
+})
+
+describe('praise', () => {
+  it('is worth full marks the first time, and again once the gap has passed', () => {
+    expect(praiseMorale(employee(), 5)).toBe(PRAISE_MORALE)
+    expect(praiseMorale(employee({ praisedDay: 5 - PRAISE_GAP }), 5)).toBe(PRAISE_MORALE)
+  })
+
+  it('falls off to half within the gap, and to nothing twice in a day', () => {
+    expect(praiseMorale(employee({ praisedDay: 4 }), 5)).toBe(PRAISE_MORALE / 2)
+    expect(praiseMorale(employee({ praisedDay: 5 }), 5)).toBe(0)
+  })
+
+  it('is refused twice in a day, and for anyone who has gone home', () => {
+    expect(praiseBlocker(employee(), 5)).toBeNull()
+    expect(praiseBlocker(employee({ praisedDay: 5 }), 5)).toMatch(/already praised/)
+    expect(praiseBlocker(employee({ status: 'leaving' }), 5)).toMatch(/gone home/)
+    expect(praiseBlocker(employee({ fired: true }), 5)).toMatch(/let go/)
+  })
+
+  it('lifts morale through the praise event, and only once a day', () => {
+    const roster = [employee()]
+    const once = reduceStaff(roster, { type: 'praise', id: 'staff-1-1', day: 5, delta: 4 })
+    expect(once[0]).toMatchObject({ praisedDay: 5, morale: MORALE_HOME + 4 })
+    expect(reduceStaff(once, { type: 'praise', id: 'staff-1-1', day: 5, delta: 4 })).toBe(once)
+  })
+})
+
+describe('the morning huddle', () => {
+  it('is held once a day, by 10:30, with someone at their post', () => {
+    expect(huddleBlocker(HUDDLE_LATEST, false, 2)).toBeNull()
+    expect(huddleBlocker(HUDDLE_LATEST + 10, false, 2)).toMatch(/morning/)
+    expect(huddleBlocker(600, true, 2)).toMatch(/held/)
+    expect(huddleBlocker(600, false, 0)).toMatch(/Nobody/)
+  })
+
+  it('cheers those named, and leaves the rest and the let go alone', () => {
+    const a = employee({ id: 'a' })
+    const b = employee({ id: 'b' })
+    const gone = employee({ id: 'c', fired: true })
+    const next = cheer([a, b, gone], new Set(['a', 'c']), 3)
+    expect(next.map((e) => e.morale)).toEqual([MORALE_HOME + 3, MORALE_HOME, MORALE_HOME])
+    expect(cheer([b], new Set(['a']), 3)).toEqual([b])
+  })
+})
+
+describe('the break room', () => {
+  const came = { ...quiet, tally: { ...emptyTally(), came: true } }
+
+  it('lifts the morale of those who came in', () => {
+    expect(reason(employee(), { ...came, breakRoom: 1 }, 'breakRoom')).toBe(1)
+    expect(reason(employee(), { ...quiet, breakRoom: 1 }, 'breakRoom')).toBe(0)
+    expect(reason(employee(), came, 'breakRoom')).toBe(0)
+  })
+
+  it('halves what tiredness costs', () => {
+    const tired = { ...came, streak: FATIGUE_DAYS + 2 }
+    expect(reason(employee(), tired, 'tired')).toBe(-2)
+    expect(reason(employee(), { ...tired, breakRoom: 1 }, 'tired')).toBe(-1)
+  })
+
+  it('names Employee of the Month among the reasons, and a teammate’s win', () => {
+    expect(moraleLines([{ id: 'eotm', delta: EOTM_MORALE }])).toEqual([
+      `Employee of the Month +${EOTM_MORALE}`,
+    ])
+    expect(moraleLines([{ id: 'eotm', delta: 2 }])).toEqual(['A teammate’s win +2'])
   })
 })

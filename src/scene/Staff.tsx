@@ -36,14 +36,20 @@ import {
 } from '../sim/staff'
 import { bayCount } from '../sim/service'
 import {
+  BREAK_MINUTES,
   nextCheckIn,
   nextFinding,
   nextGuardTask,
   nextMechanicTask,
   nextPorterTask,
   nextSalesTask,
+  wantsBreak,
+  type BreakPart,
   type SalesTask,
 } from '../sim/staffAi'
+import { CLOSE_MINUTE, DEFAULT_DAY_MS, OPEN_MINUTE } from '../sim/clock'
+import { breakSeats } from '../sim/improvements'
+import { upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { financePaperwork } from '../state/derived'
 import { Character } from './Character'
@@ -99,6 +105,8 @@ const CHASE_REPLAN_SECONDS = 0.4
 const BOARD_REACH = 3
 /** …or after this many game seconds, however far behind the shopper is. */
 const BOARD_WAIT_SECONDS = 8
+/** A break's `BREAK_MINUTES` of the clock, in the seconds the frame loop counts, once seated. */
+const BREAK_SECONDS = (BREAK_MINUTES * DEFAULT_DAY_MS) / 1000 / (CLOSE_MINUTE - OPEN_MINUTE)
 
 /** Where staff without a chair wait, and what they face. */
 function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
@@ -135,6 +143,10 @@ interface StaffWalker extends Walker {
   unreachableIds: Set<string>
   /** Out on a test drive in this car: hidden, and off the floor. Null otherwise. */
   away: string | null
+  /** The parts of today they've had a break in. */
+  breaks: BreakPart[]
+  /** On a break: the break room chair they're headed for or sitting in. Null otherwise. */
+  rest: { seatId: string } | null
 }
 
 const walkers = new Map<string, StaffWalker>()
@@ -156,6 +168,8 @@ function walkerFor(e: Employee): StaffWalker {
     leg: 0,
     unreachableIds: new Set(),
     away: null,
+    breaks: [],
+    rest: null,
   }
   walkers.set(e.id, w)
   staffPos.set(e.id, w.pos)
@@ -637,6 +651,7 @@ function update(
   }
   // Sent home (closing, or let go) with buyers still in hand: finish them first.
   const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
+  if (onBreak(e, w, seconds, customers)) return
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
   if (e.role === 'porter' && !leaving) return updatePorter(e, w, seconds)
   if (e.role === 'security' && !leaving) return updateGuard(e, w, seconds)
@@ -650,6 +665,90 @@ function update(
   if (e.role === 'advisor' && w.task === 'post' && w.waypoints.length === 0) {
     doCheckIns(e, w, seconds, customers)
   }
+}
+
+/** Whether employee `e` has nothing on: at their post with no customer, job or task under way. */
+function idleNow(e: Employee, w: StaffWalker, customers: readonly Customer[]): boolean {
+  if (e.status !== 'atPost' || e.fired || e.quitting) return false
+  if (w.away || w.paperwork || w.waypoints.length > 0) return false
+  if (customers.some((c) => c.handlerId === e.id && c.phase !== 'leaving')) return false
+  const game = useGame.getState()
+  if (e.role === 'security') {
+    return !!w.task?.startsWith('patrol:') && game.nazma?.status !== 'onLot'
+  }
+  if (e.role === 'receptionist' && game.receptionCall?.employeeId === e.id) return false
+  return w.task === 'post'
+}
+
+/** The break room chair nobody else on a break has taken, if there's one free. */
+function freeSeat(id: string) {
+  const seats = breakSeats(upNow(useGame.getState()))
+  return seats.find((p) => {
+    for (const [other, o] of walkers) if (other !== id && o.rest?.seatId === p.id) return false
+    return true
+  })
+}
+
+/**
+ * Breaks (with a break room up): an idle employee whose time has come
+ * (`wantsBreak`) walks to a free chair in the break room and sits a while,
+ * then goes back to work. Closing, or being let go, ends one at once.
+ * Whether they're on a break now (the rest of the update skipped).
+ */
+function onBreak(
+  e: Employee,
+  w: StaffWalker,
+  seconds: number,
+  customers: readonly Customer[],
+): boolean {
+  const game = useGame.getState()
+  if (w.rest) {
+    const id = w.rest.seatId
+    const seat = breakSeats(upNow(game)).find((p) => p.id === id)
+    if (e.status !== 'atPost' || !seat || w.timer >= BREAK_SECONDS) {
+      endBreak(e, w)
+      return false
+    }
+    if (!w.seat) {
+      walk(w, STAFF_SPEED, seconds, null)
+      if (w.waypoints.length > 0) return true
+      // Can't sit: they take it standing up.
+      if (!sitOn(w, seat)) w.anim.current = 'idle'
+    }
+    if (w.seat) w.anim.current = 'sit'
+    w.timer += seconds
+    return true
+  }
+  if (!idleNow(e, w, customers)) return false
+  const seats = breakSeats(upNow(game))
+  const part = wantsBreak(e, {
+    minute: game.clock.minute,
+    taken: w.breaks,
+    waiting: customers.filter((c) => c.phase === 'waiting').length,
+    onBreak: game.onBreak.length,
+    breakRoom: seats.length > 0,
+  })
+  const seat = part && freeSeat(e.id)
+  if (!part || !seat) return false
+  report(w, 'break', () => game.staffBreak(e.id, true))
+  if (!useGame.getState().onBreak.includes(e.id)) return false
+  w.breaks.push(part)
+  w.rest = { seatId: seat.id }
+  w.task = 'break'
+  w.timer = 0
+  w.faceTo = null
+  standUp(w)
+  pathTo(w, approachTilesFor(grid, seat.rect))
+  return true
+}
+
+/** Back from a break: up from the chair and back to work, with a new plan. */
+function endBreak(e: Employee, w: StaffWalker): void {
+  w.rest = null
+  w.task = null
+  w.timer = 0
+  standUp(w)
+  useGame.getState().staffBreak(e.id, false)
 }
 
 /** Role label over an employee's head, so staff read as staff; a "?" while they think of quitting. */

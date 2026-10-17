@@ -43,6 +43,7 @@ import {
 } from './slices/customers'
 import { wash } from './slices/economy'
 import { settleDay } from './slices/day'
+import { holdHuddle } from './slices/staff'
 import { checkIn, offerFinding } from './slices/service'
 import type { GameState } from './types'
 
@@ -298,6 +299,10 @@ export function dispatch(k: Kit, ev: ActionEvent): void {
       return void get().fixDing(finished.targetId)
     case 'confront':
       return get().nazmaRunOff('player')
+    case 'praise':
+      return get().praise(finished.targetId)
+    case 'huddle':
+      return holdHuddle(k)
   }
 }
 

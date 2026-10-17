@@ -7,6 +7,11 @@ import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
 import { newDrive } from './testDrive'
 import {
+  BREAK_WINDOWS,
+  breakMinute,
+  breakPart,
+  MAX_ON_BREAK,
+  wantsBreak,
   EARLY_GREET_SKILL,
   freeSalesperson,
   guardSight,
@@ -83,6 +88,8 @@ const staff = (id: string, role: Role, over: Partial<Employee> = {}): Employee =
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...over,
 })
 
@@ -542,5 +549,55 @@ describe('nextFinding', () => {
     for (const e of [staff('a', 'advisor', { status: 'arriving' }), { ...adv, fired: true }]) {
       expect(nextFinding(e, [job('j', 'c1')], [waiting], 600)).toBeNull()
     }
+  })
+})
+
+describe('breaks', () => {
+  const at = (minute: number, over: object = {}) => ({
+    minute,
+    taken: [],
+    waiting: 0,
+    onBreak: 0,
+    breakRoom: true,
+    ...over,
+  })
+  const late = BREAK_WINDOWS.morning[1] - 1
+
+  it('falls in the morning or the afternoon window, or neither', () => {
+    expect(breakPart(BREAK_WINDOWS.morning[0])).toBe('morning')
+    expect(breakPart(BREAK_WINDOWS.afternoon[0] + 30)).toBe('afternoon')
+    expect(breakPart(13 * 60)).toBeNull()
+    expect(breakPart(9 * 60)).toBeNull()
+  })
+
+  it('spreads the staff over the window by id', () => {
+    const minutes = ['a', 'b', 'c', 'd', 'e'].map((id) => breakMinute(id, 'morning'))
+    for (const m of minutes) {
+      expect(m).toBeGreaterThanOrEqual(BREAK_WINDOWS.morning[0])
+      expect(m).toBeLessThan(BREAK_WINDOWS.morning[1])
+    }
+    expect(new Set(minutes).size).toBeGreaterThan(1)
+    expect(breakMinute('a', 'morning')).toBe(minutes[0])
+  })
+
+  it('takes one once their time has come, once each part of the day', () => {
+    expect(wantsBreak(sam, at(late))).toBe('morning')
+    expect(wantsBreak(sam, at(late, { taken: ['morning'] }))).toBeNull()
+    expect(wantsBreak(sam, at(breakMinute(sam.id, 'morning') - 1))).toBeNull()
+    expect(wantsBreak(sam, at(BREAK_WINDOWS.afternoon[1] - 1, { taken: ['morning'] }))).toBe(
+      'afternoon',
+    )
+  })
+
+  it('never while customers wait, with the break room full, or without one', () => {
+    expect(wantsBreak(sam, at(late, { waiting: 1 }))).toBeNull()
+    expect(wantsBreak(sam, at(late, { onBreak: MAX_ON_BREAK }))).toBeNull()
+    expect(wantsBreak(sam, at(late, { breakRoom: false }))).toBeNull()
+  })
+
+  it('only at their post, and never on the way out', () => {
+    expect(wantsBreak({ ...sam, status: 'arriving' }, at(late))).toBeNull()
+    expect(wantsBreak({ ...sam, quitting: true }, at(late))).toBeNull()
+    expect(wantsBreak({ ...sam, fired: true }, at(late))).toBeNull()
   })
 })

@@ -34,6 +34,8 @@ export type ActionId =
   | 'confront'
   | 'testDrive'
   | 'ride'
+  | 'praise'
+  | 'huddle'
 
 /** Real seconds the player spends looking a seller's car over. */
 export const APPRAISE_SECONDS = 4
@@ -47,6 +49,12 @@ export const RIDE_SECONDS = 1.2
 export const PITCH_SECONDS = 3
 /** Real ms a call takes the player: `CALL_MINUTES` of game time at normal speed. */
 export const CALL_MS = Math.round((CALL_MINUTES * DEFAULT_DAY_MS) / (CLOSE_MINUTE - OPEN_MINUTE))
+/** Game minutes the morning huddle keeps the player at their desk. */
+export const HUDDLE_MINUTES = 10
+/** Real ms the morning huddle takes: `HUDDLE_MINUTES` of game time at normal speed. */
+export const HUDDLE_MS = Math.round(
+  (HUDDLE_MINUTES * DEFAULT_DAY_MS) / (CLOSE_MINUTE - OPEN_MINUTE),
+)
 
 /**
  * How an action plays out once the player reaches the object:
@@ -169,6 +177,16 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
   },
   // Reaching Nazma runs him off the lot (see scene/Player, which chases him as he moves).
   confront: { id: 'confront', label: 'Confront', verb: 'Confronting', mode: 'instant' },
+  // An employee: a word of thanks for their work, which lifts their morale (see `praiseMorale`).
+  praise: { id: 'praise', label: 'Praise', verb: 'Praising', mode: 'instant' },
+  // At the player's own desk, mornings: a pep talk for everyone at their post.
+  huddle: {
+    id: 'huddle',
+    label: 'Morning huddle',
+    verb: 'Holding the huddle',
+    mode: 'timed',
+    durationMs: HUDDLE_MS,
+  },
 }
 
 export type InteractableKind =
@@ -297,7 +315,12 @@ export function buildInteractables(grid: Grid, props: Prop[]): Map<string, Inter
     } else if (p.id === DESK_CHAIR_ID) {
       out.set(p.id, { ...base, kind: 'chair', name: 'Desk chair', actions: ['sit', 'closeDeal'] })
     } else if (p.id === MANAGER_DESK.chairId) {
-      out.set(p.id, { ...base, kind: 'chair', name: 'Your desk', actions: ['sit', 'closeDeal'] })
+      out.set(p.id, {
+        ...base,
+        kind: 'chair',
+        name: 'Your desk',
+        actions: ['sit', 'closeDeal', 'huddle'],
+      })
     } else if (p.id === OFFICE_COMPUTER_ID) {
       out.set(p.id, {
         ...base,

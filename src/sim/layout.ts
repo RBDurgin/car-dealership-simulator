@@ -180,6 +180,8 @@ export type PropModel =
   | 'sign'
   | 'forSaleSign'
   | 'deskPhone'
+  | 'fridge'
+  | 'plaque'
 
 export type CarModel = Extract<
   PropModel,
@@ -335,6 +337,8 @@ export const GUEST_CHAIR_ID = 'guest-chair'
 export const DESK_PHONE_ID = 'office-phone'
 /** Where the receptionist sits, behind the reception desk facing the showroom. */
 export const RECEPTION_CHAIR_ID = 'reception-chair'
+/** Employee of the Month's plaque in the showroom. */
+export const EOTM_PLAQUE_ID = 'eotm-plaque'
 
 /** A salesperson's desk on the showroom floor: their chair, and the buyer's opposite. */
 export interface SalesDesk {
@@ -418,6 +422,8 @@ const FIXED_PROPS: Prop[] = [
   { id: 'showroom-plant-1', model: 'pottedPlant', rect: { tx: 17, tz: 3, w: 1, h: 1 }, facing: 0 },
   { id: 'showroom-plant-2', model: 'pottedPlant', rect: { tx: 17, tz: 12, w: 1, h: 1 }, facing: 0 },
   { id: 'showroom-plant-3', model: 'pottedPlant', rect: { tx: 28, tz: 3, w: 1, h: 1 }, facing: 0 },
+  // Employee of the Month's plaque, on a stand in the back corner behind the first platform.
+  { id: EOTM_PLAQUE_ID, model: 'plaque', rect: { tx: 18, tz: 3, w: 1, h: 1 }, facing: 0 },
 
   // Sales desks: one by the entrance, one in the corner by the office door.
   ...salesDesk(SALES_DESKS[0], 'sales-desk-1', 'sales-monitor-1', { tx: 21, tz: 10 }),

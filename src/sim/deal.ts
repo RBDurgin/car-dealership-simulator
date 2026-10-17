@@ -9,7 +9,13 @@ import {
 import { washBlocker } from './cleanliness'
 import { emptyClientStats, type Client, type ClientStats } from './clients'
 import type { Grid, Tile } from './grid'
-import { seniorFeeBonus, type CourseDone, type LevelUp, type StaffWork } from './growth'
+import {
+  seniorFeeBonus,
+  type CourseDone,
+  type EotmWin,
+  type LevelUp,
+  type StaffWork,
+} from './growth'
 import {
   approachTilesFor,
   carName,
@@ -130,11 +136,14 @@ export function deskActions(roster: readonly Employee[]): ActionId[] {
 }
 
 /**
- * What the player can do with an employee. The finance manager on duty sits in
- * the desk chair, so clicks on the desk land on them: they take hand-offs too.
+ * What the player can do with an employee: praise them, or look them over.
+ * The finance manager on duty sits in the desk chair, so clicks on the desk
+ * land on them: they take hand-offs too.
  */
 export function employeeActions(e: Employee, roster: readonly Employee[]): ActionId[] {
-  return financeOnDuty(roster)?.id === e.id ? ['handOff', 'inspect'] : ['inspect']
+  return financeOnDuty(roster)?.id === e.id
+    ? ['handOff', 'praise', 'inspect']
+    : ['praise', 'inspect']
 }
 
 /**
@@ -446,6 +455,12 @@ export interface DayStats {
   training: number
   /** Courses finished when the day was settled. */
   courses: CourseDone[]
+  /** The player held the morning huddle today. */
+  huddle: boolean
+  /** On the month's last day, the Employee of the Month named when it was settled. */
+  eotm: EotmWin | null
+  /** Employee of the Month's bonus, paid when the day was settled. */
+  staffBonus: number
 }
 
 /** A day's test drives (see `sim/testDrive.ts`). */
@@ -503,6 +518,9 @@ export function emptyStats(): DayStats {
     quitWages: 0,
     training: 0,
     courses: [],
+    huddle: false,
+    eotm: null,
+    staffBonus: 0,
   }
 }
 
@@ -549,7 +567,7 @@ export function theftLoss(stats: DayStats): number {
 /**
  * Gross profit on sales, F&I and service less the day's staff costs, floor plan
  * interest, ad spend, improvements, expansions, referral fees, a client
- * appreciation day and stolen stock, plus any bonus from the owner and the
+ * appreciation day, training, Employee of the Month's bonus and stolen stock, plus any bonus from the owner and the
  * month-end holdback.
  */
 export function netIncome(stats: DayStats): number {
@@ -564,6 +582,7 @@ export function netIncome(stats: DayStats): number {
     stats.clients.referralFees -
     stats.clients.appreciation -
     stats.training -
+    stats.staffBonus -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

@@ -96,8 +96,29 @@ import {
   type Comeback,
   type ServiceJob,
 } from '../../sim/service'
-import { askLapses, courseNotice, growStaff, levelUpNotice, trainingFee } from '../../sim/growth'
-import { moraleDay, moraleNotice, newlyWarned, resignsToday } from '../../sim/morale'
+import {
+  addEotm,
+  askLapses,
+  courseNotice,
+  EOTM_BONUS,
+  employeeOfMonth,
+  eotmLine,
+  growStaff,
+  levelUpNotice,
+  newMonthXp,
+  trainingFee,
+  type EotmWin,
+} from '../../sim/growth'
+import {
+  EOTM_MORALE,
+  EOTM_TEAM_MORALE,
+  moraleDay,
+  moraleNotice,
+  newlyWarned,
+  resignsToday,
+  withMorale,
+} from '../../sim/morale'
+import type { Employee } from '../../sim/staff'
 import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
 import { countStreaks, offNotice, offOn, onCourseOn } from '../../sim/rota'
@@ -113,7 +134,7 @@ import {
 } from '../../sim/stats'
 import type { TipId } from '../../sim/tips'
 import { WEATHER_EFFECTS, weatherOn } from '../../sim/weather'
-import { commit, notify, setRoster, tuning, type Kit } from '../core'
+import { commit, notify, setRoster, tuning, upEffects, type Kit } from '../core'
 import { repScale, visitOdds } from '../derived'
 import { bailoutNotice, deliveryNotice, theftNotice } from '../notices'
 import { DELIVERY_SEED, OWNER_SEED, resetRng, RIVAL_SEED, rng, seedDay } from '../rng'
@@ -147,6 +168,8 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
     achievements: [] as EarnedAchievement[],
+    eotm: [] as EotmWin[],
+    onBreak: [] as string[],
     purchases: [] as Purchase[],
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
@@ -232,6 +255,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           monthFi: save.monthFi,
           contracts: save.contracts,
           chargebacks: save.chargebacks,
+          eotm: save.eotm,
         })
         beginDay(k, save.day + 1)
       }),
@@ -303,10 +327,6 @@ export function settleDay(k: Kit): void {
         },
       }
     : null
-  const cash =
-    s.cash - charged - wages - commissions - interest + (owner?.bonus ?? 0) + (quota?.payout ?? 0)
-  // On Easy the bank covers the first time the day ends in the red.
-  const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
   // The day moves everyone's morale (a raise turned down, or left to lapse,
   // among it), then the day's work is experience: some grow a level and ask
   // for a raise.
@@ -322,15 +342,36 @@ export function settleDay(k: Kit): void {
       coworkersLost: s.dayStats.coworkersLost,
       streak: e.streak,
       shift: level.moraleShift,
+      breakRoom: upEffects(k).staffMorale,
     }),
     level.moraleQuits,
   )
   const grown = growStaff(moved, s.dayStats.staffWork, s.clock.day, level.staffGrowth)
+  // On the month's last day, whoever did the most this month is Employee of the Month.
+  const star = monthEnd ? employeeOfMonth(grown.roster) : null
+  const eotm: EotmWin | null = star
+    ? { id: star.id, name: star.name, role: star.role, day: s.clock.day }
+    : null
+  const roster = star ? celebrate(grown.roster, star.id) : grown.roster
+  const staffBonus = eotm ? EOTM_BONUS : 0
+  const cash =
+    s.cash -
+    charged -
+    wages -
+    commissions -
+    interest -
+    staffBonus +
+    (owner?.bonus ?? 0) +
+    (quota?.payout ?? 0)
+  // On Easy the bank covers the first time the day ends in the red.
+  const bailout = level.safetyNet && !s.bailoutUsed && cash < 0 ? -cash : 0
   const settled: DayStats = {
     ...dayStats,
     levelUps: [...dayStats.levelUps, ...grown.levelUps],
     raisesLapsed: grown.lapsed,
     courses: grown.courses,
+    eotm,
+    staffBonus,
     wages,
     commissions,
     interest,
@@ -376,6 +417,7 @@ export function settleDay(k: Kit): void {
     franchise,
     ...(earned.length > 0 && { achievements: [...s.achievements, ...earned] }),
     rival: rivalDay(s.rival, dayStats, createRng(RIVAL_SEED + s.clock.day), level.rivalStrength),
+    ...(eotm && { eotm: addEotm(s.eotm, eotm) }),
     ...(s.purchases.length > 0 && { inventory, purchases: [] }),
     ...(due.length > 0 && {
       chargebacks: later,
@@ -385,7 +427,24 @@ export function settleDay(k: Kit): void {
     }),
     dayStats: { ...settled, newRecords: records.broken },
   })
-  setRoster(k, grown.roster)
+  setRoster(k, roster)
+}
+
+/**
+ * The roster once employee `id` is named Employee of the Month: a lift for
+ * them and a smaller one for everyone else on the payroll, each added to
+ * the reasons shown for the day.
+ */
+function celebrate(roster: Employee[], id: string): Employee[] {
+  return roster.map((e) => {
+    if (e.fired || e.quitting) return e
+    const delta = e.id === id ? EOTM_MORALE : EOTM_TEAM_MORALE
+    return {
+      ...e,
+      morale: withMorale(e.morale, delta),
+      moraleWhy: [...e.moraleWhy, { id: 'eotm', delta }],
+    }
+  })
 }
 
 /**
@@ -396,6 +455,7 @@ export function settleDay(k: Kit): void {
  */
 export function closeUp(k: Kit): void {
   closeShop(k)
+  if (k.get().onBreak.length > 0) k.set({ onBreak: [] })
   const before = k.get().roster
   setRoster(k, reduceStaff(before, { type: 'close' }))
   const quitters = before.filter((e) => e.quitting && !e.fired)
@@ -602,6 +662,7 @@ function morning(k: Kit, day: number): void {
     callsTried: [],
     playerCall: null,
     receptionCall: null,
+    onBreak: [],
     rival: rivalDefected(rival, defectors.length, level.rivalStrength),
     ...(bust && {
       reputation: applyChange(s.reputation, BUST_REPUTATION),
@@ -628,7 +689,9 @@ function morning(k: Kit, day: number): void {
     owner,
     nazma,
   })
-  setRoster(k, reduceStaff(get().roster, { type: 'open', day }))
+  // A new month's Employee of the Month starts from scratch.
+  const staff = newMonth ? newMonthXp(get().roster) : get().roster
+  setRoster(k, reduceStaff(staff, { type: 'open', day }))
   // Those with the day off stay home, unpaid.
   const off = offOn(get().roster, day)
   if (off.length > 0) set({ dayStats: { ...get().dayStats, off: off.map((e) => e.id) } })
@@ -652,6 +715,7 @@ function morning(k: Kit, day: number): void {
     s.dayStats.quota && heldByCsi(s.dayStats.quota) && heldNotice(s.dayStats.quota),
     s.dayStats.bailout > 0 && bailoutNotice(s.dayStats.bailout),
     levelUpNotice(s.dayStats.levelUps, s.dayStats.raisesLapsed),
+    s.dayStats.eotm && eotmLine(s.dayStats.eotm),
     moraleNotice(
       warned.map((e) => e.name),
       resigning.map((e) => e.name),

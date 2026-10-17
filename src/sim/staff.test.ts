@@ -59,6 +59,8 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...over,
 })
 

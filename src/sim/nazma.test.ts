@@ -126,6 +126,8 @@ const hand = (id: string, role: Role, skill: number, over: Partial<Employee> = {
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...over,
 })
 

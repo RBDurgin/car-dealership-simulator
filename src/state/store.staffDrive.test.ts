@@ -36,6 +36,8 @@ const staff = (id: string, role: Role, skill = 3): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 })
 const sam = staff('sam', 'sales', 5)
 

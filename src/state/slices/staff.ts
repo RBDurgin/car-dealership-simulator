@@ -36,6 +36,8 @@ import {
   withLevelUp,
   xpToLevel,
 } from '../../sim/growth'
+import { cheer, HUDDLE_MORALE, PRAISE_MORALE, praiseBlocker, praiseMorale } from '../../sim/morale'
+import { breakSeats, installed } from '../../sim/improvements'
 import { freeSalesperson, leadChoice } from '../../sim/staffAi'
 import { carsHeld, driveMinutes, staffDriveCar } from '../../sim/testDrive'
 import { commit, lostCoworkers, notify, setRoster, tallyWork, type Kit } from '../core'
@@ -56,6 +58,8 @@ type StaffKeys =
   | 'bookTraining'
   | 'cancelTraining'
   | 'promote'
+  | 'praise'
+  | 'staffBreak'
   | 'devGrowStaff'
   | 'staffClaim'
   | 'staffGreet'
@@ -169,6 +173,33 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       setRoster(k, reduceStaff(s.roster, { type: 'promote', id, wage }))
       notify(k, `${e.name} is your ${SENIOR_TITLES[e.role]} now, on ${formatMoney(wage)} a day.`)
     },
+    praise: (id) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === id)
+      if (!e) return
+      const blocker = praiseBlocker(e, s.clock.day)
+      if (blocker) return notify(k, blocker)
+      const delta = praiseMorale(e, s.clock.day)
+      setRoster(k, reduceStaff(s.roster, { type: 'praise', id, day: s.clock.day, delta }))
+      notify(
+        k,
+        delta < PRAISE_MORALE
+          ? `${e.name} smiles: "Thanks, boss." Praise this often means a little less.`
+          : `${e.name} beams: "Thanks, boss!"`,
+      )
+    },
+    staffBreak: (id, on) => {
+      const s = get()
+      const now = s.onBreak.includes(id)
+      if (!on) {
+        if (now) set({ onBreak: s.onBreak.filter((x) => x !== id) })
+        return
+      }
+      const e = s.roster.find((x) => x.id === id)
+      const room = breakSeats(installed(s.improvements, s.clock.day)).length > 0
+      if (now || !room || e?.status !== 'atPost' || e.fired) return
+      set({ onBreak: [...s.onBreak, id] })
+    },
     devGrowStaff: () => {
       const s = get()
       const levelUps = [...s.dayStats.levelUps]
@@ -262,6 +293,7 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const e = freeSalesperson(s.roster, s.customers, expansionsUp(s))
       if (c?.id !== customerId || c.phase !== 'talking') return
       if (e?.id !== employeeId) return notify(k, 'That salesperson is busy.')
+      if (s.onBreak.includes(e.id)) return notify(k, `${e.name} is on a break.`)
       const car = staffDriveCar(c, s.inventory, carsHeld(s.customers))
       if (!car) return notify(k, `There's nothing for ${c.name} to drive.`)
       commit(k, reduceCustomers(s.customers, { type: 'sendWith', id: c.id, to: e.id }))
@@ -328,4 +360,22 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
 /** The customer salesperson `employeeId` is dealing with in `phases`, if any. */
 function staffCustomer(k: Kit, employeeId: string, phases: readonly CustomerPhase[]) {
   return k.get().customers.find((c) => c.handlerId === employeeId && phases.includes(c.phase))
+}
+
+/**
+ * The player's morning huddle at their desk is over: everyone at their post
+ * heard it, and it lifts their morale.
+ */
+export function holdHuddle(k: Kit): void {
+  const s = k.get()
+  if (s.dayStats.huddle) return
+  const heard = s.roster.filter((e) => e.status === 'atPost' && !e.fired)
+  k.set({ dayStats: { ...s.dayStats, huddle: true } })
+  setRoster(k, cheer(s.roster, new Set(heard.map((e) => e.id)), HUDDLE_MORALE))
+  notify(
+    k,
+    heard.length === 0
+      ? 'You run through the day’s plan, but nobody was at their post to hear it.'
+      : `Morning huddle: ${heard.length === 1 ? heard[0].name : `${heard.length} staff`} ready for the day.`,
+  )
 }

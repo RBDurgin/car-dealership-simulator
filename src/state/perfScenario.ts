@@ -47,6 +47,8 @@ export function busyDay(): void {
       training: null,
       trained: false,
       senior: false,
+      praisedDay: null,
+      monthXp: 0,
     })),
   )
   useGame.setState({

@@ -135,6 +135,8 @@ const staff = (id: string, role: Employee['role']): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 })
 
 const car = {

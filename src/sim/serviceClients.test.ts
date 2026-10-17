@@ -420,6 +420,8 @@ describe('the service advisor', () => {
     training: null,
     trained: false,
     senior: false,
+    praisedDay: null,
+    monthXp: 0,
   }
 
   it('checks in whoever has waited longest at the counter, leaving the player theirs', () => {

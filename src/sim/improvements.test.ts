@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  breakSeats,
   buyImprovement,
   effectsOf,
   IMPROVEMENT_FOOTPRINTS,
@@ -21,6 +22,7 @@ import { approachTilesFor, buildInteractables, pathToInteractable } from './inte
 import {
   buildLayout,
   DESK_CHAIR_ID,
+  DESK_PHONE_ID,
   GUEST_CHAIR_ID,
   OFFICE_COMPUTER_ID,
   createGrid,
@@ -152,14 +154,22 @@ describe('improvement footprints', () => {
     expect(improvementFootprints(['lounge-tv'])).toEqual([{ tx: 31, tz: 9, w: 2, h: 1 }])
   })
 
-  it('put the lounge props in the lounge, clear of the fixed props and each other', () => {
+  it('put the lounge props in the lounge and the break room in the office, clear of the fixed props and each other', () => {
     const blocking = indoor.filter((p) => p.blocks !== false)
     const own = blocking.flatMap((p) => tiles(p.rect))
     expect(new Set(own).size).toBe(own.length)
+    const zoneOf = new Map(
+      IMPROVEMENT_IDS.flatMap((id) =>
+        (IMPROVEMENTS[id].props ?? []).map((p) => [
+          p.id,
+          IMPROVEMENTS[id].area === 'staff' ? 'office' : 'lounge',
+        ]),
+      ),
+    )
     for (const p of indoor) {
       for (const key of tiles(p.rect)) {
         const [tx, tz] = key.split(',').map(Number)
-        expect(zoneAt(layout, tx, tz), p.id).toBe('lounge')
+        expect(zoneAt(layout, tx, tz), p.id).toBe(zoneOf.get(p.id))
       }
     }
     for (const key of own) expect(taken.has(key), key).toBe(false)
@@ -167,7 +177,7 @@ describe('improvement footprints', () => {
 
   it('leave the desk, the computer, the coffee machine and every seat reachable', () => {
     const its = buildInteractables(grid, PROPS)
-    for (const id of [DESK_CHAIR_ID, OFFICE_COMPUTER_ID, 'coffee-machine']) {
+    for (const id of [DESK_CHAIR_ID, OFFICE_COMPUTER_ID, DESK_PHONE_ID, 'coffee-machine']) {
       expect(pathToInteractable(grid, SPAWN_TILE, its.get(id)!), id).not.toBeNull()
     }
     const sofa = PROPS.find((p) => p.id === 'lounge-sofa')!
@@ -175,6 +185,7 @@ describe('improvement footprints', () => {
       ...[GUEST_CHAIR_ID, ...salesDesks([]).map((d) => d.guestChairId)].map(
         (id) => PROPS.find((p) => p.id === id)!.rect,
       ),
+      ...breakSeats(IMPROVEMENT_IDS).map((p) => p.rect),
       ...Array.from({ length: sofa.rect.w }, (_, i) => ({
         ...sofa.rect,
         tx: sofa.rect.tx + i,

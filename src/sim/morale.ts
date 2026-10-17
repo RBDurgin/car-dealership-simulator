@@ -31,6 +31,20 @@ export const NOTICE_DAYS = 2
 export const KEEP_MORALE = 15
 /** What a promotion to Senior does for their morale. */
 export const PROMOTE_MORALE = 15
+/** What the player's praise does for someone's morale (half within `PRAISE_GAP` days of the last). */
+export const PRAISE_MORALE = 4
+/** Days after a praise that another is worth only half. */
+export const PRAISE_GAP = 3
+/** What the morning huddle does for the morale of everyone at their post. */
+export const HUDDLE_MORALE = 3
+/** The latest game minute a huddle can start (10:30). */
+export const HUDDLE_LATEST = 10 * 60 + 30
+/** Employee of the Month's morale. */
+export const EOTM_MORALE = 10
+/** Everyone else's, on the day Employee of the Month is named. */
+export const EOTM_TEAM_MORALE = 2
+/** × the morale tiredness costs with a break room up. */
+const BREAK_ROOM_REST = 0.5
 
 /** Morale per day for each 10% they're paid under (or over) the wage for their skill. */
 const PAY_STEP = 1.5
@@ -61,7 +75,8 @@ const FATIGUE_PACE = 0.03
 /** The most tiredness adds to work time. */
 const MAX_FATIGUE_PACE = 0.09
 
-export type MoraleReasonId = 'pay' | 'raise' | 'wins' | 'rough' | 'coworkers' | 'tired' | 'drift'
+export type MoraleReasonId =
+  'pay' | 'raise' | 'wins' | 'rough' | 'coworkers' | 'tired' | 'breakRoom' | 'eotm' | 'drift'
 
 export interface MoraleReason {
   id: MoraleReasonId
@@ -81,6 +96,11 @@ export interface MoraleContext {
   streak?: number
   /** The level's `moraleShift`, added to the day's change (not shown as a reason). */
   shift?: number
+  /**
+   * The break room's daily lift (`Effects.staffMorale`) for someone who came
+   * in, 0 without one. With one up, tiredness costs half the morale.
+   */
+  breakRoom?: number
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -100,13 +120,16 @@ export function moraleChange(
   const t = ctx.tally
   const wins = t ? t.sales + t.jobs + t.chases : 0
   const rough = t ? t.lost + t.comebacks : 0
+  const room = ctx.breakRoom ?? 0
+  const rest = room > 0 ? BREAK_ROOM_REST : 1
   const raw: MoraleReason[] = [
     { id: 'pay', delta: Math.min(MAX_OVERPAID, payGap * 10 * PAY_STEP) },
     { id: 'raise', delta: ctx.raiseDeclined ? RAISE_DECLINED : 0 },
     { id: 'wins', delta: Math.min(MAX_WINS, wins * WIN) },
     { id: 'rough', delta: Math.max(MAX_ROUGH, rough * ROUGH) },
     { id: 'coworkers', delta: Math.max(MAX_COWORKERS, ctx.coworkersLost * COWORKER_LEFT) },
-    { id: 'tired', delta: Math.max(MAX_TIRED, tiredDays(ctx.streak ?? 0) * TIRED) },
+    { id: 'tired', delta: Math.max(MAX_TIRED, tiredDays(ctx.streak ?? 0) * TIRED) * rest },
+    { id: 'breakRoom', delta: t?.came ? room : 0 },
     { id: 'drift', delta: (MORALE_HOME - e.morale) * DRIFT },
   ]
   const reasons = raw.map((r) => ({ ...r, delta: round1(r.delta) })).filter((r) => r.delta !== 0)
@@ -202,6 +225,10 @@ export function moraleReasonText(r: MoraleReason): string {
       return 'A coworker left'
     case 'tired':
       return 'Worn out without a day off'
+    case 'breakRoom':
+      return 'A break in the staff room'
+    case 'eotm':
+      return up && r.delta >= EOTM_MORALE ? 'Employee of the Month' : 'A teammate’s win'
     case 'drift':
       return up ? 'Perking up' : 'Settling down'
   }
@@ -276,4 +303,48 @@ export function moraleNotice(warned: readonly string[], resigned: readonly strin
     )
   }
   return parts.length > 0 ? parts.join(' ') : null
+}
+
+/**
+ * What praising `e` on `day` does for their morale: `PRAISE_MORALE`, half
+ * within `PRAISE_GAP` days of the last time, and nothing twice in a day.
+ */
+export function praiseMorale(e: Pick<Employee, 'praisedDay'>, day: number): number {
+  if (e.praisedDay === null) return PRAISE_MORALE
+  const since = day - e.praisedDay
+  if (since <= 0) return 0
+  return since < PRAISE_GAP ? PRAISE_MORALE / 2 : PRAISE_MORALE
+}
+
+/** Why the player can't praise `e` on `day`, or null if they can. */
+export function praiseBlocker(
+  e: Pick<Employee, 'name' | 'fired' | 'status' | 'praisedDay'>,
+  day: number,
+): string | null {
+  if (e.fired) return 'They’ve been let go.'
+  if (e.status === 'off' || e.status === 'leaving') return `${e.name} has gone home.`
+  if (e.praisedDay === day) return `You’ve already praised ${e.name} today.`
+  return null
+}
+
+/**
+ * Why the player can't hold the morning huddle at `minute`: one a day, by
+ * `HUDDLE_LATEST`, with someone at their post to hear it. Null if they can.
+ */
+export function huddleBlocker(minute: number, held: boolean, atPost: number): string | null {
+  if (held) return 'You’ve held today’s huddle.'
+  if (minute > HUDDLE_LATEST) return 'The huddle is a morning thing: hold it by 10:30.'
+  if (atPost === 0) return 'Nobody’s at their post yet.'
+  return null
+}
+
+/** The roster with `delta` morale for each employee `ids` names (not let go). */
+export function cheer(roster: Employee[], ids: ReadonlySet<string>, delta: number): Employee[] {
+  let changed = false
+  const next = roster.map((e) => {
+    if (!ids.has(e.id) || e.fired) return e
+    changed = true
+    return { ...e, morale: withMorale(e.morale, delta) }
+  })
+  return changed ? next : roster
 }

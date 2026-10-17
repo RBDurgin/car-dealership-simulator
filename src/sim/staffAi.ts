@@ -8,6 +8,7 @@ import { findingBlocker, jobPriority, openFinding, type ServiceJob } from './ser
 import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 import { staffDriveCar } from './testDrive'
 import { seniorSightBonus } from './growth'
+import { hashSeed } from './rng'
 
 /**
  * Salespeople this skilled greet browsing customers as soon as they're on the
@@ -376,4 +377,65 @@ export function nextFinding(
         findingBlocker(j, now) === null,
     ) ?? null
   )
+}
+
+/** A break taken in the morning or the afternoon: one of each a day at most. */
+export type BreakPart = 'morning' | 'afternoon'
+
+/** When each part's breaks can start, in game minutes: 10:00–11:45 and 14:00–16:30. */
+export const BREAK_WINDOWS: Record<BreakPart, readonly [number, number]> = {
+  morning: [10 * 60, 11 * 60 + 45],
+  afternoon: [14 * 60, 16 * 60 + 30],
+}
+/** Game minutes a break lasts. */
+export const BREAK_MINUTES = 15
+/** Most staff on a break at once: one per break room chair. */
+export const MAX_ON_BREAK = 2
+
+/** The part of the day `minute` falls in, if it's in a break window. */
+export function breakPart(minute: number): BreakPart | null {
+  for (const part of ['morning', 'afternoon'] as const) {
+    const [from, to] = BREAK_WINDOWS[part]
+    if (minute >= from && minute < to) return part
+  }
+  return null
+}
+
+/**
+ * The minute in `part`'s window from which `id` would like a break: spread
+ * over the window by their id, so the staff don't all go at once.
+ */
+export function breakMinute(id: string, part: BreakPart): number {
+  const [from, to] = BREAK_WINDOWS[part]
+  return from + (hashSeed(`break-${part}-${id}`) % (to - from))
+}
+
+/** What an idle employee's break depends on. */
+export interface BreakContext {
+  minute: number
+  /** Parts of today they've had a break in already. */
+  taken: readonly BreakPart[]
+  /** Customers waiting to be helped (or at the service counter). */
+  waiting: number
+  /** Staff on a break now. */
+  onBreak: number
+  /** Whether there's a break room up. */
+  breakRoom: boolean
+}
+
+/**
+ * Whether idle employee `e` goes for a break now, and in which part of the
+ * day: with a break room up, once their time in a window has come, at most
+ * once a morning and once an afternoon, never while customers wait and
+ * never more than `MAX_ON_BREAK` at once. Null if they don't.
+ */
+export function wantsBreak(
+  e: Pick<Employee, 'id' | 'fired' | 'quitting' | 'status'>,
+  ctx: BreakContext,
+): BreakPart | null {
+  if (!ctx.breakRoom || e.fired || e.quitting || e.status !== 'atPost') return null
+  if (ctx.waiting > 0 || ctx.onBreak >= MAX_ON_BREAK) return null
+  const part = breakPart(ctx.minute)
+  if (!part || ctx.taken.includes(part)) return null
+  return ctx.minute >= breakMinute(e.id, part) ? part : null
 }

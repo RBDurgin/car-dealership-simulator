@@ -65,6 +65,8 @@ const fm: Employee = {
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 }
 
 const base: Customer = {
@@ -247,11 +249,11 @@ describe('the finance desk', () => {
   })
 
   it('takes hand-offs from the finance manager on duty too', () => {
-    expect(employeeActions(fm, [fm])).toEqual(['handOff', 'inspect'])
+    expect(employeeActions(fm, [fm])).toEqual(['handOff', 'praise', 'inspect'])
     const left = { ...fm, status: 'leaving' as const }
-    expect(employeeActions(left, [left])).toEqual(['inspect'])
+    expect(employeeActions(left, [left])).toEqual(['praise', 'inspect'])
     const porter = { ...fm, id: 'staff-2', role: 'porter' as const }
-    expect(employeeActions(porter, [fm, porter])).toEqual(['inspect'])
+    expect(employeeActions(porter, [fm, porter])).toEqual(['praise', 'inspect'])
   })
 
   it('calls the first buyer in the lounge once the guest chair is free', () => {

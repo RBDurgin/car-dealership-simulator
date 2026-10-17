@@ -194,8 +194,8 @@ export function endCall(k: Kit, clientId: string, by: string, skill: number): vo
 }
 
 /**
- * Over `minutes` of the clock: a receptionist at the desk with nobody
- * waiting works the call list, one call at a time, slower the greener they
+ * Over `minutes` of the clock: a receptionist at the desk (not on a break)
+ * with nobody waiting works the call list, one call at a time, slower the greener they
  * are. Anyone waiting comes first: they hang up and see to them.
  */
 export function receptionCalls(k: Kit, minutes: number): void {
@@ -206,6 +206,7 @@ export function receptionCalls(k: Kit, minutes: number): void {
     e &&
     s.clientPerks.receptionCalls &&
     !isClosed(s.clock) &&
+    !s.onBreak.includes(e.id) &&
     !s.customers.some((c) => c.phase === 'waiting')
   if (!free) {
     if (s.receptionCall) set({ receptionCall: null })

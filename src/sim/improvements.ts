@@ -5,7 +5,8 @@ import { FURNITURE_SCALE, type Prop, type PropModel, type Rect } from './layout'
  * for good. Outdoor ones catch the street's eye: more passers-by, and more of
  * them turning in. Showroom ones put buyers in a spending mood: they hope to
  * knock less off and say yes a little more often. Waiting-room ones keep
- * waiting customers patient for longer. A slot can have tiers; each tier needs
+ * waiting customers patient for longer. The staff room keeps the staff
+ * happier, and idle staff take their breaks in it. A slot can have tiers; each tier needs
  * the one before, and only the highest tier owned counts (it replaces the
  * last one in the world).
  */
@@ -20,18 +21,28 @@ export type ImprovementId =
   | 'lounge-tv'
   | 'designer-sofa'
   | 'coffee-bar'
+  | 'break-room'
 
 /** The fixed spot an improvement goes in. Tiers of one slot replace each other. */
 export type ImprovementSlot =
-  'sign' | 'tube-man' | 'floor' | 'lighting' | 'platforms' | 'tv' | 'sofa' | 'coffee-bar'
+  | 'sign'
+  | 'tube-man'
+  | 'floor'
+  | 'lighting'
+  | 'platforms'
+  | 'tv'
+  | 'sofa'
+  | 'coffee-bar'
+  | 'break-room'
 
 /** Where an improvement goes, for grouping in the upgrades tab and the help. */
-export type ImprovementArea = 'outside' | 'showroom' | 'lounge'
+export type ImprovementArea = 'outside' | 'showroom' | 'lounge' | 'staff'
 
 export const AREA_LABELS: Record<ImprovementArea, string> = {
   outside: 'Out front',
   showroom: 'Showroom',
   lounge: 'Waiting area',
+  staff: 'Staff room',
 }
 
 /** What improvements add up to. */
@@ -46,6 +57,8 @@ export interface Effects {
   acceptBonus: number
   /** Share of a waiting customer's patience loss saved. */
   patienceSaved: number
+  /** Morale a day for each employee who comes in (and tiredness costs them less; see `sim/morale.ts`). */
+  staffMorale: number
 }
 
 export const NO_EFFECTS: Effects = {
@@ -54,6 +67,7 @@ export const NO_EFFECTS: Effects = {
   expectCut: 0,
   acceptBonus: 0,
   patienceSaved: 0,
+  staffMorale: 0,
 }
 
 /**
@@ -82,6 +96,9 @@ export interface ImprovementInfo {
   /** Fixed props it swaps the model of. */
   swap?: { propIds: string[]; model: PropModel }
 }
+
+/** The break room's chairs. */
+export const BREAK_SEAT_IDS = ['break-chair-1', 'break-chair-2']
 
 // Heights (world units) that stacked props sit at: the model's height times its scale.
 const TV_CABINET_TOP = 0.31 * FURNITURE_SCALE
@@ -204,6 +221,42 @@ export const IMPROVEMENTS: Record<ImprovementId, ImprovementInfo> = {
       },
     ],
   },
+  'break-room': {
+    label: 'Staff break room',
+    cost: 4_000,
+    slot: 'break-room',
+    area: 'staff',
+    tier: 1,
+    effects: { staffMorale: 1 },
+    blurb: 'A table, two chairs and a fridge in the corner of the office, for staff breaks.',
+    // The office's south-west corner, clear of the door, the desk's chairs and the phone.
+    props: [
+      { id: 'break-fridge', model: 'fridge', rect: { tx: 30, tz: 4, w: 1, h: 1 }, facing: 1 },
+      {
+        id: 'break-table',
+        model: 'tableCoffeeSquare',
+        rect: { tx: 30, tz: 7, w: 1, h: 1 },
+        facing: 0,
+      },
+      {
+        id: BREAK_SEAT_IDS[0],
+        model: 'chairCushion',
+        rect: { tx: 30, tz: 6, w: 1, h: 1 },
+        facing: 0,
+      },
+      {
+        id: BREAK_SEAT_IDS[1],
+        model: 'chairCushion',
+        rect: { tx: 31, tz: 7, w: 1, h: 1 },
+        facing: 3,
+      },
+    ],
+  },
+}
+
+/** The break room's chairs, where staff on a break sit. */
+export function breakSeats(ids: readonly ImprovementId[]): Prop[] {
+  return improvementProps(ids).filter((p) => BREAK_SEAT_IDS.includes(p.id))
 }
 
 export const IMPROVEMENT_IDS = Object.keys(IMPROVEMENTS) as ImprovementId[]

@@ -39,6 +39,8 @@ const mechanic: Employee = {
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 }
 
 const DAY = 20

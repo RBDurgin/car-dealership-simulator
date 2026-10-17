@@ -33,7 +33,7 @@ import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
 import { emptyRival, isRival, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
-import { potentialFromId } from './growth'
+import { MAX_EOTM, potentialFromId, type EotmWin } from './growth'
 import { START_MORALE } from './morale'
 import { autoRota } from './rota'
 import { dressFor, ROLES, type Employee } from './staff'
@@ -61,7 +61,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 36
+export const SAVE_VERSION = 37
 
 export interface SaveData {
   version: number
@@ -132,6 +132,8 @@ export interface SaveData {
   statsFrom: number
   /** Achievements earned this game (see `sim/achievements.ts`). */
   achievements: EarnedAchievement[]
+  /** Employees of the Month, the latest last (see `sim/growth.ts`). */
+  eotm: EotmWin[]
 }
 
 export interface SaveSource {
@@ -167,6 +169,7 @@ export interface SaveSource {
   records: Records
   statsFrom: number
   achievements: EarnedAchievement[]
+  eotm: EotmWin[]
 }
 
 /**
@@ -217,6 +220,7 @@ export function createSave(s: SaveSource, now: number): SaveData {
     records: s.records,
     statsFrom: s.statsFrom,
     achievements: s.achievements,
+    eotm: s.eotm,
   }
 }
 
@@ -456,6 +460,15 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         )
       : raw.roster,
   }),
+  // v37: praise and Employee of the Month. Nobody's been praised or named
+  // yet, and the month's experience starts from the save's next day.
+  36: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e) => (isObject(e) ? { ...e, praisedDay: null, monthXp: 0 } : e))
+      : raw.roster,
+    eotm: [],
+  }),
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -528,6 +541,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!isLifetime(raw.lifetime) || !isRecords(raw.records)) return null
   if (!Number.isInteger(raw.statsFrom) || (raw.statsFrom as number) < 1) return null
   if (!Array.isArray(raw.achievements) || !raw.achievements.every(isEarned)) return null
+  if (!Array.isArray(raw.eotm) || raw.eotm.length > MAX_EOTM || !raw.eotm.every(isEotm)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
@@ -582,6 +596,17 @@ function isChargeback(v: unknown): boolean {
     CHARGEBACK_KINDS.includes(v.kind) &&
     (v.financeId === null || typeof v.financeId === 'string') &&
     isNumber(v.clawback)
+  )
+}
+
+function isEotm(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    (ROLES as readonly unknown[]).includes(v.role) &&
+    Number.isInteger(v.day) &&
+    (v.day as number) >= 1
   )
 }
 
@@ -802,7 +827,9 @@ function isEmployee(v: unknown): boolean {
         isNumber(v.training.day) &&
         (v.training.course === 'basic' || v.training.course === 'advanced'))) &&
     typeof v.trained === 'boolean' &&
-    typeof v.senior === 'boolean'
+    typeof v.senior === 'boolean' &&
+    (v.praisedDay === null || isNumber(v.praisedDay)) &&
+    isNumber(v.monthXp)
   )
 }
 

@@ -11,6 +11,7 @@ export function effectLabel(id: ImprovementId): string {
     e.expectCut && `customers hope for ${pct(e.expectCut)}% less off`,
     e.acceptBonus && `+${pct(e.acceptBonus)}% chance of a yes`,
     e.patienceSaved && `waiting customers lose patience ${pct(e.patienceSaved)}% slower`,
+    e.staffMorale && `+${e.staffMorale} staff morale a day, and long runs of days tire them less`,
   ]
   return parts.filter(Boolean).join(' · ')
 }

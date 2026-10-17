@@ -541,6 +541,17 @@ export const UPDATES: readonly Update[] = [
       'A senior earns more, is harder for Nazma to poach, helps the rest of their role learn faster and brings a small perk.',
     ],
   },
+  {
+    id: 49,
+    phase: '21',
+    title: 'A happier team',
+    items: [
+      'Click or tap an employee and choose Praise to lift their morale, once a day each.',
+      'Hold a morning huddle from your desk before 10:30: everyone at their post gets a boost.',
+      'A staff break room (Upgrades tab) keeps the team happier, and idle staff take their breaks in it when it’s quiet.',
+      'At month end the hardest worker is Employee of the Month: a bonus, a lift and their name on the showroom’s plaque.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

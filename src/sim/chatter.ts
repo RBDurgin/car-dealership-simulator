@@ -57,7 +57,7 @@ export function variantOf(s: ChatterState, speaker: string): string | null {
 }
 
 export type ConversationKind =
-  'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn' | 'phone' | 'drive'
+  'pitch' | 'signing' | 'couple' | 'poach' | 'checkIn' | 'phone' | 'drive' | 'huddle'
 
 /** Two people talking back and forth; `speakers[0]` opens. On the phone both are the caller. */
 export interface Conversation {
@@ -100,6 +100,12 @@ export function conversationsOf(s: ChatterState): Conversation[] {
   }
   const r = s.receptionCall?.employeeId
   if (r) out.push({ key: `phone:${r}`, kind: 'phone', speakers: [r, r] })
+  // The morning huddle: the player's pep talk, and someone at their post answering back.
+  if (a?.action === 'huddle' && a.phase === 'performing') {
+    const crew = s.roster.find((e) => e.status === 'atPost' && !e.fired)
+    if (crew)
+      out.push({ key: `huddle:${PLAYER_ID}`, kind: 'huddle', speakers: [PLAYER_ID, crew.id] })
+  }
   return out
 }
 
@@ -116,6 +122,7 @@ const FIRST_GAP_MS: Record<ConversationKind, readonly [number, number]> = {
   // Past the ring.
   phone: [1200, 2000],
   drive: [300, 700],
+  huddle: [300, 700],
 }
 
 export function firstGapMs(kind: ConversationKind, rng: Rng): number {
@@ -201,6 +208,12 @@ export function nextLine(
       const syllables = first ? rng.int(2, 5) : rng.int(3, 6)
       return { line: { speaker, tone, syllables }, gapMs: between(rng, [300, 900]) }
     }
+    case 'huddle': {
+      // The player rallies the team; the team cheers them on.
+      const tone: Tone = first ? (rng.next() < 0.5 ? 'happy' : 'neutral') : 'happy'
+      const syllables = first ? rng.int(5, 9) : rng.int(2, 3)
+      return { line: { speaker, tone, syllables }, gapMs: between(rng, [400, 1000]) }
+    }
     case 'poach': {
       const tone: Tone = first
         ? rng.next() < 0.6
@@ -248,7 +261,8 @@ export const REACTION_GAP_MS = 250
  * - on a test drive, how each talking point went down, and a word on
  *   getting out of the car (happy after a good drive);
  * - the owner's hello and goal when they reach the office;
- * - Nazma's grumble as he's run off.
+ * - Nazma's grumble as he's run off;
+ * - a thank-you, and a happy word back, when the player praises someone.
  */
 export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): Line[][] {
   const out: Line[][] = []
@@ -315,6 +329,18 @@ export function reactionsFor(prev: ChatterState, next: ChatterState, rng: Rng): 
       ) {
         out.push([{ speaker: c.id, tone: 'grumble', syllables: rng.int(3, 5) }])
       }
+    }
+  }
+  if (next.roster !== prev.roster) {
+    // Praised: a word of thanks from the player, and a happy one back.
+    for (const e of next.roster) {
+      if (e.praisedDay === null) continue
+      const was = prev.roster.find((x) => x.id === e.id)
+      if (!was || was.praisedDay === e.praisedDay) continue
+      out.push([
+        { speaker: PLAYER_ID, tone: 'happy', syllables: rng.int(3, 5) },
+        { speaker: e.id, tone: 'happy', syllables: rng.int(2, 4) },
+      ])
     }
   }
   if (next.owner?.announced && !prev.owner?.announced) {

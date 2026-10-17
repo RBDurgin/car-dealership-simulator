@@ -22,6 +22,7 @@ import {
 import type { Vec2 } from '../sim/grid'
 import { improvementProps, slotTier, swappedModel } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
+import { calendarOf, monthLabel } from '../sim/calendar'
 import { CAR_MODELS } from '../sim/customers'
 import { MODEL_TIER } from '../sim/franchise'
 import {
@@ -70,7 +71,10 @@ const furniture = (
 /** Small furniture: its shadow doesn't read, so it doesn't cast one. */
 const SMALL = { shadow: 'receive' } as const
 
-const MODELS: Record<Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone'>, ModelDef> = {
+const MODELS: Record<
+  Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone' | 'fridge' | 'plaque'>,
+  ModelDef
+> = {
   sedan: car('sedan'),
   'sedan-sports': car('sedan-sports'),
   suv: car('suv'),
@@ -525,6 +529,105 @@ function DeskPhone() {
   )
 }
 
+const FRIDGE_BODY = new MeshStandardMaterial({ color: '#e9ecef', roughness: 0.35 })
+const FRIDGE_TRIM = new MeshStandardMaterial({ color: '#9aa1a9', roughness: 0.4, metalness: 0.6 })
+const FRIDGE_HEIGHT = 1.7
+const FRIDGE_SPLIT = 1.1
+
+/** The break room's fridge, made of boxes: a tall white body, two doors and their handles. */
+function Fridge() {
+  return (
+    <group>
+      <mesh position-y={FRIDGE_HEIGHT / 2} material={FRIDGE_BODY} castShadow receiveShadow>
+        <boxGeometry args={[0.8, FRIDGE_HEIGHT, 0.75]} />
+      </mesh>
+      {/* The gap between the freezer and fridge doors, on the front (+z). */}
+      <mesh position={[0, FRIDGE_SPLIT, 0.376]} material={FRIDGE_TRIM}>
+        <boxGeometry args={[0.8, 0.02, 0.01]} />
+      </mesh>
+      {[FRIDGE_SPLIT + 0.25, FRIDGE_SPLIT - 0.35].map((y) => (
+        <mesh key={y} position={[0.3, y, 0.4]} material={FRIDGE_TRIM}>
+          <boxGeometry args={[0.04, 0.3, 0.04]} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Employee of the Month's plaque: the latest winner's name and month, gold on wood. */
+function usePlaqueTexture(): CanvasTexture {
+  const win = useGame((s) => s.eotm[s.eotm.length - 1] ?? null)
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 256
+    canvas.height = 320
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#6b4a2f'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.strokeStyle = '#e8c547'
+    ctx.lineWidth = 8
+    ctx.strokeRect(14, 14, canvas.width - 28, canvas.height - 28)
+    ctx.fillStyle = '#e8c547'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const maxWidth = canvas.width - 50
+    ctx.font = '600 26px system-ui, sans-serif'
+    ctx.fillText('EMPLOYEE', canvas.width / 2, 62, maxWidth)
+    ctx.fillText('OF THE MONTH', canvas.width / 2, 94, maxWidth)
+    ctx.fillText('★', canvas.width / 2, 140, maxWidth)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 40px system-ui, sans-serif'
+    ctx.fillText(win ? win.name : '—', canvas.width / 2, 200, maxWidth)
+    if (win) {
+      ctx.fillStyle = '#e8c547'
+      ctx.font = '500 26px system-ui, sans-serif'
+      const date = calendarOf(win.day)
+      ctx.fillText(
+        `${monthLabel(date.month, true)}, year ${date.year}`,
+        canvas.width / 2,
+        252,
+        maxWidth,
+      )
+    }
+    const tex = new CanvasTexture(canvas)
+    tex.colorSpace = SRGBColorSpace
+    tex.anisotropy = 8
+    return tex
+  }, [win])
+  useEffect(() => () => texture.dispose(), [texture])
+  return texture
+}
+
+const PLAQUE_WOOD = new MeshStandardMaterial({ color: '#4a3220', roughness: 0.7 })
+const PLAQUE_Y = 1.15
+
+/** The plaque on its stand, the same face on both sides so it reads from every camera angle. */
+function Plaque() {
+  const texture = usePlaqueTexture()
+  return (
+    // Turned 45° toward the showroom floor, so it reads from the default view.
+    <group position-z={-0.15} rotation-y={-Math.PI / 4}>
+      <mesh position-y={PLAQUE_Y / 2} material={PLAQUE_WOOD} castShadow>
+        <boxGeometry args={[0.08, PLAQUE_Y, 0.08]} />
+      </mesh>
+      <mesh position-y={0.03} material={PLAQUE_WOOD} receiveShadow>
+        <boxGeometry args={[0.5, 0.06, 0.4]} />
+      </mesh>
+      <mesh position-y={PLAQUE_Y} material={PLAQUE_WOOD} castShadow>
+        <boxGeometry args={[0.66, 0.82, 0.06]} />
+      </mesh>
+      {[0, Math.PI].map((rot) => (
+        <group key={rot} rotation-y={rot}>
+          <mesh position={[0, PLAQUE_Y, 0.031]}>
+            <planeGeometry args={[0.6, 0.75]} />
+            <meshStandardMaterial map={texture} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 const swallowClick = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
 interface PropViewProps {
@@ -585,6 +688,10 @@ function PropContent({ prop, cleanliness, condition, turntable, ding }: PropView
         <ForSaleSign width={turned ? b.h : b.w} />
       ) : prop.model === 'deskPhone' ? (
         <DeskPhone />
+      ) : prop.model === 'fridge' ? (
+        <Fridge />
+      ) : prop.model === 'plaque' ? (
+        <Plaque />
       ) : (
         <Model
           def={MODELS[prop.model]}

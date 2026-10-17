@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addEotm,
+  employeeOfMonth,
+  eotmCount,
+  MAX_EOTM,
+  newMonthXp,
+  ROLE_XP_SCALE,
   addWork,
   canPromote,
   MENTOR_XP,
@@ -62,6 +68,8 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...extra,
 })
 
@@ -323,5 +331,53 @@ describe('promotion', () => {
     expect(seniorSightBonus(senior('security'))).toBe(2)
     expect(seniorWashScale(senior('porter'))).toBeLessThan(1)
     expect(financeCommission(0, seniorFeeBonus(senior('finance')))).toBe(financeCommission(0) + 50)
+  })
+})
+
+describe('Employee of the Month', () => {
+  it('adds what each earns to their month', () => {
+    const e = employee({ monthXp: 10 })
+    const { roster } = growStaff([e], addWork({}, e.id, 'came'), 3)
+    expect(roster[0].monthXp).toBe(10 + XP_PER_DAY)
+    const scaled = growStaff([e], addWork({}, e.id, 'came'), 3, 2).roster[0]
+    expect(scaled.monthXp).toBe(10 + XP_PER_DAY * 2)
+  })
+
+  it('counts the month even at the top skill, where the bar stays empty', () => {
+    const top = employee({ skill: MAX_SKILL, potential: MAX_SKILL })
+    const grown = growStaff([top], addWork({}, top.id, 'came'), 3).roster[0]
+    expect(grown).toMatchObject({ xp: 0, monthXp: XP_PER_DAY })
+  })
+
+  it('picks the most experience scaled by role, so a quiet role has a chance', () => {
+    const seller = employee({ id: 'a', role: 'sales', monthXp: 300 })
+    const guard = employee({ id: 'b', role: 'security', monthXp: 200 })
+    expect(ROLE_XP_SCALE.security * 200).toBeGreaterThan(300)
+    expect(employeeOfMonth([seller, guard])?.id).toBe('b')
+  })
+
+  it('passes over the let go and the leaving, and names nobody with nothing earned', () => {
+    const fired = employee({ id: 'a', monthXp: 500, fired: true })
+    const quitting = employee({ id: 'b', monthXp: 400, quitting: true })
+    const other = employee({ id: 'c', monthXp: 10 })
+    expect(employeeOfMonth([fired, quitting, other])?.id).toBe('c')
+    expect(employeeOfMonth([employee()])).toBeNull()
+  })
+
+  it('keeps the last winners, and counts each one’s wins', () => {
+    let wins = addEotm([], { id: 'a', name: 'Dana', role: 'sales', day: 28 })
+    for (let i = 1; i <= MAX_EOTM; i++) {
+      wins = addEotm(wins, { id: i % 2 ? 'b' : 'a', name: 'X', role: 'sales', day: 28 * (i + 1) })
+    }
+    expect(wins).toHaveLength(MAX_EOTM)
+    expect(wins[wins.length - 1].day).toBe(28 * (MAX_EOTM + 1))
+    expect(eotmCount(wins, 'b') + eotmCount(wins, 'a')).toBe(MAX_EOTM)
+  })
+
+  it('starts everyone’s month afresh', () => {
+    const roster = [employee({ monthXp: 50 }), employee({ id: 'b' })]
+    expect(newMonthXp(roster).map((e) => e.monthXp)).toEqual([0, 0])
+    const fresh = [employee()]
+    expect(newMonthXp(fresh)).toBe(fresh)
   })
 })

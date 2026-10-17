@@ -102,6 +102,28 @@ export function Mood({ e }: { e: Pick<Employee, 'morale' | 'moraleWhy'> }) {
   )
 }
 
+/** 🏆 for this month's Employee of the Month (the latest named), ☕ while on a break. */
+function Badges({ id }: { id: string }) {
+  const star = useGame((s) => s.eotm[s.eotm.length - 1]?.id === id)
+  const resting = useGame((s) => s.onBreak.includes(id))
+  return (
+    <>
+      {star && (
+        <span role="img" aria-label="Employee of the Month" title="Employee of the Month">
+          {' '}
+          🏆
+        </span>
+      )}
+      {resting && (
+        <span role="img" aria-label="On a break" title="On a break">
+          {' '}
+          ☕
+        </span>
+      )}
+    </>
+  )
+}
+
 function StaffRow({
   e,
   blurb = false,
@@ -118,6 +140,7 @@ function StaffRow({
         <div className="staff-name">
           {e.name}
           {!blurb && <Mood e={e} />}
+          {!blurb && <Badges id={e.id} />}
         </div>
         <div className="staff-meta">
           {e.senior && <span aria-hidden>★ </span>}

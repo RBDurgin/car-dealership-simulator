@@ -1,13 +1,16 @@
 /** Key bindings, listed in the corner hint and the how-to-play guide. */
 export const CONTROLS: [string, string][] = [
-  ['Click', 'Move / interact / greet / buy / appraise / call / recondition / confront Nazma'],
+  [
+    'Click',
+    'Move / interact / greet / buy / appraise / call / recondition / praise / huddle / confront Nazma',
+  ],
   ['WASD', 'Walk'],
   ['Q / E', 'Rotate view'],
   ['Wheel', 'Zoom'],
   ['H', 'Staff'],
   ['I', 'Stock (order cars)'],
   ['M', 'Marketing (ads)'],
-  ['U', 'Upgrades (outside, showroom, waiting area)'],
+  ['U', 'Upgrades (outside, showroom, waiting area, staff room)'],
   ['C', 'Calendar (the week ahead)'],
   ['K', 'Rival (Nazma’s lot across the road)'],
   ['B', 'Service (the garage)'],
@@ -33,7 +36,10 @@ export const CONTROLS: [string, string][] = [
 
 /** The same for a touch screen, where the on-screen buttons stand in for keys. */
 export const TOUCH_CONTROLS: [string, string][] = [
-  ['Tap', 'Move / interact / greet / buy / appraise / call / recondition / confront Nazma'],
+  [
+    'Tap',
+    'Move / interact / greet / buy / appraise / call / recondition / praise / huddle / confront Nazma',
+  ],
   ['Pinch', 'Zoom'],
   ['Twist', 'Rotate view (two fingers)'],
   ['Staff', 'Staff'],

@@ -8,6 +8,7 @@ import {
   isCustomerAction,
 } from '../../sim/deal'
 import { PLAYER_ID } from '../../sim/customers'
+import { huddleBlocker, praiseBlocker } from '../../sim/morale'
 import { confrontBlocker } from '../../sim/nazma'
 import { dingBlocker, reconBlocker } from '../../sim/service'
 import { vehicleOwnerId } from '../../sim/sellers'
@@ -17,6 +18,12 @@ import { dispatch, endDeal, notify, type Kit } from '../core'
 import { DEV_TIME_SCALES, reconBook } from '../derived'
 import { nextActionId, nextNoticeId, nextOrderId } from '../rng'
 import type { GameState } from '../types'
+
+/** Why the player can't praise employee `id` now, or null if they can. */
+function praiseFor(s: GameState, id: string): string | null {
+  const e = s.roster.find((x) => x.id === id)
+  return e ? praiseBlocker(e, s.clock.day) : 'They’ve gone.'
+}
 
 type UiKeys =
   | 'screen'
@@ -125,11 +132,26 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
       const blocker =
         action === 'confront'
           ? confrontBlocker(s.nazma)
-          : action === 'recondition'
-            ? reconBlocker(reconBook(s), targetId)
-            : action === 'fixDing'
-              ? dingBlocker(reconBook(s), targetId)
-              : actionBlocker(action, targetId, s.customers, s.roster, s.inventory, s.serviceJobs)
+          : action === 'praise'
+            ? praiseFor(s, targetId)
+            : action === 'huddle'
+              ? huddleBlocker(
+                  s.clock.minute,
+                  s.dayStats.huddle,
+                  s.roster.filter((e) => e.status === 'atPost' && !e.fired).length,
+                )
+              : action === 'recondition'
+                ? reconBlocker(reconBook(s), targetId)
+                : action === 'fixDing'
+                  ? dingBlocker(reconBook(s), targetId)
+                  : actionBlocker(
+                      action,
+                      targetId,
+                      s.customers,
+                      s.roster,
+                      s.inventory,
+                      s.serviceJobs,
+                    )
       if (blocker) {
         set({ menu: null })
         return notify(k, blocker)

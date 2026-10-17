@@ -37,6 +37,7 @@ import type {
   ServiceSettings,
 } from '../sim/service'
 import type { ArrivalSchedule } from '../sim/spawner'
+import type { EotmWin } from '../sim/growth'
 import type { CourseKind, Employee, StaffEvent } from '../sim/staff'
 import type { DayRecord, Lifetime, Records } from '../sim/stats'
 import type { TipId } from '../sim/tips'
@@ -199,6 +200,10 @@ export interface GameState {
   roster: Employee[]
   /** Today's applicants. */
   candidates: Employee[]
+  /** Ids of staff on a break in the break room right now (mid-day, never saved). */
+  onBreak: string[]
+  /** Employees of the Month, the latest last (see `sim/growth.ts`). Saved. */
+  eotm: EotmWin[]
   /** On an owner's day, their goal for it. Null on other days. */
   owner: OwnerVisit | null
   /** On a day Nazma visits, his plan and how far he's got. Null on other days. */
@@ -408,6 +413,10 @@ export interface GameState {
   cancelTraining: (id: string) => void
   /** Gives employee `id` their role's Senior title (see `promoteBlocker`). */
   promote: (id: string) => void
+  /** The player praises employee `id`, up close (see `praiseMorale`). */
+  praise: (id: string) => void
+  /** Employee `id` goes on a break in the break room (`on`), or is back from one. */
+  staffBreak: (id: string, on: boolean) => void
   /** Dev: everyone on the lot gains a level's worth of experience now (Shift+G). */
   devGrowStaff: () => void
   /** Shift progress reported by the world for one employee. */

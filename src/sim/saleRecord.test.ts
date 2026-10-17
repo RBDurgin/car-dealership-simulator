@@ -36,6 +36,8 @@ const employee = (id: string, role: Role, name: string): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
 })
 const sam = employee('e1', 'sales', 'Sam R.')
 const fran = employee('e2', 'finance', 'Fran T.')

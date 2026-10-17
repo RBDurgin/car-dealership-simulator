@@ -22,6 +22,7 @@ const AREA_NOTES: Record<ImprovementArea, string> = {
   outside: 'More passers-by, and more of them turning in.',
   showroom: 'Buyers haggle less and say yes a little more often.',
   lounge: 'Customers waiting to be helped give up later.',
+  staff: 'Happier staff, who take their breaks there when it’s quiet.',
 }
 
 function UpgradeRow({

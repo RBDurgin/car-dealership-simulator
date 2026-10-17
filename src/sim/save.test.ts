@@ -68,6 +68,8 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   training: null,
   trained: false,
   senior: false,
+  praisedDay: null,
+  monthXp: 0,
   ...extra,
 })
 
@@ -115,6 +117,7 @@ const source = () => ({
   statsFrom: 4,
   // As a v26 save upgrades, so the older upgrades compare equal.
   achievements: [] as EarnedAchievement[],
+  eotm: [],
   // As a v27 save upgrades.
   dealershipName: DEFAULT_DEALERSHIP_NAME,
 })
@@ -689,6 +692,8 @@ describe('save data', () => {
       training: null,
       trained: false,
       senior: false,
+      praisedDay: null,
+      monthXp: 0,
     })
     expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
     expect(parseSave({ ...save, roster: old })).toBeNull()
@@ -746,6 +751,26 @@ describe('save data', () => {
     ])
     expect(parseSave({ ...save, roster: old })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], daysOff: [7] }] })).toBeNull()
+  })
+
+  it('keeps praise, the month’s experience and Employees of the Month, and upgrades a version 36 save with none', () => {
+    const star = employee('staff-1-1', { praisedDay: 120, monthXp: 84 })
+    const eotm = [{ id: 'staff-1-1', name: 'Dana', role: 'sales' as const, day: 112 }]
+    const save = createSave({ ...source(), roster: [star], eotm }, 123)
+    const back = parseSave(JSON.parse(JSON.stringify(save)))
+    expect(back?.roster[0]).toMatchObject({ praisedDay: 120, monthXp: 84 })
+    expect(back?.eotm).toEqual(eotm)
+    const old = save.roster.map((e) => {
+      const { praisedDay: _, monthXp: __, ...rest } = e
+      return rest
+    })
+    const { eotm: _gone, ...older } = save
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...older, version: 36, roster: old })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster[0]).toMatchObject({ praisedDay: null, monthXp: 0 })
+    expect(upgraded?.eotm).toEqual([])
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    expect(parseSave({ ...save, eotm: [{ ...eotm[0], role: 'boss' }] })).toBeNull()
   })
 
   it('keeps courses, the advanced course and seniors, and upgrades a version 35 save with none', () => {
