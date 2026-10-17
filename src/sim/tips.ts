@@ -15,6 +15,10 @@ import { BUST_SHARE, BUST_WEEKS, type RivalStatus } from './rival'
 import { bayCount, type ServiceJob } from './service'
 import type { RecordKey } from './stats'
 import { isStale, STALE_DAYS } from './usedCars'
+import { canPromote, trainingBlocker } from './growth'
+import { LOW_MORALE } from './morale'
+import { coverageGaps } from './rota'
+import type { Employee } from './staff'
 
 /** A used car this worn or worse is worth reconditioning (see the `recon` tip). */
 export const ROUGH_CONDITION = 0.5
@@ -59,6 +63,11 @@ export type TipId =
   | 'testDrive'
   | 'ding'
   | 'driveStaff'
+  | 'levelUp'
+  | 'lowMorale'
+  | 'rota'
+  | 'training'
+  | 'promote'
   | 'stats'
   | 'achievement'
 
@@ -67,6 +76,9 @@ export const FINANCE_TIP_DEALS = 5
 
 /** Drives the player takes in a day, with a salesperson free, that make it worth sending them instead. */
 export const DRIVE_STAFF_TIP_DRIVES = 3
+
+/** Days on the team before an employee's training is worth pointing at. */
+export const TRAINING_TIP_DAYS = 7
 
 /** Cash under this is low enough to point at the floor plan. */
 export const LOW_CASH = 5_000
@@ -131,6 +143,13 @@ export const TIPS: Record<TipId, string> = {
     'A shopper with a key over their head wants to drive the car. Choose Test drive on them to ride along: a good drive makes a yes likelier and a smaller discount. Point out what suits them when asked. Give them a price without the drive and they’re cooler on it.',
   ding: 'A car came back from a test drive with a dent, and dinged cars sell less often. Choose Fix dent on it to book the garage, or Recondition a used one.',
   driveStaff: `You’ve taken ${DRIVE_STAFF_TIP_DRIVES} test drives today while a salesperson stood free. Choose Send with … in the shopper's panel to hand the drive to them, and stay on the floor to sell.`,
+  levelUp:
+    'Someone grew a skill level from the work they’ve done, and asks for the new level’s wage. Grant or decline it in the Staff panel: a raise turned down, or left unanswered for three days, costs them morale.',
+  lowMorale: `Someone’s morale fell under ${LOW_MORALE}. The Staff panel shows what’s moving it. Fair pay, a day off, praise and a morning huddle at your desk lift it; unhappy staff work slower and are easier for Nazma to poach.`,
+  rota: 'Some days a role has nobody in. Open the Staff panel’s Schedule view to see the gaps and change who’s off: everyone gets a day off a week (unpaid), and working every day tires them out.',
+  training: `${TRAINING_TIP_DAYS} days in, your staff can be trained. Book a course from the Staff panel: a day away (paid) for about two weeks of experience, up to their potential. The advanced course, once each, raises their potential too.`,
+  promote:
+    'Someone can be promoted. Promote them in the Staff panel to their role’s Senior title: a raise, a morale lift, a small perk, and the rest of the role learns faster on the days they’re in. One per role.',
   stats:
     'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
   achievement:
@@ -157,7 +176,7 @@ export interface TipState {
     fi?: Pick<FiStats, 'financed' | 'declined' | 'chargebackCount'>
     drives?: Pick<DriveStats, 'taken' | 'byStaff' | 'dings'>
   }
-  roster?: readonly { id: string; role: string; status: string; fired: boolean }[]
+  roster?: readonly Employee[]
   achievements?: readonly unknown[]
   owner: OwnerVisit | null
   nazma: NazmaVisit | null
@@ -203,6 +222,22 @@ const idleSalesperson = (s: TipState) =>
       !e.fired &&
       !s.customers.some((c) => c.handlerId === e.id && c.phase !== 'leaving'),
   )
+
+/** Whether someone on `s`'s roster passes `test` who didn't in `prev` (by id), when either changed. */
+function newlyStaff(
+  prev: TipState,
+  next: TipState,
+  test: (e: Employee, s: TipState) => boolean,
+  byDay = false,
+): boolean {
+  if (
+    !next.roster ||
+    (next.roster === prev.roster && (!byDay || next.clock.day === prev.clock.day))
+  )
+    return false
+  const was = new Set(prev.roster?.filter((e) => test(e, prev)).map((e) => e.id))
+  return next.roster.some((e) => !was.has(e.id) && test(e, next))
+}
 
 const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
@@ -375,6 +410,24 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
         playerDrives(prev) < DRIVE_STAFF_TIP_DRIVES &&
         idleSalesperson(next)
       )
+    case 'levelUp':
+      return newlyStaff(prev, next, (e) => !e.fired && !!e.raiseAsk)
+    case 'lowMorale':
+      return newlyStaff(prev, next, (e) => !e.fired && e.morale < LOW_MORALE)
+    case 'rota': {
+      if (!next.roster || next.roster === prev.roster) return false
+      return coverageGaps(next.roster).length > 0 && coverageGaps(prev.roster ?? []).length === 0
+    }
+    case 'training':
+      return newlyStaff(
+        prev,
+        next,
+        (e, s) =>
+          s.clock.day - e.hiredDay >= TRAINING_TIP_DAYS && trainingBlocker(e, 'basic') === null,
+        true,
+      )
+    case 'promote':
+      return newlyStaff(prev, next, (e, s) => canPromote(e, s.roster ?? [], s.clock.day), true)
     case 'stats':
       return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
     case 'achievement':

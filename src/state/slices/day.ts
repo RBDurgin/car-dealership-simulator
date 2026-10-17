@@ -1,4 +1,4 @@
-import { dayAchievements, type EarnedAchievement } from '../../sim/achievements'
+import { dayAchievements, isHappyTeam, type EarnedAchievement } from '../../sim/achievements'
 import { appreciationNotice, isAppreciationDay, planGuests } from '../../sim/appreciation'
 import { calendarOf, DAYS_PER_MONTH } from '../../sim/calendar'
 import { appointmentsNotice, planClientVisits, type ClientVisit } from '../../sim/calls'
@@ -383,7 +383,10 @@ export function settleDay(k: Kit): void {
     settled: true,
   }
   const log = [...s.log, dayRecord(settled, s.clock.day, reputation, cash + bailout)]
-  const records = updateRecords(s.records, log, settled)
+  const updated = updateRecords(s.records, log, settled)
+  // The run of days the whole team ended happy, for the Happy Team achievement.
+  const happyStreak = isHappyTeam(roster) ? s.records.happyStreak + 1 : 0
+  const records = { ...updated, records: { ...updated.records, happyStreak } }
   const inventory =
     s.purchases.length > 0
       ? [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)]
@@ -412,7 +415,7 @@ export function settleDay(k: Kit): void {
     reputation,
     career,
     log,
-    lifetime: addToLifetime(s.lifetime, settled),
+    lifetime: addToLifetime(s.lifetime, settled, grown.earned),
     records: records.records,
     franchise,
     ...(earned.length > 0 && { achievements: [...s.achievements, ...earned] }),

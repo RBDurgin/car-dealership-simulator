@@ -32,6 +32,7 @@ import { emptyFiStats } from './fi'
 import { createSave, parseSave, SAVE_VERSION } from './save'
 import { defaultService, type ServiceSettings } from './service'
 import {
+  emptyEmployeeTotal,
   emptyLifetime,
   emptyRecords,
   tupleToRecord,
@@ -70,6 +71,7 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   senior: false,
   praisedDay: null,
   monthXp: 0,
+  levels: [],
   ...extra,
 })
 
@@ -694,6 +696,7 @@ describe('save data', () => {
       senior: false,
       praisedDay: null,
       monthXp: 0,
+      levels: [],
     })
     expect(upgraded!.roster[0].potential).toBeGreaterThanOrEqual(2)
     expect(parseSave({ ...save, roster: old })).toBeNull()
@@ -751,6 +754,56 @@ describe('save data', () => {
     ])
     expect(parseSave({ ...save, roster: old })).toBeNull()
     expect(parseSave({ ...save, roster: [{ ...save.roster[0], daysOff: [7] }] })).toBeNull()
+  })
+
+  it('keeps level histories, employee records, huddles and the happy run, and upgrades a version 37 save', () => {
+    const grown = employee('staff-1-1', {
+      skill: 3,
+      potential: 4,
+      levels: [
+        { skill: 2, day: 30 },
+        { skill: 3, day: 61 },
+      ],
+    })
+    const lifetime: Lifetime = {
+      ...emptyLifetime(),
+      huddles: 4,
+      bySeller: { player: { sales: 1, gross: 2_000 }, 'staff-1-1': { sales: 3, gross: 7_000 } },
+      byEmployee: {
+        'staff-1-1': { ...emptyEmployeeTotal(), days: 40, xp: 400, sales: 3, gross: 7_000 },
+      },
+    }
+    const records: Records = { ...emptyRecords(), happyStreak: 3 }
+    const save = createSave({ ...source(), roster: [grown], lifetime, records }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save)
+    const { byEmployee: _, huddles: __, ...oldLifetime } = lifetime
+    const { happyStreak: _h, ...oldRecords } = records
+    const old = save.roster.map((e) => {
+      const { levels: _l, ...rest } = e
+      return rest
+    })
+    const upgraded = parseSave(
+      JSON.parse(
+        JSON.stringify({
+          ...save,
+          version: 37,
+          roster: old,
+          lifetime: oldLifetime,
+          records: oldRecords,
+        }),
+      ),
+    )
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.roster[0].levels).toEqual([])
+    expect(upgraded?.lifetime.huddles).toBe(0)
+    expect(upgraded?.lifetime.byEmployee).toEqual({
+      'staff-1-1': { ...emptyEmployeeTotal(), sales: 3, gross: 7_000 },
+    })
+    expect(upgraded?.records.happyStreak).toBe(0)
+    expect(parseSave({ ...save, roster: old })).toBeNull()
+    expect(
+      parseSave({ ...save, lifetime: { ...lifetime, byEmployee: { x: { days: 1 } } } }),
+    ).toBeNull()
   })
 
   it('keeps praise, the month’s experience and Employees of the Month, and upgrades a version 36 save with none', () => {

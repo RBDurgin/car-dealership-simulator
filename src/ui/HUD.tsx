@@ -14,6 +14,7 @@ import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
 import { prefetchPanels } from './panelChunks'
 import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
+import { EmployeePage } from './EmployeePage'
 import { TitleScreen } from './TitleScreen'
 import { WinScreen } from './WinScreen'
 import { TopBar } from './TopBar'
@@ -205,6 +206,7 @@ export function HUD() {
       <CustomerPanel />
       <StaffPanel />
       <StockPanel />
+      <EmployeePage />
       <ActionMenu />
       <DaySummary />
       <WinScreen />

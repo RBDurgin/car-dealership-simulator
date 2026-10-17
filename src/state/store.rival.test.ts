@@ -293,6 +293,7 @@ describe('his moves and sabotage', () => {
       senior: false,
       praisedDay: null,
       monthXp: 0,
+      levels: [],
     }
     useGame.setState({ rival: open({ strength: 40 }), roster: [dana] })
     endDay()

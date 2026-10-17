@@ -11,12 +11,15 @@ import { clientJob, type Finding } from './service'
 import { serviceClient } from './serviceClients'
 import { newDrive } from './testDrive'
 import { STALE_DAYS } from './usedCars'
+import { SENIOR_DAYS } from './growth'
+import { wageFor, type Employee } from './staff'
 import {
   APPRECIATION_TIP_CLIENTS,
   DRIVE_STAFF_TIP_DRIVES,
   FINANCE_TIP_DEALS,
   LOW_CASH,
   TIP_IDS,
+  TRAINING_TIP_DAYS,
   tipFor,
   tipText,
   TIPS,
@@ -142,7 +145,35 @@ const driveStats = (taken: number, byStaff = 0, dings = 0) => ({
   quota: null,
   drives: { taken, byStaff, dings },
 })
-const idleSeller = [{ id: 'staff-1-1', role: 'sales', status: 'atPost', fired: false }]
+const staff = (patch: Partial<Employee> = {}): Employee => ({
+  id: 'staff-1-1',
+  name: 'Dana',
+  variant: 'female-e',
+  role: 'sales',
+  skill: 1,
+  wage: wageFor('sales', 1),
+  status: 'atPost',
+  fired: false,
+  quitting: false,
+  xp: 0,
+  potential: 3,
+  hiredDay: 1,
+  raiseAsk: null,
+  morale: 70,
+  lowDays: 0,
+  moraleWhy: [],
+  daysOff: [],
+  streak: 0,
+  training: null,
+  trained: false,
+  senior: false,
+  praisedDay: null,
+  monthXp: 0,
+  levels: [],
+  ...patch,
+})
+const idleSeller = [staff()]
+const seasoned = [staff({ skill: 5, potential: 5 })]
 
 const dueBook = [{ id: 'client-1-0', status: 'client', dueDay: 40 } as Client]
 
@@ -263,6 +294,20 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { dayStats: driveStats(DRIVE_STAFF_TIP_DRIVES + 1, 1), roster: idleSeller },
     { dayStats: driveStats(DRIVE_STAFF_TIP_DRIVES, 1), roster: idleSeller },
   ],
+  levelUp: [
+    { roster: [staff({ raiseAsk: { wage: wageFor('sales', 2), day: 1 } })] },
+    { roster: [staff()] },
+  ],
+  lowMorale: [{ roster: [staff({ morale: 20 })] }, { roster: [staff()] }],
+  rota: [{ roster: [staff({ daysOff: [0] })] }, { roster: [staff()] }],
+  training: [
+    { roster: idleSeller, clock: { day: 1 + TRAINING_TIP_DAYS } },
+    { roster: idleSeller, clock: { day: TRAINING_TIP_DAYS } },
+  ],
+  promote: [
+    { roster: seasoned, clock: { day: 1 + SENIOR_DAYS } },
+    { roster: seasoned, clock: { day: SENIOR_DAYS } },
+  ],
   referral: [{ customers: [customer('f1', { referredBy: 'client-1-0' })] }, {}],
   appreciation: [
     { clients: clientsOf(APPRECIATION_TIP_CLIENTS) },
@@ -333,17 +378,30 @@ describe('tipFor', () => {
 
   it('suggests a finance manager only when there isn’t one', () => {
     const [next, prev] = triggers.financeManager
-    const roster = [{ id: 'staff-1-1', role: 'finance', status: 'atPost', fired: false }]
+    const roster = [staff({ role: 'finance' })]
     expect(tip({ ...next, roster }, { ...prev, roster })).toBeNull()
     const gone = [{ ...roster[0], fired: true }]
     expect(tip({ ...next, roster: gone }, { ...prev, roster: gone })).toBe('financeManager')
+  })
+
+  it('points at training only for someone who can still learn', () => {
+    const [next, prev] = triggers.training
+    expect(tip({ ...next, roster: seasoned }, { ...prev, roster: seasoned })).toBeNull()
+    const booked = [staff({ training: { day: 20, course: 'basic' } })]
+    expect(tip({ ...next, roster: booked }, { ...prev, roster: booked })).toBeNull()
+  })
+
+  it('counts a coverage gap only when there was none', () => {
+    const [next] = triggers.rota
+    expect(tip(next, next)).toBeNull()
+    expect(tip(next, { roster: [staff({ daysOff: [1] })] })).toBeNull()
   })
 
   it('points at a salesperson’s drives only while one is free', () => {
     const [next, prev] = triggers.driveStaff
     const busy = [customer('d2', { handlerId: 'staff-1-1' })]
     expect(tip({ ...next, customers: busy }, { ...prev, customers: busy })).toBeNull()
-    const off = [{ ...idleSeller[0], status: 'off' }]
+    const off = [staff({ status: 'off' })]
     expect(tip({ ...next, roster: off }, { ...prev, roster: off })).toBeNull()
     // Drives the salespeople took don't count.
     expect(tip({ ...next, dayStats: driveStats(5, 3) }, prev)).toBeNull()

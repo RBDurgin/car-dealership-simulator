@@ -170,6 +170,14 @@ export interface Employee {
   praisedDay: number | null
   /** Experience earned so far this month, for Employee of the Month (see `sim/growth.ts`). */
   monthXp: number
+  /** Each level they've grown to, and the day, the first first (see `sim/growth.ts`). */
+  levels: LevelStep[]
+}
+
+/** A level an employee grew to. */
+export interface LevelStep {
+  skill: number
+  day: number
 }
 
 /** A basic course (experience) or the advanced one (a higher potential too). */
@@ -367,6 +375,7 @@ export function generateCandidates(
       senior: false,
       praisedDay: null,
       monthXp: 0,
+      levels: [],
     }
   })
 }

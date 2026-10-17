@@ -552,6 +552,17 @@ export const UPDATES: readonly Update[] = [
       'At month end the hardest worker is Employee of the Month: a bonus, a lift and their name on the showroom’s plaque.',
     ],
   },
+  {
+    id: 50,
+    phase: '21',
+    title: 'Employee pages',
+    items: [
+      'Pick a name in the staff panel or on the Stats tab for their page: hire day, growth, morale and record.',
+      'The Stats tab lists the whole team, with days worked and experience.',
+      'Five new achievements for growing, promoting and keeping a happy team.',
+      'Morale settles back toward the middle faster, so neglect costs less and daily huddles lift less.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

@@ -12,7 +12,12 @@ import {
   TEAM_DRIVES,
   CLOSER_SALES,
   dayAchievements,
+  HAPPY_TEAM_DAYS,
+  HAPPY_TEAM_SIZE,
+  HUDDLES,
+  isHappyTeam,
   SIX_FIGURES,
+  TEAM_MORALE,
   STAR_SELLER_SALES,
   type AchievementId,
   type AchievementState,
@@ -72,6 +77,7 @@ const employee = (id: string, extra: Partial<Employee> = {}): Employee => ({
   senior: false,
   praisedDay: null,
   monthXp: 0,
+  levels: [],
   ...extra,
 })
 
@@ -563,6 +569,55 @@ describe('test drive achievements', () => {
     expect(dayEarns(day(SCRATCH_FREE_DRIVES), 'not-a-scratch')).toBe(true)
     expect(dayEarns(day(SCRATCH_FREE_DRIVES - 1), 'not-a-scratch')).toBe(false)
     expect(dayEarns(day(SCRATCH_FREE_DRIVES, 1), 'not-a-scratch')).toBe(false)
+  })
+})
+
+describe('staff growth achievements', () => {
+  it('marks someone hired at skill 1 grown to 5, not someone hired higher', () => {
+    const grown = employee('s1', {
+      skill: 5,
+      levels: [2, 3, 4, 5].map((skill) => ({ skill, day: skill * 20 })),
+    })
+    expect(earns(base, { ...base, roster: [grown] }, 'homegrown')).toBe(true)
+    const hiredAt2 = { ...grown, levels: grown.levels.slice(1) }
+    expect(earns(base, { ...base, roster: [hiredAt2] }, 'homegrown')).toBe(false)
+  })
+
+  it('marks a first senior and an Employee of the Month', () => {
+    expect(
+      earns(base, { ...base, roster: [employee('s1', { senior: true })] }, 'first-senior'),
+    ).toBe(true)
+    expect(earns(base, { ...base, roster: [employee('s1')] }, 'first-senior')).toBe(false)
+    const named = ctx({
+      stats: {
+        ...emptyStats(),
+        settled: true,
+        eotm: { id: 's1', name: 'Dana', role: 'sales', day: 28 },
+      },
+    })
+    expect(dayEarns(named, 'eotm')).toBe(true)
+    expect(dayEarns(ctx(), 'eotm')).toBe(false)
+  })
+
+  it(`needs a happy team of ${HAPPY_TEAM_SIZE}+ for ${HAPPY_TEAM_DAYS} days`, () => {
+    const happy = (n: number, morale = TEAM_MORALE) =>
+      Array.from({ length: n }, (_, i) => employee(`s${i}`, { morale }))
+    expect(isHappyTeam(happy(HAPPY_TEAM_SIZE))).toBe(true)
+    expect(isHappyTeam(happy(HAPPY_TEAM_SIZE - 1))).toBe(false)
+    expect(isHappyTeam([...happy(HAPPY_TEAM_SIZE), employee('x', { morale: 79 })])).toBe(false)
+    expect(
+      isHappyTeam([...happy(HAPPY_TEAM_SIZE), employee('x', { morale: 10, fired: true })]),
+    ).toBe(true)
+    const run = (happyStreak: number) => ctx({ records: { ...emptyRecords(), happyStreak } })
+    expect(dayEarns(run(HAPPY_TEAM_DAYS), 'happy-team')).toBe(true)
+    expect(dayEarns(run(HAPPY_TEAM_DAYS - 1), 'happy-team')).toBe(false)
+  })
+
+  it(`counts ${HUDDLES} huddles, today’s among them`, () => {
+    const before = { ...base, lifetime: { ...base.lifetime, huddles: HUDDLES - 1 } }
+    expect(earns(before, withStats(before, { huddle: true }), 'huddle-up')).toBe(true)
+    const fewer = { ...base, lifetime: { ...base.lifetime, huddles: HUDDLES - 2 } }
+    expect(earns(fewer, withStats(fewer, { huddle: true }), 'huddle-up')).toBe(false)
   })
 })
 

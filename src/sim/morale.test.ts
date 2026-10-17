@@ -56,6 +56,7 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   senior: false,
   praisedDay: null,
   monthXp: 0,
+  levels: [],
   ...extra,
 })
 
@@ -69,8 +70,8 @@ describe('moraleChange', () => {
   })
 
   it('drifts toward home from either side', () => {
-    expect(reason(employee({ morale: 85 }), quiet, 'drift')).toBe(-2)
-    expect(reason(employee({ morale: 35 }), quiet, 'drift')).toBe(3)
+    expect(reason(employee({ morale: 85 }), quiet, 'drift')).toBe(-4)
+    expect(reason(employee({ morale: 35 }), quiet, 'drift')).toBe(6)
   })
 
   it('lowers it for pay under the wage for their skill, and lifts it a little for more', () => {
@@ -153,7 +154,7 @@ describe('moraleDay', () => {
     expect(next[0].morale).toBeLessThan(LOW_MORALE)
     expect(next[0].lowDays).toBe(2)
     expect(next[0].moraleWhy.map((r) => r.id)).toEqual(['pay', 'drift'])
-    expect(next[1]).toMatchObject({ morale: 78.5, lowDays: 0 })
+    expect(next[1]).toMatchObject({ morale: 77, lowDays: 0 })
     expect(next[2]).toBe(roster[2])
   })
 

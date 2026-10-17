@@ -99,6 +99,7 @@ describe('reconditioning in the garage', () => {
     senior: false,
     praisedDay: null,
     monthXp: 0,
+    levels: [],
   }
   const usedCar = (): InventoryCar =>
     usedStockCar(

@@ -25,6 +25,7 @@ import {
   emptyTally,
   grow,
   growStaff,
+  hiredSkill,
   levelProgress,
   levelUpNotice,
   potentialFromId,
@@ -36,6 +37,8 @@ import {
   xpFor,
   xpToLevel,
 } from './growth'
+import { DAYS_PER_WEEK } from './calendar'
+import { moraleChange, withMorale } from './morale'
 import { createRng } from './rng'
 import {
   financeCommission,
@@ -70,6 +73,7 @@ const employee = (extra: Partial<Employee> = {}): Employee => ({
   senior: false,
   praisedDay: null,
   monthXp: 0,
+  levels: [],
   ...extra,
 })
 
@@ -210,6 +214,77 @@ describe('growStaff', () => {
   it('returns the same roster when nobody changed', () => {
     const roster = [employee()]
     expect(growStaff(roster, {}, 2).roster).toBe(roster)
+  })
+
+  it('keeps each level grown, a step at a time, and the skill they were hired at', () => {
+    const e = employee({ xp: XP_TO_LEVEL[1] + XP_TO_LEVEL[2] - XP_PER_DAY })
+    const { roster } = growStaff([e], { [e.id]: came }, 12)
+    expect(roster[0].skill).toBe(3)
+    expect(roster[0].levels).toEqual([
+      { skill: 2, day: 12 },
+      { skill: 3, day: 12 },
+    ])
+    expect(hiredSkill(roster[0])).toBe(1)
+  })
+
+  it('reports the experience each earned, for their lifetime totals', () => {
+    const a = employee({ id: 'a' })
+    const b = employee({ id: 'b' })
+    const { earned } = growStaff([a, b], { a: came }, 3, 1.5)
+    expect(earned).toEqual({ a: Math.round(XP_PER_DAY * 1.5) })
+  })
+})
+
+/**
+ * The plan's growth and morale targets on Medium, played over a steady day
+ * of work (a sale and a test drive) without the store.
+ */
+describe('growth and morale balance', () => {
+  const steady = { ...emptyTally(), came: true, sales: 1, drives: 1 }
+
+  /** Day by day for 56 days: morale and skill at the end of each. */
+  function run(opts: { daysOff: boolean; grant: boolean }) {
+    let e = employee()
+    const days: { morale: number; skill: number }[] = []
+    for (let day = 1; day <= 56; day++) {
+      const off = opts.daysOff && day % DAYS_PER_WEEK === 3
+      const tally = off ? undefined : steady
+      e = { ...e, streak: off ? 0 : e.streak + 1 }
+      const declined = !!e.raiseAsk && !opts.grant
+      if (e.raiseAsk) e = { ...e, wage: opts.grant ? e.raiseAsk.wage : e.wage, raiseAsk: null }
+      const m = moraleChange(e, {
+        tally,
+        raiseDeclined: declined,
+        coworkersLost: 0,
+        streak: e.streak,
+      })
+      e = { ...e, morale: withMorale(e.morale, m.delta) }
+      e = growStaff([e], tally ? { [e.id]: tally } : {}, day).roster[0]
+      days.push({ morale: e.morale, skill: e.skill })
+    }
+    return days
+  }
+
+  it('takes a skill-1 hire to skill 3 in about 6–8 weeks of work', () => {
+    const third = run({ daysOff: true, grant: true }).findIndex((d) => d.skill >= 3) + 1
+    expect(third).toBeGreaterThanOrEqual(6 * DAYS_PER_WEEK)
+    expect(third).toBeLessThanOrEqual(8 * DAYS_PER_WEEK)
+  })
+
+  it('keeps a fairly paid, rested employee at about 60–80', () => {
+    for (const d of run({ daysOff: true, grant: true }).slice(DAYS_PER_WEEK)) {
+      expect(d.morale).toBeGreaterThanOrEqual(60)
+      expect(d.morale).toBeLessThanOrEqual(80)
+    }
+  })
+
+  it('lets a neglected one sink to about 30, but not under notice', () => {
+    const days = run({ daysOff: false, grant: false })
+    const declined = days.findIndex((d) => d.skill >= 2)
+    const fortnight = days[declined + 2 * DAYS_PER_WEEK].morale
+    expect(fortnight).toBeGreaterThan(25)
+    expect(fortnight).toBeLessThan(45)
+    expect(days.every((d) => d.morale > 20)).toBe(true)
   })
 })
 

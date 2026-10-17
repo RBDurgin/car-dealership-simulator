@@ -138,7 +138,17 @@ function StaffRow({
     <li className="staff-row">
       <div className="staff-who">
         <div className="staff-name">
-          {e.name}
+          {blurb ? (
+            e.name
+          ) : (
+            <button
+              className="name-button"
+              title={`Open ${e.name}'s page`}
+              onClick={() => useGame.getState().openEmployeePage(e.id)}
+            >
+              {e.name}
+            </button>
+          )}
           {!blurb && <Mood e={e} />}
           {!blurb && <Badges id={e.id} />}
         </div>
@@ -459,7 +469,7 @@ function StaffList() {
           )}
           <div className="status-hint">
             Wages are paid at closing. Hollow stars are skill they can grow into; hover a face for
-            their morale.
+            their morale, or pick a name for their page.
             {touch ? '' : ' H or Esc to close.'}
           </div>
         </>

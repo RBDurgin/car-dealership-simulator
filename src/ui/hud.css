@@ -1641,6 +1641,42 @@ kbd {
   cursor: pointer;
   opacity: 0.7;
 }
+.name-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.name-button:hover,
+.name-button:focus-visible {
+  text-decoration: underline;
+}
+
+/* An employee's page, over the panels */
+.employee-page {
+  width: min(400px, calc(100vw - 32px));
+}
+.employee-page h3 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.employee-blurb,
+.employee-empty {
+  margin: -8px 0 12px;
+  font-size: 13px;
+}
+.employee-empty {
+  margin: 0;
+}
+.employee-why {
+  margin: -6px 0 8px;
+}
 .trophy-reset {
   display: block;
   margin: 14px auto 0;

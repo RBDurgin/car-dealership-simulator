@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
 import type { Customer } from '../sim/customers'
+import type { Difficulty } from '../sim/difficulty'
 import type { Role } from '../sim/staff'
+import { nextDay, playDay, setStaffStyle, type StaffStyle } from './bench/bot'
 import { STARTING_CASH, useGame } from './store'
 
 const initial = useGame.getState()
@@ -186,5 +188,66 @@ describe('payroll', () => {
     endDay()
     expect(game().cash).toBe(STARTING_CASH)
     expect(game().dayStats.settled).toBe(true)
+  })
+})
+
+/**
+ * Staff balance (21f), against the plan's tuning targets: the bench bot plays
+ * 56 seeded days with a small team it treats fairly (the auto rota, every
+ * raise granted, the morning huddle) or neglects (seven-day weeks, every
+ * raise declined). The bands are a little wider than the targets.
+ */
+const BALANCE_DAYS = 56
+
+interface Team {
+  /** The team's average morale at the end of each week. */
+  weekly: number[]
+  resigned: number
+}
+
+function playTeam(level: Difficulty, style: StaffStyle): Team {
+  useGame.setState(initial, true)
+  setStaffStyle(style)
+  game().newGame(level)
+  const weekly: number[] = []
+  let resigned = 0
+  for (let d = 1; d <= BALANCE_DAYS; d++) {
+    playDay()
+    resigned += game().dayStats.resigned.length
+    if (d % 7 === 0) {
+      const team = game().roster.filter((e) => !e.fired)
+      weekly.push(team.reduce((sum, e) => sum + e.morale, 0) / Math.max(1, team.length))
+    }
+    nextDay()
+  }
+  setStaffStyle('none')
+  return { weekly, resigned }
+}
+
+describe('staff over 8 seeded weeks', { timeout: 60_000 }, () => {
+  const runs = {} as Record<'fair' | 'neglect' | 'easyNeglect', Team>
+  beforeAll(() => {
+    runs.fair = playTeam('medium', 'fair')
+    runs.neglect = playTeam('medium', 'neglect')
+    runs.easyNeglect = playTeam('easy', 'neglect')
+  })
+
+  it('keeps a fairly paid, rested team at about 60–80', () => {
+    for (const m of runs.fair.weekly) {
+      expect(m).toBeGreaterThan(58)
+      expect(m).toBeLessThan(85)
+    }
+  })
+
+  it('lets a neglected team sink, but under 1 resignation in 2 months on Medium', () => {
+    const last = runs.neglect.weekly[runs.neglect.weekly.length - 1]
+    expect(last).toBeLessThan(55)
+    expect(last).toBeGreaterThan(20)
+    expect(runs.neglect.resigned).toBe(0)
+  })
+
+  it('never has anyone resign on Easy, and the team stays happier there', () => {
+    expect(runs.easyNeglect.resigned).toBe(0)
+    expect(runs.easyNeglect.weekly.at(-1)).toBeGreaterThan(runs.neglect.weekly.at(-1)!)
   })
 })

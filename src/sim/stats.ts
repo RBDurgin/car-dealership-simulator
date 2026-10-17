@@ -1,8 +1,10 @@
 import { calendarOf, DAYS_PER_MONTH, DAYS_PER_WEEK, monthLabel } from './calendar'
 import { PLAYER_ID } from './customers'
 import { netIncome, totalGross, walkOuts, type DayStats, type Sale } from './deal'
+import type { WorkCount } from './growth'
 import type { CarModel } from './layout'
 import type { Source } from './marketing'
+import type { Role } from './staff'
 
 /**
  * The game's memory of past days: a compact record of each settled day (the
@@ -84,6 +86,68 @@ export interface SellerTotal {
   gross: number
 }
 
+/** One employee's lifetime record, whatever their role. */
+export interface EmployeeTotal {
+  /** Days they came in, and the experience they earned. */
+  days: number
+  xp: number
+  /** Cars they sold and the gross on them. */
+  sales: number
+  gross: number
+  /** The rest of their `WorkTally` counts, added up. */
+  signings: number
+  drives: number
+  washes: number
+  jobs: number
+  checkIns: number
+  findings: number
+  calls: number
+  bookings: number
+  chases: number
+}
+
+export function emptyEmployeeTotal(): EmployeeTotal {
+  return {
+    days: 0,
+    xp: 0,
+    sales: 0,
+    gross: 0,
+    signings: 0,
+    drives: 0,
+    washes: 0,
+    jobs: 0,
+    checkIns: 0,
+    findings: 0,
+    calls: 0,
+    bookings: 0,
+    chases: 0,
+  }
+}
+
+/** The `WorkTally` counts an `EmployeeTotal` adds up as they are. */
+const TOTAL_COUNTS = [
+  'signings',
+  'drives',
+  'washes',
+  'jobs',
+  'checkIns',
+  'findings',
+  'calls',
+  'bookings',
+  'chases',
+] as const satisfies readonly (keyof EmployeeTotal & WorkCount)[]
+
+/** The counts an employee page shows for each role, after days worked and experience. */
+export const ROLE_TOTALS: Record<Role, readonly (keyof EmployeeTotal)[]> = {
+  sales: ['sales', 'gross', 'drives', 'signings'],
+  receptionist: ['calls', 'bookings'],
+  finance: ['signings'],
+  porter: ['washes'],
+  security: ['chases'],
+  mechanic: ['jobs'],
+  advisor: ['checkIns', 'findings'],
+}
+
 export interface Lifetime {
   /** Cars sold, new and used, and of them the used ones. */
   sales: number
@@ -97,12 +161,16 @@ export interface Lifetime {
   bySource: Partial<Record<Source, number>>
   /** By employee id, or `PLAYER_ID` for the player's own sales. */
   bySeller: Record<string, SellerTotal>
+  /** Every employee's record, by id (the player isn't in it). */
+  byEmployee: Record<string, EmployeeTotal>
   /** Sales with a trade-in, and used cars bought (trade-ins and sellers' cars). */
   trades: number
   bought: number
   /** Times Nazma was run off the lot, and thefts a guard foiled. */
   nazmaRunOffs: number
   theftsFoiled: number
+  /** Morning huddles held. */
+  huddles: number
 }
 
 export function emptyLifetime(): Lifetime {
@@ -115,10 +183,12 @@ export function emptyLifetime(): Lifetime {
     byModel: {},
     bySource: {},
     bySeller: {},
+    byEmployee: {},
     trades: 0,
     bought: 0,
     nazmaRunOffs: 0,
     theftsFoiled: 0,
+    huddles: 0,
   }
 }
 
@@ -131,18 +201,46 @@ const bump = <K extends string>(counts: Partial<Record<K, number>>, key: K) => {
   counts[key] = (counts[key] ?? 0) + 1
 }
 
-/** `stats`, a settled day, folded into `lifetime`. */
-export function addDay(lifetime: Lifetime, stats: DayStats): Lifetime {
+/**
+ * `stats`, a settled day, folded into `lifetime`, with `xp` the experience
+ * each employee earned (by id, from `growStaff`).
+ */
+export function addDay(
+  lifetime: Lifetime,
+  stats: DayStats,
+  xp: Readonly<Record<string, number>> = {},
+): Lifetime {
   const byModel = { ...lifetime.byModel }
   const bySource = { ...lifetime.bySource }
   const bySeller = { ...lifetime.bySeller }
+  const byEmployee = { ...lifetime.byEmployee }
+  // Each employee's total is copied once, the first time the day adds to it.
+  const copied = new Set<string>()
+  const touch = (id: string) => {
+    if (!copied.has(id)) {
+      copied.add(id)
+      byEmployee[id] = { ...(byEmployee[id] ?? emptyEmployeeTotal()) }
+    }
+    return byEmployee[id]
+  }
   for (const s of stats.sales) {
     bump(byModel, s.model)
     bump(bySource, s.source)
     const key = sellerKey(s)
     const t = bySeller[key] ?? { sales: 0, gross: 0 }
     bySeller[key] = { sales: t.sales + 1, gross: t.gross + s.price - s.cost }
+    if (key !== PLAYER_ID) {
+      const e = touch(key)
+      e.sales++
+      e.gross += s.price - s.cost
+    }
   }
+  for (const [id, w] of Object.entries(stats.staffWork)) {
+    const e = touch(id)
+    if (w.came) e.days++
+    for (const c of TOTAL_COUNTS) e[c] += w[c]
+  }
+  for (const [id, n] of Object.entries(xp)) touch(id).xp += n
   return {
     sales: lifetime.sales + stats.sales.length,
     usedSales: lifetime.usedSales + stats.sales.filter((s) => s.used).length,
@@ -152,10 +250,12 @@ export function addDay(lifetime: Lifetime, stats: DayStats): Lifetime {
     byModel,
     bySource,
     bySeller,
+    byEmployee,
     trades: lifetime.trades + stats.sales.filter((s) => s.trade).length,
     bought: lifetime.bought + stats.bought.length,
     nazmaRunOffs: lifetime.nazmaRunOffs + (stats.nazma.runOff ? 1 : 0),
     theftsFoiled: lifetime.theftsFoiled + (stats.nazma.foiled ? 1 : 0),
+    huddles: lifetime.huddles + (stats.huddle ? 1 : 0),
   }
 }
 
@@ -201,6 +301,8 @@ export interface Records {
   longestStreak: Best | null
   /** Days in a row with a sale, up to the last day settled. */
   streak: number
+  /** Days in a row the whole team ended happy (see `isHappyTeam`), up to the last day settled. */
+  happyStreak: number
 }
 
 export type RecordKey =
@@ -224,6 +326,7 @@ export function emptyRecords(): Records {
     biggestDeal: null,
     longestStreak: null,
     streak: 0,
+    happyStreak: 0,
   }
 }
 

@@ -17,6 +17,7 @@ import {
   type ChartRange,
   type Metric,
 } from '../sim/stats'
+import { ROLE_BADGES } from '../sim/staff'
 import { useGame } from '../state/store'
 import { AchievementList, type EarnedView } from './AchievementList'
 import { Chart } from './Chart'
@@ -84,8 +85,9 @@ function AchievementsView() {
 
 /**
  * The dealership's history, with a toggle between the numbers (lifetime
- * totals, personal records, a chart of the day log, and lifetime sales by
- * model, source and seller) and this game's achievements.
+ * totals, personal records, a chart of the day log, lifetime sales by
+ * model, source and seller, and the staff, each opening their page) and this
+ * game's achievements.
  */
 export function StatsTab() {
   const [view, setView] = useState<View>('stats')
@@ -119,10 +121,11 @@ function StatsView() {
   const [range, setRange] = useState<ChartRange>('recent')
   const points = useMemo(() => series(log, metric, range), [log, metric, range])
 
-  const names = new Map(roster.map((e) => [e.id, e.name]))
+  const staff = roster.filter((e) => !e.fired)
+  const names = new Map(staff.map((e) => [e.id, e.name]))
   const sellers = sellerRows(
     lifetime.bySeller,
-    roster.filter((e) => !e.fired).map((e) => e.id),
+    staff.map((e) => e.id),
   )
   const byModel: [string, number][] = CAR_MODELS.filter((m) => lifetime.byModel[m])
     .map((m): [string, number] => [carName(m), lifetime.byModel[m] ?? 0])
@@ -237,11 +240,13 @@ function StatsView() {
             {sellers.map((r) => (
               <tr key={r.key}>
                 <td>
-                  {r.key === PLAYER_ID
-                    ? 'You'
-                    : r.key === FORMER_STAFF
-                      ? 'Former staff'
-                      : (names.get(r.key) ?? 'Former staff')}
+                  {r.key === PLAYER_ID ? (
+                    'You'
+                  ) : r.key !== FORMER_STAFF && names.has(r.key) ? (
+                    <EmployeeLink id={r.key} name={names.get(r.key)!} />
+                  ) : (
+                    'Former staff'
+                  )}
                 </td>
                 <td>{r.sales}</td>
                 <td>{formatMoney(r.gross)}</td>
@@ -250,6 +255,42 @@ function StatsView() {
           </tbody>
         </table>
       )}
+      {staff.length > 0 && (
+        <table className="summary-sellers stats-breakdown">
+          <thead>
+            <tr>
+              <th>Staff</th>
+              <th>Days</th>
+              <th title="Experience earned">XP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {staff.map((e) => (
+              <tr key={e.id}>
+                <td>
+                  <EmployeeLink id={e.id} name={e.name} />{' '}
+                  <span className="muted">{ROLE_BADGES[e.role]}</span>
+                </td>
+                <td>{lifetime.byEmployee[e.id]?.days ?? 0}</td>
+                <td>{Math.round(lifetime.byEmployee[e.id]?.xp ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </>
+  )
+}
+
+/** An employee's name that opens their page. */
+function EmployeeLink({ id, name }: { id: string; name: string }) {
+  return (
+    <button
+      className="name-button"
+      title={`Open ${name}'s page`}
+      onClick={() => useGame.getState().openEmployeePage(id)}
+    >
+      {name}
+    </button>
   )
 }

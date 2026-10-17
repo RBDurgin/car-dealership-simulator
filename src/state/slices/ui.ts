@@ -37,6 +37,7 @@ type UiKeys =
   | 'inspectedId'
   | 'notice'
   | 'staffOpen'
+  | 'employeePage'
   | 'stockOpen'
   | 'computerTab'
   | 'helpOpen'
@@ -66,6 +67,7 @@ type UiKeys =
   | 'showNotice'
   | 'clearNotice'
   | 'toggleStaffPanel'
+  | 'openEmployeePage'
   | 'toggleStockPanel'
   | 'toggleHelp'
   | 'toggleControls'
@@ -92,6 +94,7 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
     inspectedId: null,
     notice: null,
     staffOpen: false,
+    employeePage: null,
     stockOpen: false,
     computerTab: 'stock',
     helpOpen: false,
@@ -176,6 +179,7 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
       if (s.helpOpen) return set({ helpOpen: false })
       if (s.audioOpen) return set({ audioOpen: false })
       if (s.menu) return set({ menu: null })
+      if (s.employeePage) return set({ employeePage: null })
       if (s.staffOpen) return set({ staffOpen: false })
       if (s.stockOpen) return set({ stockOpen: false })
       // Out on a test drive, Esc heads back.
@@ -210,6 +214,7 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
         const staffOpen = open ?? !s.staffOpen
         return { staffOpen, stockOpen: staffOpen ? false : s.stockOpen }
       }),
+    openEmployeePage: (employeePage) => set({ employeePage }),
     toggleStockPanel: (open, tab) =>
       set((s) => {
         const switching = open === undefined && tab !== undefined && tab !== s.computerTab

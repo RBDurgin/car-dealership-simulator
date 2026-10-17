@@ -55,7 +55,7 @@ describe('staff morale', () => {
   })
 
   it('warns, then hands in notice, and Keep saves them on Medium', () => {
-    const id = hire('porter', { wage: wageFor('porter', 1), morale: 5 })
+    const id = hire('porter', { wage: 30, morale: 5 })
     for (let d = 0; d < QUIT_WARN_DAYS; d++) nextDay()
     expect(employee(id)!.lowDays).toBe(QUIT_WARN_DAYS)
     expect(game().notice?.text).toMatch(/unhappy and thinking of leaving/)
@@ -69,7 +69,7 @@ describe('staff morale', () => {
   })
 
   it('lets a resigner go at closing, over morale', () => {
-    const id = hire('porter', { wage: wageFor('porter', 1), morale: 5 })
+    const id = hire('porter', { wage: 30, morale: 5 })
     const name = employee(id)!.name
     for (let d = 0; d < QUIT_WARN_DAYS + NOTICE_DAYS; d++) nextDay()
     expect(employee(id)!.quitting).toBe(true)

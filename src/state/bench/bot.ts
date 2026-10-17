@@ -7,6 +7,7 @@ import { MAX_MARKUP } from '../../sim/lenders'
 import type { ActionId } from '../../sim/interactables'
 import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
 import { PROMPTS_PER_DRIVE, topicFit } from '../../sim/talkingPoints'
+import type { Role } from '../../sim/staff'
 import { driveBlocker } from '../../sim/testDrive'
 import { useGame } from '../store'
 
@@ -17,7 +18,9 @@ import { useGame } from '../store'
  * player works one deal at a time, gives a test drive to anyone who asks (back
  * at once, see `setDriveStyle`), takes every counter and runs a fair F&I
  * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
- * ads are bought each morning. Staff stand idle, as their work is the scene's. Every choice
+ * ads are bought each morning. With a staff style (see `setStaffStyle`) it
+ * keeps a small team, who come in and stand idle, as their work is the
+ * scene's; by default it hires nobody. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
  * level plays the same each time.
  */
@@ -214,10 +217,49 @@ function serveCustomers(): void {
 }
 
 /**
+ * How the bot treats its staff: `none` (the default) hires nobody; `fair`
+ * keeps one of each of `BOT_ROLES` on the auto rota, grants every raise and
+ * holds the morning huddle; `neglect` keeps the same team working every day
+ * and declines every raise.
+ */
+export type StaffStyle = 'none' | 'fair' | 'neglect'
+let staffStyle: StaffStyle = 'none'
+
+export function setStaffStyle(style: StaffStyle): void {
+  staffStyle = style
+}
+
+/** The roles the bot keeps one of, with a staff style. */
+export const BOT_ROLES: readonly Role[] = ['sales', 'porter', 'receptionist']
+
+/**
+ * The morning's staff work, with a staff style: fills an empty role from
+ * today's applicants, answers raise requests, brings everyone working
+ * today to their post and (fair) holds the huddle, or (neglect) takes away
+ * their days off from tomorrow.
+ */
+function manageStaff(): void {
+  if (staffStyle === 'none') return
+  for (const role of BOT_ROLES) {
+    if (game().roster.some((e) => e.role === role && !e.fired)) continue
+    const c = game().candidates.find((x) => x.role === role)
+    if (c) game().hire(c.id)
+  }
+  for (const e of game().roster) {
+    if (e.fired) continue
+    if (e.raiseAsk) game().answerRaise(e.id, staffStyle === 'fair')
+    if (staffStyle === 'neglect') for (const w of e.daysOff) game().toggleDayOff(e.id, w)
+    if (e.status === 'arriving') game().dispatchStaff({ type: 'atPost', id: e.id })
+  }
+  if (staffStyle === 'fair') perform(MANAGER_DESK.chairId, 'huddle')
+}
+
+/**
  * The morning's shopping, while there's cash: buys each expansion it can,
  * keeps an online ad running and refills the lot.
  */
 function morning(): void {
+  manageStaff()
   if (game().cash <= 0) return
   for (const id of Object.keys(EXPANSIONS) as ExpansionId[]) game().buyExpansion(id)
   const day = game().clock.day

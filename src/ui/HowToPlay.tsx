@@ -1132,6 +1132,24 @@ function PeopleTab({ touch, click }: TabProps) {
         </p>
       </section>
       <section>
+        <h3>Employee pages</h3>
+        <p>
+          {click} a name in the staff panel, or on the Stats tab
+          {touch ? (
+            ''
+          ) : (
+            <>
+              {' '}
+              (<kbd>P</kbd>)
+            </>
+          )}
+          , for that employee&apos;s page: when they were hired and at what skill, each level
+          they&apos;ve grown and when, their morale and what moved it last night, their record for
+          the role (days worked, experience, cars sold, washes, jobs, calls and so on, counted every
+          day you close), and their Senior title and Employee of the Month wins.
+        </p>
+      </section>
+      <section>
         <h3>The owner</h3>
         <p>
           Every two or three days the owner drops by at opening and sets a goal for the day, shown

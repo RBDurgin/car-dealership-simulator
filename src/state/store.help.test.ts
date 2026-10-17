@@ -42,6 +42,21 @@ describe('how-to-play guide', () => {
   })
 })
 
+describe('the employee page', () => {
+  beforeEach(() => useGame.setState(initial, true))
+
+  it('opens over the panels and closes first on Esc, leaving the panel open', () => {
+    game().newGame()
+    game().toggleHelp(false)
+    game().toggleStaffPanel(true)
+    game().openEmployeePage('staff-1-1')
+    game().cancelAll()
+    expect(game()).toMatchObject({ employeePage: null, staffOpen: true })
+    game().cancelAll()
+    expect(game().staffOpen).toBe(false)
+  })
+})
+
 describe('rotate-your-device prompt', () => {
   beforeEach(() => useGame.setState(initial, true))
 

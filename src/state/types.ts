@@ -212,6 +212,8 @@ export interface GameState {
   missedYesterday: DayStats['missed']
   /** The staff panel is open. */
   staffOpen: boolean
+  /** The employee whose page is open (from the Staff panel or the Stats tab), or null. */
+  employeePage: string | null
   /** The office computer panel (stock, marketing, upgrades, calendar, rival, service, clients) is open. */
   stockOpen: boolean
   /** Which tab of it shows. */
@@ -422,6 +424,8 @@ export interface GameState {
   /** Shift progress reported by the world for one employee. */
   dispatchStaff: (ev: StaffEvent) => void
   toggleStaffPanel: (open?: boolean) => void
+  /** Opens employee `id`'s page over the panels, or closes it (null). */
+  openEmployeePage: (id: string | null) => void
   /**
    * Opens or closes the office computer panel. With a `tab` (and no `open`),
    * a panel open on another tab switches to it instead of closing.

@@ -1,7 +1,15 @@
 import { formatMoney } from './format'
 import { moraleXp } from './morale'
 import { createRng, hashSeed, type Rng } from './rng'
-import { MAX_SKILL, ROLE_LABELS, wageFor, type CourseKind, type Employee, type Role } from './staff'
+import {
+  MAX_SKILL,
+  ROLE_LABELS,
+  wageFor,
+  type CourseKind,
+  type Employee,
+  type LevelStep,
+  type Role,
+} from './staff'
 
 /**
  * Staff growth: the work each employee does in a day earns experience, and
@@ -205,8 +213,16 @@ export function growStaff(
   work: StaffWork,
   day: number,
   scale = 1,
-): { roster: Employee[]; levelUps: LevelUp[]; lapsed: string[]; courses: CourseDone[] } {
+): {
+  roster: Employee[]
+  levelUps: LevelUp[]
+  lapsed: string[]
+  courses: CourseDone[]
+  /** The experience each earned today, by id (for their lifetime totals). */
+  earned: Record<string, number>
+} {
   const levelUps: LevelUp[] = []
+  const earnedBy: Record<string, number> = {}
   const lapsed: string[] = []
   const courses: CourseDone[] = []
   const mentored = new Set(
@@ -236,16 +252,20 @@ export function growStaff(
     n = withLevelUp(grow(n, xp, scale), e.skill, day, levelUps)
     // Counted for Employee of the Month whether or not it fills a bar.
     const earned = Math.round(xp * scale)
-    if (earned > 0) n = { ...n, monthXp: n.monthXp + earned }
+    if (earned > 0) {
+      n = { ...n, monthXp: n.monthXp + earned }
+      earnedBy[e.id] = earned
+    }
     if (n !== e) changed = true
     return n
   })
-  return { roster: changed ? next : roster, levelUps, lapsed, courses }
+  return { roster: changed ? next : roster, levelUps, lapsed, courses, earned: earnedBy }
 }
 
 /**
  * `e` (after growing from `before`) with a raise request if they levelled
- * up and the new level pays more, and the level-up added to `levelUps`.
+ * up and the new level pays more, each level grown kept in `levels`, and the
+ * level-up added to `levelUps`.
  */
 export function withLevelUp(
   e: Employee,
@@ -257,7 +277,18 @@ export function withLevelUp(
   const wage = wageFor(e.role, e.skill)
   const ask = wage > e.wage ? wage : null
   levelUps.push({ id: e.id, name: e.name, role: e.role, skill: e.skill, ask })
-  return { ...e, raiseAsk: ask === null ? null : { wage: ask, day } }
+  const steps: LevelStep[] = []
+  for (let skill = before + 1; skill <= e.skill; skill++) steps.push({ skill, day })
+  return {
+    ...e,
+    raiseAsk: ask === null ? null : { wage: ask, day },
+    levels: [...e.levels, ...steps],
+  }
+}
+
+/** The skill `e` was hired at: their skill before each level they've grown. */
+export function hiredSkill(e: Pick<Employee, 'skill' | 'levels'>): number {
+  return e.skill - e.levels.length
 }
 
 /** The morning's word on yesterday's level-ups and lapsed raise requests. */

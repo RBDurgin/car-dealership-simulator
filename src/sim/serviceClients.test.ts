@@ -422,6 +422,7 @@ describe('the service advisor', () => {
     senior: false,
     praisedDay: null,
     monthXp: 0,
+    levels: [],
   }
 
   it('checks in whoever has waited longest at the counter, leaving the player theirs', () => {

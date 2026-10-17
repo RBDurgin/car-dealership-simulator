@@ -35,6 +35,7 @@ const guard: Employee = {
   senior: false,
   praisedDay: null,
   monthXp: 0,
+  levels: [],
 }
 
 /** Resumes the game on the morning of `day`. */
@@ -263,6 +264,7 @@ describe('poaching', () => {
     senior: false,
     praisedDay: null,
     monthXp: 0,
+    levels: [],
   }
   const dana_ = () => game().roster.find((e) => e.id === dana.id)
 

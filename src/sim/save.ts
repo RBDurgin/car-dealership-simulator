@@ -22,7 +22,7 @@ import { isExpansionId, type OwnedExpansion } from './expansions'
 import { emptyFiStats, PRODUCT_IDS, type FiStats } from './fi'
 import { IMPROVEMENT_IDS, type OwnedImprovement } from './improvements'
 import { isFranchiseTier, START_TIER, type FranchiseTier } from './franchise'
-import { CAR_MODELS } from './customers'
+import { CAR_MODELS, PLAYER_ID } from './customers'
 import { BASE_MSRP, COST_FRACTION, type InventoryCar } from './inventory'
 import { PARKING_SPACES, PLATFORMS, type CarModel } from './layout'
 import { CHANNEL_IDS, unfinished, type Campaign } from './marketing'
@@ -38,6 +38,7 @@ import { START_MORALE } from './morale'
 import { autoRota } from './rota'
 import { dressFor, ROLES, type Employee } from './staff'
 import {
+  emptyEmployeeTotal,
   emptyLifetime,
   emptyRecords,
   LOG_FIELDS,
@@ -45,6 +46,7 @@ import {
   recordToTuple,
   tupleToRecord,
   type DayRecord,
+  type EmployeeTotal,
   type Lifetime,
   type Records,
 } from './stats'
@@ -61,7 +63,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 37
+export const SAVE_VERSION = 38
 
 export interface SaveData {
   version: number
@@ -469,6 +471,30 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
       : raw.roster,
     eotm: [],
   }),
+  // v38: employee records. Nobody's level-ups were kept before, each
+  // salesperson's record starts from their sales, and the huddles and the
+  // happy team's run are counted from the save's next day.
+  37: (raw) => ({
+    ...raw,
+    roster: Array.isArray(raw.roster)
+      ? raw.roster.map((e) => (isObject(e) ? { ...e, levels: [] } : e))
+      : raw.roster,
+    lifetime:
+      isObject(raw.lifetime) && isObject(raw.lifetime.bySeller)
+        ? { ...raw.lifetime, byEmployee: seedEmployees(raw.lifetime.bySeller), huddles: 0 }
+        : raw.lifetime,
+    records: isObject(raw.records) ? { ...raw.records, happyStreak: 0 } : raw.records,
+  }),
+}
+
+/** Employee records for an older save, from each salesperson's sales (the player's left out). */
+function seedEmployees(bySeller: Record<string, unknown>): Record<string, EmployeeTotal> {
+  const byEmployee: Record<string, EmployeeTotal> = {}
+  for (const [id, t] of Object.entries(bySeller)) {
+    if (id === PLAYER_ID || !isObject(t) || !isNumber(t.sales) || !isNumber(t.gross)) continue
+    byEmployee[id] = { ...emptyEmployeeTotal(), sales: t.sales, gross: t.gross }
+  }
+  return byEmployee
 }
 
 /** `sales` cars spread evenly over the models, the remainder to the first ones. */
@@ -636,10 +662,12 @@ function isLog(v: unknown): boolean {
 const isCounts = (v: unknown, keys?: readonly unknown[]) =>
   isObject(v) && Object.entries(v).every(([k, n]) => (!keys || keys.includes(k)) && isNumber(n))
 
+const EMPLOYEE_TOTAL_KEYS = Object.keys(emptyEmployeeTotal())
+
 function isLifetime(v: unknown): boolean {
   return (
     isObject(v) &&
-    ['sales', 'usedSales', 'gross', 'net', 'visitors', 'trades', 'bought'].every((k) =>
+    ['sales', 'usedSales', 'gross', 'net', 'visitors', 'trades', 'bought', 'huddles'].every((k) =>
       isNumber(v[k]),
     ) &&
     isNumber(v.nazmaRunOffs) &&
@@ -647,7 +675,11 @@ function isLifetime(v: unknown): boolean {
     isCounts(v.byModel, CAR_MODELS) &&
     isCounts(v.bySource) &&
     isObject(v.bySeller) &&
-    Object.values(v.bySeller).every((t) => isObject(t) && isNumber(t.sales) && isNumber(t.gross))
+    Object.values(v.bySeller).every((t) => isObject(t) && isNumber(t.sales) && isNumber(t.gross)) &&
+    isObject(v.byEmployee) &&
+    Object.values(v.byEmployee).every(
+      (t) => isObject(t) && EMPLOYEE_TOTAL_KEYS.every((k) => isNumber(t[k])),
+    )
   )
 }
 
@@ -657,6 +689,7 @@ function isRecords(v: unknown): boolean {
   return (
     isObject(v) &&
     isNumber(v.streak) &&
+    isNumber(v.happyStreak) &&
     RECORD_KEYS.every((k) => isBest(v[k])) &&
     (v.biggestDeal === null || (isObject(v.biggestDeal) && isModel(v.biggestDeal.model)))
   )
@@ -829,7 +862,9 @@ function isEmployee(v: unknown): boolean {
     typeof v.trained === 'boolean' &&
     typeof v.senior === 'boolean' &&
     (v.praisedDay === null || isNumber(v.praisedDay)) &&
-    isNumber(v.monthXp)
+    isNumber(v.monthXp) &&
+    Array.isArray(v.levels) &&
+    v.levels.every((l) => isObject(l) && isNumber(l.skill) && isNumber(l.day))
   )
 }
 

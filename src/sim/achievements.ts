@@ -12,7 +12,8 @@ import { CAR_MODELS } from './customers'
 import { CHANNELS, type Channel } from './marketing'
 import { freeSlots } from './ordering'
 import { RANKS, TOP_RANK, type Career, type RankId } from './progression'
-import { roleLimits, ROLES, type Employee } from './staff'
+import { hiredSkill } from './growth'
+import { MAX_SKILL, MIN_SKILL, roleLimits, ROLES, type Employee } from './staff'
 import type { DayRecord, Lifetime, Records } from './stats'
 import type { Weather } from './weather'
 
@@ -79,6 +80,10 @@ export const CLEAN_BOOKS_DEALS = 10
 export const ROAD_SALES = 5
 export const TEAM_DRIVES = 5
 export const SCRATCH_FREE_DRIVES = 6
+export const TEAM_MORALE = 80
+export const HAPPY_TEAM_DAYS = 7
+export const HAPPY_TEAM_SIZE = 3
+export const HUDDLES = 10
 const SATURDAY = 5
 
 /** The slice of the store `achievementsFor` compares. */
@@ -93,10 +98,18 @@ export interface AchievementState {
   weather: Weather
   dayStats: Pick<
     DayStats,
-    'sales' | 'nazma' | 'bought' | 'service' | 'clients' | 'washes' | 'settled' | 'drives'
+    | 'sales'
+    | 'nazma'
+    | 'bought'
+    | 'service'
+    | 'clients'
+    | 'washes'
+    | 'settled'
+    | 'drives'
+    | 'huddle'
   >
   career: Pick<Career, 'sales' | 'soldByModel' | 'rivalsBeaten'>
-  lifetime: Pick<Lifetime, 'bySource' | 'bySeller'>
+  lifetime: Pick<Lifetime, 'bySource' | 'bySeller' | 'huddles'>
   clients: readonly Client[]
 }
 
@@ -152,6 +165,11 @@ export type AchievementId =
   | 'star-seller'
   | 'loyal'
   | 'hands-off'
+  | 'homegrown'
+  | 'first-senior'
+  | 'eotm'
+  | 'happy-team'
+  | 'huddle-up'
   | 'not-on-my-lot'
   | 'guard-dog'
   | 'fort-knox'
@@ -192,6 +210,15 @@ export type AchievementId =
   | 'fender-bender'
   | 'car-wash'
   | 'tube-man-fan'
+
+/**
+ * Whether everyone on the payroll (at least `HAPPY_TEAM_SIZE` of them) is at
+ * `TEAM_MORALE` or more, for `Records.happyStreak`.
+ */
+export function isHappyTeam(roster: readonly Pick<Employee, 'fired' | 'morale'>[]): boolean {
+  const team = roster.filter((e) => !e.fired)
+  return team.length >= HAPPY_TEAM_SIZE && team.every((e) => e.morale >= TEAM_MORALE)
+}
 
 /** A new day (or a new game) starts the day's tallies afresh. */
 const sameDay = (prev: AchievementState, next: AchievementState) =>
@@ -469,6 +496,51 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     when: 'day',
     check: (ctx) =>
       ctx.stats.sales.length >= HANDS_OFF_SALES && ctx.stats.sales.every((s) => s.soldBy !== null),
+  },
+  {
+    id: 'homegrown',
+    title: 'Homegrown',
+    text: 'grew someone hired at skill 1 to skill 5',
+    group: 'people',
+    when: 'live',
+    check: (prev, next) =>
+      next.roster !== prev.roster &&
+      next.roster.some((e) => !e.fired && e.skill === MAX_SKILL && hiredSkill(e) === MIN_SKILL),
+  },
+  {
+    id: 'first-senior',
+    title: 'Corner Office',
+    text: 'promoted someone to Senior',
+    group: 'people',
+    when: 'live',
+    check: (prev, next) => next.roster !== prev.roster && next.roster.some((e) => e.senior),
+  },
+  {
+    id: 'eotm',
+    title: 'Employee of the Month',
+    text: 'named an Employee of the Month',
+    group: 'people',
+    when: 'day',
+    check: (ctx) => ctx.stats.eotm !== null,
+  },
+  {
+    id: 'happy-team',
+    title: 'Happy Team',
+    text: `kept a team of ${HAPPY_TEAM_SIZE}+ all at ${TEAM_MORALE}+ morale for ${HAPPY_TEAM_DAYS} days in a row`,
+    group: 'people',
+    when: 'day',
+    check: (ctx) => ctx.records.happyStreak >= HAPPY_TEAM_DAYS,
+  },
+  {
+    id: 'huddle-up',
+    title: 'Huddle Up',
+    text: `held ${HUDDLES} morning huddles`,
+    group: 'people',
+    when: 'live',
+    check: (prev, next) =>
+      next.dayStats.huddle &&
+      !prev.dayStats.huddle &&
+      next.lifetime.huddles + (next.dayStats.settled ? 0 : 1) >= HUDDLES,
   },
   // Adversaries
   {

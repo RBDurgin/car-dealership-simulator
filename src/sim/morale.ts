@@ -16,7 +16,7 @@ export const MAX_MORALE = 100
 export const START_MORALE = 70
 /** Where morale drifts back to, a share of the gap each day (`DRIFT`). */
 export const MORALE_HOME = 65
-const DRIFT = 0.1
+const DRIFT = 0.2
 /** The most a day can move anyone's morale, either way. */
 export const MAX_DAILY_MORALE = 8
 /** Under this, a day counts toward `lowDays`. */

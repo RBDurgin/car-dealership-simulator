@@ -49,6 +49,7 @@ export function busyDay(): void {
       senior: false,
       praisedDay: null,
       monthXp: 0,
+      levels: [],
     })),
   )
   useGame.setState({

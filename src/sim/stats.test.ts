@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DAYS_PER_MONTH } from './calendar'
 import { PLAYER_ID } from './customers'
 import { emptyStats, netIncome, type DayStats, type Sale } from './deal'
+import { emptyTally } from './growth'
 import type { CarModel } from './layout'
 import type { Source } from './marketing'
 import {
@@ -9,6 +10,7 @@ import {
   amendDay,
   closeRate,
   dayRecord,
+  emptyEmployeeTotal,
   emptyLifetime,
   emptyRecords,
   FORMER_STAFF,
@@ -19,6 +21,7 @@ import {
   periodGross,
   RECENT_DAYS,
   recordToTuple,
+  ROLE_TOTALS,
   sellerRows,
   series,
   tupleToRecord,
@@ -124,6 +127,41 @@ describe('lifetime totals', () => {
       nazmaRunOffs: 1,
       theftsFoiled: 1,
     })
+  })
+
+  it('keeps every employee’s record from the day’s work, sales and experience', () => {
+    const work = {
+      'staff-1-1': { ...emptyTally(), came: true, drives: 2, signings: 1 },
+      'staff-1-2': { ...emptyTally(), came: true, washes: 4 },
+      'staff-1-3': { ...emptyTally(), jobs: 1 },
+    }
+    const day = stats({
+      staffWork: work,
+      huddle: true,
+      sales: [
+        sale(20_000, 18_000, { soldBy: 'Sam T.', sellerId: 'staff-1-1' }),
+        sale(30_000, 27_000),
+      ],
+    })
+    let life = addDay(emptyLifetime(), day, { 'staff-1-1': 14, 'staff-1-2': 10 })
+    life = addDay(life, stats({ staffWork: { 'staff-1-2': { ...emptyTally(), came: true } } }))
+    expect(life.byEmployee['staff-1-1']).toEqual({
+      ...emptyEmployeeTotal(),
+      days: 1,
+      xp: 14,
+      sales: 1,
+      gross: 2_000,
+      drives: 2,
+      signings: 1,
+    })
+    expect(life.byEmployee['staff-1-2']).toMatchObject({ days: 2, xp: 10, washes: 4 })
+    expect(life.byEmployee['staff-1-3']).toMatchObject({ days: 0, jobs: 1 })
+    expect(life.byEmployee[PLAYER_ID]).toBeUndefined()
+    expect(life.huddles).toBe(1)
+  })
+
+  it('names a count for every role’s page', () => {
+    for (const keys of Object.values(ROLE_TOTALS)) expect(keys.length).toBeGreaterThan(0)
   })
 
   it('takes money spent after settling into the day’s record and the lifetime net', () => {
