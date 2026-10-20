@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { runList, wholesaleValue } from '../sim/auction'
+import { INSPECT_FEE, lotValue, runList, type Lot } from '../sim/auction'
 import { AUCTION_END, AUCTION_START, BEAT_MINUTES, nextBid } from '../sim/bidding'
 import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
 import { PLAYER_ID } from '../sim/customers'
 import { freeSlots } from '../sim/ordering'
+import { netIncome } from '../sim/deal'
 import { NO_CASH, NO_ROOM } from '../sim/sellers'
+import { gradeOf } from '../sim/usedCars'
 import { useGame } from './store'
 
 const initial = useGame.getState()
@@ -112,9 +114,7 @@ describe('the auction in the store', () => {
     game().devAuctionBuy()
     const lots = runList(WEDNESDAY, { rank: 'main-street', tier: 'bronze' })
     expect(game().auctionWins.map((w) => w.lotId)).toEqual([lots[0].id, lots[1].id])
-    expect(game().auctionWins[0].price).toBe(
-      wholesaleValue(lots[0].car.model, lots[0].car, WEDNESDAY),
-    )
+    expect(game().auctionWins[0].price).toBe(lotValue(lots[0], WEDNESDAY))
   })
 })
 
@@ -200,5 +200,71 @@ describe('the live auction in the store', () => {
     game().startNextDay()
     expect(game().clock.day).toBe(WEDNESDAY)
     expect(game().notice?.text).toMatch(/auction day/)
+  })
+})
+
+describe('inspection in the store', () => {
+  /** The first Wednesday with a lot the sheet grades better than it is, and that lot. */
+  function surpriseLot(): { day: number; lot: Lot } {
+    for (let day = WEDNESDAY; ; day += 7) {
+      const lot = runList(day, { rank: 'main-street', tier: 'bronze' }).find(
+        (l) => l.grade !== gradeOf(l.car.condition),
+      )
+      if (lot) return { day, lot }
+    }
+  }
+
+  it('inspects a lot on Monday for the fee, and it holds to the auction', () => {
+    openOn(WEDNESDAY - 2)
+    const lot = firstLot()
+    expect(game().inspectLot(lot.id)).toBe(true)
+    expect(game().cash).toBe(100_000 - INSPECT_FEE)
+    expect(game().dayStats.auction.inspections).toBe(INSPECT_FEE)
+    expect(game().notice?.text).toMatch(/inspected/)
+    expect(game().inspectLot(lot.id)).toBe(false)
+    expect(game().notice?.text).toBe('Already inspected.')
+    settle()
+    expect(game().log.at(-1)!.net).toBe(Math.round(netIncome(game().dayStats)))
+    game().startNextDay()
+    settle()
+    game().startNextDay()
+    expect(game().clock.day).toBe(WEDNESDAY)
+    expect(game().inspected.map((i) => i.lotId)).toEqual([lot.id])
+    // Bought on the inspection's grade.
+    expect(game().buyLot(lot.id, 5_000)).toBe(true)
+    expect(game().auctionWins[0].graded).toBe(game().inspected[0].grade)
+    settle()
+    game().startNextDay()
+    expect(game().inspected).toEqual([])
+  })
+
+  it('won’t inspect a lot that has run, or before Main Street', () => {
+    openOn(WEDNESDAY + 1)
+    expect(game().inspectLot(firstLot().id)).toBe(false)
+    expect(game().notice?.text).toMatch(/Too late/)
+    openOn(WEDNESDAY - 1, 'corner-lot')
+    expect(game().inspectLot(firstLot().id)).toBe(false)
+    expect(game().cash).toBe(100_000)
+  })
+
+  it('stocks a lot at its true condition, and the morning names the surprise', () => {
+    const { day, lot } = surpriseLot()
+    openOn(day)
+    expect(game().buyLot(lot.id, 3_000)).toBe(true)
+    const { id } = game().auctionWins[0]
+    settle()
+    expect(game().dayStats.auction.surprises).toEqual([
+      {
+        model: lot.car.model,
+        year: lot.car.year,
+        graded: lot.grade,
+        arrived: gradeOf(lot.car.condition),
+      },
+    ])
+    expect(game().inventory.find((c) => c.id === id)!.used!.condition).toBe(lot.car.condition)
+    game().startNextDay()
+    expect(game().notice?.text).toContain(
+      `graded ${lot.grade}, arrived ${gradeOf(lot.car.condition)}.`,
+    )
   })
 })

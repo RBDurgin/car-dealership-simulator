@@ -1,4 +1,4 @@
-import { wholesaleValue, type Lot } from './auction'
+import { lotValue, type Lot } from './auction'
 import { formatTime } from './clock'
 import { PLAYER_ID } from './customers'
 import type { Rng } from './rng'
@@ -86,7 +86,7 @@ export function bidStep(price: number): number {
 
 /** What a lot opens at on `day`: `OPEN_FACTOR` of its wholesale value, down to the increment. */
 export function openingBid(lot: Lot, day: number): number {
-  const ask = wholesaleValue(lot.car.model, lot.car, day) * OPEN_FACTOR
+  const ask = lotValue(lot, day) * OPEN_FACTOR
   const step = bidStep(ask)
   return Math.max(step, Math.floor(ask / step) * step)
 }
@@ -96,7 +96,8 @@ export function openingBid(lot: Lot, day: number): number {
  * around its wholesale value (`BIDDER_TOP`) and scaled by `heat`.
  */
 export function bidderMaxes(lot: Lot, day: number, rng: Rng, heat = 1): Bidder[] {
-  const value = wholesaleValue(lot.car.model, lot.car, day)
+  // The trade bids on the sheet: nobody at the sale knows the true condition.
+  const value = lotValue(lot, day)
   const names = [...DEALER_NAMES]
   const count = rng.int(BIDDERS.min, BIDDERS.max)
   const out: Bidder[] = []

@@ -227,6 +227,8 @@ export function usedTag(info: UsedInfo): string {
 
 /** A used car's shape in a word, best first. */
 export type Grade = 'Good' | 'Fair' | 'Worn' | 'Rough'
+/** The grades from best to worst. */
+export const GRADES: readonly Grade[] = ['Good', 'Fair', 'Worn', 'Rough']
 
 /** The word for a used car's `condition`: Good from 75%, Fair from 50%, Worn from 25%. */
 export function gradeOf(condition: number): Grade {

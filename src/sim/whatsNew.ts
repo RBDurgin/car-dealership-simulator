@@ -583,6 +583,16 @@ export const UPDATES: readonly Update[] = [
       'Once it’s over, the tab shows what every lot sold for.',
     ],
   },
+  {
+    id: 53,
+    phase: '22',
+    title: 'Auction grades and inspection',
+    items: [
+      'An auction lot’s grade can be kinder than the car: about one in five is a step worse.',
+      'Inspect a lot on the run list for a small fee: a closer grade and a tighter estimate.',
+      'The morning after, you hear about any car that came in worse than its grade.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

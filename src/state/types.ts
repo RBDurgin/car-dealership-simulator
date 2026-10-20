@@ -28,7 +28,7 @@ import type { MonthSales } from '../sim/quota'
 import type { FranchiseTier } from '../sim/franchise'
 import type { Rival } from '../sim/rival'
 import type { SaveData } from '../sim/save'
-import type { AuctionWin } from '../sim/auction'
+import type { AuctionWin, Inspection } from '../sim/auction'
 import type { AuctionState } from '../sim/bidding'
 import type { Purchase } from '../sim/sellers'
 import type {
@@ -128,6 +128,11 @@ export interface GameState {
    * lot space until the day is settled and it goes into stock. Never saved.
    */
   auctionWins: AuctionWin[]
+  /**
+   * This week's run-list lots the player has had inspected (see
+   * `inspectLot` in `sim/auction.ts`). Kept to the auction day, never saved.
+   */
+  inspected: Inspection[]
   /**
    * Today's live auction (see `sim/bidding.ts`): null until the run starts on
    * auction day, then the lot on the block and the results. Never saved.
@@ -300,6 +305,8 @@ export interface GameState {
    * when it can't be bought.
    */
   buyLot: (lotId: string, price: number) => boolean
+  /** Has run-list lot `lotId` inspected for `INSPECT_FEE`. False, with a notice, when it can't be. */
+  inspectLot: (lotId: string) => boolean
   /** Dev cheat: buys the first lot still in today's run at its wholesale value. */
   devAuctionBuy: () => void
   /** Steps today's auction to `minute` (between the clock's steps). */

@@ -3,8 +3,11 @@ import {
   auctionOpen,
   auctionRecord,
   bidBlocker,
+  INSPECT_FEE,
+  inspectBlocker,
+  inspectLot,
   isAuctionDay,
-  wholesaleValue,
+  lotValue,
   winLot,
 } from '../../sim/auction'
 import {
@@ -34,6 +37,7 @@ import { emptyMonthSales } from '../../sim/quota'
 import { rankById } from '../../sim/progression'
 import { createRng } from '../../sim/rng'
 import { reservedSlots } from '../../sim/sellers'
+import { PLAYER_SKILL } from '../../sim/usedCars'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../../sim/usedCars'
 import { dispatch, notify, type Kit } from '../core'
 import { orderInvoice } from '../derived'
@@ -55,6 +59,7 @@ type EconomyKeys =
   | 'devRestock'
   | 'devUsedCar'
   | 'buyLot'
+  | 'inspectLot'
   | 'devAuctionBuy'
   | 'tickAuction'
   | 'auctionBid'
@@ -185,7 +190,8 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
         return false
       }
       const id = nextUsedId([...s.inventory, ...s.purchases, ...s.auctionWins], day)
-      const win = winLot(lot!, price, s, id)!
+      const inspection = s.inspected.find((i) => i.lotId === lotId)
+      const win = winLot(lot!, price, s, id, inspection)!
       set({
         cash: s.cash - win.price - win.fee,
         auctionWins: [...s.auctionWins, win],
@@ -203,11 +209,44 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       )
       return true
     },
+    inspectLot: (lotId) => {
+      const s = get()
+      const day = s.clock.day
+      const lot = runListFor(s).find((l) => l.id === lotId)
+      const blocker = !auctionOpen(s.career)
+        ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
+        : !lot
+          ? 'That lot isn’t in the run.'
+          : inspectBlocker(lot, day, s.auction, s.inspected, s.cash)
+      if (blocker) {
+        notify(k, blocker)
+        return false
+      }
+      const inspection = inspectLot(lot!, PLAYER_SKILL)
+      set({
+        cash: s.cash - INSPECT_FEE,
+        inspected: [...s.inspected, inspection],
+        dayStats: {
+          ...s.dayStats,
+          auction: {
+            ...s.dayStats.auction,
+            inspections: s.dayStats.auction.inspections + INSPECT_FEE,
+          },
+        },
+      })
+      amendLog(k)
+      const same = inspection.grade === lot!.grade
+      notify(
+        k,
+        `Lot ${lot!.order}, the ${lot!.car.year} ${carName(lot!.car.model)}, inspected for ${formatMoney(INSPECT_FEE)}: ${same ? `${inspection.grade}, as graded` : `${inspection.grade}, not ${lot!.grade}`}.`,
+      )
+      return true
+    },
     devAuctionBuy: () => {
       const s = get()
       const lot = runListFor(s).find((l) => !s.auctionWins.some((w) => w.lotId === l.id))
       if (!isAuctionDay(s.clock.day) || !lot) return notify(k, 'No lot left in today’s run.')
-      get().buyLot(lot.id, wholesaleValue(lot.car.model, lot.car, s.clock.day))
+      get().buyLot(lot.id, lotValue(lot, s.clock.day))
     },
     tickAuction: (minute) => k.batch(() => runAuction(k, minute)),
     auctionBid: () => {

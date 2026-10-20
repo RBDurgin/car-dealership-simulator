@@ -587,6 +587,7 @@ export function netIncome(stats: DayStats): number {
     stats.clients.appreciation -
     stats.training -
     stats.staffBonus -
+    stats.auction.inspections -
     theftLoss(stats) +
     (stats.owner?.bonus ?? 0) +
     (stats.quota?.payout ?? 0)

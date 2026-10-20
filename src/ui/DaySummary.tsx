@@ -32,7 +32,7 @@ import { rankById, rankProgress } from '../sim/progression'
 import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
-import { auctionSpend } from '../sim/auction'
+import { auctionSpend, surpriseNotice } from '../sim/auction'
 import { levelTuning, useGame } from '../state/store'
 import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
@@ -374,24 +374,41 @@ function SummaryPanel() {
               </dd>
             </>
           )}
-          {stats.auction.bought.length > 0 && (
+          {(stats.auction.bought.length > 0 || stats.auction.inspections > 0) && (
             <>
               <dt>Auction</dt>
               <dd>
-                {stats.auction.bought.length} car{stats.auction.bought.length === 1 ? '' : 's'} won
-                (<span className="price">{formatMoney(auctionSpend(stats.auction))}</span> with
-                fees)
-                <span className="muted"> stock, not an expense</span>
-                <ul className="summary-bought">
-                  {stats.auction.bought.map((b, i) => (
-                    <li key={i}>
-                      {b.year} {carName(b.model)} for {formatMoney(b.price)}{' '}
-                      <span className="muted">
-                        (+{formatMoney(b.fee)} fee, worth {formatMoney(b.value)})
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {stats.auction.bought.length > 0 && (
+                  <>
+                    {stats.auction.bought.length} car
+                    {stats.auction.bought.length === 1 ? '' : 's'} won (
+                    <span className="price">{formatMoney(auctionSpend(stats.auction))}</span> with
+                    fees)
+                    <span className="muted"> stock, not an expense</span>
+                    <ul className="summary-bought">
+                      {stats.auction.bought.map((b, i) => (
+                        <li key={i}>
+                          {b.year} {carName(b.model)} for {formatMoney(b.price)}{' '}
+                          <span className="muted">
+                            (+{formatMoney(b.fee)} fee, graded {b.graded}, worth{' '}
+                            {formatMoney(b.value)})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {stats.auction.surprises.length > 0 && (
+                  <div className="muted">{surpriseNotice(stats.auction.surprises)}</div>
+                )}
+                {stats.auction.inspections > 0 && (
+                  <div>
+                    Inspections{' '}
+                    <span className="price margin-loss">
+                      −{formatMoney(stats.auction.inspections)}
+                    </span>
+                  </div>
+                )}
               </dd>
             </>
           )}

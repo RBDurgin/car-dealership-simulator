@@ -31,7 +31,7 @@ import { DING_PENALTY } from '../sim/cleanliness'
 import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
-import { AUCTION_RANK, BUYER_FEE, WHOLESALE_FACTOR } from '../sim/auction'
+import { AUCTION_RANK, BUYER_FEE, INSPECT_FEE, WHOLESALE_FACTOR } from '../sim/auction'
 import { AUCTION_START } from '../sim/bidding'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
 import {
@@ -645,6 +645,15 @@ function BusinessTab({ touch, click }: TabProps) {
           while you bid, so keep an eye on the floor: the 🔨 chip in the top bar shows the run and
           opens the tab. Afterwards the tab lists what every lot sold for, a guide to next
           week&apos;s prices.
+        </p>
+        <p>
+          The sheet&apos;s grade leans kind: about one car in five is really a step worse, and
+          nobody at the sale knows which. <b>Inspect</b> a lot on the run list (
+          {formatMoney(INSPECT_FEE)}, any time until it comes up) for a closer grade (marked ✓) and
+          a tighter estimate. A car goes on your lot as it really is, and the next morning tells you
+          about any that came in worse than the grade you bought it on. With a garage and the{' '}
+          <b>Service</b> tab&apos;s send-to-the-shop box ticked, auction cars go to the shop the
+          morning after, like any used car you take in.
         </p>
       </section>
       <section>

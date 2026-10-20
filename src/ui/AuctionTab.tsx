@@ -2,9 +2,13 @@ import {
   AUCTION_RANK,
   auctionOpen,
   BUYER_FEE,
+  INSPECT_FEE,
+  inspectBlocker,
   isAuctionDay,
   lotEstimate,
+  lotReading,
   nextAuction,
+  type Inspection,
   type Lot,
 } from '../sim/auction'
 import {
@@ -21,6 +25,7 @@ import { formatTime } from '../sim/clock'
 import { PLAYER_ID } from '../sim/customers'
 import { carName } from '../sim/interactables'
 import { rankById } from '../sim/progression'
+import { NO_CASH } from '../sim/sellers'
 import { auctionBidBlocker, lotRoom, runListFor } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -32,19 +37,57 @@ function untilText(days: number): string {
   return `in ${days} days`
 }
 
+/** The player's inspection of `lot`, if they've had one. */
+function useInspection(lot: Lot): Inspection | null {
+  return useGame((s) => s.inspected.find((i) => i.lotId === lot.id) ?? null)
+}
+
+/** "Fair", or "Worn ✓" once inspected, with what the sheet said in its tooltip. */
+function GradeText({ lot, inspection }: { lot: Lot; inspection: Inspection | null }) {
+  const { grade } = lotReading(lot, inspection)
+  if (!inspection)
+    return <span title="The sheet's grade: the car may be a step worse">{grade}</span>
+  return (
+    <span className="auction-inspected" title={`Inspected. The sheet said ${lot.grade}.`}>
+      {grade} ✓
+    </span>
+  )
+}
+
+/** Inspect, while the lot can still be inspected; nothing once it's done or too late. */
+function InspectButton({ lot }: { lot: Lot }) {
+  const blocker = useGame((s) => inspectBlocker(lot, s.clock.day, s.auction, s.inspected, s.cash))
+  if (blocker && blocker !== NO_CASH) return <span />
+  return (
+    <button
+      className="btn btn-small"
+      disabled={!!blocker}
+      title={
+        blocker ??
+        `Have the car looked over for ${formatMoney(INSPECT_FEE)}: a truer grade and a tighter estimate`
+      }
+      onClick={() => useGame.getState().inspectLot(lot.id)}
+    >
+      Inspect
+    </button>
+  )
+}
+
 function LotRow({ lot, day, won }: { lot: Lot; day: number; won: boolean }) {
-  const { low, high } = lotEstimate(lot, day)
+  const inspection = useInspection(lot)
+  const { low, high } = lotEstimate(lot, day, inspection)
   return (
     <li className={won ? 'auction-won' : undefined}>
       <span className="muted">{lot.order}</span>
       <span>
         {lot.car.year} {carName(lot.car.model)}
       </span>
-      <span>{lot.grade}</span>
+      <GradeText lot={lot} inspection={inspection} />
       <span className="muted auction-miles">{Math.round(lot.car.miles / 1000)}k mi</span>
       <span className="price">
         {won ? 'Bought' : `${formatMoney(low)}–${formatMoney(high).replace('$', '')}`}
       </span>
+      {won ? <span /> : <InspectButton lot={lot} />}
     </li>
   )
 }
@@ -84,7 +127,8 @@ function highText(run: AuctionState): string {
 /** The lot on the block: the car, the price, who's high, the call, and Bid and Pass. */
 function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }) {
   const blocker = useGame(auctionBidBlocker)
-  const { low, high } = lotEstimate(lot, day)
+  const inspection = useInspection(lot)
+  const { low, high } = lotEstimate(lot, day, inspection)
   const sold = run.call === 'sold'
   const mine = run.high === PLAYER_ID
   const bid = nextBid(run)
@@ -95,8 +139,8 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
           Lot {lot.order}: {lot.car.year} {carName(lot.car.model)}
         </b>
         <span className="muted">
-          {lot.grade} · {Math.round(lot.car.miles / 1000)}k mi · est. {formatMoney(low)}–
-          {formatMoney(high).replace('$', '')}
+          <GradeText lot={lot} inspection={inspection} /> · {Math.round(lot.car.miles / 1000)}k mi ·
+          est. {formatMoney(low)}–{formatMoney(high).replace('$', '')}
         </span>
       </div>
       <div className="auction-price">
@@ -129,12 +173,17 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
 
 function ResultRow({ r, lots }: { r: LotResult; lots: readonly Lot[] }) {
   const lot = lots.find((l) => l.id === r.lotId)
-  if (!lot) return null
+  return lot ? <ResultLine r={r} lot={lot} /> : null
+}
+
+function ResultLine({ r, lot }: { r: LotResult; lot: Lot }) {
+  const inspection = useInspection(lot)
   return (
     <li className={r.buyer === PLAYER_ID && !r.fell ? 'auction-yours' : undefined}>
       <span className="muted">{lot.order}</span>
       <span>
-        {lot.car.year} {carName(lot.car.model)} <span className="muted">· {lot.grade}</span>
+        {lot.car.year} {carName(lot.car.model)}{' '}
+        <span className="muted">· {lotReading(lot, inspection).grade}</span>
       </span>
       <span className="price">{resultLine(r, formatMoney)}</span>
     </li>
@@ -206,7 +255,7 @@ function AuctionDay({ day }: { day: number }) {
     <>
       <p className="cal-intro">
         The run starts at <b>{formatTime(AUCTION_START)}</b>. Lots come up one at a time: bid
-        against the other dealers, or pass.
+        against the other dealers, or pass. Until a lot runs you can still have it inspected.
       </p>
       <RunList day={day} />
     </>
@@ -254,6 +303,11 @@ export function AuctionTab() {
             {formatMoney(BUYER_FEE.flat)} and {Math.round(BUYER_FEE.share * 100)}% of the price), is
             paid in cash, needs a free lot space and is on the lot the next morning. The office
             computer doesn&apos;t stop the clock: the floor keeps running while you bid.
+          </p>
+          <p className="muted cal-intro">
+            The sheet&apos;s grade leans kind: about one car in five comes in a step worse. An
+            inspection ({formatMoney(INSPECT_FEE)}, any day the list is up until the lot runs) reads
+            it closer and tightens the estimate.
           </p>
         </>
       )}

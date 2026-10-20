@@ -546,9 +546,13 @@ kbd {
 }
 .auction-lots li {
   display: grid;
-  grid-template-columns: 1.2em 1fr auto auto auto;
+  grid-template-columns: 1.2em 1fr auto auto auto auto;
   gap: 10px;
+  align-items: center;
   font-variant-numeric: tabular-nums;
+}
+.auction-lots .auction-inspected {
+  color: #93c5fd;
 }
 .auction-lots .auction-won {
   opacity: 0.55;
@@ -1959,7 +1963,7 @@ kbd {
 @media (max-height: 500px), (max-width: 760px) {
   /* The run list drops the miles; the top bar's auction chip folds into the Office badge */
   .auction-lots li {
-    grid-template-columns: 1.2em 1fr auto auto;
+    grid-template-columns: 1.2em 1fr auto auto auto;
   }
   .auction-lots .auction-miles {
     display: none;

@@ -123,7 +123,15 @@ import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
 import { countStreaks, offNotice, offOn, onCourseOn } from '../../sim/rota'
 import { stockPurchases } from '../../sim/sellers'
-import { auctionOpen, isAuctionDay, stockWins, type AuctionWin } from '../../sim/auction'
+import {
+  auctionOpen,
+  isAuctionDay,
+  stockWins,
+  surpriseNotice,
+  surprisesOf,
+  type AuctionWin,
+  type Inspection,
+} from '../../sim/auction'
 import { auctionNotice, type AuctionState } from '../../sim/bidding'
 import {
   addDay as addToLifetime,
@@ -175,6 +183,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     onBreak: [] as string[],
     purchases: [] as Purchase[],
     auctionWins: [] as AuctionWin[],
+    inspected: [] as Inspection[],
     auction: null as AuctionState | null,
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
@@ -229,6 +238,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
         // actions or panels to clear.
         set({
           screen: 'playing',
+          inspected: [],
           difficulty: save.difficulty,
           dealershipName: save.dealershipName,
           cash: save.cash,
@@ -378,6 +388,8 @@ export function settleDay(k: Kit): void {
     eotm,
     staffBonus,
     wages,
+    // Lots won today are stocked at their true condition: some come in worse than graded.
+    auction: { ...dayStats.auction, surprises: surprisesOf(s.auctionWins) },
     commissions,
     interest,
     owner,
@@ -662,6 +674,8 @@ function morning(k: Kit, day: number): void {
     cash: s.cash - (stolen?.floored ? stolen.cost : 0),
     purchases: [],
     auctionWins: [],
+    // Inspections hold until their auction has run.
+    inspected: s.inspected.filter((i) => i.auctionDay >= day),
     auction: null,
     serviceJobs: [],
     serviceAway: [],
@@ -749,6 +763,7 @@ function morning(k: Kit, day: number): void {
     defectors.length > 0 && defectNotice(defectors, rival.name),
     theft && theftNotice(theft, rival.status === 'open' ? rival.name : null),
     delivered.length > 0 && deliveryNotice(delivered),
+    surpriseNotice(s.dayStats.auction.surprises),
     appointmentsNotice(clients, day),
     appreciationNotice(s.appreciation, day),
     isAuctionDay(day) && auctionOpen(get().career) && auctionNotice(runListFor(get()).length),

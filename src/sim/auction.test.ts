@@ -7,12 +7,19 @@ import {
   auctionRecord,
   bidBlocker,
   buyerFee,
+  INSPECT_FEE,
+  inspectBlocker,
+  inspectLot,
   isAuctionDay,
   lotEstimate,
   nextAuction,
+  readCondition,
   RUN_SIZE,
   runList,
+  SHEET_NOISE,
   stockWins,
+  surpriseNotice,
+  surprisesOf,
   wholesaleValue,
   WHOLESALE_FACTOR,
   winLot,
@@ -23,9 +30,21 @@ import { buildInventory } from './inventory'
 import { freeSlots } from './ordering'
 import { createRng } from './rng'
 import { NO_CASH, NO_ROOM, reservedSlots, type BuyBook } from './sellers'
-import { gradeOf, marketValue } from './usedCars'
+import { carName } from './interactables'
+import { GRADES, gradeOf, marketValue, PLAYER_SKILL, type Grade } from './usedCars'
 
 const OPEN = { rank: 'main-street', tier: 'bronze' } as const
+const inventory = buildInventory(createRng(1))
+const book = (extra: Partial<BuyBook> = {}): BuyBook => ({
+  cash: 50_000,
+  inventory,
+  orders: [],
+  purchases: [],
+  auctionWins: [],
+  expansions: [],
+  clock: { day: 10 },
+  ...extra,
+})
 
 describe('the auction calendar', () => {
   it('is on Wednesdays', () => {
@@ -58,13 +77,13 @@ describe('runList', () => {
     expect(runList(15, OPEN)).not.toEqual(monday)
   })
 
-  it('numbers its lots for the auction day, graded by their condition', () => {
+  it('numbers its lots for the auction day, graded by the sheet’s reading', () => {
     const lots = runList(8, OPEN)
     expect(lots).toHaveLength(RUN_SIZE['main-street'])
     lots.forEach((lot, i) => {
       expect(lot.id).toBe(`lot-10-${i + 1}`)
       expect(lot.order).toBe(i + 1)
-      expect(lot.grade).toBe(gradeOf(lot.car.condition))
+      expect(lot.grade).toBe(gradeOf(lot.reading))
       expect(lot.car.acquiredDay).toBe(10)
     })
   })
@@ -104,7 +123,13 @@ describe('prices', () => {
   })
 
   it('estimates a range around the wholesale value', () => {
-    const lot = { id: 'lot-10-1', car, grade: gradeOf(car.condition), order: 1 }
+    const lot = {
+      id: 'lot-10-1',
+      car,
+      reading: car.condition,
+      grade: gradeOf(car.condition),
+      order: 1,
+    }
     const value = wholesaleValue(car.model, car, 10)
     const { low, high } = lotEstimate(lot, 10)
     expect(low).toBeLessThan(value)
@@ -118,17 +143,6 @@ describe('prices', () => {
 })
 
 describe('buying a lot', () => {
-  const inventory = buildInventory(createRng(1))
-  const book = (extra: Partial<BuyBook> = {}): BuyBook => ({
-    cash: 50_000,
-    inventory,
-    orders: [],
-    purchases: [],
-    auctionWins: [],
-    expansions: [],
-    clock: { day: 10 },
-    ...extra,
-  })
   const lot = runList(10, OPEN)[0]
 
   it('needs the price and the fee in cash', () => {
@@ -156,6 +170,7 @@ describe('buying a lot', () => {
       slot,
       price: 1,
       fee: 1,
+      graded: lot.grade,
     }))
     expect(bidBlocker(book({ auctionWins: wins }), 1_000)).toBe(NO_ROOM)
   })
@@ -179,6 +194,86 @@ describe('buying a lot', () => {
       price: 8_000,
       fee: win.fee,
       value: marketValue(lot.car.model, lot.car, 10),
+      graded: lot.grade,
     })
+  })
+})
+
+describe('grades and inspection', () => {
+  // Many weeks of lots, for the odds.
+  const lots = Array.from({ length: 200 }, (_, w) => runList(1 + w * 7, OPEN)).flat()
+  const steps = (better: Grade, worse: Grade) => GRADES.indexOf(worse) - GRADES.indexOf(better)
+
+  it('reads the sheet up to SHEET_NOISE over the truth, never under', () => {
+    for (const lot of lots) {
+      expect(lot.reading).toBeGreaterThanOrEqual(lot.car.condition)
+      expect(lot.reading).toBeLessThanOrEqual(Math.min(1, lot.car.condition + SHEET_NOISE) + 1e-9)
+      expect(steps(lot.grade, gradeOf(lot.car.condition))).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('grades about one lot in five a step better than it is', () => {
+    const off = lots.filter((l) => l.grade !== gradeOf(l.car.condition)).length / lots.length
+    expect(off).toBeGreaterThan(0.1)
+    expect(off).toBeLessThan(0.25)
+  })
+
+  it('keeps the cars as they were before the sheet could be off', () => {
+    // The sheet rolls on its own seed: the cars are 22a's.
+    expect(runList(8, OPEN).map((l) => l.car.condition)).toEqual(
+      runList(10, OPEN).map((l) => l.car.condition),
+    )
+  })
+
+  it('narrows the reading on inspection, to about one in fifteen off', () => {
+    const inspections = lots.map((l) => inspectLot(l, PLAYER_SKILL))
+    lots.forEach((lot, i) => {
+      const { reading } = inspections[i]
+      expect(reading).toBeGreaterThanOrEqual(lot.car.condition)
+      expect(reading).toBeLessThanOrEqual(lot.reading)
+      expect(inspections[i].auctionDay).toBe(lot.car.acquiredDay)
+    })
+    const off =
+      inspections.filter((x, i) => x.grade !== gradeOf(lots[i].car.condition)).length / lots.length
+    expect(off).toBeLessThan(0.1)
+    // The same lot reads the same twice.
+    expect(inspectLot(lots[0], PLAYER_SKILL)).toEqual(inspections[0])
+  })
+
+  it('tightens the estimate once inspected', () => {
+    const lot = lots[0]
+    const loose = lotEstimate(lot, 10)
+    const tight = lotEstimate(lot, 10, inspectLot(lot, PLAYER_SKILL))
+    expect(tight.high - tight.low).toBeLessThan(loose.high - loose.low)
+    expect(readCondition(0.95, SHEET_NOISE, 1)).toBe(1)
+  })
+
+  it('can be inspected until the lot runs, once, with the cash', () => {
+    const lot = runList(8, OPEN)[2]
+    const done = [inspectLot(lot, PLAYER_SKILL)]
+    expect(inspectBlocker(lot, 8, null, [], 1_000)).toBeNull()
+    expect(inspectBlocker(lot, 10, { lotIndex: 1, over: false }, [], 1_000)).toBeNull()
+    expect(inspectBlocker(lot, 10, { lotIndex: 2, over: false }, [], 1_000)).toMatch(/Too late/)
+    expect(inspectBlocker(lot, 10, { lotIndex: 9, over: true }, [], 1_000)).toMatch(/Too late/)
+    expect(inspectBlocker(lot, 11, null, [], 1_000)).toMatch(/Too late/)
+    expect(inspectBlocker(lot, 8, null, done, 1_000)).toBe('Already inspected.')
+    expect(inspectBlocker(lot, 8, null, [], INSPECT_FEE - 1)).toBe(NO_CASH)
+  })
+
+  it('names a car that came in worse than it was bought on', () => {
+    const lot = { ...runList(8, OPEN)[0], reading: 0.8, grade: 'Good' as const }
+    const rough = { ...lot, car: { ...lot.car, condition: 0.55 } }
+    const won = winLot(rough, 5_000, book(), 'used-10-1')!
+    expect(won.graded).toBe('Good')
+    // Bought on the inspection's grade, it's no surprise.
+    const read = { lotId: lot.id, auctionDay: 10, reading: 0.55, grade: 'Fair' as const }
+    const fair = winLot(rough, 5_000, book(), 'used-10-2', read)!
+    expect(surprisesOf([won, fair])).toEqual([
+      { model: lot.car.model, year: lot.car.year, graded: 'Good', arrived: 'Fair' },
+    ])
+    expect(surpriseNotice(surprisesOf([won]))).toBe(
+      `The ${carName(lot.car.model)} you bought graded Good, arrived Fair.`,
+    )
+    expect(surpriseNotice([])).toBeNull()
   })
 })

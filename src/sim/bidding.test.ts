@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runList, wholesaleValue } from './auction'
+import { lotValue, runList } from './auction'
 import {
   AUCTION_END,
   AUCTION_START,
@@ -48,13 +48,13 @@ describe('bidding basics', () => {
   it('opens a lot under its wholesale value, on the increment', () => {
     const lot = LOTS[0]
     const open = openingBid(lot, DAY)
-    expect(open).toBeLessThan(wholesaleValue(lot.car.model, lot.car, DAY))
+    expect(open).toBeLessThan(lotValue(lot, DAY))
     expect(open % bidStep(open)).toBe(0)
   })
 
   it('brings three to five dealers, their top bids around wholesale', () => {
     const lot = LOTS[0]
-    const value = wholesaleValue(lot.car.model, lot.car, DAY)
+    const value = lotValue(lot, DAY)
     for (let seed = 1; seed < 30; seed++) {
       const bidders = bidderMaxes(lot, DAY, createRng(seed))
       expect(bidders.length).toBeGreaterThanOrEqual(3)
