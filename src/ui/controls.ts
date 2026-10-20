@@ -16,6 +16,7 @@ export const CONTROLS: [string, string][] = [
   ['B', 'Service (the garage)'],
   ['L', 'Clients (the client book)'],
   ['F', 'Finance (F&I, loans and lenders)'],
+  ['J', 'Auction (the dealer auction’s run list)'],
   ['P', 'Stats (totals, records, charts and achievements)'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],
@@ -29,6 +30,7 @@ export const CONTROLS: [string, string][] = [
         ['Shift R', 'Add a used car (dev)'],
         ['Shift L', 'Bring back a client, due ones first (dev)'],
         ['Shift G', 'Level up the staff on the lot (dev)'],
+        ['Shift J', 'Buy the next auction lot at wholesale (dev)'],
         ['T', 'Game speed (dev)'],
       ] as [string, string][])
     : []),
@@ -43,7 +45,10 @@ export const TOUCH_CONTROLS: [string, string][] = [
   ['Pinch', 'Zoom'],
   ['Twist', 'Rotate view (two fingers)'],
   ['Staff', 'Staff'],
-  ['Office', 'Stock, marketing, upgrades, calendar, rival, service, clients, finance, stats'],
+  [
+    'Office',
+    'Stock, marketing, upgrades, calendar, rival, service, clients, finance, auction, stats',
+  ],
   ['Walls', 'Wall mode'],
   ['✕', 'Cancel / head back'],
   ['🔊', 'Sound settings and mute'],

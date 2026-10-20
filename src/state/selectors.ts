@@ -1,7 +1,11 @@
+import { runList, type Lot } from '../sim/auction'
+import { weekStart } from '../sim/calendar'
 import type { Customer } from '../sim/customers'
 import { installedExpansions } from '../sim/expansions'
 import { installed, type ImprovementId } from '../sim/improvements'
+import type { FranchiseTier } from '../sim/franchise'
 import type { ExpansionId } from '../sim/layout'
+import type { RankId } from '../sim/progression'
 import { courseGaps, courseGapText, coverageGaps, gapText } from '../sim/rota'
 import { buyBlocker, lotSlotFor } from '../sim/sellers'
 import { baseSellerBonus, testDriveBonus } from './derived'
@@ -113,14 +117,15 @@ const lotRoomOf = memoLast(
     inventory: GameState['inventory'],
     orders: GameState['orders'],
     purchases: GameState['purchases'],
+    auctionWins: GameState['auctionWins'],
     expansions: GameState['expansions'],
     day: number,
-  ) => !!lotSlotFor({ inventory, orders, purchases, expansions, clock: { day } }),
+  ) => !!lotSlotFor({ inventory, orders, purchases, auctionWins, expansions, clock: { day } }),
 )
 
 /** Whether a lot space is free for a used car (`lotSlotFor`), recomputed only when stock changes. */
 export const lotRoom = (s: GameState): boolean =>
-  lotRoomOf(s.inventory, s.orders, s.purchases, s.expansions, s.clock.day)
+  lotRoomOf(s.inventory, s.orders, s.purchases, s.auctionWins, s.expansions, s.clock.day)
 
 const buyBlockerOf = memoLast(
   (
@@ -128,12 +133,34 @@ const buyBlockerOf = memoLast(
     inventory: GameState['inventory'],
     orders: GameState['orders'],
     purchases: GameState['purchases'],
+    auctionWins: GameState['auctionWins'],
     expansions: GameState['expansions'],
     day: number,
     price: number,
-  ) => buyBlocker({ cash, inventory, orders, purchases, expansions, clock: { day } }, price),
+  ) =>
+    buyBlocker(
+      { cash, inventory, orders, purchases, auctionWins, expansions, clock: { day } },
+      price,
+    ),
 )
 
 /** `buyBlocker` for `price`, recomputed only when cash, stock or the price change. */
 export const buyBlockerFor = (s: GameState, price: number): string | null =>
-  buyBlockerOf(s.cash, s.inventory, s.orders, s.purchases, s.expansions, s.clock.day, price)
+  buyBlockerOf(
+    s.cash,
+    s.inventory,
+    s.orders,
+    s.purchases,
+    s.auctionWins,
+    s.expansions,
+    s.clock.day,
+    price,
+  )
+
+const runListOf = memoLast((week: number, rank: RankId, tier: FranchiseTier) =>
+  runList(week, { rank, tier }),
+)
+
+/** The week's auction run list (`runList`), recomputed only when the week, rank or tier change. */
+export const runListFor = (s: GameState): Lot[] =>
+  runListOf(weekStart(s.clock.day), s.career.rank, s.franchise)

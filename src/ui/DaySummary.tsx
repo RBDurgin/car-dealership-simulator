@@ -32,6 +32,7 @@ import { rankById, rankProgress } from '../sim/progression'
 import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
+import { auctionSpend } from '../sim/auction'
 import { levelTuning, useGame } from '../state/store'
 import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
@@ -367,6 +368,27 @@ function SummaryPanel() {
                         ? `taken in trade from ${b.sellerName} at ${formatMoney(b.price)}`
                         : `from ${b.sellerName} for ${formatMoney(b.price)}`}{' '}
                       <span className="muted">(worth {formatMoney(b.value)})</span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </>
+          )}
+          {stats.auction.bought.length > 0 && (
+            <>
+              <dt>Auction</dt>
+              <dd>
+                {stats.auction.bought.length} car{stats.auction.bought.length === 1 ? '' : 's'} won
+                (<span className="price">{formatMoney(auctionSpend(stats.auction))}</span> with
+                fees)
+                <span className="muted"> stock, not an expense</span>
+                <ul className="summary-bought">
+                  {stats.auction.bought.map((b, i) => (
+                    <li key={i}>
+                      {b.year} {carName(b.model)} for {formatMoney(b.price)}{' '}
+                      <span className="muted">
+                        (+{formatMoney(b.fee)} fee, worth {formatMoney(b.value)})
+                      </span>
                     </li>
                   ))}
                 </ul>

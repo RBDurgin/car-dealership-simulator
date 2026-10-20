@@ -123,6 +123,7 @@ import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
 import { countStreaks, offNotice, offOn, onCourseOn } from '../../sim/rota'
 import { stockPurchases } from '../../sim/sellers'
+import { stockWins, type AuctionWin } from '../../sim/auction'
 import {
   addDay as addToLifetime,
   dayRecord,
@@ -171,6 +172,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     eotm: [] as EotmWin[],
     onBreak: [] as string[],
     purchases: [] as Purchase[],
+    auctionWins: [] as AuctionWin[],
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
     serviceVisits: emptySchedule(),
@@ -270,7 +272,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
  * pays the holdback on the month's sales (scaled by the franchise tier), and
  * the month's result moves the tier. The day's gross goes on the
  * career, which may earn a new rank. Nazma's lot across the road takes in
- * the day (see `rivalDay`). Used cars bought today go into stock, in the lot
+ * the day (see `rivalDay`). Used cars bought today and auction wins go into stock, in the lot
  * spaces held for them, so the save keeps them. Chargebacks due today take
  * back F&I gross, and the finance manager who signed the deal gives back his
  * share of it out of the day's commissions; a client charged back within
@@ -387,10 +389,15 @@ export function settleDay(k: Kit): void {
   // The run of days the whole team ended happy, for the Happy Team achievement.
   const happyStreak = isHappyTeam(roster) ? s.records.happyStreak + 1 : 0
   const records = { ...updated, records: { ...updated.records, happyStreak } }
-  const inventory =
-    s.purchases.length > 0
-      ? [...s.inventory, ...stockPurchases(s.purchases, s.clock.day)]
-      : s.inventory
+  // Used cars bought today and lots won at the auction go into the spaces they held.
+  const bought = s.purchases.length > 0 || s.auctionWins.length > 0
+  const inventory = bought
+    ? [
+        ...s.inventory,
+        ...stockPurchases(s.purchases, s.clock.day),
+        ...stockWins(s.auctionWins, s.clock.day),
+      ]
+    : s.inventory
   const franchise = quota?.tier.to ?? s.franchise
   const monthFi =
     due.length > 0 ? addFiStats(s.monthFi, { ...emptyFiStats(), ...landed }) : s.monthFi
@@ -421,7 +428,7 @@ export function settleDay(k: Kit): void {
     ...(earned.length > 0 && { achievements: [...s.achievements, ...earned] }),
     rival: rivalDay(s.rival, dayStats, createRng(RIVAL_SEED + s.clock.day), level.rivalStrength),
     ...(eotm && { eotm: addEotm(s.eotm, eotm) }),
-    ...(s.purchases.length > 0 && { inventory, purchases: [] }),
+    ...(bought && { inventory, purchases: [], auctionWins: [] }),
     ...(due.length > 0 && {
       chargebacks: later,
       // A client charged back soon after buying comes in sour next time.
@@ -651,6 +658,7 @@ function morning(k: Kit, day: number): void {
     ),
     cash: s.cash - (stolen?.floored ? stolen.cost : 0),
     purchases: [],
+    auctionWins: [],
     serviceJobs: [],
     serviceAway: [],
     serviceComebacks: [],

@@ -23,6 +23,7 @@ import { ClientsTab } from './ClientsTab'
 import { StatsTab } from './StatsTab'
 import { RivalTab } from './RivalTab'
 import { FinanceTab } from './FinanceTab'
+import { AuctionTab } from './AuctionTab'
 import { ServiceTab } from './ServiceTab'
 import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
@@ -206,9 +207,10 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
  * today's orders and the cars in stock), ad campaigns on the marketing tab,
  * improvements on the upgrades tab, the coming weeks on the calendar tab and
  * Nazma's lot across the road on the rival tab, the garage on the service tab
- * and the client book on the clients tab, and totals, records and charts on
+ * and the client book on the clients tab, loans on the finance tab, the dealer
+ * auction's run list on the auction tab, and totals, records and charts on
  * the stats tab. Opened at the computer (on the tab it
- * was last on), from the top bar's Office button, or with I, M, U, C, K, B, L and P.
+ * was last on), from the top bar's Office button, or with I, M, U, C, K, B, L, F, J and P.
  * Orders are delivered the next morning.
  */
 export function StockPanel() {
@@ -256,6 +258,8 @@ export function StockPanel() {
         <ClientsTab />
       ) : tab === 'finance' ? (
         <FinanceTab />
+      ) : tab === 'auction' ? (
+        <AuctionTab />
       ) : (
         <StatsTab />
       )}
@@ -276,6 +280,7 @@ const TABS: [ComputerTab, string][] = [
   ['service', 'Service'],
   ['clients', 'Clients'],
   ['finance', 'Finance'],
+  ['auction', 'Auction'],
   ['stats', 'Stats'],
 ]
 
@@ -288,6 +293,7 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
   clients: { hint: 'Happy clients come back.', key: 'L' },
   finance: { hint: 'Every deal is a chance at the F&I menu.', key: 'F' },
+  auction: { hint: 'The run list is posted on Mondays.', key: 'J' },
   stats: { hint: 'Every day closed is kept here.', key: 'P' },
 }
 
@@ -297,14 +303,15 @@ function StockTab() {
   const inventory = useGame((s) => s.inventory)
   const orders = useGame((s) => s.orders)
   const purchases = useGame((s) => s.purchases)
+  const auctionWins = useGame((s) => s.auctionWins)
   const missedToday = useGame((s) => s.dayStats.missed)
   const missedYesterday = useGame((s) => s.missedYesterday)
   const invoice = useGame(orderInvoice)
   const tier = useGame((s) => s.franchise)
   const expansions = useGame((s) => s.expansions)
 
-  // Lot spaces held for used cars bought today are taken too.
-  const reserved = reservedSlots(purchases)
+  // Lot spaces held for used cars bought today, or won at auction, are taken too.
+  const reserved = reservedSlots(purchases, auctionWins)
   const book = { cash, inventory, orders, reserved, tier, expansions, clock: { day } }
   const free = freeSlots(inventory, orders, reserved, expansionsUp(book))
   const freeIn = (where: 'lot' | 'showroom') => free.filter((s) => s.location === where).length

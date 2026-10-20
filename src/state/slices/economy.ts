@@ -1,3 +1,12 @@
+import {
+  AUCTION_RANK,
+  auctionOpen,
+  auctionRecord,
+  bidBlocker,
+  isAuctionDay,
+  wholesaleValue,
+  winLot,
+} from '../../sim/auction'
 import { washCar } from '../../sim/cleanliness'
 import { expansionsUp } from '../../sim/expansions'
 import { payoffOnSale } from '../../sim/floorPlan'
@@ -7,12 +16,14 @@ import { buildInventory, restock, roundTo100, sellCar as markSold } from '../../
 import { CHANNELS, launchCampaign } from '../../sim/marketing'
 import { cancelOrder, claimedByOrder, freeSlots, placeOrder } from '../../sim/ordering'
 import { emptyMonthSales } from '../../sim/quota'
+import { rankById } from '../../sim/progression'
 import { createRng } from '../../sim/rng'
 import { reservedSlots } from '../../sim/sellers'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../../sim/usedCars'
 import { dispatch, notify, type Kit } from '../core'
 import { orderInvoice } from '../derived'
 import { INVENTORY_SEED } from '../rng'
+import { runListFor } from '../selectors'
 import type { GameState } from '../types'
 import { amendLog } from './career'
 
@@ -28,10 +39,12 @@ type EconomyKeys =
   | 'payOff'
   | 'devRestock'
   | 'devUsedCar'
+  | 'buyLot'
+  | 'devAuctionBuy'
 
 /**
  * Cash, stock, orders, the floor plan, ads and the month's sales. (Cash,
- * the quota, purchases and the franchise tier start with `dayOne`.)
+ * the quota, purchases, auction wins and the franchise tier start with `dayOne`.)
  */
 export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
   const { get, set } = k
@@ -59,7 +72,7 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
     },
     orderCar: (model, financing) => {
       const s = get()
-      const book = { ...s, reserved: reservedSlots(s.purchases), tier: s.franchise }
+      const book = { ...s, reserved: reservedSlots(s.purchases, s.auctionWins), tier: s.franchise }
       const result = placeOrder(book, model, financing, s.clock.day, orderInvoice(s))
       if (!result.ok) {
         notify(k, result.reason)
@@ -123,8 +136,13 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       const s = get()
       const day = s.clock.day
       const spec = rollUsedCar(createRng(Date.now()), day)
-      const id = nextUsedId([...s.inventory, ...s.purchases], day)
-      const cars = freeSlots(s.inventory, s.orders, reservedSlots(s.purchases), expansionsUp(s))
+      const id = nextUsedId([...s.inventory, ...s.purchases, ...s.auctionWins], day)
+      const cars = freeSlots(
+        s.inventory,
+        s.orders,
+        reservedSlots(s.purchases, s.auctionWins),
+        expansionsUp(s),
+      )
         .filter((slot) => slot.location === 'lot')
         .map((slot) => usedStockCar(id, spec, slot, 0, day, 0.5))
       const car = cars.find((c) => canPlace?.(c) ?? true)
@@ -132,6 +150,46 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       set({
         inventory: [...s.inventory, { ...car, cost: roundTo100(stockValue(car, day)! * 0.9) }],
       })
+    },
+    buyLot: (lotId, price) => {
+      const s = get()
+      const day = s.clock.day
+      const lot = runListFor(s).find((l) => l.id === lotId)
+      const blocker = !auctionOpen(s.career)
+        ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
+        : !isAuctionDay(day) || !lot
+          ? 'That lot isn’t up today.'
+          : s.auctionWins.some((w) => w.lotId === lotId)
+            ? 'Already bought.'
+            : bidBlocker(s, price)
+      if (blocker) {
+        notify(k, blocker)
+        return false
+      }
+      const id = nextUsedId([...s.inventory, ...s.purchases, ...s.auctionWins], day)
+      const win = winLot(lot!, price, s, id)!
+      set({
+        cash: s.cash - win.price - win.fee,
+        auctionWins: [...s.auctionWins, win],
+        dayStats: {
+          ...s.dayStats,
+          auction: {
+            ...s.dayStats.auction,
+            bought: [...s.dayStats.auction.bought, auctionRecord(win, day)],
+          },
+        },
+      })
+      notify(
+        k,
+        `Won the ${win.car.year} ${carName(win.car.model)} at auction for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). It's on the lot tomorrow.`,
+      )
+      return true
+    },
+    devAuctionBuy: () => {
+      const s = get()
+      const lot = runListFor(s).find((l) => !s.auctionWins.some((w) => w.lotId === l.id))
+      if (!isAuctionDay(s.clock.day) || !lot) return notify(k, 'No lot left in today’s run.')
+      get().buyLot(lot.id, wholesaleValue(lot.car.model, lot.car, s.clock.day))
     },
   }
 }

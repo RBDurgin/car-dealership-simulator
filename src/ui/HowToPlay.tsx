@@ -31,6 +31,7 @@ import { DING_PENALTY } from '../sim/cleanliness'
 import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
+import { AUCTION_RANK, BUYER_FEE, WHOLESALE_FACTOR } from '../sim/auction'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
 import {
   BLITZ_CUT,
@@ -621,6 +622,19 @@ function BusinessTab({ touch, click }: TabProps) {
         <p>
           Customers who can&apos;t find the kind of car they want are counted as <i>missed</i> in
           the summary and the stock panel. Order what people ask for.
+        </p>
+      </section>
+      <section>
+        <h3>The dealer auction</h3>
+        <p>
+          Once you reach {rankById(AUCTION_RANK).name}, the trade&apos;s dealer auction is open to
+          you. It&apos;s held every Wednesday (marked on the <b>Calendar</b> tab), and its run list
+          goes up on the <b>Auction</b> tab on the Monday before: each used car with its grade
+          (Good, Fair, Worn or Rough), its miles and an estimate of what it&apos;ll go for. The
+          trade pays about {Math.round(WHOLESALE_FACTOR * 100)}% of what a car would fetch on your
+          lot, since it still has to be retailed. A car won costs its price plus the buyer fee (
+          {formatMoney(BUYER_FEE.flat)} and {Math.round(BUYER_FEE.share * 100)}% of the price), is
+          paid in cash, needs a free lot space and goes on the lot the next morning.
         </p>
       </section>
       <section>

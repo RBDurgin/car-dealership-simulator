@@ -28,6 +28,7 @@ import type { MonthSales } from '../sim/quota'
 import type { FranchiseTier } from '../sim/franchise'
 import type { Rival } from '../sim/rival'
 import type { SaveData } from '../sim/save'
+import type { AuctionWin } from '../sim/auction'
 import type { Purchase } from '../sim/sellers'
 import type {
   Comeback,
@@ -83,6 +84,7 @@ export type ComputerTab =
   | 'service'
   | 'clients'
   | 'finance'
+  | 'auction'
   | 'stats'
 
 /**
@@ -120,6 +122,11 @@ export interface GameState {
    * holding a lot space, until the day is settled and it goes into stock.
    */
   purchases: Purchase[]
+  /**
+   * Lots won at today's dealer auction (see `sim/auction.ts`), each holding a
+   * lot space until the day is settled and it goes into stock. Never saved.
+   */
+  auctionWins: AuctionWin[]
   /** The service department's jobs today, in the bays or waiting for one. Never saved. */
   serviceJobs: ServiceJob[]
   /** Today's service visits and how many have driven in. */
@@ -281,6 +288,14 @@ export interface GameState {
   devRestock: (canPlace?: (car: InventoryCar) => boolean) => void
   /** Dev cheat: a random used car on the first free lot space `canPlace` allows. */
   devUsedCar: (canPlace?: (car: InventoryCar) => boolean) => void
+  /**
+   * Buys lot `lotId` of today's auction for `price` (plus the buyer fee),
+   * holding a lot space until it's stocked tonight. False, with a notice,
+   * when it can't be bought.
+   */
+  buyLot: (lotId: string, price: number) => boolean
+  /** Dev cheat: buys the first lot still in today's run at its wholesale value. */
+  devAuctionBuy: () => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
   /** Dev cheat: someone from the client book who isn't on the lot turns up. */

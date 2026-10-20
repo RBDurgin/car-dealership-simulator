@@ -225,11 +225,23 @@ export function usedTag(info: UsedInfo): string {
   return `Used · ${info.year} · ${Math.round(info.miles / 1000)}k mi`
 }
 
+/** A used car's shape in a word, best first. */
+export type Grade = 'Good' | 'Fair' | 'Worn' | 'Rough'
+
+/** The word for a used car's `condition`: Good from 75%, Fair from 50%, Worn from 25%. */
+export function gradeOf(condition: number): Grade {
+  return condition >= 0.75
+    ? 'Good'
+    : condition >= 0.5
+      ? 'Fair'
+      : condition >= 0.25
+        ? 'Worn'
+        : 'Rough'
+}
+
 /** "Fair (45%)": how a used car's `condition` reads in the panels. */
 export function shapeLabel(condition: number): string {
-  const word =
-    condition >= 0.75 ? 'Good' : condition >= 0.5 ? 'Fair' : condition >= 0.25 ? 'Worn' : 'Rough'
-  return `${word} (${Math.round(condition * 100)}%)`
+  return `${gradeOf(condition)} (${Math.round(condition * 100)}%)`
 }
 
 /** After this many days in stock a used car is flagged as stale in the stock panel. */

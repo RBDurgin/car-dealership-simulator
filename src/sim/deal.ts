@@ -1,4 +1,5 @@
 import { ARCHETYPES } from './archetypes'
+import { emptyAuctionStats, type AuctionStats } from './auction'
 import {
   PLAYER_ID,
   reduceCustomers,
@@ -419,6 +420,8 @@ export interface DayStats {
   bailout: number
   /** Used cars bought from sellers today: stock, not an expense, so off `netIncome`. */
   bought: BoughtCar[]
+  /** What the dealer auction sold us today (see `sim/auction.ts`): stock too, so off `netIncome`. */
+  auction: AuctionStats
   /** Cars the player washed themselves today. */
   washes: number
   /** The rank reached when the day was settled, or null if it didn't change. */
@@ -500,6 +503,7 @@ export function emptyStats(): DayStats {
     quota: null,
     bailout: 0,
     bought: [],
+    auction: emptyAuctionStats(),
     washes: 0,
     rankUp: null,
     rival: null,

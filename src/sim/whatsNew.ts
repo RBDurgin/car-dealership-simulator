@@ -563,6 +563,16 @@ export const UPDATES: readonly Update[] = [
       'Morale settles back toward the middle faster, so neglect costs less and daily huddles lift less.',
     ],
   },
+  {
+    id: 51,
+    phase: '22',
+    title: 'The dealer auction',
+    items: [
+      'From Main Street, the office computer’s new Auction tab (J) previews the dealer auction held every Wednesday.',
+      'Its run list goes up on the Monday: each used car with its grade, miles and what the trade is likely to pay.',
+      'Auction days are marked on the Calendar tab.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

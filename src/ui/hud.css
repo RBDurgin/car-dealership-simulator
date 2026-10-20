@@ -536,6 +536,24 @@ kbd {
   text-decoration: line-through;
 }
 
+/* The auction's run list: order, car, grade, miles, estimate */
+.auction-lots {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0 6px;
+  display: grid;
+  gap: 2px;
+}
+.auction-lots li {
+  display: grid;
+  grid-template-columns: 1.2em 1fr auto auto auto;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.auction-lots .auction-won {
+  opacity: 0.55;
+}
+
 /* The date in the top bar; only the weekday on compact screens */
 .topbar-date {
   white-space: nowrap;

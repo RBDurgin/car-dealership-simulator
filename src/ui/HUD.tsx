@@ -187,6 +187,10 @@ export function HUD() {
       else if (e.code === 'KeyL' && !e.repeat) game.toggleStockPanel(undefined, 'clients')
       else if (e.code === 'KeyP' && !e.repeat) game.toggleStockPanel(undefined, 'stats')
       else if (e.code === 'KeyF' && !e.repeat) game.toggleStockPanel(undefined, 'finance')
+      // Dev: Shift+J buys the first lot left in today's auction at its wholesale value.
+      else if (e.code === 'KeyJ' && !e.repeat && e.shiftKey && import.meta.env.DEV)
+        game.devAuctionBuy()
+      else if (e.code === 'KeyJ' && !e.repeat) game.toggleStockPanel(undefined, 'auction')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

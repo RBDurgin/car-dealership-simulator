@@ -10,6 +10,7 @@ import {
   upcoming,
 } from '../sim/appreciation'
 import { appointmentsOn } from '../sim/calls'
+import { auctionOpen, isAuctionDay } from '../sim/auction'
 import {
   calendarOf,
   DAYS_PER_WEEK,
@@ -81,6 +82,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const bays = useGame((s) => bayCount(expansionsUp(s)))
   const recall = !!recallOn(today, bays) && !!recallOn(day, bays) && sameMonth(day, today)
   const party = useGame((s) => s.appreciation?.day === day)
+  const auction = useGame((s) => auctionOpen(s.career)) && isAuctionDay(day)
   // A day the rota leaves a role with nobody in, from today on.
   const rota = useGame((s) => (day >= today ? rotaGaps(s, c.weekday) : undefined))
   const courses = useGame((s) => (day >= today ? courseGapsOn(s, day) : undefined))
@@ -94,7 +96,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
   const sky = weather
     ? `${day > today ? 'Forecast: ' : ''}${WEATHER_LABELS[weather].toLowerCase()}`
     : 'No forecast yet'
-  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}${party ? ' · client appreciation day' : ''}${gaps ? ` · ${gaps.join(', ')}` : ''}`
+  const sale = `${event ? ` · ${event.label} sale` : ''}${recall ? ' · recall' : ''}${party ? ' · client appreciation day' : ''}${auction ? ' · dealer auction' : ''}${gaps ? ` · ${gaps.join(', ')}` : ''}`
   return (
     <li
       className={`cal-day cal-${when}${event ? ' cal-sale' : ''}`}
@@ -114,6 +116,7 @@ function DayRow({ day, today }: { day: number; today: number }) {
         {event ? 'Sale · ' : ''}
         {recall ? 'Recall · ' : ''}
         {party ? 'Cookout · ' : ''}
+        {auction ? 'Auction · ' : ''}
         {gaps ? <span className="cal-gap">Gap · </span> : ''}
         {trafficLabel(traffic)}
       </span>

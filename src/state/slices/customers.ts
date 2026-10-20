@@ -409,7 +409,7 @@ function answerSeller(k: Kit, c: Customer): void {
   const price = c.offer!.price
   const res = respondToBuyOffer(c, price, rng.deal)
   if (res.answer === 'accept') {
-    const id = nextUsedId([...s.inventory, ...s.purchases], s.clock.day)
+    const id = nextUsedId([...s.inventory, ...s.purchases, ...s.auctionWins], s.clock.day)
     const blocker = buyBlocker(s, price)
     const purchase = blocker ? null : purchaseOf(c, price, s, id)
     if (!purchase) {
@@ -483,7 +483,12 @@ export function sign(
   const traded =
     allowance === undefined
       ? null
-      : purchaseOf(c, allowance, s, nextUsedId([...s.inventory, ...s.purchases], s.clock.day))
+      : purchaseOf(
+          c,
+          allowance,
+          s,
+          nextUsedId([...s.inventory, ...s.purchases, ...s.auctionWins], s.clock.day),
+        )
   if (allowance !== undefined && !traded) return null
   if (!get().sellCar(car.id, price)) return null
   // The loan and the products taken; a salesperson's loan comes without the menu.

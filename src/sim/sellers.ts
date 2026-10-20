@@ -1,4 +1,5 @@
 import { ARCHETYPES, EXPECT_JITTER, type Archetype } from './archetypes'
+import type { AuctionWin } from './auction'
 import type { Customer } from './customers'
 import { drivenCleanliness } from './driving'
 import { roundTo100, type InventoryCar } from './inventory'
@@ -171,11 +172,16 @@ export interface BuyBook extends Grounds {
   inventory: readonly InventoryCar[]
   orders: readonly Order[]
   purchases: readonly Purchase[]
+  /** Lots won at today's auction (see `sim/auction.ts`), each holding a space too. */
+  auctionWins?: readonly AuctionWin[]
 }
 
-/** The lot spaces held for today's purchases. */
-export function reservedSlots(purchases: readonly Purchase[]): Slot[] {
-  return purchases.map((p) => p.slot)
+/** The lot spaces held for today's purchases and auction wins. */
+export function reservedSlots(
+  purchases: readonly Purchase[],
+  wins: readonly AuctionWin[] = [],
+): Slot[] {
+  return [...purchases.map((p) => p.slot), ...wins.map((w) => w.slot)]
 }
 
 /** The first lot space (never a showroom platform) free for a used car, or null. */
@@ -183,7 +189,7 @@ export function lotSlotFor(book: Omit<BuyBook, 'cash'>): Slot | null {
   const free = freeSlots(
     book.inventory,
     book.orders,
-    reservedSlots(book.purchases),
+    reservedSlots(book.purchases, book.auctionWins),
     expansionsUp(book),
   )
   return free.find((s) => s.location === 'lot') ?? null
