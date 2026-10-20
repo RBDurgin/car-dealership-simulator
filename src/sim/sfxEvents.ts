@@ -1,3 +1,4 @@
+import { newResults, type AuctionState } from './bidding'
 import { dayOver, type GameTime } from './clock'
 import type { Customer } from './customers'
 import { eventOn } from './events'
@@ -31,6 +32,7 @@ export type SfxCue =
   | 'lift'
   | 'ring'
   | 'trophy'
+  | 'gavel'
 
 /**
  * Where a cue happens: a customer, an employee, a car in stock, a visitor's
@@ -76,6 +78,8 @@ export interface SfxState {
   receptionCall?: { employeeId: string; clientId: string } | null
   /** Achievements earned: one more plays the trophy. */
   achievements?: readonly unknown[]
+  /** The dealer auction's run: each lot sold brings the gavel down. */
+  auction?: AuctionState | null
 }
 
 /**
@@ -104,6 +108,7 @@ export const SFX_MIN_GAP_MS: Record<SfxCue, number> = {
   lift: 1500,
   ring: 1500,
   trophy: 1500,
+  gavel: 600,
 }
 
 const PANELS = ['staffOpen', 'stockOpen', 'helpOpen', 'audioOpen'] as const
@@ -129,6 +134,10 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if (atTopRank(next.career) && !atTopRank(prev.career)) out.push({ cue: 'fanfare' })
   if ((next.achievements?.length ?? 0) > (prev.achievements?.length ?? 0)) {
     out.push({ cue: 'trophy' })
+  }
+  if (next.auction !== prev.auction) {
+    const sold = newResults(prev.auction ?? null, next.auction ?? null)
+    if (sold.some((r) => r.buyer !== null)) out.push({ cue: 'gavel' })
   }
 
   if (next.customers !== prev.customers) {

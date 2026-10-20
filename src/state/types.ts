@@ -29,6 +29,7 @@ import type { FranchiseTier } from '../sim/franchise'
 import type { Rival } from '../sim/rival'
 import type { SaveData } from '../sim/save'
 import type { AuctionWin } from '../sim/auction'
+import type { AuctionState } from '../sim/bidding'
 import type { Purchase } from '../sim/sellers'
 import type {
   Comeback,
@@ -127,6 +128,11 @@ export interface GameState {
    * lot space until the day is settled and it goes into stock. Never saved.
    */
   auctionWins: AuctionWin[]
+  /**
+   * Today's live auction (see `sim/bidding.ts`): null until the run starts on
+   * auction day, then the lot on the block and the results. Never saved.
+   */
+  auction: AuctionState | null
   /** The service department's jobs today, in the bays or waiting for one. Never saved. */
   serviceJobs: ServiceJob[]
   /** Today's service visits and how many have driven in. */
@@ -296,6 +302,12 @@ export interface GameState {
   buyLot: (lotId: string, price: number) => boolean
   /** Dev cheat: buys the first lot still in today's run at its wholesale value. */
   devAuctionBuy: () => void
+  /** Steps today's auction to `minute` (between the clock's steps). */
+  tickAuction: (minute: number) => void
+  /** The player raises on the lot on the block. False, with a notice, if they can't. */
+  auctionBid: () => boolean
+  /** The player passes on the lot on the block: the dealers bid it out at once. */
+  auctionPass: () => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
   /** Dev cheat: someone from the client book who isn't on the lot turns up. */

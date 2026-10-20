@@ -123,7 +123,8 @@ import { planArrivals } from '../../sim/spawner'
 import { generateCandidates, isGuarded, onShift, payroll, reduceStaff } from '../../sim/staff'
 import { countStreaks, offNotice, offOn, onCourseOn } from '../../sim/rota'
 import { stockPurchases } from '../../sim/sellers'
-import { stockWins, type AuctionWin } from '../../sim/auction'
+import { auctionOpen, isAuctionDay, stockWins, type AuctionWin } from '../../sim/auction'
+import { auctionNotice, type AuctionState } from '../../sim/bidding'
 import {
   addDay as addToLifetime,
   dayRecord,
@@ -139,6 +140,7 @@ import { commit, notify, setRoster, tuning, upEffects, type Kit } from '../core'
 import { repScale, visitOdds } from '../derived'
 import { bailoutNotice, deliveryNotice, theftNotice } from '../notices'
 import { DELIVERY_SEED, OWNER_SEED, resetRng, RIVAL_SEED, rng, seedDay } from '../rng'
+import { runListFor } from '../selectors'
 import type { GameState, ReceptionCall } from '../types'
 import { autoRecon, closeShop } from './service'
 import { tallyNazma } from './world'
@@ -173,6 +175,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     onBreak: [] as string[],
     purchases: [] as Purchase[],
     auctionWins: [] as AuctionWin[],
+    auction: null as AuctionState | null,
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
     serviceVisits: emptySchedule(),
@@ -659,6 +662,7 @@ function morning(k: Kit, day: number): void {
     cash: s.cash - (stolen?.floored ? stolen.cost : 0),
     purchases: [],
     auctionWins: [],
+    auction: null,
     serviceJobs: [],
     serviceAway: [],
     serviceComebacks: [],
@@ -747,6 +751,7 @@ function morning(k: Kit, day: number): void {
     delivered.length > 0 && deliveryNotice(delivered),
     appointmentsNotice(clients, day),
     appreciationNotice(s.appreciation, day),
+    isAuctionDay(day) && auctionOpen(get().career) && auctionNotice(runListFor(get()).length),
     shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
   ].filter((t): t is string => !!t)
   if (notices.length > 0) notify(k, notices.join(' '))

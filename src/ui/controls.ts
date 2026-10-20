@@ -16,7 +16,7 @@ export const CONTROLS: [string, string][] = [
   ['B', 'Service (the garage)'],
   ['L', 'Clients (the client book)'],
   ['F', 'Finance (F&I, loans and lenders)'],
-  ['J', 'Auction (the dealer auction’s run list)'],
+  ['J', 'Auction (the run list and live bidding)'],
   ['P', 'Stats (totals, records, charts and achievements)'],
   ['V', 'Wall mode'],
   ['G', 'Debug grid'],

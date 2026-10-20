@@ -7,6 +7,21 @@ import {
   wholesaleValue,
   winLot,
 } from '../../sim/auction'
+import {
+  AUCTION_END,
+  AUCTION_START,
+  AUCTION_STARTING,
+  biddingOpen,
+  newResults,
+  nextBid,
+  passLot,
+  playerBid,
+  startAuction,
+  stepAuction,
+  type AuctionState,
+  type RunContext,
+} from '../../sim/bidding'
+import { PLAYER_ID } from '../../sim/customers'
 import { washCar } from '../../sim/cleanliness'
 import { expansionsUp } from '../../sim/expansions'
 import { payoffOnSale } from '../../sim/floorPlan'
@@ -22,7 +37,7 @@ import { reservedSlots } from '../../sim/sellers'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../../sim/usedCars'
 import { dispatch, notify, type Kit } from '../core'
 import { orderInvoice } from '../derived'
-import { INVENTORY_SEED } from '../rng'
+import { INVENTORY_SEED, rng } from '../rng'
 import { runListFor } from '../selectors'
 import type { GameState } from '../types'
 import { amendLog } from './career'
@@ -41,6 +56,9 @@ type EconomyKeys =
   | 'devUsedCar'
   | 'buyLot'
   | 'devAuctionBuy'
+  | 'tickAuction'
+  | 'auctionBid'
+  | 'auctionPass'
 
 /**
  * Cash, stock, orders, the floor plan, ads and the month's sales. (Cash,
@@ -191,7 +209,76 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       if (!isAuctionDay(s.clock.day) || !lot) return notify(k, 'No lot left in today’s run.')
       get().buyLot(lot.id, wholesaleValue(lot.car.model, lot.car, s.clock.day))
     },
+    tickAuction: (minute) => k.batch(() => runAuction(k, minute)),
+    auctionBid: () => {
+      const s = get()
+      const run = s.auction
+      if (!biddingOpen(run)) return false
+      const blocker =
+        run.high === PLAYER_ID ? 'You have the high bid.' : bidBlocker(s, nextBid(run))
+      if (blocker) {
+        notify(k, blocker)
+        return false
+      }
+      set({ auction: playerBid(run) })
+      return true
+    },
+    auctionPass: () => {
+      const run = get().auction
+      const next = run && passLot(run, runContext(k))
+      if (next) k.batch(() => afterBeats(k, run, next))
+    },
   }
+}
+
+/** What stepping today's run needs from the store: the run list, and lots already bought. */
+function runContext(k: Kit): RunContext {
+  const s = k.get()
+  return {
+    lots: runListFor(s),
+    taken: s.auctionWins.map((w) => w.lotId),
+    day: s.clock.day,
+    rng: rng.auction,
+  }
+}
+
+/**
+ * Today's auction, stepped to `minute`: on auction day, once the dealership
+ * has the rank, the run starts at `AUCTION_START` and the lots go one at a
+ * time. Called from the clock's steps and, between them, from `tickAuction`,
+ * so it stops while the game is paused.
+ */
+export function runAuction(k: Kit, minute: number): void {
+  const s = k.get()
+  if (!isAuctionDay(s.clock.day) || !auctionOpen(s.career)) return
+  if (!s.auction) {
+    if (minute < AUCTION_START || minute >= AUCTION_END) return
+    k.set({ auction: startAuction(minute, runContext(k)) })
+    notify(k, AUCTION_STARTING)
+  }
+  const run = k.get().auction!
+  const next = stepAuction(run, minute, runContext(k))
+  if (next !== run) afterBeats(k, run, next)
+}
+
+/**
+ * Stores the run moved on from `prev` to `next`, buying each lot the player
+ * won as it's hammered. One that can't be paid for or placed any more falls
+ * through, with `buyLot`'s notice saying why.
+ */
+function afterBeats(k: Kit, prev: AuctionState, next: AuctionState): void {
+  k.set({ auction: next })
+  const fell = newResults(prev, next).filter(
+    (r) => r.buyer === PLAYER_ID && !k.get().buyLot(r.lotId, r.price),
+  )
+  if (fell.length === 0) return
+  const run = k.get().auction!
+  k.set({
+    auction: {
+      ...run,
+      results: run.results.map((r) => (fell.includes(r) ? { ...r, fell: true } : r)),
+    },
+  })
 }
 
 /** Car `id` washed by the player. */

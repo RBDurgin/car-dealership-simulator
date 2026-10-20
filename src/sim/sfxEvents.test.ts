@@ -1,3 +1,5 @@
+import { runList } from './auction'
+import { AUCTION_START, startAuction } from './bidding'
 import { describe, expect, it } from 'vitest'
 import { CLOSE_MINUTE, startOfDay } from './clock'
 import { generateCustomer, type Customer } from './customers'
@@ -146,6 +148,22 @@ describe('sfxFor', () => {
     expect(cues({ achievements: [1] }, { achievements: [1] })).toEqual([])
     // A new game starting with none is quiet.
     expect(cues({ achievements: [] }, { achievements: [1] })).toEqual([])
+  })
+
+  it('brings the gavel down on each auction lot sold, not on one nobody bid on', () => {
+    const run = startAuction(AUCTION_START, {
+      lots: runList(3, { rank: 'main-street', tier: 'bronze' }),
+      taken: [],
+      day: 3,
+      rng: createRng(1),
+    })
+    const sold = (buyer: string | null) => ({
+      ...run,
+      results: [{ lotId: 'lot-3-1', price: 9_000, buyer }],
+    })
+    expect(cues({ auction: sold('Lakeside Auto') }, { auction: run })).toEqual(['gavel'])
+    expect(cues({ auction: sold(null) }, { auction: run })).toEqual([])
+    expect(cues({ auction: { ...run, quiet: 1 } }, { auction: run })).toEqual([])
   })
 
   it('turns the page when the day summary comes up', () => {

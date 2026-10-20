@@ -1,4 +1,6 @@
-import { runList, type Lot } from '../sim/auction'
+import { bidBlocker, runList, type Lot } from '../sim/auction'
+import { biddingOpen, nextBid } from '../sim/bidding'
+import { PLAYER_ID } from '../sim/customers'
 import { weekStart } from '../sim/calendar'
 import type { Customer } from '../sim/customers'
 import { installedExpansions } from '../sim/expansions'
@@ -164,3 +166,40 @@ const runListOf = memoLast((week: number, rank: RankId, tier: FranchiseTier) =>
 /** The week's auction run list (`runList`), recomputed only when the week, rank or tier change. */
 export const runListFor = (s: GameState): Lot[] =>
   runListOf(weekStart(s.clock.day), s.career.rank, s.franchise)
+
+const bidBlockerOf = memoLast(
+  (
+    cash: number,
+    inventory: GameState['inventory'],
+    orders: GameState['orders'],
+    purchases: GameState['purchases'],
+    auctionWins: GameState['auctionWins'],
+    expansions: GameState['expansions'],
+    day: number,
+    price: number,
+  ) =>
+    bidBlocker(
+      { cash, inventory, orders, purchases, auctionWins, expansions, clock: { day } },
+      price,
+    ),
+)
+
+/**
+ * Why the player can't raise on the lot on the block (`bidBlocker` at the
+ * next bid), or null if they can or there's nothing to bid on. Recomputed only
+ * when cash, stock or the bid change.
+ */
+export const auctionBidBlocker = (s: GameState): string | null => {
+  const run = s.auction
+  if (!biddingOpen(run) || run.high === PLAYER_ID) return null
+  return bidBlockerOf(
+    s.cash,
+    s.inventory,
+    s.orders,
+    s.purchases,
+    s.auctionWins,
+    s.expansions,
+    s.clock.day,
+    nextBid(run),
+  )
+}

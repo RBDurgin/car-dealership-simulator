@@ -32,6 +32,7 @@ import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { AUCTION_RANK, BUYER_FEE, WHOLESALE_FACTOR } from '../sim/auction'
+import { AUCTION_START } from '../sim/bidding'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
 import {
   BLITZ_CUT,
@@ -635,6 +636,15 @@ function BusinessTab({ touch, click }: TabProps) {
           lot, since it still has to be retailed. A car won costs its price plus the buyer fee (
           {formatMoney(BUYER_FEE.flat)} and {Math.round(BUYER_FEE.share * 100)}% of the price), is
           paid in cash, needs a free lot space and goes on the lot the next morning.
+        </p>
+        <p>
+          The run starts at {formatTime(AUCTION_START)} on auction day. Lots come up one at a time
+          and the other dealers bid the price up. <b>Bid</b> raises to the next increment; while
+          nobody raises, the auctioneer goes once, twice, and sells to the high bidder. <b>Pass</b>{' '}
+          lets the dealers bid a lot out among themselves and moves on. The game doesn&apos;t stop
+          while you bid, so keep an eye on the floor: the 🔨 chip in the top bar shows the run and
+          opens the tab. Afterwards the tab lists what every lot sold for, a guide to next
+          week&apos;s prices.
         </p>
       </section>
       <section>

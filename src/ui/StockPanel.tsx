@@ -293,7 +293,7 @@ const TAB_HINTS: Record<ComputerTab, { hint: string; key: string }> = {
   service: { hint: 'Mechanics work the bays until closing.', key: 'B' },
   clients: { hint: 'Happy clients come back.', key: 'L' },
   finance: { hint: 'Every deal is a chance at the F&I menu.', key: 'F' },
-  auction: { hint: 'The run list is posted on Mondays.', key: 'J' },
+  auction: { hint: 'Bid live on Wednesdays from 10:00.', key: 'J' },
   stats: { hint: 'Every day closed is kept here.', key: 'P' },
 }
 

@@ -573,6 +573,16 @@ export const UPDATES: readonly Update[] = [
       'Auction days are marked on the Calendar tab.',
     ],
   },
+  {
+    id: 52,
+    phase: '22',
+    title: 'Live bidding at the auction',
+    items: [
+      'On Wednesdays from 10:00 the auction runs live on the Auction tab: bid against the other dealers, or pass on a lot.',
+      'The clock keeps running while you bid; a 🔨 chip in the top bar follows the run.',
+      'Once it’s over, the tab shows what every lot sold for.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

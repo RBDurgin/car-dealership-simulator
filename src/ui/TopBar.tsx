@@ -1,3 +1,4 @@
+import { CALL_TEXT } from '../sim/bidding'
 import { csiLine, csiOf } from '../sim/csi'
 import { calendarOf, formatDate, longDate } from '../sim/calendar'
 import { formatTime, isClosed } from '../sim/clock'
@@ -6,6 +7,7 @@ import { RANK_IDS, rankProgress } from '../sim/progression'
 import { daysLeft, QUOTA_STATUS_LABELS, quotaLine, quotaStatus } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
+import { runListFor } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
@@ -98,9 +100,39 @@ function RivalChip() {
   )
 }
 
-/** His share as a badge on the Office button, for compact screens (hidden elsewhere by `hud.css`). */
+/** While the dealer auction runs: the lot on the block and the call. Opens the Auction tab. */
+function AuctionChip() {
+  const lotIndex = useGame((s) => (s.auction && !s.auction.over ? s.auction.lotIndex : -1))
+  const call = useGame((s) => s.auction?.call ?? 'open')
+  const lots = useGame((s) => runListFor(s).length)
+  if (lotIndex < 0) return null
+  const text = `The auction is on: lot ${lotIndex + 1} of ${lots} (${CALL_TEXT[call]}). Open the Auction tab (J).`
+  return (
+    <button
+      className="btn btn-small auction-chip"
+      title={text}
+      aria-label={text}
+      onClick={() => useGame.getState().toggleStockPanel(true, 'auction')}
+    >
+      🔨 {lotIndex + 1}/{lots}
+    </button>
+  )
+}
+
+/**
+ * His share as a badge on the Office button, or 🔨 while the auction runs, for
+ * compact screens (hidden elsewhere by `hud.css`).
+ */
 function OfficeBadge() {
   const share = useGame((s) => s.dayStats.rival?.share)
+  const live = useGame((s) => !!s.auction && !s.auction.over)
+  if (live) {
+    return (
+      <span className="office-badge" aria-hidden>
+        🔨
+      </span>
+    )
+  }
   if (share === undefined) return null
   return (
     <span className="office-badge" aria-hidden>
@@ -190,6 +222,7 @@ export function TopBar() {
       <RankChip />
       <QuotaMeter day={clock.day} />
       <RivalChip />
+      <AuctionChip />
       <GoalBanner />
       <button
         className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}

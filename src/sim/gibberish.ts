@@ -6,7 +6,8 @@ import { createRng, hashSeed, type Rng } from './rng'
  */
 
 /** How a line is said. Each has its own pitch contour, pace and level. */
-export type Tone = 'neutral' | 'question' | 'happy' | 'grumble' | 'greeting' | 'murmur'
+export type Tone =
+  'neutral' | 'question' | 'happy' | 'grumble' | 'greeting' | 'murmur' | 'auctioneer'
 
 export interface Voice {
   /** Base pitch in Hz. */
@@ -116,6 +117,13 @@ const TONES: Record<Tone, ToneShape> = {
   greeting: { contour: (t) => 1.25 - 0.3 * t, wobble: 0.03, pace: 0.95, gain: 0.9 },
   // Quiet, quick and nearly flat: paperwork small talk.
   murmur: { contour: () => 0.95, wobble: 0.02, pace: 0.8, gain: 0.45 },
+  // The auction chant: very fast, rattling between two pitches, up at the end.
+  auctioneer: {
+    contour: (t, i) => (t > 0.85 ? 1.2 : 1.05 + (i % 2 ? 0.08 : -0.04)),
+    wobble: 0.03,
+    pace: 0.42,
+    gain: 0.8,
+  },
 }
 
 /**

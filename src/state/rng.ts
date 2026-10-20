@@ -27,6 +27,7 @@ const DRIVE_ASK_SEED = 29_000
 const TEST_DRIVE_SEED = 30_000
 const WEAR_SEED = 31_000
 const GROWTH_SEED = 32_000
+const AUCTION_SEED = 33_000
 
 /** The rng streams, seeded per day, so a day plays out the same given the same choices. */
 export interface DayRngs {
@@ -62,6 +63,8 @@ export interface DayRngs {
   wear: Rng
   /** Applicants' potential. Apart, so the rest of each applicant rolls as before. */
   growth: Rng
+  /** The other dealers at the auction and their bids. Apart, so a day without the auction plays as before. */
+  auction: Rng
 }
 
 function dayRngs(day: number): DayRngs {
@@ -82,6 +85,7 @@ function dayRngs(day: number): DayRngs {
     testDrive: createRng(TEST_DRIVE_SEED + day),
     wear: createRng(WEAR_SEED + day),
     growth: createRng(GROWTH_SEED + day),
+    auction: createRng(AUCTION_SEED + day),
   }
 }
 

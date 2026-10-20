@@ -7,6 +7,7 @@ import { startMusic, syncMusic } from './audio/music'
 import { startRain, syncRain } from './audio/rain'
 import { preloadSfx } from './audio/samples'
 import { startSfx } from './audio/sfxBridge'
+import { startAuctioneer } from './audio/auctioneer'
 import { startUiClicks } from './audio/uiClicks'
 import { COARSE, COMPACT, matchesMedia } from './input/useMediaQuery'
 import {
@@ -46,6 +47,7 @@ startMusic()
 startRain()
 startUiClicks()
 startSfx()
+startAuctioneer()
 
 // Console access while developing, e.g. `game.getState().sellCar('lot-car-1')`.
 if (import.meta.env.DEV) Object.assign(window, { game: useGame })

@@ -16,6 +16,7 @@ import type { GameState } from '../types'
 import { clientArrivals, receptionCalls } from './clients'
 import { withQuotes, withShopperRolls } from './customers'
 import { closeUp } from './day'
+import { runAuction } from './economy'
 import { creditJobs, jobsDone, serviceArrivals } from './service'
 
 type ClockKeys = 'clock' | 'tickClock'
@@ -118,6 +119,8 @@ function tick(k: Kit, step: ReturnType<typeof toStep>): void {
       jobs.filter((j, i) => j.status !== s.serviceJobs[i].status),
     )
   }
+  // The dealer auction's run, on auction day.
+  runAuction(k, step.minute)
   if (isClosed(step)) closeUp(k)
   // Settles the day too, once the doors are shut and the lot is empty.
   commit(k, customers)

@@ -553,6 +553,68 @@ kbd {
 .auction-lots .auction-won {
   opacity: 0.55;
 }
+.auction-lots.auction-results li {
+  grid-template-columns: 1.2em 1fr auto;
+}
+.auction-lots .price {
+  text-align: right;
+}
+.auction-lots .auction-yours {
+  color: #4ade80;
+}
+
+/* The lot on the block: the car, the price and call, then Bid and Pass */
+.auction-block {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+.auction-block.auction-mine {
+  border-color: #4ade80;
+}
+.auction-car {
+  display: grid;
+  gap: 2px;
+}
+.auction-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.auction-amount {
+  font-size: 22px;
+  font-weight: 700;
+}
+.auction-call {
+  margin-left: auto;
+  font-weight: 600;
+}
+.auction-call-once {
+  color: #facc15;
+}
+.auction-call-twice {
+  color: #fb923c;
+}
+.auction-call-sold {
+  color: #f87171;
+}
+.auction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The top bar's chip while the auction is running */
+.auction-chip {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 
 /* The date in the top bar; only the weekday on compact screens */
 .topbar-date {
@@ -1895,6 +1957,16 @@ kbd {
 
 /* Compact: landscape phones and small windows. Keep in step with COMPACT in input/useMediaQuery.ts. */
 @media (max-height: 500px), (max-width: 760px) {
+  /* The run list drops the miles; the top bar's auction chip folds into the Office badge */
+  .auction-lots li {
+    grid-template-columns: 1.2em 1fr auto auto;
+  }
+  .auction-lots .auction-miles {
+    display: none;
+  }
+  .auction-chip {
+    display: none;
+  }
   .hud {
     --edge: 8px;
     font-size: 12px;

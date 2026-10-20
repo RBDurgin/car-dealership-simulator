@@ -5,7 +5,8 @@ import { audioContext, busNode } from './engine'
 export type SfxId = SfxCue
 
 /** Sounds made here rather than read from a file. */
-type Synth = 'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift' | 'ring' | 'trophy'
+type Synth =
+  'spray' | 'fanfare' | 'engine' | 'door' | 'wrench' | 'lift' | 'ring' | 'trophy' | 'gavel'
 
 /** Recorded sounds, from Kenney's packs (see public/audio/LICENSE.md). */
 const FILES: Record<Exclude<SfxId, Synth>, string> = {
@@ -34,6 +35,7 @@ const ALL_IDS = [
   'lift',
   'ring',
   'trophy',
+  'gavel',
 ] as SfxId[]
 
 const BASE = `${import.meta.env.BASE_URL}audio/`
@@ -249,6 +251,36 @@ function trophyBuffer(ctx: AudioContext): AudioBuffer {
   return buffer
 }
 
+const GAVEL_SECONDS = 0.5
+/** The gavel's two knocks: the bang, and its bounce. */
+const GAVEL_KNOCKS = [
+  { at: 0, level: 1 },
+  { at: 0.11, level: 0.35 },
+]
+
+/**
+ * The auctioneer's gavel on the block: a hard wooden knock (a click of noise
+ * over a couple of quickly damped low partials, like a hollow block of wood)
+ * and a softer bounce.
+ */
+function gavelBuffer(ctx: AudioContext): AudioBuffer {
+  const rate = ctx.sampleRate
+  const buffer = ctx.createBuffer(1, Math.floor(GAVEL_SECONDS * rate), rate)
+  const data = buffer.getChannelData(0)
+  for (const knock of GAVEL_KNOCKS) {
+    const start = Math.floor(knock.at * rate)
+    for (let i = start; i < data.length; i++) {
+      const t = (i - start) / rate
+      const click = (Math.random() * 2 - 1) * Math.exp(-t / 0.002)
+      const wood =
+        (Math.sin(2 * Math.PI * 190 * t) + 0.7 * Math.sin(2 * Math.PI * 610 * t)) *
+        Math.exp(-t / 0.035)
+      data[i] += (click * 0.6 + wood * 0.5) * knock.level
+    }
+  }
+  return buffer
+}
+
 const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   spray: sprayBuffer,
   fanfare: fanfareBuffer,
@@ -258,10 +290,17 @@ const SYNTHS: Record<Synth, (ctx: AudioContext) => AudioBuffer> = {
   lift: liftBuffer,
   ring: ringBuffer,
   trophy: trophyBuffer,
+  gavel: gavelBuffer,
 }
 
 /** Lowpass cutoffs (Hz) that take the fizz off made-up sounds. */
-const LOWPASS: Partial<Record<SfxId, number>> = { engine: 900, door: 2500, lift: 1200, ring: 3000 }
+const LOWPASS: Partial<Record<SfxId, number>> = {
+  engine: 900,
+  door: 2500,
+  lift: 1200,
+  ring: 3000,
+  gavel: 4000,
+}
 
 function load(ctx: AudioContext, id: SfxId): Promise<AudioBuffer | null> {
   let buffer = cache.get(id)
