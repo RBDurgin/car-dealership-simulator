@@ -19,6 +19,7 @@ import {
   undercutOf,
   weekChange,
   type Rival,
+  type RivalCar,
 } from '../sim/rival'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -116,11 +117,7 @@ function OpenRival({ rival }: { rival: Rival }) {
       {rival.hires.length > 0 && (
         <p className="muted cal-intro">Working for him: {rival.hires.join(', ')}.</p>
       )}
-      {rival.stolen.length > 0 && (
-        <p className="muted cal-intro">
-          For sale on his lot, taken from yours: {rival.stolen.map(carName).join(', ')}.
-        </p>
-      )}
+      <LotCars cars={rival.lotCars} />
       {lost.length > 0 && (
         <p className="muted cal-intro">
           Clients lost to him ({lost.length}):{' '}
@@ -184,6 +181,27 @@ export function RivalTab() {
       {beaten > 0 && (
         <p className="cal-intro">
           Rivals beaten: <b>{beaten}</b>
+        </p>
+      )}
+    </>
+  )
+}
+
+/** Our cars for sale on his lot: stolen, or bought at the dealer auction. */
+function LotCars({ cars }: { cars: readonly RivalCar[] }) {
+  const stolen = cars.filter((c) => c.how === 'stolen')
+  const bought = cars.filter((c) => c.how === 'bought')
+  return (
+    <>
+      {stolen.length > 0 && (
+        <p className="muted cal-intro">
+          For sale on his lot, stolen from yours: {stolen.map((c) => carName(c.model)).join(', ')}.
+          One may come up at the dealer auction for you to buy back.
+        </p>
+      )}
+      {bought.length > 0 && (
+        <p className="muted cal-intro">
+          Bought from you at the auction: {bought.map((c) => carName(c.model)).join(', ')}.
         </p>
       )}
     </>

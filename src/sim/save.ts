@@ -33,7 +33,7 @@ import { BASE_SLOTS, type Order } from './ordering'
 import { emptyCareer, isRankId, type Career } from './progression'
 import { emptyMonthSales, monthlyQuota, type MonthSales } from './quota'
 import { MAX_REPUTATION, START_REPUTATION } from './reputation'
-import { emptyRival, isRival, type Rival } from './rival'
+import { emptyRival, isRival, legacyLotCars, type Rival } from './rival'
 import { defaultService, isRateLevel, type ServiceSettings } from './service'
 import { MAX_EOTM, potentialFromId, type EotmWin } from './growth'
 import { START_MORALE } from './morale'
@@ -65,7 +65,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 40
+export const SAVE_VERSION = 41
 
 export interface SaveData {
   version: number
@@ -524,6 +524,18 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
   }),
   // v40: wholesale. Nothing consigned yet, and auto-wholesale off.
   39: (raw) => ({ ...raw, consigned: [], autoWholesale: false }),
+  // v41: Nazma's lot keeps our cars (stolen or bought at the auction) as cars,
+  // not models. Those already stolen count as long ago, so none comes up for a buy-back.
+  40: (raw) => ({
+    ...raw,
+    rival:
+      isObject(raw.rival) && Array.isArray(raw.rival.stolen)
+        ? (({ stolen, ...rival }) => ({
+            ...rival,
+            lotCars: legacyLotCars(stolen as unknown[], isNumber(raw.day) ? raw.day : 1),
+          }))(raw.rival)
+        : raw.rival,
+  }),
 }
 
 /** Employee records for an older save, from each salesperson's sales (the player's left out). */

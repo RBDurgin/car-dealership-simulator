@@ -3,6 +3,8 @@ import { calendarOf } from './calendar'
 import type { Sale } from './deal'
 import { generateCustomer, type Customer } from './customers'
 import { BASE_MSRP, buildInventory } from './inventory'
+import type { CarModel } from './layout'
+import { modelYear } from './usedCars'
 import {
   assignQuotes,
   DEFECT_STRENGTH,
@@ -35,9 +37,12 @@ import {
   planRivalWeek,
   PRICE_WAR_UNDERCUT,
   rivalHired,
-  rivalStole,
+  onHisLot,
+  offHisLot,
+  legacyLotCars,
+  STOLEN_NEW_MILES,
   sabotageScale,
-  STOLEN_KEPT,
+  LOT_CARS_KEPT,
   undercutOf,
   type RivalMoveId,
   BUST_DAYS,
@@ -499,12 +504,36 @@ describe('desperation', () => {
 })
 
 describe('his stolen cars and hires', () => {
-  it('puts a stolen car on his lot while he’s open, keeping the latest', () => {
-    expect(rivalStole(emptyRival(), 'truck')).toEqual(emptyRival())
+  const car = (id: string, model: CarModel) => ({ id, model, used: null })
+
+  it('puts our cars on his lot while he’s open, keeping the latest', () => {
+    expect(onHisLot(emptyRival(), car('a', 'truck'), 'stolen', 5)).toEqual(emptyRival())
     let rival = open()
-    for (let i = 0; i < STOLEN_KEPT + 2; i++) rival = rivalStole(rival, i === 0 ? 'van' : 'truck')
-    expect(rival.stolen).toHaveLength(STOLEN_KEPT)
-    expect(rival.stolen).not.toContain('van')
+    for (let i = 0; i < LOT_CARS_KEPT + 2; i++) {
+      rival = onHisLot(rival, car(`c${i}`, i === 0 ? 'van' : 'truck'), 'stolen', 5)
+    }
+    expect(rival.lotCars).toHaveLength(LOT_CARS_KEPT)
+    expect(rival.lotCars.map((c) => c.model)).not.toContain('van')
+  })
+
+  it('keeps a stolen new car as this year’s, nearly unused, and a used one as it was', () => {
+    const rival = onHisLot(open(), car('n1', 'sedan'), 'stolen', 30)
+    expect(rival.lotCars[0]).toEqual({
+      id: 'n1',
+      model: 'sedan',
+      how: 'stolen',
+      day: 30,
+      car: { year: modelYear(30), miles: STOLEN_NEW_MILES, condition: 1, acquiredDay: 30 },
+    })
+    const used = { year: 2020, miles: 60_000, condition: 0.5, acquiredDay: 12 }
+    const bought = onHisLot(rival, { id: 'u1', model: 'van', used }, 'bought', 31)
+    expect(bought.lotCars[1]).toMatchObject({ how: 'bought', car: used })
+  })
+
+  it('takes a car off his lot', () => {
+    const rival = onHisLot(open(), car('n1', 'sedan'), 'stolen', 30)
+    expect(offHisLot(rival, 'n1').lotCars).toEqual([])
+    expect(offHisLot(rival, 'nope')).toBe(rival)
   })
 
   it('hires those who quit, and grows with their skill', () => {
@@ -569,7 +598,7 @@ describe('going bust and reopening', () => {
       open({
         shares: [low],
         weeks: Array(BUST_WEEKS - 1).fill(low),
-        stolen: ['sedan'],
+        lotCars: legacyLotCars(['sedan'], 1),
         hires: ['Dana'],
       }),
       monday,
@@ -587,7 +616,7 @@ describe('going bust and reopening', () => {
       generation: 2,
       name: RIVAL_NAMES[1],
       closedDay: 0,
-      stolen: [],
+      lotCars: [],
       hires: [],
       shares: [],
       weeks: [],

@@ -2,12 +2,13 @@ import { calendarOf, DAYS_PER_WEEK, longDate } from './calendar'
 import type { Customer } from './customers'
 import type { Sale } from './deal'
 import { EVENT_FIRST_WEEKDAY, eventOn } from './events'
-import { BASE_MSRP } from './inventory'
+import { BASE_MSRP, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
 import { PRICE_STEP } from './negotiation'
 import { RANK_IDS, type RankId } from './progression'
 import { START_REPUTATION } from './reputation'
 import { createRng, type Rng } from './rng'
+import { modelYear, type UsedInfo } from './usedCars'
 
 /**
  * Nazma's rival dealership across the road. Once the player's dealership
@@ -21,8 +22,9 @@ import { createRng, type Rng } from './rng'
  * `sim/negotiation.ts`). Each Monday he picks a move for the week
  * (`planRivalWeek`), and the lower his share the more desperate he gets
  * (`desperation`), which makes Nazma's visits, thefts and poaching likelier
- * (`sabotageScale`). Cars he steals go on his lot (`rivalStole`) and staff he
- * poaches go to work for him (`rivalHired`). Kept under `BUST_SHARE` for
+ * (`sabotageScale`). Cars he steals, and our cars he buys at the dealer
+ * auction, go on his lot (`onHisLot`), and staff he poaches go to work for
+ * him (`rivalHired`). Kept under `BUST_SHARE` for
  * `BUST_WEEKS` Mondays running, he goes bust (`isBust`) and closes for
  * `CLOSED_DAYS` (× the level's `rivalComeback`), and his buyers come to the
  * player for a week (`bustBoost`). Then he announces his lot again, under the
@@ -59,8 +61,8 @@ export interface Rival {
   shares: number[]
   /** His average share each week he was open, as reported on Mondays, oldest first (the last `WEEKS_KEPT`). */
   weeks: number[]
-  /** Models he has stolen, for sale on his lot. */
-  stolen: CarModel[]
+  /** Cars of ours on his lot: stolen overnight or bought at the dealer auction, oldest first. */
+  lotCars: RivalCar[]
   /** Names of the staff he has poached, now working for him. */
   hires: string[]
   /** The last night Nazma tried to steal a car (0 if never). */
@@ -76,6 +78,18 @@ export interface Rival {
  * - quiet: nothing special
  */
 export type RivalMoveId = 'priceWar' | 'adBlitz' | 'saleWeekend' | 'quiet'
+
+/** A car of ours on his lot. */
+export interface RivalCar {
+  /** Its stock id when it was ours. */
+  id: string
+  model: CarModel
+  how: 'stolen' | 'bought'
+  /** The day it went on his lot. */
+  day: number
+  /** The car as a used one: a new car he stole counts as this year's, nearly unused. */
+  car: UsedInfo
+}
 
 export interface RivalMove {
   id: RivalMoveId
@@ -172,7 +186,7 @@ export function emptyRival(): Rival {
     ourDiscount: START_DISCOUNT,
     shares: [],
     weeks: [],
-    stolen: [],
+    lotCars: [],
     hires: [],
     lastTheftDay: 0,
     move: null,
@@ -266,7 +280,7 @@ export function rivalMorning(
       undercut: (OPEN_UNDERCUT + GENERATION_UNDERCUT * (generation - 1)) * levers.undercut,
       shares: [],
       weeks: [],
-      stolen: [],
+      lotCars: [],
       hires: [],
     }
     return { rival: withMove(opened, day), event: 'opened' }
@@ -407,8 +421,10 @@ export function moveText(rival: Rival): string | null {
   }
 }
 
-/** How many of the cars he stole are kept on his lot. */
-export const STOLEN_KEPT = 4
+/** How many of our cars are kept on his lot (the oldest go first). */
+export const LOT_CARS_KEPT = 4
+/** Miles on a new car he stole, as it runs at the auction. */
+export const STOLEN_NEW_MILES = 300
 /** How many of his hires are remembered. */
 export const HIRES_KEPT = 6
 /** Strength he gains per skill point of each employee he poaches. */
@@ -423,10 +439,48 @@ export function rivalDefected(rival: Rival, count: number, growth = 1): Rival {
   return { ...rival, strength: Math.min(100, rival.strength + count * DEFECT_STRENGTH * growth) }
 }
 
-/** A car of `model` stolen overnight: on his lot while he's open. */
-export function rivalStole(rival: Rival, model: CarModel): Rival {
+/**
+ * Our `car` on his lot from `day`, stolen overnight or bought at the dealer
+ * auction (while he's open; the oldest go past `LOT_CARS_KEPT`).
+ */
+export function onHisLot(
+  rival: Rival,
+  car: Pick<InventoryCar, 'id' | 'model' | 'used'>,
+  how: RivalCar['how'],
+  day: number,
+): Rival {
   if (rival.status !== 'open') return rival
-  return { ...rival, stolen: [...rival.stolen, model].slice(-STOLEN_KEPT) }
+  const info: UsedInfo = car.used ?? {
+    year: modelYear(day),
+    miles: STOLEN_NEW_MILES,
+    condition: 1,
+    acquiredDay: day,
+  }
+  const entry: RivalCar = { id: car.id, model: car.model, how, day, car: info }
+  return { ...rival, lotCars: [...rival.lotCars, entry].slice(-LOT_CARS_KEPT) }
+}
+
+/**
+ * For a save from before his lot kept cars (v41): the `models` he stole, as
+ * cars stolen long ago (day 0) that were new on `day`.
+ */
+export function legacyLotCars(models: readonly unknown[], day: number): RivalCar[] {
+  return models
+    .filter((m): m is CarModel => typeof m === 'string' && m in BASE_MSRP)
+    .map((model, i) => ({
+      id: `stolen-${i + 1}`,
+      model,
+      how: 'stolen' as const,
+      day: 0,
+      car: { year: modelYear(day), miles: STOLEN_NEW_MILES, condition: 1, acquiredDay: day },
+    }))
+}
+
+/** `rival` without car `id` on his lot (the same rival if it isn't there). */
+export function offHisLot(rival: Rival, id: string): Rival {
+  return rival.lotCars.some((c) => c.id === id)
+    ? { ...rival, lotCars: rival.lotCars.filter((c) => c.id !== id) }
+    : rival
 }
 
 /**
@@ -656,10 +710,30 @@ export function isRival(v: unknown): v is Rival {
     r.shares.every(isNumber) &&
     Array.isArray(r.weeks) &&
     r.weeks.every(isNumber) &&
-    isStrings(r.stolen) &&
+    Array.isArray(r.lotCars) &&
+    r.lotCars.every(isRivalCar) &&
     isStrings(r.hires) &&
     isNumber(r.lastTheftDay) &&
     (r.move === null || isMove(r.move))
+  )
+}
+
+function isRivalCar(v: unknown): v is RivalCar {
+  if (typeof v !== 'object' || v === null) return false
+  const c = v as Record<string, unknown>
+  const info = c.car as Record<string, unknown> | null
+  return (
+    typeof c.id === 'string' &&
+    typeof c.model === 'string' &&
+    c.model in BASE_MSRP &&
+    (c.how === 'stolen' || c.how === 'bought') &&
+    isNumber(c.day) &&
+    typeof info === 'object' &&
+    info !== null &&
+    isNumber(info.year) &&
+    isNumber(info.miles) &&
+    isNumber(info.condition) &&
+    isNumber(info.acquiredDay)
   )
 }
 

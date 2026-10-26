@@ -155,7 +155,7 @@ function LotRow({
     <li className={won ? 'auction-won' : undefined}>
       <span className="muted">{lot.order}</span>
       <span>
-        {lot.car.year} {carName(lot.car.model)}
+        {lot.car.year} {carName(lot.car.model)} <StolenBadge lot={lot} />
       </span>
       <GradeText lot={lot} inspection={inspection} />
       <span className="muted auction-miles">{Math.round(lot.car.miles / 1000)}k mi</span>
@@ -165,6 +165,16 @@ function LotRow({
       {won ? <span /> : <InspectButton lot={lot} />}
       {manager && !won && <MaxBid lot={lot} day={day} />}
     </li>
+  )
+}
+
+/** "Yours, stolen" on a car Nazma stole from us and runs at the auction. */
+function StolenBadge({ lot }: { lot: Lot }) {
+  if (!lot.stolen) return null
+  return (
+    <span className="stock-badge" title="Nazma stole it from your lot. Buy it back for reputation.">
+      Yours, stolen
+    </span>
   )
 }
 
@@ -240,7 +250,7 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
     <div className={mine ? 'auction-block auction-mine' : 'auction-block'}>
       <div className="auction-car">
         <b>
-          Lot {lot.order}: {lot.car.year} {carName(lot.car.model)}
+          Lot {lot.order}: {lot.car.year} {carName(lot.car.model)} <StolenBadge lot={lot} />
         </b>
         <span className="muted">
           <GradeText lot={lot} inspection={inspection} /> · {Math.round(lot.car.miles / 1000)}k mi ·
@@ -298,6 +308,7 @@ function ResultLine({ r, lot }: { r: LotResult; lot: Lot }) {
         {lot.car.year} {carName(lot.car.model)}{' '}
         <span className="muted">· {lotReading(lot, inspection).grade}</span>
         {lot.consigned && <span className="stock-badge">Yours</span>}
+        <StolenBadge lot={lot} />
       </span>
       <span className="price">{resultLine(r, formatMoney)}</span>
     </li>

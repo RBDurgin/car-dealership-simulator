@@ -272,6 +272,29 @@ const triggers: Record<TipId, [Partial<TipState>, Partial<TipState>]> = {
     { inventory: withCar({ used: usedOn(1) }), clock: { day: 1 + STALE_DAYS } },
     { inventory: withCar({ used: usedOn(1) }), clock: { day: STALE_DAYS } },
   ],
+  wholesale: [
+    {
+      inventory: withCar({ used: usedOn(1) }),
+      clock: { day: 1 + STALE_DAYS },
+      career: { rank: 'main-street' },
+    },
+    {
+      inventory: withCar({ used: usedOn(1) }),
+      clock: { day: STALE_DAYS },
+      career: { rank: 'main-street' },
+    },
+  ],
+  auction: [{ auction: { over: false } }, { auction: null }],
+  inspect: [
+    {
+      dayStats: {
+        missed: {},
+        quota: null,
+        auction: { surprises: [{ model: 'sedan', year: 2020, graded: 'Good', arrived: 'Fair' }] },
+      },
+    },
+    {},
+  ],
   declinedCredit: [
     { customers: [customer('b1', atMenu(null))] },
     { customers: [customer('b1', { phase: 'signing' })] },
@@ -329,6 +352,14 @@ describe('tipFor', () => {
     const [next, prev] = triggers[id]
     expect(tip(next, prev)).toBe(id)
     expect(tip(next, prev, [id])).toBeNull()
+  })
+
+  it('points stale used cars at the auction once it’s open, instead of the plain tip', () => {
+    const [next, prev] = triggers.staleUsed
+    const open = { career: { rank: 'main-street' as const } }
+    expect(tip({ ...next, ...open }, { ...prev, ...open })).toBe('wholesale')
+    expect(tip({ ...next, ...open }, { ...prev, ...open }, ['wholesale'])).toBeNull()
+    expect(tip(next, prev, ['staleUsed'])).toBeNull()
   })
 
   it('points at reconditioning only once the garage is up, and only for a rough car', () => {

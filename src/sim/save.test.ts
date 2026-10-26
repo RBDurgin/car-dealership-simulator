@@ -20,7 +20,8 @@ import type { Campaign } from './marketing'
 import type { Order } from './ordering'
 import { emptyCareer, type Career } from './progression'
 import { START_REPUTATION } from './reputation'
-import { emptyRival, type Rival } from './rival'
+import { emptyRival, STOLEN_NEW_MILES, type Rival } from './rival'
+import { modelYear } from './usedCars'
 import { BASE_SLOTS } from './ordering'
 import { monthlyQuota } from './quota'
 import { lastTheftNight } from './nazma'
@@ -894,6 +895,36 @@ describe('save data', () => {
     expect(parseSave({ ...old })).toBeNull()
   })
 
+  it('keeps the cars on his lot, and upgrades a version 40 save’s stolen models as cars stolen long ago', () => {
+    const lotCars = [
+      {
+        id: 'used-20-1',
+        model: 'van' as const,
+        how: 'bought' as const,
+        day: 24,
+        car: { year: 2021, miles: 50_000, condition: 0.6, acquiredDay: 15 },
+      },
+    ]
+    const save = createSave({ ...source(), rival: { ...emptyRival(), lotCars } }, 123)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))?.rival.lotCars).toEqual(lotCars)
+    expect(parseSave({ ...save, rival: { ...save.rival, lotCars: [{ id: 'x' }] } })).toBeNull()
+
+    const { lotCars: _, ...oldRival } = save.rival
+    const old = { ...save, version: 40, rival: { ...oldRival, stolen: ['truck', 'boat'] } }
+    const upgraded = parseSave(JSON.parse(JSON.stringify(old)))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.rival.lotCars).toEqual([
+      {
+        id: 'stolen-1',
+        model: 'truck',
+        how: 'stolen',
+        day: 0,
+        car: { year: modelYear(3), miles: STOLEN_NEW_MILES, condition: 1, acquiredDay: 3 },
+      },
+    ])
+    expect(upgraded?.rival).not.toHaveProperty('stolen')
+  })
+
   it('keeps praise, the month’s experience and Employees of the Month, and upgrades a version 36 save with none', () => {
     const star = employee('staff-1-1', { praisedDay: 120, monthXp: 84 })
     const eotm = [{ id: 'staff-1-1', name: 'Dana', role: 'sales' as const, day: 112 }]
@@ -1095,7 +1126,15 @@ describe('save data', () => {
       undercut: 0.04,
       shares: [0.15, 0.17],
       weeks: [0.16],
-      stolen: ['truck'],
+      lotCars: [
+        {
+          id: 'used-20-1',
+          model: 'truck',
+          how: 'stolen',
+          day: 20,
+          car: { year: 2024, miles: 30_000, condition: 0.7, acquiredDay: 12 },
+        },
+      ],
       hires: ['Dana K.'],
       lastTheftDay: 31,
       move: { id: 'priceWar', from: 29 },

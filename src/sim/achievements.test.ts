@@ -26,7 +26,9 @@ import {
 } from './achievements'
 import { DAYS_PER_MONTH } from './calendar'
 import { CAR_MODELS } from './customers'
+import type { AuctionBuy } from './auction'
 import { emptyStats, type DayStats, type Sale } from './deal'
+import { sellerFee } from './wholesale'
 import { emptyFiStats, type SaleFi } from './fi'
 import { IMPROVEMENTS, type ImprovementId } from './improvements'
 import { buildInventory, type InventoryCar } from './inventory'
@@ -569,6 +571,46 @@ describe('test drive achievements', () => {
     expect(dayEarns(day(SCRATCH_FREE_DRIVES), 'not-a-scratch')).toBe(true)
     expect(dayEarns(day(SCRATCH_FREE_DRIVES - 1), 'not-a-scratch')).toBe(false)
     expect(dayEarns(day(SCRATCH_FREE_DRIVES, 1), 'not-a-scratch')).toBe(false)
+  })
+})
+
+describe('auction achievements', () => {
+  const buy = (patch: Partial<AuctionBuy> = {}): AuctionBuy => ({
+    model: 'sedan',
+    year: 2020,
+    price: 9_000,
+    fee: 470,
+    value: 12_000,
+    wholesale: 10_000,
+    graded: 'Fair',
+    ...patch,
+  })
+  const won = (...bought: AuctionBuy[]) =>
+    withStats(base, { auction: { ...base.dayStats.auction, bought } })
+  const wholesaled = (price: number, cost: number) =>
+    withStats(base, {
+      wholesale: {
+        ...base.dayStats.wholesale,
+        sold: [
+          { model: 'van', year: 2019, price, fee: sellerFee(price), cost, buyer: 'Lakeside Auto' },
+        ],
+      },
+    })
+
+  it('marks the first lot won, and a steal under 80% of wholesale', () => {
+    expect(earns(base, won(buy()), 'first-lot')).toBe(true)
+    expect(earns(base, won(buy()), 'a-steal')).toBe(false)
+    expect(earns(base, won(buy({ price: 7_900 })), 'a-steal')).toBe(true)
+  })
+
+  it('marks a car bought back from Nazma', () => {
+    expect(earns(base, won(buy({ stolen: true })), 'bought-back')).toBe(true)
+    expect(earns(base, won(buy()), 'bought-back')).toBe(false)
+  })
+
+  it('marks a wholesale that made money after the fee', () => {
+    expect(earns(base, wholesaled(9_000, 8_000), 'sold-to-the-trade')).toBe(true)
+    expect(earns(base, wholesaled(8_000, 8_000), 'sold-to-the-trade')).toBe(false)
   })
 })
 

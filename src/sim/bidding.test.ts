@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lotValue, runList } from './auction'
+import { isSlowLot, lotValue, runList, SLOW_LOT_CHANCE, SLOW_LOT_HEAT } from './auction'
 import {
   AUCTION_END,
   AUCTION_START,
@@ -10,11 +10,18 @@ import {
   bidStep,
   CALL_BEATS,
   newResults,
+  nazmaMax,
+  NAZMA_EAGER,
+  NAZMA_SKIP,
+  NAZMA_STRENGTH,
+  NAZMA_TOP,
   nextBid,
   openingBid,
   passLot,
   playerBid,
   resultLine,
+  RIVAL_BIDDER,
+  rivalBidder,
   startAuction,
   stepAuction,
   type AuctionState,
@@ -23,6 +30,7 @@ import {
 import { PLAYER_ID } from './customers'
 import { formatMoney } from './format'
 import { createRng } from './rng'
+import { emptyRival, OPEN_STRENGTH, type Rival } from './rival'
 
 const DAY = 3
 const LOTS = runList(DAY, { rank: 'main-street', tier: 'bronze' })
@@ -248,3 +256,94 @@ describe('the auctioneer', () => {
     expect(auctioneerSpeaks(run, { ...run, over: true })).toBe(false)
   })
 })
+
+describe('Nazma at the auction', () => {
+  const open: Rival = { ...emptyRival(), status: 'open', strength: OPEN_STRENGTH, shares: [0.2] }
+
+  it('bids only while his lot is open, harder the more desperate and the stronger he is', () => {
+    expect(rivalBidder(emptyRival())).toBeNull()
+    expect(rivalBidder({ ...open, status: 'closed' })).toBeNull()
+    const calm = rivalBidder(open)!
+    expect(calm).toEqual({ name: open.name, eager: NAZMA_TOP })
+    const desperate = rivalBidder({ ...open, shares: [0.01] })!
+    expect(desperate.eager).toBeCloseTo(NAZMA_TOP + NAZMA_EAGER)
+    const strong = rivalBidder({ ...open, strength: OPEN_STRENGTH + 10 })!
+    expect(strong.eager).toBeCloseTo(NAZMA_TOP + 10 * NAZMA_STRENGTH)
+  })
+
+  it('sits out some lots and never bids on a car he stole', () => {
+    const lots = Array.from({ length: 100 }, (_, w) =>
+      runList(DAY + w * 7, { rank: 'main-street', tier: 'bronze' }),
+    ).flat()
+    const nazma = rivalBidder(open)!
+    const bids = lots.map((l) => nazmaMax(l, 10_000, nazma))
+    const skipped = bids.filter((b) => b === null).length / bids.length
+    expect(skipped).toBeGreaterThan(NAZMA_SKIP - 0.1)
+    expect(skipped).toBeLessThan(NAZMA_SKIP + 0.1)
+    for (const b of bids) {
+      if (b !== null) expect(b / 10_000).toBeCloseTo(NAZMA_TOP, 1)
+    }
+    expect(nazmaMax({ ...LOTS[0], stolen: 'used-1-1' }, 10_000, nazma)).toBeNull()
+  })
+
+  it('joins the dealers on a lot without changing their bids, and his win is marked', () => {
+    const lot = lots().find((l) => nazmaMax(l, 10_000, rivalBidder(open)!) !== null)!
+    const dealers = bidderMaxes(lot, DAY, createRng(5))
+    const keen = { name: open.name, eager: 3 }
+    const withHim = bidderMaxes(lot, DAY, createRng(5), 1, keen)
+    expect(withHim.slice(0, -1)).toEqual(dealers)
+    expect(withHim.at(-1)).toMatchObject({ id: RIVAL_BIDDER, name: open.name })
+    const run = until(
+      startAuction(AUCTION_START, { ...ctx(5), lots: [lot], nazma: keen }),
+      ctx(5),
+      (s) => s.over,
+    )
+    expect(run.results[0]).toMatchObject({ buyer: open.name, rival: true })
+  })
+
+  it('pushes prices up on the lots he bids on while he’s desperate', () => {
+    const desperate = rivalBidder({ ...open, shares: [0.01] })!
+    let without = 0
+    let withHim = 0
+    for (let w = 0; w < 100; w++) {
+      const day = DAY + w * 7
+      const lots = runList(day, { rank: 'main-street', tier: 'bronze' })
+      const sold = (nazma: typeof desperate | null) => {
+        const c: RunContext = { lots, taken: [], day, rng: createRng(day), nazma }
+        return stepAuction(startAuction(AUCTION_START, c), AUCTION_END, c).results
+      }
+      const a = sold(null)
+      const b = sold(desperate)
+      for (const lot of lots) {
+        if (nazmaMax(lot, 10_000, desperate) === null) continue
+        without += a.find((r) => r.lotId === lot.id)?.price ?? 0
+        withHim += b.find((r) => r.lotId === lot.id)?.price ?? 0
+      }
+    }
+    expect(withHim / without).toBeGreaterThan(1.03)
+    expect(withHim / without).toBeLessThan(1.12)
+  })
+})
+
+describe('slow lots', () => {
+  it('has the dealers cool on about one lot in ten', () => {
+    const lots = Array.from({ length: 100 }, (_, w) =>
+      runList(DAY + w * 7, { rank: 'main-street', tier: 'bronze' }),
+    ).flat()
+    const slow = lots.filter(isSlowLot)
+    expect(slow.length / lots.length).toBeGreaterThan(SLOW_LOT_CHANCE - 0.04)
+    expect(slow.length / lots.length).toBeLessThan(SLOW_LOT_CHANCE + 0.04)
+    for (const lot of slow) {
+      const value = lotValue(lot, lot.car.acquiredDay)
+      for (const b of bidderMaxes(lot, lot.car.acquiredDay, createRng(2))) {
+        expect(b.max).toBeLessThanOrEqual(Math.round(value * BIDDER_TOP.high * SLOW_LOT_HEAT) + 10)
+      }
+    }
+  })
+})
+
+function lots() {
+  return Array.from({ length: 10 }, (_, w) =>
+    runList(DAY + w * 7, { rank: 'main-street', tier: 'bronze' }),
+  ).flat()
+}

@@ -390,6 +390,7 @@ function SummaryPanel() {
                       {stats.auction.bought.map((b, i) => (
                         <li key={i}>
                           {b.year} {carName(b.model)} for {formatMoney(b.price)}{' '}
+                          {b.stolen && <span className="stock-badge">Bought back</span>}{' '}
                           <span className="muted">
                             (+{formatMoney(b.fee)} fee, graded {b.graded}, worth{' '}
                             {formatMoney(b.value)})

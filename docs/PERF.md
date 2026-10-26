@@ -279,3 +279,21 @@ The geometries that climbed all day in 18a–18d (to 500–1,300 on the real dev
 ### Storage
 
 At day 500 (`npm run bench`, Medium): the save is 163 KB, `createSave` 0.9 ms and `parseSave` 1.4 ms (Hard: 126 KB, 0.6 and 1.0 ms), well inside the 500 KB and 20 ms targets and far from the 1 MB that would have called for delta-encoded day logs, so the save format is unchanged. If the browser refuses the end-of-day write (a full quota or blocked storage), the game now shows "Couldn't save today" and plays on. Why there's no server, and what would reopen it: `docs/ARCHITECTURE.md`.
+
+## 22f: the bench bot at the auction (2026-10-26)
+
+The bench bot now bids at the dealer auction (`AUCTION_MARGIN`: the price and fee at most 80% of a lot's retail value, keeping $50,000 in hand) and wholesales stale used cars, beat by beat between the clock's steps as `GameClock` does. `setAuctionStyle('none')` keeps it away, and then both levels play exactly as before 22f: Nazma's bids, slow lots and the new `WHOLESALE_FACTOR` change nothing the bench sees unless the bot takes part.
+
+### Sim bench
+
+| Level  | When   | ms/day first 50 | middle 50 | last 50 | ms/tick mean | Sales | Rank at day 500    | Save at day 500 |
+| ------ | ------ | --------------- | --------- | ------- | ------------ | ----- | ------------------ | --------------- |
+| Medium | before | 12.8            | 8.8       | 9.1     | 0.105        | 1,848 | Trusted Dealer     | 211 KB          |
+| Medium | after  | 16.6            | 12.6      | 10.8    | 0.125        | 3,519 | Dealer of the Year | 212 KB          |
+| Hard   | before | 7.3             | 8.6       | 8.7     | 0.098        | 3,023 | Main Street        | 204 KB          |
+| Hard   | after  | 8.3             | 10.2      | 4.8     | 0.093        | 2,390 | Main Street        | 180 KB          |
+
+- The time per day follows how big the game gets, not the auction: Medium now reaches the top rank by day 200 and sells nearly twice the cars. The auction itself steps only on Wednesdays from 10:00, a set per half game minute while the run is on.
+- Medium bought 43 lots in 500 days (about 0.6 a week: the bot pays little), 2 of them cars Nazma stole, and wholesaled 9. That little stock was enough to change the run's course from day 100 on, since every day's rolls follow from the last.
+- Hard bought 21 lots and ran out of cash around day 410, with an empty lot and its reputation falling to 8. That's the bot, not the auction: without it Hard's cash was already falling from day 300 (324k to 191k) with the lot as empty, and a lot this bare loses customers to "missed" every day. With auction cars in, its used sales lost less per car ($1,244 against $1,669: the bot takes every counter).
+- Listeners (200 Medium days): 390 to 489 sets a day and 6.3 to 6.8 ms a day, from the auction's beats and the bigger game.

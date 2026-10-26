@@ -1,4 +1,4 @@
-import { calendarOf, DAYS_PER_WEEK, weekStart } from './calendar'
+import { calendarOf, DAYS_PER_MONTH, DAYS_PER_WEEK, weekStart } from './calendar'
 import { orderable, type FranchiseTier } from './franchise'
 import { roundTo100, type InventoryCar } from './inventory'
 import type { CarModel } from './layout'
@@ -6,6 +6,7 @@ import type { Slot } from './ordering'
 import { rankById, RANKS, type Career, type RankId } from './progression'
 import { carName } from './interactables'
 import { createRng, hashSeed } from './rng'
+import type { Rival } from './rival'
 import { lotSlotFor, NO_CASH, NO_ROOM, type BuyBook } from './sellers'
 import {
   appraisalNoise,
@@ -45,7 +46,7 @@ export const RUN_SIZE: Record<RankId, number> = {
 }
 
 /** What the trade pays for a used car it still has to retail: this share of its market value. */
-export const WHOLESALE_FACTOR = 0.8
+export const WHOLESALE_FACTOR = 0.85
 /** The run list's estimate is the wholesale value this much either way. */
 export const ESTIMATE_SPREAD = 0.1
 /** The auction's buyer fee: a flat amount plus a share of the hammer price. */
@@ -57,6 +58,13 @@ export const AUCTION_CLEANLINESS = 0.6
  * under): usually the right grade, about one lot in five a step better.
  */
 export const SHEET_NOISE = 0.12
+/** About one lot in ten is a slow one: the dealers aren't keen, and it can go cheap. */
+export const SLOW_LOT_CHANCE = 0.1
+/** The dealers' top bids on a slow lot are scaled by this. */
+export const SLOW_LOT_HEAT = 0.8
+const SLOW_SEED = 45_000
+/** A lot won under this share of its wholesale value is a steal. */
+export const STEAL_SHARE = 0.8
 /** An inspection reads condition up to the inspector's `appraisalNoise` × this over the truth. */
 export const INSPECT_NOISE_SCALE = 0.3
 /** What an inspection costs. */
@@ -78,6 +86,8 @@ export interface Lot {
   order: number
   /** One of our cars, consigned to the run (see `sim/wholesale.ts`): we can't bid on it. */
   consigned?: Consignment
+  /** A car Nazma stole from us, run from his lot: its old stock id. Ours to buy back. */
+  stolen?: string
 }
 
 /** A lot looked over before the auction: a closer reading of its condition. */
@@ -112,6 +122,8 @@ export interface AuctionWin {
   fee: number
   /** The grade it was bought on: the sheet's, or the inspection's. */
   graded: Grade
+  /** A car Nazma stole from us, bought back: its old stock id. */
+  stolen?: string
 }
 
 /** An auction buy as the summary lists it. */
@@ -122,8 +134,12 @@ export interface AuctionBuy {
   fee: number
   /** Its market value that day. */
   value: number
+  /** Its wholesale value as it was read when bought (`lotValue`). */
+  wholesale: number
   /** The grade it was bought on. */
   graded: Grade
+  /** A car Nazma stole from us, bought back. */
+  stolen?: true
 }
 
 /** The day's auction. Buys are stock, not an expense, so they stay off `netIncome`. */
@@ -165,15 +181,18 @@ export function auctionOpen(career: Pick<Career, 'rank'>): boolean {
 export interface RunOpts {
   rank: RankId
   tier: FranchiseTier
+  /** × `SHEET_NOISE` (the level's `gradeNoise`). */
+  noise?: number
 }
 
 /**
  * The run list for the week `day` is in: `RUN_SIZE[rank]` used cars rolled on
  * the week's own seed, so the same week always gives the same list (and a
  * rank-up mid-week only adds lots at the end). Models the franchise `tier`
- * can't order (`MODEL_TIER`) don't come up.
+ * can't order (`MODEL_TIER`) don't come up. The sheet reads each car up to
+ * `SHEET_NOISE` × `noise` over its true condition.
  */
-export function runList(day: number, { rank, tier }: RunOpts): Lot[] {
+export function runList(day: number, { rank, tier, noise = 1 }: RunOpts): Lot[] {
   const start = weekStart(day)
   const auctionDay = start + AUCTION_WEEKDAY
   const rng = createRng(AUCTION_SEED + start)
@@ -185,7 +204,7 @@ export function runList(day: number, { rank, tier }: RunOpts): Lot[] {
       car = rollUsedCar(rng, auctionDay)
     }
     if (!orderable(car.model, tier)) car = { ...car, model: 'sedan' }
-    const reading = readCondition(car.condition, SHEET_NOISE, sheet.next())
+    const reading = readCondition(car.condition, SHEET_NOISE * noise, sheet.next())
     lots.push({ id: `lot-${auctionDay}-${order}`, car, reading, grade: gradeOf(reading), order })
   }
   return lots
@@ -316,6 +335,11 @@ export function lotValue(lot: Lot, day: number, inspection?: Inspection | null):
   return wholesaleValue(lot.car.model, { ...lot.car, condition: reading }, day)
 }
 
+/** Whether the dealers are cool on `lot` (`SLOW_LOT_CHANCE`), seeded by the lot. */
+export function isSlowLot(lot: Pick<Lot, 'id'>): boolean {
+  return createRng(hashSeed(lot.id) + SLOW_SEED).next() < SLOW_LOT_CHANCE
+}
+
 /**
  * The run list's guide to what `lot` will go for on `day`: its wholesale
  * value as read, give or take `ESTIMATE_SPREAD` (`INSPECTED_SPREAD` once inspected).
@@ -368,7 +392,16 @@ export function winLot(
   const slot = lotSlotFor(book)
   if (!slot) return null
   const graded = lotReading(lot, inspection).grade
-  return { id, lotId: lot.id, car: lot.car, slot, price, fee: buyerFee(price), graded }
+  return {
+    id,
+    lotId: lot.id,
+    car: lot.car,
+    slot,
+    price,
+    fee: buyerFee(price),
+    graded,
+    ...(lot.stolen && { stolen: lot.stolen }),
+  }
 }
 
 /** Today's wins as stock on `day`, each in its held space, costing the price and the fee. */
@@ -378,16 +411,31 @@ export function stockWins(wins: readonly AuctionWin[], day: number): InventoryCa
   )
 }
 
-/** For the summary: what was won, for how much and what it was worth on `day`. */
-export function auctionRecord(w: AuctionWin, day: number): AuctionBuy {
+/**
+ * For the summary: what was won, for how much and what it was worth on `day`
+ * (`wholesale` as the buyer read it, from `lot` and its `inspection`).
+ */
+export function auctionRecord(
+  w: AuctionWin,
+  day: number,
+  lot: Lot,
+  inspection?: Inspection | null,
+): AuctionBuy {
   return {
     model: w.car.model,
     year: w.car.year,
     price: w.price,
     fee: w.fee,
     value: marketValue(w.car.model, w.car, day),
+    wholesale: lotValue(lot, day, inspection),
     graded: w.graded,
+    ...(w.stolen && { stolen: true as const }),
   }
+}
+
+/** Whether `buy` was a steal: under `STEAL_SHARE` of its wholesale value. */
+export function isSteal(buy: Pick<AuctionBuy, 'price' | 'wholesale'>): boolean {
+  return buy.price < buy.wholesale * STEAL_SHARE
 }
 
 /** Today's wins that are a grade (or more) worse than they were bought on. */
@@ -411,4 +459,33 @@ export function surpriseNotice(surprises: readonly AuctionSurprise[]): string | 
 /** What the day's auction buys cost, fees included. */
 export function auctionSpend(stats: AuctionStats): number {
   return stats.bought.reduce((sum, b) => sum + b.price + b.fee, 0)
+}
+
+/** A car Nazma stole within this many days can come up at the auction for us to buy back. */
+export const BUYBACK_DAYS = DAYS_PER_MONTH
+/** Each auction while he has one, the chance a car he stole runs. */
+export const BUYBACK_CHANCE = 0.5
+const BUYBACK_SEED = 46_000
+
+/**
+ * On auction `day`, a car Nazma stole from us within `BUYBACK_DAYS` that he
+ * runs at the auction (`BUYBACK_CHANCE`, seeded by the day), as lot `order`,
+ * read as it is. Null while he isn't open or has none.
+ */
+export function buyBackLot(rival: Rival, day: number, order: number): Lot | null {
+  if (rival.status !== 'open') return null
+  const recent = rival.lotCars.filter((c) => c.how === 'stolen' && day - c.day <= BUYBACK_DAYS)
+  if (recent.length === 0) return null
+  const rng = createRng(BUYBACK_SEED + day)
+  if (rng.next() >= BUYBACK_CHANCE) return null
+  const pick = recent[rng.int(0, recent.length - 1)]
+  const car = { ...pick.car, model: pick.model, acquiredDay: day }
+  return {
+    id: `lot-${day}-stolen`,
+    car,
+    reading: car.condition,
+    grade: gradeOf(car.condition),
+    order,
+    stolen: pick.id,
+  }
 }

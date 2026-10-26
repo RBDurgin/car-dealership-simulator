@@ -30,7 +30,7 @@ const BUILDING = { x0: 15, x1: 26, z0: 8.5, z1: 13.2, h: 3.6 }
 /** A building site is lower, in bare block, inside scaffolding. */
 const SITE_H = 2
 
-/** Parking spaces, front row first, nose to the road: his own stock, then what he stole. */
+/** Parking spaces, front row first, nose to the road: his own stock, then our cars he stole or bought. */
 const STALLS: [number, number][] = [
   [3, 5],
   [6, 5],
@@ -369,7 +369,9 @@ export function RivalLot() {
   const rival = useGame((s) => s.rival)
   if (rival.status === 'unopened') return null
   const open = rival.status === 'open'
-  const cars = open ? [...OWN_STOCK, ...rival.stolen].slice(0, STALLS.length) : []
+  const cars = open
+    ? [...OWN_STOCK, ...rival.lotCars.map((c) => c.model)].slice(0, STALLS.length)
+    : []
   return (
     <group position={[ORIGIN_X, 0, ORIGIN_Z]}>
       <mesh rotation-x={-Math.PI / 2} position={[WIDTH / 2, 0.012, WALK / 2]} material={SIDEWALK}>

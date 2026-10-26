@@ -3,14 +3,19 @@ import {
   AUCTION_WEEKDAY,
   auctionCost,
   auctionDayOf,
+  lotValue,
   auctionOpen,
   auctionRecord,
   bidBlocker,
+  BUYBACK_CHANCE,
+  BUYBACK_DAYS,
+  buyBackLot,
   buyerFee,
   INSPECT_FEE,
   inspectBlocker,
   inspectLot,
   isAuctionDay,
+  isSteal,
   liveBids,
   lotEstimate,
   lotHasRun,
@@ -21,6 +26,7 @@ import {
   RUN_SIZE,
   runList,
   SHEET_NOISE,
+  STEAL_SHARE,
   stockWins,
   surpriseNotice,
   surprisesOf,
@@ -33,6 +39,7 @@ import { calendarOf } from './calendar'
 import { emptyCareer } from './progression'
 import { buildInventory } from './inventory'
 import { freeSlots } from './ordering'
+import { emptyRival, type Rival } from './rival'
 import { createRng } from './rng'
 import { NO_CASH, NO_ROOM, reservedSlots, type BuyBook } from './sellers'
 import { carName } from './interactables'
@@ -193,12 +200,13 @@ describe('buying a lot', () => {
       status: 'available',
     })
     expect(car.used).toMatchObject({ year: lot.car.year, acquiredDay: 10 })
-    expect(auctionRecord(win, 10)).toEqual({
+    expect(auctionRecord(win, 10, lot)).toEqual({
       model: lot.car.model,
       year: lot.car.year,
       price: 8_000,
       fee: win.fee,
       value: marketValue(lot.car.model, lot.car, 10),
+      wholesale: lotValue(lot, 10),
       graded: lot.grade,
     })
   })
@@ -326,5 +334,77 @@ describe('a senior’s closer inspection', () => {
         plain.reading - lot.car.condition + 1e-9,
       )
     }
+  })
+})
+
+describe('the level’s sheet noise', () => {
+  it('reads closer to the truth at a lower noise, and the cars stay the same', () => {
+    const over = (noise: number) =>
+      Array.from({ length: 50 }, (_, w) => runList(3 + w * 7, { ...OPEN, noise }))
+        .flat()
+        .map((l) => l.reading - l.car.condition)
+    expect(Math.max(...over(0))).toBe(0)
+    expect(Math.max(...over(0.7))).toBeLessThanOrEqual(SHEET_NOISE * 0.7 + 1e-9)
+    expect(Math.max(...over(1.3))).toBeGreaterThan(SHEET_NOISE)
+    expect(runList(3, { ...OPEN, noise: 1.3 }).map((l) => l.car)).toEqual(
+      runList(3, OPEN).map((l) => l.car),
+    )
+  })
+})
+
+describe('steals', () => {
+  it('counts a win under STEAL_SHARE of its wholesale value as a steal', () => {
+    expect(isSteal({ price: 7_900, wholesale: 10_000 })).toBe(true)
+    expect(isSteal({ price: 8_000, wholesale: 10_000 })).toBe(false)
+    expect(STEAL_SHARE).toBe(0.8)
+  })
+})
+
+describe('buying back a stolen car', () => {
+  const stolen = (day: number) => ({
+    id: 'new-7',
+    model: 'suv' as const,
+    how: 'stolen' as const,
+    day,
+    car: { year: 2026, miles: 300, condition: 1, acquiredDay: day },
+  })
+  const open = (lotCars: Rival['lotCars']): Rival => ({ ...emptyRival(), status: 'open', lotCars })
+  // Day 10 is an auction day he runs one; day 3 isn't.
+  const RUNS = 10
+
+  it('runs a car he stole within BUYBACK_DAYS, badged with its old id, read as it is', () => {
+    const lot = buyBackLot(open([stolen(RUNS - 3)]), RUNS, 8)!
+    expect(lot).toEqual({
+      id: `lot-${RUNS}-stolen`,
+      car: { model: 'suv', year: 2026, miles: 300, condition: 1, acquiredDay: RUNS },
+      reading: 1,
+      grade: 'Good',
+      order: 8,
+      stolen: 'new-7',
+    })
+    expect(buyBackLot(open([stolen(RUNS - 3)]), 3, 8)).toBeNull()
+  })
+
+  it('runs none he bought, none stolen long ago, and none unless he’s open', () => {
+    expect(buyBackLot(open([{ ...stolen(RUNS - 3), how: 'bought' }]), RUNS, 8)).toBeNull()
+    expect(buyBackLot(open([stolen(RUNS - BUYBACK_DAYS - 1)]), RUNS, 8)).toBeNull()
+    expect(buyBackLot({ ...open([stolen(RUNS - 3)]), status: 'closed' }, RUNS, 8)).toBeNull()
+  })
+
+  it('comes up at about BUYBACK_CHANCE of auctions', () => {
+    const days = Array.from({ length: 200 }, (_, w) => 3 + w * 7)
+    const runs = days.filter((d) => buyBackLot(open([stolen(d - 1)]), d, 8)).length
+    expect(runs / days.length).toBeGreaterThan(BUYBACK_CHANCE - 0.1)
+    expect(runs / days.length).toBeLessThan(BUYBACK_CHANCE + 0.1)
+  })
+
+  it('marks the win and the record as a buy-back', () => {
+    const lot = buyBackLot(open([stolen(RUNS - 3)]), RUNS, 8)!
+    const win = winLot(lot, 15_000, book({ clock: { day: RUNS } }), 'used-10-1')!
+    expect(win.stolen).toBe('new-7')
+    expect(auctionRecord(win, RUNS, lot)).toMatchObject({
+      stolen: true,
+      wholesale: lotValue(lot, RUNS),
+    })
   })
 })

@@ -54,7 +54,7 @@ import {
 } from '../sim/staffAi'
 import { CLOSE_MINUTE, DEFAULT_DAY_MS, OPEN_MINUTE } from '../sim/clock'
 import { breakSeats } from '../sim/improvements'
-import { runListFor, upNow } from '../state/selectors'
+import { biddableLotsFor, upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { financePaperwork } from '../state/derived'
 import { Character } from './Character'
@@ -645,7 +645,7 @@ function buyerTask(e: Employee): BuyerTask {
     day: game.clock.day,
     minute: game.clock.minute,
     open: auctionOpen(game.career),
-    lots: runListFor(game),
+    lots: biddableLotsFor(game),
     inspected: game.inspected,
     runOver: !!game.auction?.over,
   })

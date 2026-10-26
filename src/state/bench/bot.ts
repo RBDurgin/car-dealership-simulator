@@ -1,3 +1,18 @@
+import {
+  auctionCost,
+  auctionOpen,
+  isAuctionDay,
+  lotValue,
+  WHOLESALE_FACTOR,
+} from '../../sim/auction'
+import {
+  AUCTION_END,
+  AUCTION_START,
+  BEAT_MINUTES,
+  biddingOpen,
+  lotOnBlock,
+  nextBid,
+} from '../../sim/bidding'
 import { CLOCK_STEP_MINUTES, CLOSE_MINUTE, OPEN_MINUTE } from '../../sim/clock'
 import { CAR_MODELS, PLAYER_ID } from '../../sim/customers'
 import { customerActions, dealCustomer } from '../../sim/deal'
@@ -9,6 +24,9 @@ import { MANAGER_DESK, type ExpansionId } from '../../sim/layout'
 import { PROMPTS_PER_DRIVE, topicFit } from '../../sim/talkingPoints'
 import type { Role } from '../../sim/staff'
 import { driveBlocker } from '../../sim/testDrive'
+import { isStale } from '../../sim/usedCars'
+import { MAX_CONSIGNED } from '../../sim/wholesale'
+import { auctionBidBlocker, auctionLotsFor } from '../selectors'
 import { useGame } from '../store'
 
 /**
@@ -18,7 +36,9 @@ import { useGame } from '../store'
  * player works one deal at a time, gives a test drive to anyone who asks (back
  * at once, see `setDriveStyle`), takes every counter and runs a fair F&I
  * menu at their own desk (or a hard one, see `setMenuStyle`), and stock and
- * ads are bought each morning. With a staff style (see `setStaffStyle`) it
+ * ads are bought each morning. Once the dealer auction is open it bids on
+ * lots while they're well under retail value and wholesales stale used
+ * cars. With a staff style (see `setStaffStyle`) it
  * keeps a small team, who come in and stand idle, as their work is the
  * scene's; by default it hires nobody. Every choice
  * is fixed, and the store's rngs are seeded by the day, so a run with the same
@@ -255,11 +275,74 @@ function manageStaff(): void {
 }
 
 /**
+ * How the bot uses the dealer auction once it's open: `margin` (the default)
+ * bids while a lot keeps `AUCTION_MARGIN` and wholesales stale used cars;
+ * `none` stays away.
+ */
+export type AuctionStyle = 'margin' | 'none'
+let auctionStyle: AuctionStyle = 'margin'
+
+export function setAuctionStyle(style: AuctionStyle): void {
+  auctionStyle = style
+}
+
+/**
+ * The most the bot pays for an auction lot, its price and the buyer fee, as a
+ * share of its retail value as read: room for a margin when it's retailed.
+ */
+export const AUCTION_MARGIN = 0.8
+
+/** Cash the bot keeps after an auction buy, so stock can still be ordered. */
+const AUCTION_RESERVE = 50_000
+
+/**
+ * Raises on the lot on the block while the next bid keeps the margin and
+ * leaves `AUCTION_RESERVE`, and it can place the car.
+ */
+function bidAtAuction(): void {
+  if (auctionStyle === 'none') return
+  const s = game()
+  const run = s.auction
+  if (!biddingOpen(run) || run.high === PLAYER_ID || auctionBidBlocker(s)) return
+  const lot = lotOnBlock(run, auctionLotsFor(s))
+  if (!lot || lot.consigned) return
+  const inspection = s.inspected.find((i) => i.lotId === lot.id)
+  const retail = lotValue(lot, s.clock.day, inspection) / WHOLESALE_FACTOR
+  const cost = auctionCost(nextBid(run))
+  if (cost <= retail * AUCTION_MARGIN && s.cash - cost >= AUCTION_RESERVE) s.auctionBid()
+}
+
+/** On auction day, the run's beats between clock steps `from` and `to`, as the scene's clock steps them. */
+function auctionBeats(from: number, to: number): void {
+  const s = game()
+  if (!isAuctionDay(s.clock.day) || !auctionOpen(s.career)) return
+  if (to <= AUCTION_START || from >= AUCTION_END) return
+  for (let m = from + BEAT_MINUTES; m < to; m += BEAT_MINUTES) {
+    game().tickAuction(m)
+    bidAtAuction()
+  }
+}
+
+/** Stale used cars go to the next auction, while it has room. */
+function wholesaleStale(): void {
+  const s = game()
+  if (auctionStyle === 'none' || !auctionOpen(s.career)) return
+  for (const car of s.inventory) {
+    if (game().consigned.length >= MAX_CONSIGNED) return
+    const consigned = game().consigned.some((c) => c.carId === car.id)
+    if (car.status === 'available' && !consigned && isStale(car, s.clock.day)) {
+      game().consign(car.id)
+    }
+  }
+}
+
+/**
  * The morning's shopping, while there's cash: buys each expansion it can,
  * keeps an online ad running and refills the lot.
  */
 function morning(): void {
   manageStaff()
+  wholesaleStale()
   if (game().cash <= 0) return
   for (const id of Object.keys(EXPANSIONS) as ExpansionId[]) game().buyExpansion(id)
   const day = game().clock.day
@@ -279,10 +362,12 @@ export function playDay(onTick?: (ms: number, sets: number) => void): void {
   const day = game().clock.day
   morning()
   for (let minute = OPEN_MINUTE + CLOCK_STEP_MINUTES; minute <= CLOSE_MINUTE;) {
+    auctionBeats(minute - CLOCK_STEP_MINUTES, minute)
     const before = sets
     const t = performance.now()
     game().tickClock({ day, minute })
     onTick?.(performance.now() - t, sets - before)
+    bidAtAuction()
     serveCustomers()
     minute += CLOCK_STEP_MINUTES
   }

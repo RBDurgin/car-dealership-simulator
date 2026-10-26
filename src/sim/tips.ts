@@ -1,3 +1,4 @@
+import { auctionOpen, type AuctionStats } from './auction'
 import { CSI_FLOOR } from './csi'
 import { WASH_BELOW } from './cleanliness'
 import { dueCount, type Client } from './clients'
@@ -42,6 +43,7 @@ export type TipId =
   | 'rivalOpens'
   | 'rivalBust'
   | 'staleUsed'
+  | 'wholesale'
   | 'franchise'
   | 'expansion'
   | 'serviceBay'
@@ -70,6 +72,8 @@ export type TipId =
   | 'promote'
   | 'stats'
   | 'achievement'
+  | 'auction'
+  | 'inspect'
 
 /** Financed deals in a day that make a finance manager worth hiring. */
 export const FINANCE_TIP_DEALS = 5
@@ -102,6 +106,7 @@ export const TIPS: Record<TipId, string> = {
   rivalQuote:
     "This buyer has a price from Nazma's lot across the road. Ask much more and they may go to him; Match his price makes a yes more likely.",
   staleUsed: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Buyers judge its price by what it's worth now, so take a lower offer to move it.`,
+  wholesale: `A used car has been in stock ${STALE_DAYS} days, and it's worth less every day. Take a lower offer to move it, or choose Wholesale on it (or in the Stock tab) to send it to the next dealer auction: it sells to the highest dealer, less a fee. Set a floor on the Auction tab if you won’t take less.`,
   franchise:
     'Your franchise tier changed. Higher tiers pay less for stock, earn a bigger holdback and can order the top models. Meet the quota to move up; fall well short and you drop. The Calendar tab shows where you stand.',
   expansion:
@@ -154,6 +159,10 @@ export const TIPS: Record<TipId, string> = {
     'You broke a record today. The office computer’s Stats tab (P) keeps every day you close: lifetime totals, your records and charts of sales, gross, cash and more.',
   achievement:
     'You earned an achievement. See them all in the office computer’s Stats tab (P) under Achievements, and every game’s in the trophy case on the title screen.',
+  auction:
+    'The dealer auction is running. Open the Auction tab (J) on the office computer to bid against the other dealers: a lot you win is on your lot tomorrow. The estimate is what the trade pays, so leave room for your margin. Nazma bids too while his lot is open, harder when he’s losing.',
+  inspect:
+    'A car you bought at the auction came in worse than its grade: the sheet reads a little kind. Inspect a lot on the Auction tab before it runs for a closer look, or hire a used-car manager to inspect the whole run.',
   lowCash:
     'Cash is running low. Order on the floor plan to pay when the car sells, and only pay off loans early when you can spare it.',
 }
@@ -173,6 +182,7 @@ export interface TipState {
   customers: readonly Customer[]
   dayStats: Pick<DayStats, 'missed' | 'quota'> & {
     newRecords?: readonly RecordKey[]
+    auction?: Pick<AuctionStats, 'surprises'>
     fi?: Pick<FiStats, 'financed' | 'declined' | 'chargebackCount'>
     drives?: Pick<DriveStats, 'taken' | 'byStaff' | 'dings'>
   }
@@ -183,6 +193,8 @@ export interface TipState {
   franchise: FranchiseTier
   career: { rank: RankId }
   rival: { status: RivalStatus }
+  /** Today's run at the dealer auction, null until it starts. */
+  auction?: { over: boolean } | null
   expansions: readonly OwnedExpansion[]
   serviceJobs: readonly ServiceJob[]
   clients: readonly Client[]
@@ -300,7 +312,10 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
           quoted(c),
       )
     }
-    case 'staleUsed': {
+    case 'staleUsed':
+    case 'wholesale': {
+      // Once the auction is open, the wholesale tip says it all.
+      if ((id === 'wholesale') !== auctionOpen(next.career)) return false
       const stale = (s: TipState) =>
         s.inventory.filter((c) => c.status === 'available' && isStale(c, s.clock.day))
       const was = new Set(stale(prev).map((c) => c.id))
@@ -432,6 +447,12 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       return (next.dayStats.newRecords?.length ?? 0) > 0 && !prev.dayStats.newRecords?.length
     case 'achievement':
       return (next.achievements?.length ?? 0) > 0 && !prev.achievements?.length
+    case 'auction':
+      return !!next.auction && !prev.auction
+    case 'inspect': {
+      const surprises = (t: TipState) => t.dayStats.auction?.surprises.length ?? 0
+      return surprises(next) > 0 && surprises(prev) === 0
+    }
     case 'lowCash':
       return next.cash < LOW_CASH && prev.cash >= LOW_CASH
   }

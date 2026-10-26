@@ -31,6 +31,8 @@ export const REPUTATION_POINTS = {
   turnedAway: -1,
   /** A service client whose job didn't hold, so they came back (or would have). */
   comeback: -1,
+  /** A car Nazma stole, bought back at the dealer auction: the town hears of it. */
+  buyBack: 3,
 }
 
 /** One day can't move reputation by more than this either way. */
@@ -63,7 +65,11 @@ const MEDIUM_SCALE: RepScale = { gain: 1, loss: 1 }
 export function reputationChange(stats: DayStats, scale: RepScale = MEDIUM_SCALE): number {
   const missed = Object.values(stats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
   const { jobs, late, turnedAway, comebacks } = stats.service
-  const gain = stats.sales.length * REPUTATION_POINTS.sale + jobs * REPUTATION_POINTS.serviced
+  const buyBacks = stats.auction.bought.filter((b) => b.stolen).length
+  const gain =
+    stats.sales.length * REPUTATION_POINTS.sale +
+    jobs * REPUTATION_POINTS.serviced +
+    buyBacks * REPUTATION_POINTS.buyBack
   const loss =
     stats.refused * REPUTATION_POINTS.refused +
     stats.impatient * REPUTATION_POINTS.impatient +

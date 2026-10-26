@@ -10,7 +10,7 @@ import type { ExpansionId } from '../sim/layout'
 import type { RankId } from '../sim/progression'
 import { courseGaps, courseGapText, coverageGaps, gapText } from '../sim/rota'
 import { buyBlocker, lotSlotFor } from '../sim/sellers'
-import { baseSellerBonus, testDriveBonus } from './derived'
+import { baseSellerBonus, levelTuning, testDriveBonus } from './derived'
 import type { GameState } from './types'
 
 /**
@@ -159,20 +159,33 @@ export const buyBlockerFor = (s: GameState, price: number): string | null =>
     price,
   )
 
-const runListOf = memoLast((week: number, rank: RankId, tier: FranchiseTier) =>
-  runList(week, { rank, tier }),
+const runListOf = memoLast((week: number, rank: RankId, tier: FranchiseTier, noise: number) =>
+  runList(week, { rank, tier, noise }),
 )
 
-/** The week's auction run list (`runList`), recomputed only when the week, rank or tier change. */
+/**
+ * The week's auction run list (`runList`, with the level's `gradeNoise`),
+ * recomputed only when the week, rank, tier or level change.
+ */
 export const runListFor = (s: GameState): Lot[] =>
-  runListOf(weekStart(s.clock.day), s.career.rank, s.franchise)
+  runListOf(weekStart(s.clock.day), s.career.rank, s.franchise, levelTuning(s).gradeNoise)
 
 const auctionLotsOf = memoLast((listed: Lot[], ours: Lot[]) =>
   ours.length === 0 ? listed : [...listed, ...ours],
 )
 
-/** Today's run: the week's run list, then our consigned cars (`wholesaleLots`). */
+/**
+ * Today's run: the week's run list, then our consigned cars and a car Nazma
+ * stole (`wholesaleLots`).
+ */
 export const auctionLotsFor = (s: GameState): Lot[] => auctionLotsOf(runListFor(s), s.wholesaleLots)
+
+const biddableLotsOf = memoLast((lots: Lot[]) =>
+  lots.some((l) => l.consigned) ? lots.filter((l) => !l.consigned) : lots,
+)
+
+/** Today's run without our own consigned cars: the lots the dealership can inspect and bid on. */
+export const biddableLotsFor = (s: GameState): Lot[] => biddableLotsOf(auctionLotsFor(s))
 
 const bidBlockerOf = memoLast(
   (

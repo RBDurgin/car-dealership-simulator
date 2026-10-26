@@ -214,7 +214,10 @@ function BasicsTab({ touch, click }: TabProps) {
           {percentOn(TUNING.hard.rivalStrength)} stronger and undercuts{' '}
           {percentOn(TUNING.hard.rivalUndercut)} more on Hard. After going bust he stays shut{' '}
           {percentOn(TUNING.easy.rivalComeback)} longer on Easy and{' '}
-          {percentOff(TUNING.hard.rivalComeback)} shorter on Hard.
+          {percentOff(TUNING.hard.rivalComeback)} shorter on Hard. At the dealer auction the other
+          dealers bid {percentOff(TUNING.easy.auctionHeat)} less and the sheet&apos;s grades are
+          closer to the truth on Easy; on Hard they bid {percentOn(TUNING.hard.auctionHeat)} more
+          and the grades are further off.
         </p>
       </section>
       <section>
@@ -674,6 +677,10 @@ function BusinessTab({ touch, click }: TabProps) {
           <b>Auto-wholesale</b> ticked sends those held {AUTO_WHOLESALE_DAYS}+ days on their own the
           morning before each auction.
         </p>
+        <p>
+          Now and then the dealers are cool on a lot, and it can go well under its estimate: worth
+          watching the run for.
+        </p>
       </section>
       <section>
         <h3>Progress</h3>
@@ -856,6 +863,14 @@ function BusinessTab({ touch, click }: TabProps) {
           Nazma leaves you alone while he&apos;s shut. About {Math.round(CLOSED_DAYS / 7)} weeks
           later he&apos;s back with a week&apos;s notice, under a new name and a little stronger.
           The Rival tab counts the rivals you&apos;ve beaten.
+        </p>
+        <p>
+          <b>Nazma at the auction.</b> While his lot is open he bids at the dealer auction too,
+          under his lot&apos;s name, on most lots, and the more desperate he gets the higher he
+          goes. A car of yours he buys there goes on his lot across the road, beside any he stole.
+          Now and then he runs a car he stole from you in the last month at the auction, badged{' '}
+          <b>Yours, stolen</b>: buy it back and it&apos;s yours again, and your reputation goes up{' '}
+          {REPUTATION_POINTS.buyBack}.
         </p>
       </section>
       <section>

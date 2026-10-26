@@ -1,4 +1,4 @@
-import { auctionOpen } from './auction'
+import { auctionOpen, isSteal, STEAL_SHARE, type AuctionBuy } from './auction'
 import { calendarOf, DAYS_PER_MONTH, DAYS_PER_WEEK, MONTHS_PER_YEAR } from './calendar'
 import type { Client } from './clients'
 import { netIncome, type DayStats, type Sale } from './deal'
@@ -39,6 +39,7 @@ export type AchievementGroup =
   | 'clients'
   | 'finance'
   | 'drives'
+  | 'auction'
 
 export const GROUP_LABELS: Record<AchievementGroup, string> = {
   selling: 'Selling',
@@ -53,6 +54,7 @@ export const GROUP_LABELS: Record<AchievementGroup, string> = {
   clients: 'Clients',
   finance: 'Finance',
   drives: 'Test drives',
+  auction: 'Auction',
 }
 
 // Thresholds, at every level.
@@ -108,6 +110,8 @@ export interface AchievementState {
     | 'settled'
     | 'drives'
     | 'huddle'
+    | 'auction'
+    | 'wholesale'
   >
   career: Pick<Career, 'sales' | 'soldByModel' | 'rivalsBeaten' | 'rank'>
   lifetime: Pick<Lifetime, 'bySource' | 'bySeller' | 'huddles'>
@@ -209,6 +213,10 @@ export type AchievementId =
   | 'road-crew'
   | 'not-a-scratch'
   | 'fender-bender'
+  | 'first-lot'
+  | 'a-steal'
+  | 'bought-back'
+  | 'sold-to-the-trade'
   | 'car-wash'
   | 'tube-man-fan'
 
@@ -320,6 +328,13 @@ const drivesReach = (n: number, count: (d: DayStats['drives']) => number) => ({
   when: 'live' as const,
   check: (prev: AchievementState, next: AchievementState) =>
     next.dayStats !== prev.dayStats && count(next.dayStats.drives) >= n,
+})
+
+/** A car won at the auction since `prev` that passes `pred`. */
+const anyNewBuy = (pred: (b: AuctionBuy) => boolean) => ({
+  when: 'live' as const,
+  check: (prev: AchievementState, next: AchievementState) =>
+    next.dayStats.auction !== prev.dayStats.auction && next.dayStats.auction.bought.some(pred),
 })
 
 const rankName = (id: RankId) => RANKS.find((r) => r.id === id)!.name
@@ -842,6 +857,38 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     group: 'drives',
     when: 'day',
     check: (ctx) => ctx.stats.drives.taken >= SCRATCH_FREE_DRIVES && ctx.stats.drives.dings === 0,
+  },
+  // Auction
+  {
+    id: 'first-lot',
+    title: 'Sold to the Dealership',
+    text: 'won a lot at the dealer auction',
+    group: 'auction',
+    ...anyNewBuy(() => true),
+  },
+  {
+    id: 'a-steal',
+    title: 'A Steal',
+    text: `won a lot for under ${Math.round(STEAL_SHARE * 100)}% of its wholesale value`,
+    group: 'auction',
+    ...anyNewBuy(isSteal),
+  },
+  {
+    id: 'bought-back',
+    title: 'Bought Back',
+    text: 'bought back a car Nazma stole',
+    group: 'auction',
+    ...anyNewBuy((b) => !!b.stolen),
+  },
+  {
+    id: 'sold-to-the-trade',
+    title: 'Sold to the Trade',
+    text: 'wholesaled a car for more than it cost, after the fee',
+    group: 'auction',
+    when: 'live',
+    check: (prev, next) =>
+      next.dayStats.wholesale !== prev.dayStats.wholesale &&
+      next.dayStats.wholesale.sold.some((w) => w.price - w.fee > w.cost),
   },
   // Hidden
   {

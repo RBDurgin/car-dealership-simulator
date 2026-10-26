@@ -1,6 +1,7 @@
 import {
   AUCTION_RANK,
   auctionOpen,
+  buyBackLot,
   auctionRecord,
   bidBlocker,
   INSPECT_FEE,
@@ -27,6 +28,7 @@ import {
   startAuction,
   stepAuction,
   type AuctionState,
+  rivalBidder,
   type LotResult,
   type RunContext,
 } from '../../sim/bidding'
@@ -41,6 +43,7 @@ import { CHANNELS, launchCampaign } from '../../sim/marketing'
 import { cancelOrder, claimedByOrder, freeSlots, placeOrder } from '../../sim/ordering'
 import { emptyMonthSales } from '../../sim/quota'
 import { rankById } from '../../sim/progression'
+import { offHisLot, onHisLot } from '../../sim/rival'
 import { createRng } from '../../sim/rng'
 import { reservedSlots } from '../../sim/sellers'
 import { seniorInspectScale } from '../../sim/growth'
@@ -62,9 +65,9 @@ import {
   withFloor,
 } from '../../sim/wholesale'
 import { dispatch, notify, tallyWork, type Kit } from '../core'
-import { orderInvoice } from '../derived'
+import { levelTuning, orderInvoice } from '../derived'
 import { INVENTORY_SEED, rng } from '../rng'
-import { auctionLotsFor, runListFor } from '../selectors'
+import { auctionLotsFor, biddableLotsFor, runListFor } from '../selectors'
 import type { GameState } from '../types'
 import { amendLog } from './career'
 
@@ -207,7 +210,7 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
     buyLot: (lotId, price, by) => {
       const s = get()
       const day = s.clock.day
-      const lot = runListFor(s).find((l) => l.id === lotId)
+      const lot = biddableLotsFor(s).find((l) => l.id === lotId)
       const blocker = !auctionOpen(s.career)
         ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
         : !isAuctionDay(day) || !lot
@@ -225,26 +228,31 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       set({
         cash: s.cash - win.price - win.fee,
         auctionWins: [...s.auctionWins, win],
+        // A car he stole, bought back: off his lot.
+        ...(win.stolen && { rival: offHisLot(s.rival, win.stolen) }),
         dayStats: {
           ...s.dayStats,
           auction: {
             ...s.dayStats.auction,
-            bought: [...s.dayStats.auction.bought, auctionRecord(win, day)],
+            bought: [...s.dayStats.auction.bought, auctionRecord(win, day, lot!, inspection)],
           },
         },
       })
       const manager = by ? s.roster.find((e) => e.id === by) : undefined
       tallyWork(k, manager?.id, 'buys')
+      const car = `the ${win.car.year} ${carName(win.car.model)}`
       notify(
         k,
-        `${manager ? `${manager.name} won` : 'Won'} the ${win.car.year} ${carName(win.car.model)} at auction for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). It's on the lot tomorrow.`,
+        win.stolen
+          ? `${manager ? `${manager.name} bought` : 'Bought'} back ${car} ${s.rival.name} stole, for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). Word gets round: it's on the lot tomorrow.`
+          : `${manager ? `${manager.name} won` : 'Won'} ${car} at auction for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). It's on the lot tomorrow.`,
       )
       return true
     },
     inspectLot: (lotId) => {
       const s = get()
       const day = s.clock.day
-      const lot = runListFor(s).find((l) => l.id === lotId)
+      const lot = biddableLotsFor(s).find((l) => l.id === lotId)
       const blocker = !auctionOpen(s.career)
         ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
         : !lot
@@ -276,7 +284,7 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
     },
     setMaxBid: (lotId, max) => {
       const s = get()
-      const lot = runListFor(s).find((l) => l.id === lotId)
+      const lot = biddableLotsFor(s).find((l) => l.id === lotId)
       const blocker = !auctionOpen(s.career)
         ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
         : !lot
@@ -289,7 +297,7 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
     staffInspect: (employeeId, lotId) => {
       const s = get()
       const e = s.roster.find((x) => x.id === employeeId)
-      const lot = runListFor(s).find((l) => l.id === lotId)
+      const lot = biddableLotsFor(s).find((l) => l.id === lotId)
       if (e?.role !== 'buyer' || e.fired || !lot || !auctionOpen(s.career)) return
       // Their inspection is the job: no fee, and nothing to add once anyone's done it.
       if (inspectBlocker(lot, s.clock.day, s.auction, s.inspected, Infinity)) return
@@ -365,6 +373,8 @@ function runContext(k: Kit, minute?: number): RunContext {
     taken: s.auctionWins.map((w) => w.lotId),
     day: s.clock.day,
     rng: rng.auction,
+    heat: levelTuning(s).auctionHeat,
+    nazma: rivalBidder(s.rival),
     ...(manager &&
       s.auctionBids.length > 0 && {
         proxy: (lotId: string, bid: number) =>
@@ -404,6 +414,10 @@ function afterBeats(k: Kit, prev: AuctionState, next: AuctionState): void {
   for (const r of results) {
     const lot = lots.find((l) => l.id === r.lotId)
     if (lot?.consigned) wholesaled(k, lot, r)
+    // A car he stole that another dealer bought is off his lot too.
+    else if (lot?.stolen && r.buyer !== null && r.buyer !== PLAYER_ID) {
+      k.set({ rival: offHisLot(k.get().rival, lot.stolen) })
+    }
   }
   const by = (proxy?: true) => (proxy ? usedCarManager(k.get().roster)?.id : undefined)
   const fell = results.filter(
@@ -433,6 +447,8 @@ function wholesaled(k: Kit, lot: Lot, r: LotResult): void {
   const sale = wholesaleRecord(car, r.price, r.buyer)
   k.set({
     inventory: s.inventory.map((c) => (c === car ? { ...c, status: 'sold' } : c)),
+    // Nazma's buy goes on his lot across the road.
+    ...(r.rival && { rival: onHisLot(s.rival, car, 'bought', s.clock.day) }),
     cash: s.cash + r.price - sale.fee - payoffOnSale(car),
     dayStats: {
       ...s.dayStats,
@@ -441,7 +457,7 @@ function wholesaled(k: Kit, lot: Lot, r: LotResult): void {
   })
   notify(
     k,
-    `${r.buyer} bought your ${lot.car.year} ${name} for ${formatMoney(r.price)} (−${formatMoney(sellerFee(r.price))} seller fee).`,
+    `${r.buyer} bought your ${lot.car.year} ${name} for ${formatMoney(r.price)} (−${formatMoney(sellerFee(r.price))} seller fee)${r.rival ? ': it’s going on his lot across the road' : ''}.`,
   )
 }
 
@@ -471,11 +487,14 @@ export function wholesaleMorning(k: Kit, day: number): string | null {
     if (consigned !== s.consigned) k.set({ consigned })
     return notices.join(' ') || null
   }
-  const { lots, rest } = consignedLots(consigned, s.inventory, runListFor(s).length, day)
+  const listed = runListFor(s).length
+  const { lots, rest } = consignedLots(consigned, s.inventory, listed, day)
   const going = new Set(lots.map((l) => l.consigned!.carId))
+  // Nazma may run a car he stole from us, last.
+  const stolen = buyBackLot(s.rival, day, listed + lots.length + 1)
   k.set({
     consigned: rest,
-    wholesaleLots: lots,
+    wholesaleLots: stolen ? [...lots, stolen] : lots,
     ...(lots.length > 0 && {
       inventory: s.inventory.map((c) => (going.has(c.id) ? { ...c, status: 'auction' } : c)),
     }),
@@ -483,6 +502,11 @@ export function wholesaleMorning(k: Kit, day: number): string | null {
   if (lots.length > 0) {
     notices.push(
       `${lots.length === 1 ? 'Your consigned car runs' : `Your ${lots.length} consigned cars run`} at today's auction.`,
+    )
+  }
+  if (stolen) {
+    notices.push(
+      `The ${carName(stolen.car.model)} ${s.rival.name} stole from you is in today's run, lot ${stolen.order}: buy it back.`,
     )
   }
   return notices.join(' ') || null
@@ -494,8 +518,9 @@ export function wholesaleMorning(k: Kit, day: number): string | null {
  */
 export function returnUnsold(k: Kit): void {
   const s = k.get()
-  const back = s.wholesaleLots.filter((l) =>
-    s.inventory.some((c) => c.id === l.consigned!.carId && c.status === 'auction'),
+  const back = s.wholesaleLots.filter(
+    (l) =>
+      l.consigned && s.inventory.some((c) => c.id === l.consigned!.carId && c.status === 'auction'),
   )
   if (back.length === 0) return
   const returned = back.map((l) =>

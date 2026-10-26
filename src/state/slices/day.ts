@@ -78,7 +78,7 @@ import {
   rivalHired,
   rivalMorning,
   rivalNotice,
-  rivalStole,
+  onHisLot,
   sabotageScale,
 } from '../../sim/rival'
 import { createRng } from '../../sim/rng'
@@ -590,7 +590,7 @@ function morning(k: Kit, day: number): void {
   const stolen = theft?.outcome === 'stolen' ? theft.car : null
   const tried = theftNightAfter(day, last, theftChance)
   const rival = stolen
-    ? { ...rivalStole(opening.rival, stolen.model), lastTheftDay: day }
+    ? { ...onHisLot(opening.rival, stolen, 'stolen', day), lastTheftDay: day }
     : tried
       ? { ...opening.rival, lastTheftDay: day }
       : opening.rival

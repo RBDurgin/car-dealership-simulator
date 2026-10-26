@@ -615,6 +615,19 @@ export const UPDATES: readonly Update[] = [
       'Your used-car manager suggests stale cars, and can send long-held ones on their own.',
     ],
   },
+  {
+    id: 56,
+    phase: '22',
+    title: 'Nazma at the auction',
+    items: [
+      'While his lot is open, Nazma bids at the dealer auction too, and harder the more desperate he gets.',
+      'A car of yours he buys there goes on his lot across the road.',
+      'A car he stole from you can come up in the run, badged Yours, stolen. Buy it back for a lift in reputation.',
+      'Now and then the dealers are cool on a lot, and it goes cheap.',
+      'Four new auction achievements, and tips for the auction, inspections and wholesale on Easy.',
+      'Easy’s dealers bid a little less and its grades are closer to the truth; Hard’s the other way.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

@@ -7,6 +7,7 @@ import { wageFor, type Employee } from '../sim/staff'
 import { emptyCareer, RANKS } from '../sim/progression'
 import { BASE_MSRP } from '../sim/inventory'
 import {
+  legacyLotCars,
   emptyRival,
   OPEN_STRENGTH,
   OPEN_UNDERCUT,
@@ -231,7 +232,7 @@ describe('his moves and sabotage', () => {
     startDay(night)
     const [stolen] = game().dayStats.nazma.stolen
     expect(stolen).toBeDefined()
-    expect(game().rival.stolen).toEqual([stolen.model])
+    expect(game().rival.lotCars).toMatchObject([{ model: stolen.model, how: 'stolen', day: night }])
     expect(game().rival.lastTheftDay).toBe(night)
     expect(game().notice?.text).toMatch(/It's for sale at Nazma's Motors now\./)
     expect(nazmaSummary(game().dayStats.nazma)).toMatch(/now for sale at Nazma's Motors/)
@@ -251,7 +252,7 @@ describe('his moves and sabotage', () => {
   it('leaves the cars alone overnight before his lot opens, as before', () => {
     startDay(night)
     expect(game().dayStats.nazma.stolen).toHaveLength(1)
-    expect(game().rival.stolen).toEqual([])
+    expect(game().rival.lotCars).toEqual([])
     expect(nazmaSummary(game().dayStats.nazma)).not.toMatch(/for sale/)
   })
 
@@ -368,7 +369,9 @@ describe('going bust and reopening', () => {
   })
 
   it('announces his return, then reopens under his next name, stronger, with an empty lot', () => {
-    useGame.setState({ rival: { ...failing(), stolen: ['sedan'], hires: ['Dana R.'] } })
+    useGame.setState({
+      rival: { ...failing(), lotCars: legacyLotCars(['sedan'], 1), hires: ['Dana R.'] },
+    })
     startDay(monday)
     const until = game().rival.closedUntil
     startDay(until)
@@ -379,7 +382,7 @@ describe('going bust and reopening', () => {
       status: 'open',
       generation: 2,
       name: RIVAL_NAMES[1],
-      stolen: [],
+      lotCars: [],
       hires: [],
     })
     expect(game().rival.strength).toBeGreaterThan(OPEN_STRENGTH)

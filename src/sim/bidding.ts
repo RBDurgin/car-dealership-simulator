@@ -1,7 +1,8 @@
-import { lotValue, type Lot } from './auction'
+import { isSlowLot, lotValue, SLOW_LOT_HEAT, type Lot } from './auction'
 import { formatTime } from './clock'
 import { PLAYER_ID } from './customers'
-import type { Rng } from './rng'
+import { desperation, OPEN_STRENGTH, type Rival } from './rival'
+import { createRng, hashSeed, type Rng } from './rng'
 
 /**
  * Live bidding at the dealer auction: one lot on the block at a time, the
@@ -25,6 +26,50 @@ export const OPEN_FACTOR = 0.75
 export const BIDDERS = { min: 3, max: 5 }
 /** Each dealer's top bid is this range of the wholesale value (before `heat`). */
 export const BIDDER_TOP = { low: 0.85, high: 1.08 }
+
+/** Nazma's bidder id at the auction while his lot is open. */
+export const RIVAL_BIDDER = 'rival'
+/** Nazma's top bid on a lot is its wholesale value × this, calm and at his opening strength. */
+export const NAZMA_TOP = 0.97
+/** … plus this × his `desperation`: a losing lot needs cars. */
+export const NAZMA_EAGER = 0.15
+/** … plus this per point of strength over `OPEN_STRENGTH` (minus under it). */
+export const NAZMA_STRENGTH = 0.002
+/** His top bid spreads this much either way from lot to lot. */
+export const NAZMA_JITTER = 0.03
+/** The share of lots he sits out. */
+export const NAZMA_SKIP = 0.4
+const NAZMA_SEED = 47_000
+
+/** Nazma at the auction: his lot's name, and his top bid as a share of a lot's wholesale value. */
+export interface RivalBidder {
+  name: string
+  eager: number
+}
+
+/**
+ * Nazma as a bidder while his lot is open: `NAZMA_TOP`, raised by
+ * `NAZMA_EAGER` × his `desperation` and by his strength over his opening
+ * strength. Null while he isn't open.
+ */
+export function rivalBidder(rival: Rival): RivalBidder | null {
+  if (rival.status !== 'open') return null
+  const strength = (rival.strength - OPEN_STRENGTH) * NAZMA_STRENGTH
+  return { name: rival.name, eager: NAZMA_TOP + NAZMA_EAGER * desperation(rival) + strength }
+}
+
+/**
+ * Nazma's top bid on `lot` worth `value`, or null on a lot he sits out
+ * (`NAZMA_SKIP`) or his own (a car he stole). Seeded by the lot, so the
+ * dealers' bids roll as they would without him.
+ */
+export function nazmaMax(lot: Lot, value: number, nazma: RivalBidder): number | null {
+  if (lot.stolen) return null
+  const rng = createRng(hashSeed(lot.id) + NAZMA_SEED)
+  if (rng.next() < NAZMA_SKIP) return null
+  const top = nazma.eager + (rng.next() * 2 - 1) * NAZMA_JITTER
+  return Math.round((value * top) / 10) * 10
+}
 
 /** The trade's other dealers at the auction. */
 export const DEALER_NAMES = [
@@ -59,6 +104,8 @@ export interface LotResult {
   proxy?: true
   /** One of our consigned cars stopped under its floor: not sold, `price` the high bid. */
   short?: true
+  /** Nazma bought it, for his lot. */
+  rival?: true
 }
 
 /** The run on auction day. */
@@ -99,19 +146,29 @@ export function openingBid(lot: Lot, day: number): number {
 
 /**
  * The dealers bidding on `lot`: three to five, each with a top bid spread
- * around its wholesale value (`BIDDER_TOP`) and scaled by `heat`.
+ * around its wholesale value (`BIDDER_TOP`) and scaled by `heat` (and by
+ * `SLOW_LOT_HEAT` on a slow lot), and Nazma (`nazma`) unless he sits it out.
  */
-export function bidderMaxes(lot: Lot, day: number, rng: Rng, heat = 1): Bidder[] {
+export function bidderMaxes(
+  lot: Lot,
+  day: number,
+  rng: Rng,
+  heat = 1,
+  nazma: RivalBidder | null = null,
+): Bidder[] {
   // The trade bids on the sheet: nobody at the sale knows the true condition.
   const value = lotValue(lot, day)
+  const keen = heat * (isSlowLot(lot) ? SLOW_LOT_HEAT : 1)
   const names = [...DEALER_NAMES]
   const count = rng.int(BIDDERS.min, BIDDERS.max)
   const out: Bidder[] = []
   for (let i = 0; i < count; i++) {
     const name = names.splice(rng.int(0, names.length - 1), 1)[0]
     const top = BIDDER_TOP.low + rng.next() * (BIDDER_TOP.high - BIDDER_TOP.low)
-    out.push({ id: `dealer-${i}`, name, max: Math.round((value * top * heat) / 10) * 10 })
+    out.push({ id: `dealer-${i}`, name, max: Math.round((value * top * keen) / 10) * 10 })
   }
+  const his = nazma && nazmaMax(lot, value, nazma)
+  if (his) out.push({ id: RIVAL_BIDDER, name: nazma.name, max: his })
   return out
 }
 
@@ -139,6 +196,7 @@ function onBlock(
   day: number,
   rng: Rng,
   heat: number,
+  nazma: RivalBidder | null,
 ): AuctionState {
   let i = index
   while (i < lots.length && taken.includes(lots[i].id)) i++
@@ -151,7 +209,7 @@ function onBlock(
     proxy: false,
     call: 'open',
     quiet: 0,
-    bidders: bidderMaxes(lots[i], day, rng, heat),
+    bidders: bidderMaxes(lots[i], day, rng, heat, nazma),
   }
 }
 
@@ -164,6 +222,8 @@ export interface RunContext {
   rng: Rng
   /** Scales the dealers' top bids. */
   heat?: number
+  /** Nazma, bidding while his lot is open. */
+  nazma?: RivalBidder | null
   /**
    * Whether the used-car manager bids `bid` on lot `lotId` for the
    * dealership (up to the player's max bid, while they're at the auction).
@@ -185,7 +245,7 @@ export function startAuction(minute: number, ctx: RunContext): AuctionState {
     results: [],
     over: false,
   }
-  return onBlock(empty, 0, ctx.lots, ctx.taken, ctx.day, ctx.rng, ctx.heat ?? 1)
+  return onBlock(empty, 0, ctx.lots, ctx.taken, ctx.day, ctx.rng, ctx.heat ?? 1, ctx.nazma ?? null)
 }
 
 const NEXT_CALL: Record<Exclude<Call, 'sold'>, Call> = {
@@ -214,6 +274,7 @@ function hammer(state: AuctionState, lots: readonly Lot[]): AuctionState {
     buyer,
     ...(buyer === PLAYER_ID && state.proxy && { proxy: true as const }),
     ...(short && { short: true as const }),
+    ...(buyer !== null && state.high === RIVAL_BIDDER && { rival: true as const }),
   }
   return { ...state, call: 'sold', quiet: 0, results: [...state.results, result] }
 }
@@ -228,7 +289,8 @@ function hammer(state: AuctionState, lots: readonly Lot[]): AuctionState {
 function beat(state: AuctionState, ctx: RunContext): AuctionState {
   if (state.over) return state
   if (state.call === 'sold') {
-    return onBlock(state, state.lotIndex + 1, ctx.lots, ctx.taken, ctx.day, ctx.rng, ctx.heat ?? 1)
+    const { lots, taken, day, rng, heat = 1, nazma = null } = ctx
+    return onBlock(state, state.lotIndex + 1, lots, taken, day, rng, heat, nazma)
   }
   const bid = nextBid(state)
   if (state.high !== PLAYER_ID && ctx.proxy?.(ctx.lots[state.lotIndex].id, bid)) {
