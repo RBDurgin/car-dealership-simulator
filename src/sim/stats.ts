@@ -104,6 +104,8 @@ export interface EmployeeTotal {
   calls: number
   bookings: number
   chases: number
+  inspections: number
+  buys: number
 }
 
 export function emptyEmployeeTotal(): EmployeeTotal {
@@ -121,6 +123,8 @@ export function emptyEmployeeTotal(): EmployeeTotal {
     calls: 0,
     bookings: 0,
     chases: 0,
+    inspections: 0,
+    buys: 0,
   }
 }
 
@@ -135,6 +139,8 @@ const TOTAL_COUNTS = [
   'calls',
   'bookings',
   'chases',
+  'inspections',
+  'buys',
 ] as const satisfies readonly (keyof EmployeeTotal & WorkCount)[]
 
 /** The counts an employee page shows for each role, after days worked and experience. */
@@ -146,6 +152,7 @@ export const ROLE_TOTALS: Record<Role, readonly (keyof EmployeeTotal)[]> = {
   security: ['chases'],
   mechanic: ['jobs'],
   advisor: ['checkIns', 'findings'],
+  buyer: ['inspections', 'buys'],
 }
 
 export interface Lifetime {

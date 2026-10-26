@@ -6,7 +6,13 @@ import { GUARD_PATROL_TILES, GUEST_CHAIR_ID, patrolTiles, SALES_DESKS } from './
 import { createRng } from './rng'
 import { wageFor, type Employee, type Role } from './staff'
 import { newDrive } from './testDrive'
+import { auctionDayOf, runList } from './auction'
+import { AUCTION_END } from './bidding'
 import {
+  atAuction,
+  BUYER_LEAVE,
+  nextBuyerTask,
+  proxyBuyer,
   BREAK_WINDOWS,
   breakMinute,
   breakPart,
@@ -600,5 +606,61 @@ describe('breaks', () => {
     expect(wantsBreak({ ...sam, status: 'arriving' }, at(late))).toBeNull()
     expect(wantsBreak({ ...sam, quitting: true }, at(late))).toBeNull()
     expect(wantsBreak({ ...sam, fired: true }, at(late))).toBeNull()
+  })
+})
+
+describe('the used-car manager', () => {
+  const WEDNESDAY = 3
+  const lots = runList(WEDNESDAY, { rank: 'main-street', tier: 'bronze' })
+  const buyer = staff('uc', 'buyer')
+  const ctx = (day: number, minute: number, inspected: string[] = [], runOver = false) => ({
+    day,
+    minute,
+    open: true,
+    lots,
+    inspected: inspected.map((lotId) => ({ lotId })),
+    runOver,
+  })
+
+  it('inspects the run list the day before the auction, lot by lot', () => {
+    expect(auctionDayOf(WEDNESDAY - 1)).toBe(WEDNESDAY)
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY - 1, 600))).toEqual({
+      kind: 'inspect',
+      lotId: lots[0].id,
+    })
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY - 1, 600, [lots[0].id]))).toEqual({
+      kind: 'inspect',
+      lotId: lots[1].id,
+    })
+    const all = lots.map((l) => l.id)
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY - 1, 600, all))).toEqual({ kind: 'idle' })
+    // Other days, nothing to look over.
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY - 2, 600))).toEqual({ kind: 'idle' })
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY + 1, 600))).toEqual({ kind: 'idle' })
+  })
+
+  it('finishes inspecting on auction morning, then is away for the run', () => {
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY, BUYER_LEAVE - 1)).kind).toBe('inspect')
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY, BUYER_LEAVE)).kind).toBe('auction')
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY, AUCTION_END - 1)).kind).toBe('auction')
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY, AUCTION_END)).kind).toBe('idle')
+    // Back as soon as the run is over.
+    expect(nextBuyerTask(buyer, ctx(WEDNESDAY, BUYER_LEAVE + 60, [], true)).kind).toBe('idle')
+    expect(atAuction(WEDNESDAY + 7, BUYER_LEAVE, false)).toBe(true)
+    expect(atAuction(WEDNESDAY + 1, BUYER_LEAVE, false)).toBe(false)
+  })
+
+  it('does nothing until the auction is open, or once let go', () => {
+    expect(nextBuyerTask(buyer, { ...ctx(WEDNESDAY, BUYER_LEAVE), open: false }).kind).toBe('idle')
+    expect(nextBuyerTask({ ...buyer, fired: true }, ctx(WEDNESDAY, BUYER_LEAVE)).kind).toBe('idle')
+  })
+
+  it('bids for the dealership only while at work and at the auction', () => {
+    expect(proxyBuyer([sam, buyer], WEDNESDAY, BUYER_LEAVE + 30, false)).toBe(buyer)
+    expect(proxyBuyer([sam, buyer], WEDNESDAY, BUYER_LEAVE + 30, true)).toBeNull()
+    expect(proxyBuyer([sam, buyer], WEDNESDAY - 1, BUYER_LEAVE + 30, false)).toBeNull()
+    expect(proxyBuyer([sam], WEDNESDAY, BUYER_LEAVE + 30, false)).toBeNull()
+    const off = { ...buyer, status: 'off' as const }
+    expect(proxyBuyer([off], WEDNESDAY, BUYER_LEAVE + 30, false)).toBeNull()
   })
 })

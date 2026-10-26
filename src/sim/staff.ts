@@ -30,7 +30,7 @@ import { createRng, type Rng } from './rng'
  * `quitting` until kept with a raise; at `close` they walk out for good.
  */
 export type Role =
-  'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic' | 'advisor'
+  'sales' | 'receptionist' | 'finance' | 'porter' | 'security' | 'mechanic' | 'advisor' | 'buyer'
 
 export const ROLES: readonly Role[] = [
   'sales',
@@ -40,6 +40,7 @@ export const ROLES: readonly Role[] = [
   'security',
   'mechanic',
   'advisor',
+  'buyer',
 ]
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -50,6 +51,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   security: 'Security guard',
   mechanic: 'Mechanic',
   advisor: 'Service advisor',
+  buyer: 'Used-car manager',
 }
 const ROLE_PLURALS: Record<Role, string> = {
   sales: 'salespeople',
@@ -59,6 +61,7 @@ const ROLE_PLURALS: Record<Role, string> = {
   security: 'security guards',
   mechanic: 'mechanics',
   advisor: 'service advisors',
+  buyer: 'used-car managers',
 }
 /** What each role does, for applicants in the staff panel. */
 export const ROLE_BLURBS: Record<Role, string> = {
@@ -69,6 +72,8 @@ export const ROLE_BLURBS: Record<Role, string> = {
   security: 'Patrols the lot, chases off Nazma and makes his visits rarer.',
   mechanic: 'Works a bay in the service garage. Skill sets how fast.',
   advisor: "Checks service clients in at the garage counter, so you don't have to.",
+  buyer:
+    'Inspects the auction’s run list the day before, and bids your max bids at the auction while you work the floor.',
 }
 /** Short label for the badge over their head. */
 export const ROLE_BADGES: Record<Role, string> = {
@@ -79,11 +84,13 @@ export const ROLE_BADGES: Record<Role, string> = {
   security: 'Security',
   mechanic: 'Mechanic',
   advisor: 'Service',
+  buyer: 'Used cars',
 }
 
 /**
- * Most of each role on the payroll at once, before the showroom wing and the
- * garage. No mechanics or service advisor until there's a garage to work in.
+ * Most of each role on the payroll at once, before the showroom wing, the
+ * garage and the auction. No mechanics or service advisor until there's a
+ * garage to work in, and no used-car manager until the auction is open.
  */
 export const ROLE_LIMITS: Record<Role, number> = {
   sales: 2,
@@ -93,6 +100,7 @@ export const ROLE_LIMITS: Record<Role, number> = {
   security: 1,
   mechanic: 0,
   advisor: 0,
+  buyer: 0,
 }
 
 /** With the showroom wing up: a desk for each of 4 salespeople, and 2 porters for the bigger lot. */
@@ -100,13 +108,23 @@ const WING_LIMITS: Partial<Record<Role, number>> = { sales: 4, porter: 2 }
 
 /**
  * Most of each role on the payroll at once with the `expansions` that are up:
- * a mechanic per bay, and a service advisor once there's a garage.
+ * a mechanic per bay, a service advisor once there's a garage, and a
+ * used-car manager once the `auction` is open to the dealership.
  */
-export function roleLimits(expansions: readonly ExpansionId[] = []): Record<Role, number> {
+export function roleLimits(
+  expansions: readonly ExpansionId[] = [],
+  auction = false,
+): Record<Role, number> {
   const wing = expansions.includes('showroom-wing')
   const bays = serviceBays(expansions).length
-  if (!wing && !bays) return ROLE_LIMITS
-  return { ...ROLE_LIMITS, ...(wing && WING_LIMITS), mechanic: bays, advisor: bays > 0 ? 1 : 0 }
+  if (!wing && !bays && !auction) return ROLE_LIMITS
+  return {
+    ...ROLE_LIMITS,
+    ...(wing && WING_LIMITS),
+    mechanic: bays,
+    advisor: bays > 0 ? 1 : 0,
+    buyer: auction ? 1 : 0,
+  }
 }
 
 /**
@@ -121,6 +139,7 @@ export const POSTS: Record<Role, string | null> = {
   security: null,
   mechanic: null,
   advisor: SERVICE_CHAIR_ID,
+  buyer: null,
 }
 
 export type StaffStatus = 'off' | 'arriving' | 'atPost' | 'leaving'
@@ -206,6 +225,7 @@ const WAGES: Record<Role, { base: number; perSkill: number }> = {
   security: { base: 80, perSkill: 20 },
   mechanic: { base: 100, perSkill: 30 },
   advisor: { base: 80, perSkill: 25 },
+  buyer: { base: 90, perSkill: 25 },
 }
 
 /** Share of a sale's gross profit (price less cost) a salesperson earns for making it. */
@@ -232,6 +252,8 @@ export const SALES_SIGN_SECONDS = 6
 export const ADVISOR_CHECK_IN_SECONDS = 4
 /** Game seconds an average service advisor takes to talk a client through extra work. */
 export const ADVISOR_CALL_SECONDS = 6
+/** Game seconds an average used-car manager takes to look over a lot on the run list. */
+export const BUYER_INSPECT_SECONDS = 10
 /** Game seconds an average lot porter takes to wash a car. */
 export const PORTER_WASH_SECONDS = 8
 /** Each skill level above or below average takes this much off a task's time or adds it on. */
@@ -331,17 +353,19 @@ const GROWTH_SEED = 41_000
 /**
  * The day's applicants: one for each role in random order, sometimes plus one
  * more of any role, so every role can be filled on any day. Only roles that
- * can be hired with the `expansions` up apply (no mechanics without a garage),
- * so the rolls are the same as before there were any. Their potentials come
- * from `growth`, so the rest of each applicant is rolled as before.
+ * can be hired with the `expansions` up (no mechanics without a garage) and
+ * the `auction` open apply, so the rolls are the same as before there were
+ * any. Their potentials come from `growth`, so the rest of each applicant is
+ * rolled as before.
  */
 export function generateCandidates(
   rng: Rng,
   day: number,
   expansions: readonly ExpansionId[] = [],
   growth: Rng = createRng(GROWTH_SEED + day),
+  auction = false,
 ): Employee[] {
-  const limits = roleLimits(expansions)
+  const limits = roleLimits(expansions, auction)
   const open = ROLES.filter((r) => limits[r] > 0)
   const roles = [...open]
   for (let i = roles.length - 1; i > 0; i--) {
@@ -385,16 +409,21 @@ export function isBusy(_employee: Employee): boolean {
   return false
 }
 
-/** Why another `role` can't be hired with the `expansions` up, or null if they can. */
+/**
+ * Why another `role` can't be hired with the `expansions` up and the
+ * `auction` open or not, or null if they can.
+ */
 export function canHire(
   roster: readonly Employee[],
   role: Role,
   expansions: readonly ExpansionId[] = [],
+  auction = false,
 ): string | null {
   const count = roster.filter((e) => e.role === role && !e.fired).length
-  const limit = roleLimits(expansions)[role]
+  const limit = roleLimits(expansions, auction)[role]
   if (count < limit) return null
-  // Only the garage's staff need somewhere to work before they can be hired.
+  // Only the garage's staff and the used-car manager need something open first.
+  if (limit === 0 && role === 'buyer') return 'Hired once the dealer auction is open to you.'
   if (limit === 0) return 'Build a service garage first.'
   return limit === 1
     ? `You already have a ${ROLE_LABELS[role].toLowerCase()}.`
@@ -443,6 +472,11 @@ export function financeOnDuty(roster: readonly Employee[]): Employee | null {
       (e) => e.role === 'finance' && !e.fired && (e.status === 'arriving' || e.status === 'atPost'),
     ) ?? null
   )
+}
+
+/** The used-car manager on the payroll (not let go), or null. */
+export function usedCarManager(roster: readonly Employee[]): Employee | null {
+  return roster.find((e) => e.role === 'buyer' && !e.fired) ?? null
 }
 
 /**

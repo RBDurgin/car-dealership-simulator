@@ -69,6 +69,7 @@ const SAVED_AFTER_CLOSING = [
   'clientPerks',
   'appreciation',
   'won',
+  'auctionBids',
 ] as const
 
 /** Whether the day is over and payroll paid, so the day can be saved. */
@@ -79,7 +80,7 @@ function settledDay(s: GameState): boolean {
 
 /**
  * Saves whenever the day is over and something worth keeping changes: once when
- * payroll is paid, then again for any hiring, firing, ordering, advertising, improving, changing the service settings or the client book's levers from the day summary
+ * payroll is paid, then again for any hiring, firing, ordering, advertising, improving, changing the service settings, the client book's levers or the auction's max bids from the day summary
  * (or a tip shown or an achievement earned after closing, or Keep playing on the win screen).
  * Does nothing else until the day is settled.
  */

@@ -593,6 +593,16 @@ export const UPDATES: readonly Update[] = [
       'The morning after, you hear about any car that came in worse than its grade.',
     ],
   },
+  {
+    id: 54,
+    phase: '22',
+    title: 'The used-car manager',
+    items: [
+      'Once the auction is open, hire a used-car manager. They work from the new kiosk on the lot.',
+      'They inspect the whole run list the day before the auction, for free.',
+      'Set a max bid on any lot on the Auction tab: they go to the auction and bid it for you while you work the floor.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

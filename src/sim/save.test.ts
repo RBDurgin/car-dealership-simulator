@@ -120,6 +120,7 @@ const source = () => ({
   // As a v26 save upgrades, so the older upgrades compare equal.
   achievements: [] as EarnedAchievement[],
   eotm: [],
+  auctionBids: [],
   // As a v27 save upgrades.
   dealershipName: DEFAULT_DEALERSHIP_NAME,
 })
@@ -804,6 +805,53 @@ describe('save data', () => {
     expect(
       parseSave({ ...save, lifetime: { ...lifetime, byEmployee: { x: { days: 1 } } } }),
     ).toBeNull()
+  })
+
+  it('keeps max bids on coming auctions, and upgrades a version 38 save with none', () => {
+    const bids = [
+      { lotId: 'lot-3-1', auctionDay: 3, max: 6_000 },
+      { lotId: 'lot-10-2', auctionDay: 10, max: 4_500 },
+    ]
+    const lifetime: Lifetime = {
+      ...emptyLifetime(),
+      byEmployee: {
+        'staff-1-1': { ...emptyEmployeeTotal(), days: 12, inspections: 20, buys: 3 },
+      },
+    }
+    // Saved on day 2: both auctions are still to come.
+    const save = createSave(
+      { ...source(), clock: { day: 2, minute: CLOSE_MINUTE }, auctionBids: bids, lifetime },
+      123,
+    )
+    expect(save.auctionBids).toEqual(bids)
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save)
+    // Saved the night of the first: its bid has had its run.
+    const later = createSave({ ...source(), auctionBids: bids }, 123)
+    expect(later.auctionBids).toEqual([bids[1]])
+    expect(
+      parseSave({ ...save, auctionBids: [{ lotId: 'lot-3-1', auctionDay: 3, max: 0 }] }),
+    ).toBeNull()
+
+    const { auctionBids: _, ...old } = save
+    const oldTotal = { ...emptyEmployeeTotal(), days: 12 } as Record<string, number>
+    delete oldTotal.inspections
+    delete oldTotal.buys
+    const upgraded = parseSave(
+      JSON.parse(
+        JSON.stringify({
+          ...old,
+          version: 38,
+          lifetime: { ...lifetime, byEmployee: { 'staff-1-1': oldTotal } },
+        }),
+      ),
+    )
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.auctionBids).toEqual([])
+    expect(upgraded?.lifetime.byEmployee['staff-1-1']).toEqual({
+      ...emptyEmployeeTotal(),
+      days: 12,
+    })
+    expect(parseSave({ ...old })).toBeNull()
   })
 
   it('keeps praise, the month’s experience and Employees of the Month, and upgrades a version 36 save with none', () => {

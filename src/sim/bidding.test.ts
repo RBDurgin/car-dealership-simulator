@@ -188,6 +188,56 @@ describe('the player', () => {
   })
 })
 
+describe('the used-car manager’s max bid', () => {
+  /** A run with the manager bidding up to `max` on the first lot. */
+  const withMax = (max: number, seed = 4): RunContext => ({
+    ...ctx(seed),
+    proxy: (lotId, bid) => lotId === LOTS[0].id && bid <= max,
+  })
+  const sell = (c: RunContext) =>
+    until(startAuction(AUCTION_START, c), c, (s) => s.results.length > 0)
+
+  it('wins a lot under the max when the dealers stop short of it', () => {
+    const top = Math.max(...startAuction(AUCTION_START, ctx(4)).bidders.map((b) => b.max))
+    const max = top + 5 * bidStep(top)
+    const [result] = sell(withMax(max)).results
+    expect(result).toMatchObject({ lotId: LOTS[0].id, buyer: PLAYER_ID, proxy: true })
+    expect(result.price).toBeLessThanOrEqual(max)
+    expect(result.price).toBeLessThanOrEqual(top + bidStep(top))
+    expect(resultLine(result, formatMoney)).toMatch(/^Yours for \$[\d,]+ \(manager\)$/)
+  })
+
+  it('never goes over the max, and loses to a dealer who will', () => {
+    const run = startAuction(AUCTION_START, ctx(4))
+    const max = run.price + bidStep(run.price)
+    const [result] = sell(withMax(max)).results
+    expect(result.buyer).not.toBe(PLAYER_ID)
+    expect(result.price).toBeGreaterThan(max)
+  })
+
+  it('raises at once when outbid, and not on a lot without a max', () => {
+    const c = withMax(1_000_000)
+    const run = startAuction(AUCTION_START, c)
+    const s = stepAuction({ ...run, high: 'dealer-0' }, run.minute + BEAT_MINUTES, c)
+    expect(s).toMatchObject({
+      high: PLAYER_ID,
+      proxy: true,
+      price: nextBid({ ...run, high: 'dealer-0' }),
+    })
+    // The player's own bid isn't the manager's.
+    expect(playerBid({ ...s, high: 'dealer-0' })!.proxy).toBe(false)
+    // The second lot has no max: the dealers have it.
+    const next = until(s, c, (x) => x.results.length > 1)
+    expect(next.results[1].buyer).not.toBe(PLAYER_ID)
+  })
+
+  it('lets a passed lot go', () => {
+    const c = withMax(1_000_000)
+    const passed = passLot(startAuction(AUCTION_START, c), ctx(4))!
+    expect(passed.results[0].buyer).not.toBe(PLAYER_ID)
+  })
+})
+
 describe('the auctioneer', () => {
   it('speaks on a raise or a call, not on a quiet beat', () => {
     const run = startAuction(AUCTION_START, ctx())

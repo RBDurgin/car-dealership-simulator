@@ -21,6 +21,8 @@ const TOTAL_LABELS: Record<keyof EmployeeTotal, string> = {
   calls: 'Calls made',
   bookings: 'Appointments booked',
   chases: 'Times Nazma was run off',
+  inspections: 'Auction lots inspected',
+  buys: 'Lots won at auction',
 }
 
 /** "March", with the year from year 2 on. */

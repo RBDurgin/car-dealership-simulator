@@ -1,3 +1,4 @@
+import { auctionOpen } from './auction'
 import { calendarOf, DAYS_PER_MONTH, DAYS_PER_WEEK, MONTHS_PER_YEAR } from './calendar'
 import type { Client } from './clients'
 import { netIncome, type DayStats, type Sale } from './deal'
@@ -108,7 +109,7 @@ export interface AchievementState {
     | 'drives'
     | 'huddle'
   >
-  career: Pick<Career, 'sales' | 'soldByModel' | 'rivalsBeaten'>
+  career: Pick<Career, 'sales' | 'soldByModel' | 'rivalsBeaten' | 'rank'>
   lifetime: Pick<Lifetime, 'bySource' | 'bySeller' | 'huddles'>
   clients: readonly Client[]
 }
@@ -276,7 +277,7 @@ function starSeller(s: AchievementState, n: number): boolean {
 
 /** Every role there's room for has someone on the payroll. */
 function fullHouse(s: AchievementState): boolean {
-  const limits = roleLimits(installedExpansions(s.expansions, s.clock.day))
+  const limits = roleLimits(installedExpansions(s.expansions, s.clock.day), auctionOpen(s.career))
   return ROLES.every(
     (r) => limits[r] === 0 || s.roster.some((e) => e.role === r && !e.fired && !e.quitting),
   )

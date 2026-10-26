@@ -9,6 +9,8 @@ import { financeOnDuty, salesDeskOf, type Employee } from './staff'
 import { staffDriveCar } from './testDrive'
 import { seniorSightBonus } from './growth'
 import { hashSeed } from './rng'
+import { auctionDayOf, isAuctionDay, type Inspection, type Lot } from './auction'
+import { AUCTION_END, AUCTION_START } from './bidding'
 
 /**
  * Salespeople this skilled greet browsing customers as soon as they're on the
@@ -377,6 +379,66 @@ export function nextFinding(
         findingBlocker(j, now) === null,
     ) ?? null
   )
+}
+
+/** The used-car manager sets off for the auction this long before the run starts. */
+export const BUYER_LEAVE = AUCTION_START - 30
+
+/**
+ * The used-car manager's next step:
+ * - inspect: look over a lot on this week's run list (at their post), the
+ *   day before the auction, or on the morning before they leave
+ * - auction: away at the auction, from `BUYER_LEAVE` until the run is over
+ * - idle: at their post by the kiosk
+ */
+export type BuyerTask = { kind: 'idle' } | { kind: 'inspect'; lotId: string } | { kind: 'auction' }
+
+/** What the used-car manager's day depends on. */
+export interface BuyerContext {
+  day: number
+  minute: number
+  /** Whether the auction is open to the dealership. */
+  open: boolean
+  /** This week's run list. */
+  lots: readonly Lot[]
+  /** The lots inspected already (by anyone). */
+  inspected: readonly Pick<Inspection, 'lotId'>[]
+  /** Whether today's run is over (or there's none). */
+  runOver: boolean
+}
+
+/** Whether the used-car manager is away at the auction at `minute` of `day`. */
+export function atAuction(day: number, minute: number, runOver: boolean): boolean {
+  return isAuctionDay(day) && minute >= BUYER_LEAVE && minute < AUCTION_END && !runOver
+}
+
+/** Whether employee `e` is a used-car manager at work today (not let go, on the lot). */
+function buyerAtWork(e: Pick<Employee, 'role' | 'fired' | 'status'>): boolean {
+  return e.role === 'buyer' && !e.fired && (e.status === 'arriving' || e.status === 'atPost')
+}
+
+export function nextBuyerTask(e: Employee, ctx: BuyerContext): BuyerTask {
+  if (!ctx.open || !buyerAtWork(e)) return { kind: 'idle' }
+  if (atAuction(ctx.day, ctx.minute, ctx.runOver)) return { kind: 'auction' }
+  const before = auctionDayOf(ctx.day) - 1 === ctx.day
+  const morning = isAuctionDay(ctx.day) && ctx.minute < BUYER_LEAVE
+  if (!before && !morning) return { kind: 'idle' }
+  const lot = ctx.lots.find((l) => !ctx.inspected.some((i) => i.lotId === l.id))
+  return lot ? { kind: 'inspect', lotId: lot.id } : { kind: 'idle' }
+}
+
+/**
+ * The used-car manager bidding for the dealership at `minute` of `day`: at
+ * work today and away at the auction. Null if there's nobody there.
+ */
+export function proxyBuyer(
+  roster: readonly Employee[],
+  day: number,
+  minute: number,
+  runOver: boolean,
+): Employee | null {
+  if (!atAuction(day, minute, runOver)) return null
+  return roster.find(buyerAtWork) ?? null
 }
 
 /** A break taken in the morning or the afternoon: one of each a day at most. */

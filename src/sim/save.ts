@@ -1,4 +1,5 @@
 import { ARCHETYPES } from './archetypes'
+import { liveBids, type AuctionBid } from './auction'
 import { calendarOf, DAYS_PER_WEEK } from './calendar'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
@@ -63,7 +64,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 38
+export const SAVE_VERSION = 39
 
 export interface SaveData {
   version: number
@@ -136,6 +137,8 @@ export interface SaveData {
   achievements: EarnedAchievement[]
   /** Employees of the Month, the latest last (see `sim/growth.ts`). */
   eotm: EotmWin[]
+  /** Max bids on coming auctions' lots, for the used-car manager (see `sim/auction.ts`). */
+  auctionBids: AuctionBid[]
 }
 
 export interface SaveSource {
@@ -172,6 +175,7 @@ export interface SaveSource {
   statsFrom: number
   achievements: EarnedAchievement[]
   eotm: EotmWin[]
+  auctionBids: AuctionBid[]
 }
 
 /**
@@ -223,6 +227,8 @@ export function createSave(s: SaveSource, now: number): SaveData {
     statsFrom: s.statsFrom,
     achievements: s.achievements,
     eotm: s.eotm,
+    // Bids on today's auction have had their run.
+    auctionBids: liveBids(s.auctionBids, s.clock.day + 1),
   }
 }
 
@@ -485,6 +491,24 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
         : raw.lifetime,
     records: isObject(raw.records) ? { ...raw.records, happyStreak: 0 } : raw.records,
   }),
+  // v39: the used-car manager. No max bids set yet, and nobody has inspected
+  // or bought a lot for the dealership.
+  38: (raw) => ({
+    ...raw,
+    auctionBids: [],
+    lifetime:
+      isObject(raw.lifetime) && isObject(raw.lifetime.byEmployee)
+        ? {
+            ...raw.lifetime,
+            byEmployee: Object.fromEntries(
+              Object.entries(raw.lifetime.byEmployee).map(([id, t]) => [
+                id,
+                isObject(t) ? { ...t, inspections: 0, buys: 0 } : t,
+              ]),
+            ),
+          }
+        : raw.lifetime,
+  }),
 }
 
 /** Employee records for an older save, from each salesperson's sales (the player's left out). */
@@ -568,6 +592,7 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Number.isInteger(raw.statsFrom) || (raw.statsFrom as number) < 1) return null
   if (!Array.isArray(raw.achievements) || !raw.achievements.every(isEarned)) return null
   if (!Array.isArray(raw.eotm) || raw.eotm.length > MAX_EOTM || !raw.eotm.every(isEotm)) return null
+  if (!Array.isArray(raw.auctionBids) || !raw.auctionBids.every(isAuctionBid)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
@@ -622,6 +647,16 @@ function isChargeback(v: unknown): boolean {
     CHARGEBACK_KINDS.includes(v.kind) &&
     (v.financeId === null || typeof v.financeId === 'string') &&
     isNumber(v.clawback)
+  )
+}
+
+function isAuctionBid(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.lotId === 'string' &&
+    Number.isInteger(v.auctionDay) &&
+    isNumber(v.max) &&
+    (v.max as number) > 0
   )
 }
 

@@ -8,7 +8,10 @@ import {
   inspectLot,
   isAuctionDay,
   lotValue,
+  maxBidBlocker,
+  maxBidFor,
   winLot,
+  withMaxBid,
 } from '../../sim/auction'
 import {
   AUCTION_END,
@@ -37,9 +40,12 @@ import { emptyMonthSales } from '../../sim/quota'
 import { rankById } from '../../sim/progression'
 import { createRng } from '../../sim/rng'
 import { reservedSlots } from '../../sim/sellers'
+import { seniorInspectScale } from '../../sim/growth'
+import { usedCarManager } from '../../sim/staff'
+import { proxyBuyer } from '../../sim/staffAi'
 import { PLAYER_SKILL } from '../../sim/usedCars'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../../sim/usedCars'
-import { dispatch, notify, type Kit } from '../core'
+import { dispatch, notify, tallyWork, type Kit } from '../core'
 import { orderInvoice } from '../derived'
 import { INVENTORY_SEED, rng } from '../rng'
 import { runListFor } from '../selectors'
@@ -60,6 +66,8 @@ type EconomyKeys =
   | 'devUsedCar'
   | 'buyLot'
   | 'inspectLot'
+  | 'setMaxBid'
+  | 'staffInspect'
   | 'devAuctionBuy'
   | 'tickAuction'
   | 'auctionBid'
@@ -174,7 +182,7 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
         inventory: [...s.inventory, { ...car, cost: roundTo100(stockValue(car, day)! * 0.9) }],
       })
     },
-    buyLot: (lotId, price) => {
+    buyLot: (lotId, price, by) => {
       const s = get()
       const day = s.clock.day
       const lot = runListFor(s).find((l) => l.id === lotId)
@@ -203,9 +211,11 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
           },
         },
       })
+      const manager = by ? s.roster.find((e) => e.id === by) : undefined
+      tallyWork(k, manager?.id, 'buys')
       notify(
         k,
-        `Won the ${win.car.year} ${carName(win.car.model)} at auction for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). It's on the lot tomorrow.`,
+        `${manager ? `${manager.name} won` : 'Won'} the ${win.car.year} ${carName(win.car.model)} at auction for ${formatMoney(win.price)} (+${formatMoney(win.fee)} fee). It's on the lot tomorrow.`,
       )
       return true
     },
@@ -242,6 +252,28 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       )
       return true
     },
+    setMaxBid: (lotId, max) => {
+      const s = get()
+      const lot = runListFor(s).find((l) => l.id === lotId)
+      const blocker = !auctionOpen(s.career)
+        ? `The auction opens at ${rankById(AUCTION_RANK).name}.`
+        : !lot
+          ? 'That lot isn’t in the run.'
+          : maxBidBlocker(lot, s.clock.day, s.auction, !!usedCarManager(s.roster))
+      if (blocker) return notify(k, blocker)
+      const auctionBids = withMaxBid(s.auctionBids, lot!, Math.max(0, Math.round(max)))
+      set({ auctionBids })
+    },
+    staffInspect: (employeeId, lotId) => {
+      const s = get()
+      const e = s.roster.find((x) => x.id === employeeId)
+      const lot = runListFor(s).find((l) => l.id === lotId)
+      if (e?.role !== 'buyer' || e.fired || !lot || !auctionOpen(s.career)) return
+      // Their inspection is the job: no fee, and nothing to add once anyone's done it.
+      if (inspectBlocker(lot, s.clock.day, s.auction, s.inspected, Infinity)) return
+      set({ inspected: [...s.inspected, inspectLot(lot, e.skill, seniorInspectScale(e))] })
+      tallyWork(k, e.id, 'inspections')
+    },
     devAuctionBuy: () => {
       const s = get()
       const lot = runListFor(s).find((l) => !s.auctionWins.some((w) => w.lotId === l.id))
@@ -264,20 +296,32 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
     },
     auctionPass: () => {
       const run = get().auction
+      // The manager lets it go too.
       const next = run && passLot(run, runContext(k))
       if (next) k.batch(() => afterBeats(k, run, next))
     },
   }
 }
 
-/** What stepping today's run needs from the store: the run list, and lots already bought. */
-function runContext(k: Kit): RunContext {
+/**
+ * What stepping today's run needs from the store: the run list, and lots
+ * already bought. With a `minute`, the used-car manager bids the player's max
+ * bids while they're at the auction then, as far as cash and lot space allow.
+ */
+function runContext(k: Kit, minute?: number): RunContext {
   const s = k.get()
+  const manager =
+    minute !== undefined && proxyBuyer(s.roster, s.clock.day, minute, !!s.auction?.over)
   return {
     lots: runListFor(s),
     taken: s.auctionWins.map((w) => w.lotId),
     day: s.clock.day,
     rng: rng.auction,
+    ...(manager &&
+      s.auctionBids.length > 0 && {
+        proxy: (lotId: string, bid: number) =>
+          bid <= maxBidFor(s.auctionBids, lotId) && !bidBlocker(s, bid),
+      }),
   }
 }
 
@@ -292,23 +336,24 @@ export function runAuction(k: Kit, minute: number): void {
   if (!isAuctionDay(s.clock.day) || !auctionOpen(s.career)) return
   if (!s.auction) {
     if (minute < AUCTION_START || minute >= AUCTION_END) return
-    k.set({ auction: startAuction(minute, runContext(k)) })
+    k.set({ auction: startAuction(minute, runContext(k, minute)) })
     notify(k, AUCTION_STARTING)
   }
   const run = k.get().auction!
-  const next = stepAuction(run, minute, runContext(k))
+  const next = stepAuction(run, minute, runContext(k, minute))
   if (next !== run) afterBeats(k, run, next)
 }
 
 /**
  * Stores the run moved on from `prev` to `next`, buying each lot the player
- * won as it's hammered. One that can't be paid for or placed any more falls
- * through, with `buyLot`'s notice saying why.
+ * (or the used-car manager) won as it's hammered. One that can't be paid for
+ * or placed any more falls through, with `buyLot`'s notice saying why.
  */
 function afterBeats(k: Kit, prev: AuctionState, next: AuctionState): void {
   k.set({ auction: next })
+  const by = (proxy?: true) => (proxy ? usedCarManager(k.get().roster)?.id : undefined)
   const fell = newResults(prev, next).filter(
-    (r) => r.buyer === PLAYER_ID && !k.get().buyLot(r.lotId, r.price),
+    (r) => r.buyer === PLAYER_ID && !k.get().buyLot(r.lotId, r.price, by(r.proxy)),
   )
   if (fell.length === 0) return
   const run = k.get().auction!

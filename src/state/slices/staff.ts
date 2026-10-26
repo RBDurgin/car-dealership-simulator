@@ -1,3 +1,4 @@
+import { auctionOpen } from '../../sim/auction'
 import { washCar } from '../../sim/cleanliness'
 import { isClosed } from '../../sim/clock'
 import { chooseTarget, PLAYER_ID, reduceCustomers, type CustomerPhase } from '../../sim/customers'
@@ -80,7 +81,7 @@ export function staffSlice(k: Kit): Pick<GameState, StaffKeys> {
       const s = get()
       const c = s.candidates.find((x) => x.id === id)
       if (!c) return
-      const blocker = canHire(s.roster, c.role, expansionsUp(s))
+      const blocker = canHire(s.roster, c.role, expansionsUp(s), auctionOpen(s.career))
       if (blocker) return notify(k, blocker)
       set({ candidates: s.candidates.filter((x) => x !== c) })
       // Their day off fits round everyone else's; they come in today regardless.

@@ -192,8 +192,8 @@ describe('routes', () => {
 })
 
 describe('test drive routes', () => {
-  // Every space open: the east lot, the wing and the garage up.
-  const grid = createGrid(buildLayout(['east-lot', 'showroom-wing', 'service-bay']))
+  // Every space open: the east lot, the wing and the garage up, and the auction's kiosk.
+  const grid = createGrid(buildLayout(['east-lot', 'showroom-wing', 'service-bay'], true))
   const gate = OPENINGS[2]
   const inRect = (r: Rect, tx: number, tz: number) =>
     tx >= r.tx && tx < r.tx + r.w && tz >= r.tz && tz < r.tz + r.h

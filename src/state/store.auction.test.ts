@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { INSPECT_FEE, lotValue, runList, type Lot } from '../sim/auction'
+import { INSPECT_FEE, lotValue, maxBidFor, runList, type Lot } from '../sim/auction'
 import { AUCTION_END, AUCTION_START, BEAT_MINUTES, nextBid } from '../sim/bidding'
 import { CLOSE_MINUTE, OPEN_MINUTE } from '../sim/clock'
 import { PLAYER_ID } from '../sim/customers'
 import { freeSlots } from '../sim/ordering'
 import { netIncome } from '../sim/deal'
 import { NO_CASH, NO_ROOM } from '../sim/sellers'
+import { createRng } from '../sim/rng'
+import { generateCandidates } from '../sim/staff'
 import { gradeOf } from '../sim/usedCars'
 import { useGame } from './store'
 
@@ -266,5 +268,88 @@ describe('inspection in the store', () => {
     expect(game().notice?.text).toContain(
       `graded ${lot.grade}, arrived ${gradeOf(lot.car.condition)}.`,
     )
+  })
+})
+
+describe('the used-car manager in the store', () => {
+  beforeEach(() => openOn(WEDNESDAY, 'main-street', OPEN_MINUTE))
+
+  /** Hires a used-car manager from today's applicants and has them reach their post. */
+  function hireManager(): string {
+    const day = game().clock.day
+    const candidates = generateCandidates(createRng(day), day, [], undefined, true)
+    useGame.setState({ candidates })
+    const c = candidates.find((x) => x.role === 'buyer')!
+    game().hire(c.id)
+    game().dispatchStaff({ type: 'atPost', id: c.id })
+    return c.id
+  }
+  const tickTo = (minute: number) => {
+    useGame.setState({ arrivals: { minutes: [], sources: [], spawned: 0 } })
+    game().tickClock({ day: game().clock.day, minute })
+  }
+
+  it('is hired only once the auction is open', () => {
+    openOn(WEDNESDAY, 'corner-lot')
+    const candidates = generateCandidates(createRng(1), WEDNESDAY, [], undefined, true)
+    useGame.setState({ candidates })
+    game().hire(candidates.find((x) => x.role === 'buyer')!.id)
+    expect(game().roster).toEqual([])
+    expect(game().notice?.text).toMatch(/auction is open/)
+  })
+
+  it('takes max bids only with a manager, and drops them once the auction has run', () => {
+    game().setMaxBid(firstLot().id, 5_000)
+    expect(game().auctionBids).toEqual([])
+    expect(game().notice?.text).toMatch(/used-car manager/)
+    hireManager()
+    game().setMaxBid(firstLot().id, 5_000)
+    expect(maxBidFor(game().auctionBids, firstLot().id)).toBe(5_000)
+    game().setMaxBid(firstLot().id, 0)
+    expect(game().auctionBids).toEqual([])
+    game().setMaxBid(firstLot().id, 5_000)
+    settle()
+    game().startNextDay()
+    expect(game().auctionBids).toEqual([])
+  })
+
+  it('inspects lots for free, once each, counted as their work', () => {
+    const id = hireManager()
+    game().staffInspect(id, firstLot().id)
+    game().staffInspect(id, firstLot().id)
+    expect(game().inspected.map((i) => i.lotId)).toEqual([firstLot().id])
+    expect(game().cash).toBe(100_000)
+    expect(game().dayStats.staffWork[id].inspections).toBe(1)
+    // Only the manager.
+    game().staffInspect('nobody', runList(WEDNESDAY, { rank: 'main-street', tier: 'bronze' })[1].id)
+    expect(game().inspected).toHaveLength(1)
+  })
+
+  it('wins a lot on its max bid at the auction while the player is busy', () => {
+    const id = hireManager()
+    const lot = firstLot()
+    game().setMaxBid(lot.id, lotValue(lot, WEDNESDAY) * 2)
+    tickTo(AUCTION_START)
+    for (let i = 0; i < 2_000 && game().auction!.results.length === 0; i++) {
+      game().tickAuction(game().auction!.minute + BEAT_MINUTES)
+    }
+    const [result] = game().auction!.results
+    expect(result).toMatchObject({ lotId: lot.id, buyer: PLAYER_ID, proxy: true })
+    expect(game().auctionWins).toEqual([expect.objectContaining({ lotId: lot.id })])
+    expect(game().dayStats.staffWork[id].buys).toBe(1)
+    expect(game().notice?.text).toMatch(/ won the .* at auction/)
+  })
+
+  it('bids nothing without a manager at work', () => {
+    const id = hireManager()
+    const lot = firstLot()
+    game().setMaxBid(lot.id, lotValue(lot, WEDNESDAY) * 2)
+    game().fire(id)
+    tickTo(AUCTION_START)
+    for (let i = 0; i < 2_000 && game().auction!.results.length === 0; i++) {
+      game().tickAuction(game().auction!.minute + BEAT_MINUTES)
+    }
+    expect(game().auction!.results[0].buyer).not.toBe(PLAYER_ID)
+    expect(game().auctionWins).toEqual([])
   })
 })

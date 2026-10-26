@@ -566,6 +566,13 @@ kbd {
 .auction-lots .auction-yours {
   color: #4ade80;
 }
+.auction-lots .auction-max {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+}
 
 /* The lot on the block: the car, the price and call, then Bid and Pass */
 .auction-block {

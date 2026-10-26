@@ -11,7 +11,11 @@ import {
   inspectBlocker,
   inspectLot,
   isAuctionDay,
+  liveBids,
   lotEstimate,
+  lotHasRun,
+  maxBidBlocker,
+  maxBidFor,
   nextAuction,
   readCondition,
   RUN_SIZE,
@@ -23,6 +27,7 @@ import {
   wholesaleValue,
   WHOLESALE_FACTOR,
   winLot,
+  withMaxBid,
 } from './auction'
 import { calendarOf } from './calendar'
 import { emptyCareer } from './progression'
@@ -275,5 +280,51 @@ describe('grades and inspection', () => {
       `The ${carName(lot.car.model)} you bought graded Good, arrived Fair.`,
     )
     expect(surpriseNotice([])).toBeNull()
+  })
+})
+
+describe('max bids', () => {
+  const [first, second] = runList(3, OPEN)
+
+  it('sets, changes and clears a lot’s max bid', () => {
+    const bids = withMaxBid([], first, 6_000)
+    expect(bids).toEqual([{ lotId: first.id, auctionDay: 3, max: 6_000 }])
+    expect(maxBidFor(bids, first.id)).toBe(6_000)
+    expect(maxBidFor(bids, second.id)).toBe(0)
+    const both = withMaxBid(withMaxBid(bids, first, 6_500), second, 4_000)
+    expect(both.map((b) => [b.lotId, b.max])).toEqual([
+      [first.id, 6_500],
+      [second.id, 4_000],
+    ])
+    expect(withMaxBid(both, first, 0)).toEqual([both[1]])
+  })
+
+  it('keeps bids until their auction has run', () => {
+    const bids = withMaxBid([], first, 6_000)
+    expect(liveBids(bids, 3)).toBe(bids)
+    expect(liveBids(bids, 4)).toEqual([])
+  })
+
+  it('needs a manager, and a lot that hasn’t run', () => {
+    expect(maxBidBlocker(first, 1, null, false)).toMatch(/used-car manager/)
+    expect(maxBidBlocker(first, 1, null, true)).toBeNull()
+    expect(maxBidBlocker(second, 3, { lotIndex: 0, over: false }, true)).toBeNull()
+    // On the block, or past.
+    expect(lotHasRun(first, 3, { lotIndex: 0, over: false })).toBe(true)
+    expect(maxBidBlocker(first, 3, { lotIndex: 0, over: false }, true)).toMatch(/Too late/)
+    expect(maxBidBlocker(second, 4, null, true)).toMatch(/Too late/)
+  })
+})
+
+describe('a senior’s closer inspection', () => {
+  it('reads no further over the truth than a plain one', () => {
+    for (const lot of runList(3, OPEN)) {
+      const plain = inspectLot(lot, 5)
+      const close = inspectLot(lot, 5, 0.5)
+      expect(close.reading).toBeGreaterThanOrEqual(lot.car.condition)
+      expect(close.reading - lot.car.condition).toBeLessThanOrEqual(
+        plain.reading - lot.car.condition + 1e-9,
+      )
+    }
   })
 })

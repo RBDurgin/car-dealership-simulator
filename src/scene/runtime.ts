@@ -4,6 +4,7 @@ import { PLAYER_ID } from '../sim/customers'
 import { spotsInUse } from '../sim/driving'
 import { customerInteractable, deskActions, employeeActions, personInteractable } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
+import { auctionOpen } from '../sim/auction'
 import { expansionsUp } from '../sim/expansions'
 import { improvementFootprints, type ImprovementId } from '../sim/improvements'
 import {
@@ -22,6 +23,7 @@ import {
   CUSTOMER_PARKING,
   DESK_CHAIR_ID,
   GUEST_CHAIR_ID,
+  KIOSK_RECT,
   MANAGER_DESK,
   parkedCarRect,
   SALES_DESKS,
@@ -37,15 +39,16 @@ import { groundUp, upNow as upToday } from '../state/selectors'
 import { useGame } from '../state/store'
 import { sameFields, subscribeTo } from '../state/subscribe'
 
-/** Expansions the layout was last built with. */
+/** Expansions the layout was last built with, and whether the auction (its kiosk) was open. */
 let groundNow: ExpansionId[] = expansionsUp(useGame.getState())
+let kioskNow = auctionOpen(useGame.getState().career)
 
 /**
  * The dealership as it stands today. Rebuilt in place (`regrounded`) the
  * morning an expansion goes up; components that draw from it redraw through
  * `useGround`.
  */
-export const layout = buildLayout(groundNow)
+export const layout = buildLayout(groundNow, kioskNow)
 
 // Mutable per-frame state shared between scene components. Deliberately not in the
 // zustand store: these change every frame and must never trigger React renders.
@@ -110,13 +113,21 @@ export const riding: { player: boolean; with: string | null } = { player: false,
  */
 export const driveClock = new Map<string, { left: number; total: number }>()
 
-/** Builds the layout again if the expansions up have changed. True if it did. */
-function regrounded(ground: ExpansionId[]): boolean {
-  if (ground.length === groundNow.length && ground.every((id) => groundNow.includes(id))) {
+/**
+ * Builds the layout again if the expansions up, or whether the auction's
+ * kiosk stands, have changed. True if it did.
+ */
+function regrounded(ground: ExpansionId[], kiosk: boolean): boolean {
+  if (
+    kiosk === kioskNow &&
+    ground.length === groundNow.length &&
+    ground.every((id) => groundNow.includes(id))
+  ) {
     return false
   }
   groundNow = ground
-  Object.assign(layout, buildLayout(ground))
+  kioskNow = kiosk
+  Object.assign(layout, buildLayout(ground, kiosk))
   return true
 }
 
@@ -128,9 +139,13 @@ subscribeTo(
     const up = upToday(s)
     const raised = up.filter((id) => !upNow.includes(id))
     const morning = s.clock.day !== prev.clock.day
-    if (!morning && s.inventory === prev.inventory && raised.length === 0) return
-    // New ground only ever opens up, so nobody needs stepping out of it.
-    const rebuilt = regrounded(groundUp(s))
+    const kiosk = kioskNow
+    const auction = auctionOpen(s.career)
+    if (!morning && s.inventory === prev.inventory && raised.length === 0 && auction === kiosk)
+      return
+    // New ground only ever opens up, so nobody needs stepping out of it. The
+    // kiosk goes up with the rank that opens the auction (stepping the player out, below).
+    const rebuilt = regrounded(groundUp(s), auction)
     if (rebuilt || morning) resetGrid()
     syncWorld(s.inventory, up)
     if (rebuilt) holdSeats()
@@ -143,12 +158,14 @@ subscribeTo(
         .filter((c) => c.status === 'available' && before.get(c.id) !== 'available')
         .map((c) => c.rect),
       ...improvementFootprints(raised),
+      ...(kioskNow && !kiosk ? [KIOSK_RECT] : []),
     ]
     if (added.some((rect) => touches(rect, playerPos))) {
       Object.assign(playerPos, nearestStandable(grid, playerPos))
     }
   },
-  (a, b) => a.clock.day === b.clock.day && sameFields(a, b, ['inventory', 'improvements']),
+  (a, b) =>
+    a.clock.day === b.clock.day && sameFields(a, b, ['inventory', 'improvements', 'career']),
 )
 
 subscribeTo(

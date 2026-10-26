@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildLayout,
+  BUYER_POST_TILES,
+  KIOSK_ID,
+  KIOSK_RECT,
   createGrid,
   CUSTOMER_PARKING,
   DESK_CHAIR_ID,
@@ -295,6 +298,19 @@ describe('the parcel east of the lot', () => {
     expect(sign.facing).toBe(0)
     for (const [tx, tz] of tiles(sign.rect)) expect(zoneAt(layout, tx, tz)).toBe('parcel')
     expect(buildLayout(['east-lot']).props.some((p) => p.model === 'forSaleSign')).toBe(false)
+  })
+
+  it('puts the used-car kiosk on the lot, blocked, only once the auction is open', () => {
+    expect(layout.props.some((p) => p.id === KIOSK_ID)).toBe(false)
+    const open = buildLayout([], true)
+    const kiosk = open.props.find((p) => p.id === KIOSK_ID)!
+    expect(kiosk).toMatchObject({ model: 'kiosk', rect: KIOSK_RECT })
+    const grid = createGrid(open)
+    for (const [tx, tz] of tiles(KIOSK_RECT)) {
+      expect(zoneAt(open, tx, tz)).toBe('asphalt')
+      expect(grid.isWalkable(tx, tz)).toBe(false)
+    }
+    for (const t of BUYER_POST_TILES) expect(grid.isWalkable(t.tx, t.tz)).toBe(true)
   })
 
   it('opens onto the lot once the east lot is bought', () => {

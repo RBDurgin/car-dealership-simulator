@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { AUCTION_WEEKDAY } from './auction'
 import {
+  auctionDuty,
   autoRota,
   countStreaks,
   courseDay,
@@ -159,5 +161,19 @@ describe('courses', () => {
     expect(courseGaps([away, person('receptionist')], MONDAY)).toEqual([])
     expect(courseGaps([away], 10)).toEqual([])
     expect(courseGaps([{ ...away, daysOff: [1] }], MONDAY)).toEqual([])
+  })
+})
+
+describe('the used-car manager', () => {
+  it('is never given the day before the auction or the auction itself off', () => {
+    const busy = [person('receptionist'), person('finance'), person('porter'), person('security')]
+    const roster = autoRota([...busy, person('buyer')])
+    const buyer = roster[roster.length - 1]
+    expect(buyer.daysOff).toHaveLength(1)
+    for (const w of [AUCTION_WEEKDAY - 1, AUCTION_WEEKDAY]) {
+      expect(auctionDuty(w)).toBe(true)
+      expect(buyer.daysOff).not.toContain(w)
+      expect(rotaForHire(busy, { role: 'buyer' })).not.toContain(w)
+    }
   })
 })

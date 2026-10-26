@@ -55,6 +55,8 @@ export interface LotResult {
   buyer: string | null
   /** The player won it but couldn't pay for or place it any more. */
   fell?: true
+  /** Won on the used-car manager's bid (the player's max bid). */
+  proxy?: true
 }
 
 /** The run on auction day. */
@@ -67,6 +69,8 @@ export interface AuctionState {
   price: number
   /** Who holds the high bid: `PLAYER_ID`, a bidder's id, or null. */
   high: string | null
+  /** The dealership's high bid was the used-car manager's, not the player's. */
+  proxy: boolean
   call: Call
   /** Beats since the last raise or call. */
   quiet: number
@@ -142,6 +146,7 @@ function onBlock(
     lotIndex: i,
     price: openingBid(lots[i], day),
     high: null,
+    proxy: false,
     call: 'open',
     quiet: 0,
     bidders: bidderMaxes(lots[i], day, rng, heat),
@@ -157,6 +162,11 @@ export interface RunContext {
   rng: Rng
   /** Scales the dealers' top bids. */
   heat?: number
+  /**
+   * Whether the used-car manager bids `bid` on lot `lotId` for the
+   * dealership (up to the player's max bid, while they're at the auction).
+   */
+  proxy?: (lotId: string, bid: number) => boolean
 }
 
 /** The run at `minute` with the first lot on the block. */
@@ -166,6 +176,7 @@ export function startAuction(minute: number, ctx: RunContext): AuctionState {
     lotIndex: 0,
     price: 0,
     high: null,
+    proxy: false,
     call: 'open',
     quiet: 0,
     bidders: [],
@@ -193,15 +204,17 @@ function hammer(state: AuctionState, lots: readonly Lot[]): AuctionState {
     lotId: lots[state.lotIndex].id,
     price: state.high === null ? 0 : state.price,
     buyer,
+    ...(buyer === PLAYER_ID && state.proxy && { proxy: true as const }),
   }
   return { ...state, call: 'sold', quiet: 0, results: [...state.results, result] }
 }
 
 /**
- * One beat on the block: a dealer still under their top bid may raise
- * (`BID_CHANCE`); otherwise it's a quiet beat, and every `CALL_BEATS` of those
- * the call moves on, selling the lot at `sold`. The beat after a sale puts
- * the next lot up.
+ * One beat on the block: the used-car manager raises at once for the
+ * dealership while outbid and under the max bid; otherwise a dealer still
+ * under their top bid may raise (`BID_CHANCE`); otherwise it's a quiet beat,
+ * and every `CALL_BEATS` of those the call moves on, selling the lot at
+ * `sold`. The beat after a sale puts the next lot up.
  */
 function beat(state: AuctionState, ctx: RunContext): AuctionState {
   if (state.over) return state
@@ -209,10 +222,13 @@ function beat(state: AuctionState, ctx: RunContext): AuctionState {
     return onBlock(state, state.lotIndex + 1, ctx.lots, ctx.taken, ctx.day, ctx.rng, ctx.heat ?? 1)
   }
   const bid = nextBid(state)
+  if (state.high !== PLAYER_ID && ctx.proxy?.(ctx.lots[state.lotIndex].id, bid)) {
+    return { ...state, price: bid, high: PLAYER_ID, proxy: true, call: 'open', quiet: 0 }
+  }
   const keen = state.bidders.filter((b) => b.id !== state.high && b.max >= bid)
   if (keen.length > 0 && ctx.rng.next() < BID_CHANCE) {
     const by = keen[ctx.rng.int(0, keen.length - 1)]
-    return { ...state, price: bid, high: by.id, call: 'open', quiet: 0 }
+    return { ...state, price: bid, high: by.id, proxy: false, call: 'open', quiet: 0 }
   }
   const quiet = state.quiet + 1
   if (quiet < CALL_BEATS) return { ...state, quiet }
@@ -245,13 +261,14 @@ export function stepAuction(state: AuctionState, minute: number, ctx: RunContext
  */
 export function playerBid(state: AuctionState): AuctionState | null {
   if (!biddingOpen(state) || state.high === PLAYER_ID) return null
-  return { ...state, price: nextBid(state), high: PLAYER_ID, call: 'open', quiet: 0 }
+  return { ...state, price: nextBid(state), high: PLAYER_ID, proxy: false, call: 'open', quiet: 0 }
 }
 
 /**
  * The player passes on the lot on the block: the dealers bid it out among
  * themselves at once, beat by beat (without moving the clock), until it
- * sells. Null while the player holds the high bid or the lot is sold.
+ * sells. Null while the player holds the high bid or the lot is sold. Pass
+ * a `ctx` without a `proxy`, so the manager lets it go too.
  */
 export function passLot(state: AuctionState, ctx: RunContext): AuctionState | null {
   if (!biddingOpen(state) || state.high === PLAYER_ID) return null
@@ -267,11 +284,11 @@ export function newResults(prev: AuctionState | null, next: AuctionState | null)
   return next.results.slice(prev?.results.length ?? 0)
 }
 
-/** "Sold to Lakeside Auto for $9,250", "Yours for $9,250", "No bids". */
+/** "Lakeside Auto, $9,250", "Yours for $9,250" (with "(manager)" on a max bid), "No bids". */
 export function resultLine(r: LotResult, money: (n: number) => string): string {
   if (r.fell) return 'Fell through'
   if (r.buyer === null) return 'No bids'
-  if (r.buyer === PLAYER_ID) return `Yours for ${money(r.price)}`
+  if (r.buyer === PLAYER_ID) return `Yours for ${money(r.price)}${r.proxy ? ' (manager)' : ''}`
   return `${r.buyer}, ${money(r.price)}`
 }
 

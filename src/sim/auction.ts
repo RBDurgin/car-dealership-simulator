@@ -198,12 +198,13 @@ export function readCondition(condition: number, noise: number, u: number): numb
 
 /**
  * Lot `lot` inspected by someone of `skill`: a reading within
- * `appraisalNoise(skill)` × `INSPECT_NOISE_SCALE` of the truth, never rosier
- * than the sheet. Seeded by the lot and the skill, so it reads the same twice.
+ * `appraisalNoise(skill)` × `INSPECT_NOISE_SCALE` (× `scale`, a senior's
+ * closer look) of the truth, never rosier than the sheet. Seeded by the lot
+ * and the skill, so it reads the same twice.
  */
-export function inspectLot(lot: Lot, skill: number): Inspection {
+export function inspectLot(lot: Lot, skill: number, scale = 1): Inspection {
   const u = createRng(hashSeed(lot.id) + skill).next()
-  const noise = appraisalNoise(skill) * INSPECT_NOISE_SCALE
+  const noise = appraisalNoise(skill) * INSPECT_NOISE_SCALE * scale
   const reading = Math.min(lot.reading, readCondition(lot.car.condition, noise, u))
   return {
     lotId: lot.id,
@@ -233,13 +234,65 @@ export function inspectBlocker(
   cash: number,
 ): string | null {
   if (inspected.some((i) => i.lotId === lot.id)) return 'Already inspected.'
-  const auctionDay = auctionDayOf(lot.car.acquiredDay)
-  if (
-    day > auctionDay ||
-    (day === auctionDay && run && (run.over || run.lotIndex >= lot.order - 1))
-  )
-    return 'Too late: that lot has run.'
+  if (lotHasRun(lot, day, run)) return TOO_LATE
   if (cash < INSPECT_FEE) return NO_CASH
+  return null
+}
+
+const TOO_LATE = 'Too late: that lot has run.'
+
+/** Whether `lot` has run by `day` (or is on the block in today's `run`). */
+export function lotHasRun(
+  lot: Lot,
+  day: number,
+  run: { lotIndex: number; over: boolean } | null,
+): boolean {
+  const auctionDay = auctionDayOf(lot.car.acquiredDay)
+  return (
+    day > auctionDay || (day === auctionDay && !!run && (run.over || run.lotIndex >= lot.order - 1))
+  )
+}
+
+/**
+ * The most the used-car manager will bid on a lot for the dealership, set by
+ * the player before it runs. Saved, as it's set before auction day.
+ */
+export interface AuctionBid {
+  lotId: string
+  /** The day of the auction the lot runs in. */
+  auctionDay: number
+  max: number
+}
+
+/** The max bid set on lot `lotId`, or 0 without one. */
+export function maxBidFor(bids: readonly AuctionBid[], lotId: string): number {
+  return bids.find((b) => b.lotId === lotId)?.max ?? 0
+}
+
+/** `bids` for auctions on or after `day` (the same array if none have run). */
+export function liveBids(bids: AuctionBid[], day: number): AuctionBid[] {
+  return bids.every((b) => b.auctionDay >= day) ? bids : bids.filter((b) => b.auctionDay >= day)
+}
+
+/** `bids` with lot `lot`'s max bid set to `max` (cleared at 0 or under). */
+export function withMaxBid(bids: readonly AuctionBid[], lot: Lot, max: number): AuctionBid[] {
+  const rest = bids.filter((b) => b.lotId !== lot.id)
+  if (max <= 0) return rest
+  return [...rest, { lotId: lot.id, auctionDay: auctionDayOf(lot.car.acquiredDay), max }]
+}
+
+/**
+ * Why a max bid can't be set on `lot` on `day`: no used-car manager to bid
+ * it, or the lot has run (or is on the block in `run`). Null if it can.
+ */
+export function maxBidBlocker(
+  lot: Lot,
+  day: number,
+  run: { lotIndex: number; over: boolean } | null,
+  manager: boolean,
+): string | null {
+  if (!manager) return 'Hire a used-car manager to bid for you.'
+  if (lotHasRun(lot, day, run)) return TOO_LATE
   return null
 }
 

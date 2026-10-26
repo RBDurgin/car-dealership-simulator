@@ -22,6 +22,7 @@ import {
 import type { Vec2 } from '../sim/grid'
 import { improvementProps, slotTier, swappedModel } from '../sim/improvements'
 import { availableCars, carProp, type InventoryCar } from '../sim/inventory'
+import { auctionOpen } from '../sim/auction'
 import { calendarOf, monthLabel } from '../sim/calendar'
 import { CAR_MODELS } from '../sim/customers'
 import { MODEL_TIER } from '../sim/franchise'
@@ -72,7 +73,7 @@ const furniture = (
 const SMALL = { shadow: 'receive' } as const
 
 const MODELS: Record<
-  Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone' | 'fridge' | 'plaque'>,
+  Exclude<PropModel, 'sign' | 'forSaleSign' | 'deskPhone' | 'fridge' | 'plaque' | 'kiosk'>,
   ModelDef
 > = {
   sedan: car('sedan'),
@@ -554,6 +555,95 @@ function Fridge() {
   )
 }
 
+/** The kiosk's board: "USED CARS", white on red. */
+function useKioskTexture(): CanvasTexture {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 512
+    canvas.height = 128
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#b8322a'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = 'bold 76px system-ui, sans-serif'
+    ctx.fillText('USED CARS', canvas.width / 2, canvas.height / 2 + 4, canvas.width - 40)
+    const tex = new CanvasTexture(canvas)
+    tex.colorSpace = SRGBColorSpace
+    tex.anisotropy = 8
+    return tex
+  }, [])
+  useEffect(() => () => texture.dispose(), [texture])
+  return texture
+}
+
+const KIOSK_WALL = new MeshStandardMaterial({ color: '#f1efe8', roughness: 0.8 })
+const KIOSK_TRIM = new MeshStandardMaterial({ color: '#b8322a', roughness: 0.6 })
+const KIOSK_GLASS = new MeshStandardMaterial({
+  color: '#9cc3d9',
+  roughness: 0.15,
+  metalness: 0.3,
+  transparent: true,
+  opacity: 0.55,
+})
+const KIOSK_HEIGHT = 2.1
+const KIOSK_COUNTER = 1
+
+/**
+ * The used-car manager's kiosk, made of boxes: a small booth two tiles wide
+ * with a counter and a window on its front (+z), a roof with an overhang and
+ * a "USED CARS" board on top, the same on both faces.
+ */
+function Kiosk({ width }: { width: number }) {
+  const texture = useKioskTexture()
+  const w = width - 0.2
+  const d = 0.8
+  return (
+    <group>
+      {/* Back wall and sides, up to the roof. */}
+      <mesh position={[0, KIOSK_HEIGHT / 2, -d / 2 + 0.05]} material={KIOSK_WALL} castShadow>
+        <boxGeometry args={[w, KIOSK_HEIGHT, 0.1]} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[(side * (w - 0.1)) / 2, KIOSK_HEIGHT / 2, 0]}
+          material={KIOSK_WALL}
+          castShadow
+        >
+          <boxGeometry args={[0.1, KIOSK_HEIGHT, d]} />
+        </mesh>
+      ))}
+      {/* The counter across the front, and the window above it. */}
+      <mesh position={[0, KIOSK_COUNTER / 2, d / 2 - 0.05]} material={KIOSK_WALL} castShadow>
+        <boxGeometry args={[w, KIOSK_COUNTER, 0.1]} />
+      </mesh>
+      <mesh position={[0, KIOSK_COUNTER + 0.02, d / 2]} material={KIOSK_TRIM}>
+        <boxGeometry args={[w + 0.1, 0.05, 0.3]} />
+      </mesh>
+      <mesh position={[0, (KIOSK_COUNTER + KIOSK_HEIGHT) / 2, d / 2 - 0.05]} material={KIOSK_GLASS}>
+        <boxGeometry args={[w - 0.2, KIOSK_HEIGHT - KIOSK_COUNTER - 0.1, 0.03]} />
+      </mesh>
+      {/* The roof, overhanging the counter. */}
+      <mesh position={[0, KIOSK_HEIGHT + 0.05, 0.1]} material={KIOSK_TRIM} castShadow>
+        <boxGeometry args={[w + 0.3, 0.1, d + 0.4]} />
+      </mesh>
+      <mesh position={[0, KIOSK_HEIGHT + 0.35, 0]} material={KIOSK_TRIM} castShadow>
+        <boxGeometry args={[w, 0.5, 0.08]} />
+      </mesh>
+      {[0, Math.PI].map((rot) => (
+        <group key={rot} rotation-y={rot}>
+          <mesh position={[0, KIOSK_HEIGHT + 0.35, 0.041]}>
+            <planeGeometry args={[w - 0.05, 0.46]} />
+            <meshStandardMaterial map={texture} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 /** Employee of the Month's plaque: the latest winner's name and month, gold on wood. */
 function usePlaqueTexture(): CanvasTexture {
   const win = useGame((s) => s.eotm[s.eotm.length - 1] ?? null)
@@ -692,6 +782,8 @@ function PropContent({ prop, cleanliness, condition, turntable, ding }: PropView
         <Fridge />
       ) : prop.model === 'plaque' ? (
         <Plaque />
+      ) : prop.model === 'kiosk' ? (
+        <Kiosk width={turned ? b.h : b.w} />
       ) : (
         <Model
           def={MODELS[prop.model]}
@@ -927,6 +1019,8 @@ export function Props() {
   const up = useUpNow()
   // The For Sale sign comes down when the lot is built, and the wing's furniture goes in.
   const ground = useGround()
+  // The used-car kiosk goes up once the auction is open (scene/runtime rebuilds `layout` first).
+  useGame((s) => auctionOpen(s.career))
   return (
     <>
       {layout.props.map((p) => {

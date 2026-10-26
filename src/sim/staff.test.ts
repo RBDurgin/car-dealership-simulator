@@ -29,6 +29,7 @@ import {
   reduceStaff,
   retentionRaise,
   roleLimits,
+  usedCarManager,
   ROLE_LIMITS,
   ROLES,
   wageFor,
@@ -68,7 +69,13 @@ const hand = (role: Role, over: Partial<Employee> = {}): Employee => ({
 describe('candidates', () => {
   it('offers every role each day, with valid skills, wages and staff models', () => {
     for (let day = 1; day <= 20; day++) {
-      const cands = generateCandidates(createRng(day), day, ['east-lot', 'service-bay'])
+      const cands = generateCandidates(
+        createRng(day),
+        day,
+        ['east-lot', 'service-bay'],
+        undefined,
+        true,
+      )
       expect(cands.length).toBeGreaterThanOrEqual(ROLES.length)
       expect(cands.length).toBeLessThanOrEqual(ROLES.length + 1)
       for (const role of ROLES) expect(cands.some((c) => c.role === role)).toBe(true)
@@ -85,16 +92,30 @@ describe('candidates', () => {
   })
 
   it('offers no garage staff until there is a garage, and rolls the rest as before', () => {
-    const garageRoles = ['mechanic', 'advisor']
+    const laterRoles = ['mechanic', 'advisor', 'buyer']
     for (let day = 1; day <= 20; day++) {
       const cands = generateCandidates(createRng(day), day)
-      expect(cands.some((c) => garageRoles.includes(c.role))).toBe(false)
-      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length - 2)
-      expect(cands.length).toBeLessThanOrEqual(ROLES.length - 1)
+      expect(cands.some((c) => laterRoles.includes(c.role))).toBe(false)
+      expect(cands.length).toBeGreaterThanOrEqual(ROLES.length - 3)
+      expect(cands.length).toBeLessThanOrEqual(ROLES.length - 2)
     }
     expect(generateCandidates(createRng(5), 3, ['east-lot'])).toEqual(
       generateCandidates(createRng(5), 3),
     )
+  })
+
+  it('offers a used-car manager only once the auction is open', () => {
+    expect(roleLimits([]).buyer).toBe(0)
+    expect(roleLimits([], true).buyer).toBe(1)
+    expect(canHire([], 'buyer')).toBe('Hired once the dealer auction is open to you.')
+    expect(canHire([], 'buyer', [], true)).toBeNull()
+    expect(canHire([hand('buyer')], 'buyer', [], true)).toBe('You already have a used-car manager.')
+    for (let day = 1; day <= 20; day++) {
+      const cands = generateCandidates(createRng(day), day, [], undefined, true)
+      expect(cands.some((c) => c.role === 'buyer')).toBe(true)
+    }
+    expect(usedCarManager([hand('buyer', { fired: true })])).toBeNull()
+    expect(usedCarManager([hand('buyer')])?.role).toBe('buyer')
   })
 
   it('allows one mechanic per bay, and none before the garage', () => {

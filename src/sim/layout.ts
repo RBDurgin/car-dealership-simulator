@@ -63,6 +63,19 @@ export function patrolTiles(expansions: readonly ExpansionId[]): Tile[] {
     : GUARD_PATROL_TILES
 }
 
+/**
+ * The used-car manager's kiosk: a little booth on the open asphalt west of
+ * the gate, south of the middle row and clear of the aisle cars drive. It
+ * stands once the dealer auction is open to the dealership.
+ */
+export const KIOSK_ID = 'used-kiosk'
+export const KIOSK_RECT: Rect = { tx: 10, tz: 15, w: 2, h: 1 }
+/** Where the used-car manager stands at the kiosk, in front of its counter. */
+export const BUYER_POST_TILES: Tile[] = [
+  { tx: 10, tz: 16 },
+  { tx: 11, tz: 16 },
+]
+
 /** Where the owner stands on a visit: in the office, by the desk, clear of both chairs. */
 export const OWNER_OFFICE_TILES: Tile[] = [
   { tx: 34, tz: 6 },
@@ -181,6 +194,7 @@ export type PropModel =
   | 'forSaleSign'
   | 'deskPhone'
   | 'fridge'
+  | 'kiosk'
   | 'plaque'
 
 export type CarModel = Extract<
@@ -670,14 +684,17 @@ function forEachTile(r: Rect, fn: (tx: number, tz: number) => void): void {
  */
 const EAST_LOT_PAVING: Rect = { ...PARCEL, tx: PARCEL.tx - 1, w: PARCEL.w + 1 }
 
+const KIOSK: Prop = { id: KIOSK_ID, model: 'kiosk', rect: KIOSK_RECT, facing: 0 }
+
 /**
  * The dealership with the `expansions` that are up. Until the east lot is
  * bought, the parcel is closed off behind its fence with a sign out front;
  * once it is, the parcel and the strip under the fence are asphalt and the
  * fence between the lots opens. The showroom wing then stands on its north
- * side, with its furniture.
+ * side, with its furniture. With the `auction` open, the used-car kiosk
+ * stands on the lot.
  */
-export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
+export function buildLayout(expansions: readonly ExpansionId[] = [], auction = false): Layout {
   const lot = expansions.includes('east-lot')
   const wing = expansions.includes('showroom-wing')
   const garage = lot && expansions.includes('service-bay')
@@ -706,6 +723,7 @@ export function buildLayout(expansions: readonly ExpansionId[] = []): Layout {
   const props = [
     ...fixed,
     ...(lot ? [] : [FOR_SALE_SIGN]),
+    ...(auction ? [KIOSK] : []),
     ...(wing ? WING_PROPS : []),
     ...(garage ? GARAGE_PROPS : []),
   ]

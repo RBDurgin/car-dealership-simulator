@@ -7,12 +7,16 @@ import {
   isAuctionDay,
   lotEstimate,
   lotReading,
+  lotValue,
+  maxBidBlocker,
+  maxBidFor,
   nextAuction,
   type Inspection,
   type Lot,
 } from '../sim/auction'
 import {
   AUCTION_START,
+  bidStep,
   CALL_TEXT,
   lotOnBlock,
   nextBid,
@@ -26,6 +30,8 @@ import { PLAYER_ID } from '../sim/customers'
 import { carName } from '../sim/interactables'
 import { rankById } from '../sim/progression'
 import { NO_CASH } from '../sim/sellers'
+import { usedCarManager } from '../sim/staff'
+import { BUYER_LEAVE } from '../sim/staffAi'
 import { auctionBidBlocker, lotRoom, runListFor } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
@@ -73,7 +79,65 @@ function InspectButton({ lot }: { lot: Lot }) {
   )
 }
 
-function LotRow({ lot, day, won }: { lot: Lot; day: number; won: boolean }) {
+/** The used-car manager's max bid on `lot`, set with − and + by the auction's increment. */
+function MaxBid({ lot, day }: { lot: Lot; day: number }) {
+  const max = useGame((s) => maxBidFor(s.auctionBids, lot.id))
+  const late = useGame((s) => !!maxBidBlocker(lot, s.clock.day, s.auction, true))
+  const inspection = useInspection(lot)
+  if (late) {
+    return max > 0 ? <span className="auction-max muted">Max bid {formatMoney(max)}</span> : null
+  }
+  const set = (n: number) => useGame.getState().setMaxBid(lot.id, n)
+  const value = lotValue(lot, day, inspection)
+  const start = Math.floor(value / bidStep(value)) * bidStep(value)
+  return (
+    <span className="auction-max">
+      <span className="muted">Max bid</span>
+      {max === 0 ? (
+        <button
+          className="btn btn-small"
+          title="Your used-car manager bids up to this for you at the auction"
+          onClick={() => set(start)}
+        >
+          Set
+        </button>
+      ) : (
+        <>
+          <button
+            className="btn btn-small"
+            aria-label="Lower the max bid"
+            onClick={() => set(max - bidStep(max - 1))}
+          >
+            −
+          </button>
+          <b>{formatMoney(max)}</b>
+          <button
+            className="btn btn-small"
+            aria-label="Raise the max bid"
+            onClick={() => set(max + bidStep(max))}
+          >
+            +
+          </button>
+          <button className="btn btn-small" title="No max bid" onClick={() => set(0)}>
+            ✕
+          </button>
+        </>
+      )}
+    </span>
+  )
+}
+
+function LotRow({
+  lot,
+  day,
+  won,
+  manager,
+}: {
+  lot: Lot
+  day: number
+  won: boolean
+  manager: boolean
+}) {
   const inspection = useInspection(lot)
   const { low, high } = lotEstimate(lot, day, inspection)
   return (
@@ -88,6 +152,7 @@ function LotRow({ lot, day, won }: { lot: Lot; day: number; won: boolean }) {
         {won ? 'Bought' : `${formatMoney(low)}–${formatMoney(high).replace('$', '')}`}
       </span>
       {won ? <span /> : <InspectButton lot={lot} />}
+      {manager && !won && <MaxBid lot={lot} day={day} />}
     </li>
   )
 }
@@ -97,6 +162,7 @@ function RunList({ day }: { day: number }) {
   const lots = useGame(runListFor)
   const wins = useGame((s) => s.auctionWins)
   const room = useGame(lotRoom)
+  const manager = useGame((s) => !!usedCarManager(s.roster))
   return (
     <>
       <h3>
@@ -104,7 +170,13 @@ function RunList({ day }: { day: number }) {
       </h3>
       <ul className="auction-lots">
         {lots.map((lot) => (
-          <LotRow key={lot.id} lot={lot} day={day} won={wins.some((w) => w.lotId === lot.id)} />
+          <LotRow
+            key={lot.id}
+            lot={lot}
+            day={day}
+            won={wins.some((w) => w.lotId === lot.id)}
+            manager={manager}
+          />
         ))}
       </ul>
       <NoRoom room={room} />
@@ -120,7 +192,8 @@ function NoRoom({ room }: { room: boolean }) {
 /** "Ridgeway Motors", "You", or the asking price while nobody has bid. */
 function highText(run: AuctionState): string {
   if (run.high === null) return `Asking ${formatMoney(run.price)}`
-  if (run.high === PLAYER_ID) return 'You have the high bid'
+  if (run.high === PLAYER_ID)
+    return run.proxy ? 'Your manager has the high bid' : 'You have the high bid'
   return run.bidders.find((b) => b.id === run.high)?.name ?? 'A dealer'
 }
 
@@ -210,6 +283,7 @@ function LiveAuction({ day }: { day: number }) {
   const run = useGame((s) => s.auction)!
   const lots = useGame(runListFor)
   const room = useGame(lotRoom)
+  const manager = useGame((s) => !!usedCarManager(s.roster))
   const lot = lotOnBlock(run, lots)
   const done = new Set(run.results.map((r) => r.lotId))
   const toCome = lots.slice(run.lotIndex + 1).filter((l) => !done.has(l.id))
@@ -223,7 +297,7 @@ function LiveAuction({ day }: { day: number }) {
           <h3>Still to come</h3>
           <ul className="auction-lots">
             {toCome.map((l) => (
-              <LotRow key={l.id} lot={l} day={day} won={false} />
+              <LotRow key={l.id} lot={l} day={day} won={false} manager={manager} />
             ))}
           </ul>
         </>
@@ -259,6 +333,26 @@ function AuctionDay({ day }: { day: number }) {
       </p>
       <RunList day={day} />
     </>
+  )
+}
+
+/** What the used-car manager does at the auction, or that one can be hired. */
+function ManagerNote() {
+  const name = useGame((s) => usedCarManager(s.roster)?.name ?? null)
+  if (!name) {
+    return (
+      <p className="muted cal-intro">
+        A used-car manager (hired from the Staff panel) inspects the run list for you and bids max
+        bids you set while you work the floor.
+      </p>
+    )
+  }
+  return (
+    <p className="muted cal-intro">
+      {name}, your used-car manager, inspects the run list the day before the auction and, from{' '}
+      {formatTime(BUYER_LEAVE)} until the run is over, bids for any lot with a max bid whenever
+      you&apos;re outbid, up to that max. Bid yourself to go higher.
+    </p>
   )
 }
 
@@ -309,6 +403,7 @@ export function AuctionTab() {
             inspection ({formatMoney(INSPECT_FEE)}, any day the list is up until the lot runs) reads
             it closer and tightens the estimate.
           </p>
+          <ManagerNote />
         </>
       )}
     </>

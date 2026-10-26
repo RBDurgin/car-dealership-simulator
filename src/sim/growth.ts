@@ -49,6 +49,10 @@ export interface WorkTally {
   jobs: number
   /** Times a guard ran Nazma off. */
   chases: number
+  /** Run-list lots a used-car manager looked over. */
+  inspections: number
+  /** Lots a used-car manager won at the auction on a max bid. */
+  buys: number
   /** Shoppers who walked out on a salesperson's offer (no experience, but it hurts morale). */
   lost: number
   /** Jobs of a mechanic's that came back for a redo (likewise). */
@@ -70,6 +74,8 @@ export function emptyTally(): WorkTally {
     bookings: 0,
     jobs: 0,
     chases: 0,
+    inspections: 0,
+    buys: 0,
     lost: 0,
     comebacks: 0,
   }
@@ -97,6 +103,8 @@ export const XP_VALUES: Record<WorkCount, number> = {
   bookings: 2,
   jobs: 3,
   chases: 5,
+  inspections: 1,
+  buys: 3,
   lost: 0,
   comebacks: 0,
 }
@@ -316,6 +324,7 @@ export const TRAINING_FEES: Record<Role, number> = {
   security: 300,
   mechanic: 450,
   advisor: 350,
+  buyer: 350,
 }
 /** × the basic fee for the advanced course. */
 export const ADVANCED_FEE = 2.5
@@ -381,6 +390,7 @@ export const SENIOR_TITLES: Record<Role, string> = {
   security: 'Head of Security',
   mechanic: 'Lead Mechanic',
   advisor: 'Senior Service Advisor',
+  buyer: 'Used Car Director',
 }
 
 /** The small perk each role's senior brings, read through the helpers below. */
@@ -392,6 +402,7 @@ export const SENIOR_PERKS: Record<Role, { value: number; text: string }> = {
   security: { value: 2, text: 'Spots Nazma 2 tiles further off' },
   mechanic: { value: 0.7, text: 'Fewer comebacks (×0.7)' },
   advisor: { value: 0.03, text: 'Sells a little more extra work (+3%)' },
+  buyer: { value: 0.5, text: 'Inspects lots twice as closely' },
 }
 
 /** The role's title for `e`: their Senior title once promoted. */
@@ -420,6 +431,8 @@ export const seniorSightBonus = (e: Perked) => perk(e, 'security', 0)
 export const seniorComebackScale = (e: Perked) => perk(e, 'mechanic', 1)
 /** Added to the odds a senior advisor sells extra work. */
 export const seniorUpsellBonus = (e: Perked) => perk(e, 'advisor', 0)
+/** × how far a senior used-car manager's inspections can read over the truth. */
+export const seniorInspectScale = (e: Perked) => perk(e, 'buyer', 1)
 
 /**
  * Why `e` can't be promoted on `day`: they need the top skill, `SENIOR_DAYS`
@@ -480,6 +493,7 @@ export const ROLE_XP_SCALE: Record<Role, number> = {
   security: 1.6,
   mechanic: 0.8,
   advisor: 0.9,
+  buyer: 1.1,
 }
 
 /** Employee of the Month's cash bonus, paid on the month's last day. */

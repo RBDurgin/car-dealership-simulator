@@ -129,6 +129,8 @@ import {
   stockWins,
   surpriseNotice,
   surprisesOf,
+  liveBids,
+  type AuctionBid,
   type AuctionWin,
   type Inspection,
 } from '../../sim/auction'
@@ -184,6 +186,7 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     purchases: [] as Purchase[],
     auctionWins: [] as AuctionWin[],
     inspected: [] as Inspection[],
+    auctionBids: [] as AuctionBid[],
     auction: null as AuctionState | null,
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
@@ -271,6 +274,7 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           contracts: save.contracts,
           chargebacks: save.chargebacks,
           eotm: save.eotm,
+          auctionBids: save.auctionBids,
         })
         beginDay(k, save.day + 1)
       }),
@@ -676,6 +680,7 @@ function morning(k: Kit, day: number): void {
     auctionWins: [],
     // Inspections hold until their auction has run.
     inspected: s.inspected.filter((i) => i.auctionDay >= day),
+    auctionBids: liveBids(s.auctionBids, day),
     auction: null,
     serviceJobs: [],
     serviceAway: [],
@@ -714,6 +719,7 @@ function morning(k: Kit, day: number): void {
       day,
       installedExpansions(s.expansions, day),
       rng.growth,
+      auctionOpen(s.career),
     ),
     owner,
     nazma,

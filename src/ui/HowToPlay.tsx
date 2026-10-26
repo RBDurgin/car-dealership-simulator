@@ -113,7 +113,7 @@ import {
 } from '../sim/morale'
 import { formatTime } from '../sim/clock'
 import { HUDDLE_MINUTES } from '../sim/interactables'
-import { BREAK_MINUTES, MAX_ON_BREAK } from '../sim/staffAi'
+import { BREAK_MINUTES, BUYER_LEAVE, MAX_ON_BREAK } from '../sim/staffAi'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
@@ -655,6 +655,11 @@ function BusinessTab({ touch, click }: TabProps) {
           <b>Service</b> tab&apos;s send-to-the-shop box ticked, auction cars go to the shop the
           morning after, like any used car you take in.
         </p>
+        <p>
+          With a <b>used-car manager</b> (see the People tab), each lot on the run list gets a{' '}
+          <b>Max bid</b>: they bid it for you at the auction, so you don&apos;t have to watch the
+          run. Bidding yourself still goes higher than the max.
+        </p>
       </section>
       <section>
         <h3>Progress</h3>
@@ -1045,16 +1050,25 @@ function PeopleTab({ touch, click }: TabProps) {
             in, so you don&apos;t have to, and offers clients the extra work the mechanics find. The
             more skilled, the quicker, and the more often clients say yes.
           </li>
+          <li>
+            A <b>used-car manager</b> can be hired once the dealer auction is open to you (
+            {rankById(AUCTION_RANK).name}). They work from the kiosk on the lot. The day before an
+            auction (and on its morning) they look over every lot on the run list for free, the more
+            skilled the closer. Set a <b>max bid</b> on any lot on the Auction tab, and on auction
+            day they leave at {formatTime(BUYER_LEAVE)} and bid it for you whenever you&apos;re
+            outbid, up to that max, while you work the floor. What they win is yours, like any lot.
+            The schedule never gives them Tuesday or Wednesday off.
+          </li>
         </ul>
       </section>
       <section>
         <h3>Growth and raises</h3>
         <p>
           Staff get better with work. Every day they come in, and every sale, signing, wash,
-          check-in, call, job or chase, earns experience, and enough of it raises their skill a
-          star: a steady worker gains a level every three to four weeks. Each hire can only grow so
-          far, shown as hollow stars after their skill (applicants show theirs too), and a bar under
-          their name fills toward the next level.
+          check-in, call, job, chase, auction inspection or auction win, earns experience, and
+          enough of it raises their skill a star: a steady worker gains a level every three to four
+          weeks. Each hire can only grow so far, shown as hollow stars after their skill (applicants
+          show theirs too), and a bar under their name fills toward the next level.
         </p>
         <p>
           A level-up comes with a request for the new level&apos;s wage, shown in the staff panel.{' '}

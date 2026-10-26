@@ -7,7 +7,9 @@ import { hasBuyersInHand } from '../sim/deal'
 import type { Tile, Vec2 } from '../sim/grid'
 import { approachTilesFor, interactableCenter } from '../sim/interactables'
 import { expansionsUp } from '../sim/expansions'
+import { auctionOpen } from '../sim/auction'
 import {
+  BUYER_POST_TILES,
   GARAGE,
   GARAGE_STANDBY_TILES,
   GUARD_PATROL_TILES,
@@ -23,6 +25,7 @@ import { buyBlocker } from '../sim/sellers'
 import {
   ADVISOR_CALL_SECONDS,
   ADVISOR_CHECK_IN_SECONDS,
+  BUYER_INSPECT_SECONDS,
   GUARD_CHASE_SPEED,
   PORTER_WASH_SECONDS,
   postChairId,
@@ -37,6 +40,7 @@ import {
 import { bayCount } from '../sim/service'
 import {
   BREAK_MINUTES,
+  nextBuyerTask,
   nextCheckIn,
   nextFinding,
   nextGuardTask,
@@ -45,11 +49,12 @@ import {
   nextSalesTask,
   wantsBreak,
   type BreakPart,
+  type BuyerTask,
   type SalesTask,
 } from '../sim/staffAi'
 import { CLOSE_MINUTE, DEFAULT_DAY_MS, OPEN_MINUTE } from '../sim/clock'
 import { breakSeats } from '../sim/improvements'
-import { upNow } from '../state/selectors'
+import { runListFor, upNow } from '../state/selectors'
 import { useGame } from '../state/store'
 import { financePaperwork } from '../state/derived'
 import { Character } from './Character'
@@ -113,6 +118,7 @@ function standby(e: Employee): { tiles: Tile[]; faceTo: Vec2 } {
   if (e.role === 'porter') return { tiles: PORTER_STANDBY_TILES, faceTo: LOT_CENTER }
   if (e.role === 'security') return { tiles: GUARD_PATROL_TILES, faceTo: LOT_CENTER }
   if (e.role === 'mechanic') return { tiles: GARAGE_STANDBY_TILES, faceTo: GARAGE_CENTER }
+  if (e.role === 'buyer') return { tiles: BUYER_POST_TILES, faceTo: LOT_CENTER }
   return { tiles: STANDBY_TILES, faceTo: SHOWROOM_CENTER }
 }
 
@@ -129,7 +135,8 @@ interface StaffWalker extends Walker {
   /**
    * Finance: the buyer whose paperwork is under way, and game seconds left on
    * it. The service advisor: the client being checked in, or the job whose
-   * extra work they're offering (`finding:<job id>`).
+   * extra work they're offering (`finding:<job id>`). The used-car manager:
+   * the run-list lot they're looking over.
    */
   paperwork: { customerId: string; left: number } | null
   /**
@@ -143,6 +150,8 @@ interface StaffWalker extends Walker {
   unreachableIds: Set<string>
   /** Out on a test drive in this car: hidden, and off the floor. Null otherwise. */
   away: string | null
+  /** The used-car manager, away at the auction: hidden, and off the lot. */
+  atAuction: boolean
   /** The parts of today they've had a break in. */
   breaks: BreakPart[]
   /** On a break: the break room chair they're headed for or sitting in. Null otherwise. */
@@ -168,6 +177,7 @@ function walkerFor(e: Employee): StaffWalker {
     leg: 0,
     unreachableIds: new Set(),
     away: null,
+    atAuction: false,
     breaks: [],
     rest: null,
   }
@@ -628,6 +638,78 @@ function updateGuard(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.unreachable || w.timer >= PATROL_PAUSE_SECONDS) w.leg++
 }
 
+/** What the used-car manager does next (see `nextBuyerTask`). */
+function buyerTask(e: Employee): BuyerTask {
+  const game = useGame.getState()
+  return nextBuyerTask(e, {
+    day: game.clock.day,
+    minute: game.clock.minute,
+    open: auctionOpen(game.career),
+    lots: runListFor(game),
+    inspected: game.inspected,
+    runOver: !!game.auction?.over,
+  })
+}
+
+/**
+ * The used-car manager off to the auction: out through the gate to the
+ * sidewalk, then away (hidden, and off the lot) until the run is over. The
+ * store has them bidding from `BUYER_LEAVE` whether or not they've got there.
+ */
+function toAuction(e: Employee, w: StaffWalker, seconds: number): void {
+  if (w.atAuction) return
+  const game = useGame.getState()
+  // Straight there on the way in: they've still come to work.
+  if (e.status === 'arriving') {
+    report(w, 'atPost', () => game.dispatchStaff({ type: 'atPost', id: e.id }))
+  }
+  if (w.task !== 'auction') {
+    w.task = 'auction'
+    w.timer = 0
+    w.faceTo = null
+    w.paperwork = null
+    standUp(w)
+    pathTo(w, [w.exit])
+  }
+  walk(w, STAFF_SPEED, seconds, null)
+  if (w.waypoints.length > 0) return
+  w.atAuction = true
+  staffPos.delete(e.id)
+  releaseWalker(e.id)
+}
+
+/** Back from the auction: in from the sidewalk, and back to the kiosk. */
+function backFromAuction(e: Employee, w: StaffWalker): void {
+  w.atAuction = false
+  w.task = null
+  const at = grid.tileToWorld(w.exit.tx, w.exit.tz)
+  w.pos.x = at.x
+  w.pos.z = at.z
+  staffPos.set(e.id, w.pos)
+}
+
+/**
+ * The used-car manager at the kiosk: the day before an auction (and on its
+ * morning) they look over the run list's lots one by one; otherwise they wait there.
+ */
+function updateBuyer(e: Employee, w: StaffWalker, seconds: number, task: BuyerTask): void {
+  if (w.task !== 'post') plan(e, w, 'post')
+  updatePost(e, w, seconds)
+  if (task.kind !== 'inspect') {
+    w.paperwork = null
+    return
+  }
+  if (w.waypoints.length > 0) return
+  if (w.paperwork?.customerId !== task.lotId) {
+    w.paperwork = { customerId: task.lotId, left: workSeconds(BUYER_INSPECT_SECONDS, e) }
+  }
+  w.anim.current = 'interact-right'
+  w.paperwork.left -= seconds
+  if (w.paperwork.left > 0) return
+  w.paperwork = null
+  useGame.getState().staffInspect(e.id, task.lotId)
+}
+
 /** Going to or working from their post, and reporting in on arrival. */
 function updatePost(e: Employee, w: StaffWalker, seconds: number): void {
   if (w.seat) {
@@ -651,7 +733,14 @@ function update(
   }
   // Sent home (closing, or let go) with buyers still in hand: finish them first.
   const leaving = e.status === 'leaving' && !hasBuyersInHand(customers, e.id)
+  const buying = e.role === 'buyer' && !leaving ? buyerTask(e) : null
+  if (buying?.kind === 'auction') {
+    if (w.rest) endBreak(e, w)
+    return toAuction(e, w, seconds)
+  }
+  if (w.atAuction) backFromAuction(e, w)
   if (onBreak(e, w, seconds, customers)) return
+  if (buying) return updateBuyer(e, w, seconds, buying)
   if (e.role === 'sales' && !leaving) return updateSales(e, w, seconds, customers)
   if (e.role === 'porter' && !leaving) return updatePorter(e, w, seconds)
   if (e.role === 'security' && !leaving) return updateGuard(e, w, seconds)
@@ -816,7 +905,8 @@ const live = new Set<string>()
  * (the finance manager signs buyers' paperwork at the office desk, the porter
  * washes the dirtiest cars, the guard patrols the lot and chases off Nazma,
  * mechanics work the garage's bays, the service advisor checks clients in at
- * its counter), and walk
+ * its counter, the used-car manager looks over the auction's run list from
+ * the kiosk and goes to the auction), and walk
  * out at closing (or when fired). Shift changes go to the store;
  * positions stay in the walkers.
  */
@@ -834,8 +924,11 @@ export function Staff() {
     }
     for (const id of walkers.keys()) if (!live.has(id)) removeWalker(id)
     syncGroups(groups, walkers)
-    // Out on a test drive: not drawn.
-    for (const [id, g] of groups) g.visible = !walkers.get(id)?.away
+    // Out on a test drive, or at the auction: not drawn.
+    for (const [id, g] of groups) {
+      const w = walkers.get(id)
+      g.visible = !w?.away && !w?.atAuction
+    }
   })
 
   return (

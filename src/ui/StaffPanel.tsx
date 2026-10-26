@@ -31,6 +31,7 @@ import {
   tiredDays,
   FATIGUE_DAYS,
 } from '../sim/morale'
+import { auctionOpen } from '../sim/auction'
 import { calendarOf, shortDate, weekdayLabel } from '../sim/calendar'
 import {
   COURSE_AHEAD,
@@ -341,6 +342,7 @@ function StaffList() {
   const roster = useGame((s) => s.roster)
   const candidates = useGame((s) => s.candidates)
   const ground = useGame(useShallow(groundUp))
+  const auction = useGame((s) => auctionOpen(s.career))
   const offToday = useGame((s) => s.dayStats.off)
   const day = useGame((s) => s.clock.day)
   const touch = useMediaQuery(COARSE)
@@ -450,7 +452,7 @@ function StaffList() {
           ) : (
             <ul className="staff-list">
               {candidates.map((c) => {
-                const blocker = canHire(roster, c.role, ground)
+                const blocker = canHire(roster, c.role, ground, auction)
                 return (
                   <StaffRow key={c.id} e={c} blurb>
                     <span />

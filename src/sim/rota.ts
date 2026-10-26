@@ -1,4 +1,5 @@
 import { calendarOf, DAYS_PER_WEEK, shortDate, weekdayLabel, WEEKDAY_TRAFFIC } from './calendar'
+import { AUCTION_WEEKDAY } from './auction'
 import { SERVICE_WEEKDAY } from './service'
 import { onCourse, onShift, ROLE_LABELS, type Employee, type Role } from './staff'
 
@@ -17,6 +18,14 @@ const BUSY_TRAFFIC = 1.1
 
 /** The garage's staff, who have the days it's shut off. */
 const SHOP_ROLES: readonly Role[] = ['mechanic', 'advisor']
+
+/**
+ * Whether the used-car manager is never given `weekday` off: the day before
+ * the auction (the run list's inspections) and the auction itself.
+ */
+export function auctionDuty(weekday: number): boolean {
+  return weekday === AUCTION_WEEKDAY - 1 || weekday === AUCTION_WEEKDAY
+}
 
 export const WEEK = Array.from({ length: DAYS_PER_WEEK }, (_, w) => w)
 
@@ -93,6 +102,7 @@ function pickDaysOff(role: Role, count: number, load: number[], roleLoad: number
     let best = -1
     for (const w of QUIET_DAYS) {
       if (picks.includes(w) || roleLoad[w] >= cap) continue
+      if (role === 'buyer' && auctionDuty(w)) continue
       if (
         best < 0 ||
         roleLoad[w] < roleLoad[best] ||

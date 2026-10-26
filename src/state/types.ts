@@ -28,7 +28,7 @@ import type { MonthSales } from '../sim/quota'
 import type { FranchiseTier } from '../sim/franchise'
 import type { Rival } from '../sim/rival'
 import type { SaveData } from '../sim/save'
-import type { AuctionWin, Inspection } from '../sim/auction'
+import type { AuctionBid, AuctionWin, Inspection } from '../sim/auction'
 import type { AuctionState } from '../sim/bidding'
 import type { Purchase } from '../sim/sellers'
 import type {
@@ -129,10 +129,16 @@ export interface GameState {
    */
   auctionWins: AuctionWin[]
   /**
-   * This week's run-list lots the player has had inspected (see
-   * `inspectLot` in `sim/auction.ts`). Kept to the auction day, never saved.
+   * This week's run-list lots inspected, by the player or the used-car
+   * manager (see `inspectLot` in `sim/auction.ts`). Kept to the auction day,
+   * never saved.
    */
   inspected: Inspection[]
+  /**
+   * Max bids the player has set on run-list lots, which the used-car manager
+   * bids at the auction (see `AuctionBid`). Saved; dropped once their auction has run.
+   */
+  auctionBids: AuctionBid[]
   /**
    * Today's live auction (see `sim/bidding.ts`): null until the run starts on
    * auction day, then the lot on the block and the results. Never saved.
@@ -301,12 +307,16 @@ export interface GameState {
   devUsedCar: (canPlace?: (car: InventoryCar) => boolean) => void
   /**
    * Buys lot `lotId` of today's auction for `price` (plus the buyer fee),
-   * holding a lot space until it's stocked tonight. False, with a notice,
-   * when it can't be bought.
+   * holding a lot space until it's stocked tonight; `by` is the used-car
+   * manager who won it on a max bid. False, with a notice, when it can't be bought.
    */
-  buyLot: (lotId: string, price: number) => boolean
+  buyLot: (lotId: string, price: number, by?: string) => boolean
   /** Has run-list lot `lotId` inspected for `INSPECT_FEE`. False, with a notice, when it can't be. */
   inspectLot: (lotId: string) => boolean
+  /** Sets the used-car manager's max bid on run-list lot `lotId` (0 clears it). */
+  setMaxBid: (lotId: string, max: number) => void
+  /** Used-car manager `employeeId` has looked over run-list lot `lotId` (free: it's their job). */
+  staffInspect: (employeeId: string, lotId: string) => void
   /** Dev cheat: buys the first lot still in today's run at its wholesale value. */
   devAuctionBuy: () => void
   /** Steps today's auction to `minute` (between the clock's steps). */
