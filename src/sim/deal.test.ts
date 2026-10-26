@@ -353,8 +353,30 @@ describe('day stats', () => {
       ...emptyStats(),
       sales: [sale(30_000, 27_000), { ...sale(14_000, 11_500), used: true }],
     }
-    expect(grossSplit(stats)).toEqual({ new: 3_000, used: 2_500, fi: 0 })
-    expect(grossSplit(emptyStats())).toEqual({ new: 0, used: 0, fi: 0 })
+    expect(grossSplit(stats)).toEqual({ new: 3_000, used: 2_500, fi: 0, wholesale: 0 })
+    expect(grossSplit(emptyStats())).toEqual({ new: 0, used: 0, fi: 0, wholesale: 0 })
+  })
+
+  it('counts wholesale gross (less run fees) in the split, the total gross and net income', () => {
+    const stats = {
+      ...emptyStats(),
+      wholesale: {
+        sold: [
+          {
+            model: 'sedan' as const,
+            year: 2020,
+            price: 9_000,
+            fee: 240,
+            cost: 10_000,
+            buyer: 'Lakeside Auto',
+          },
+        ],
+        returned: [{ model: 'van' as const, year: 2019, high: 7_000, floor: 8_000, fee: 100 }],
+      },
+    }
+    expect(grossSplit(stats).wholesale).toBe(-1_340)
+    expect(totalGross(stats)).toBe(-1_340)
+    expect(netIncome(stats)).toBe(-1_340)
   })
 
   it('nets gross profit less staff costs, interest, ads and improvements, plus the owner bonus', () => {

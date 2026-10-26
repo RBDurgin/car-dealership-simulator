@@ -29,6 +29,9 @@ import { formatMoney } from './format'
 import { MarketingTab } from './MarketingTab'
 import { UpgradesTab } from './UpgradesTab'
 import { DAILY_DEPRECIATION, isStale, STALE_DAYS, stockValue, usedTag } from '../sim/usedCars'
+import { auctionOpen } from '../sim/auction'
+import { consignmentOf } from '../sim/wholesale'
+import type { Purchase } from '../sim/sellers'
 
 const WHERE = { showroom: 'Showroom', lot: 'Lot' } as const
 
@@ -148,6 +151,59 @@ function OrderRow({ o }: { o: Order }) {
   )
 }
 
+/** "To auction" on a car marked for the next auction. */
+function ToAuction({ carId }: { carId: string }) {
+  const consigned = useGame((s) => !!consignmentOf(s.consigned, carId))
+  return consigned ? <span className="stock-badge stock-stale">To auction</span> : null
+}
+
+/**
+ * Wholesale (mark a used car for the next dealer auction) or Keep (take it
+ * off), once the auction is open to the dealership.
+ */
+function WholesaleButton({ carId }: { carId: string }) {
+  const open = useGame((s) => auctionOpen(s.career))
+  const consigned = useGame((s) => !!consignmentOf(s.consigned, carId))
+  if (!open) return null
+  const game = useGame.getState()
+  return consigned ? (
+    <button
+      className="btn btn-small"
+      title="Keep it: take it off the next auction"
+      onClick={() => game.unconsign(carId)}
+    >
+      Keep
+    </button>
+  ) : (
+    <button
+      className="btn btn-small"
+      title="Send it to the next dealer auction (J for its floor)"
+      onClick={() => game.consign(carId)}
+    >
+      Wholesale
+    </button>
+  )
+}
+
+/** A used car bought today, on the lot tomorrow: it can go straight to the auction. */
+function BoughtRow({ p }: { p: Purchase }) {
+  return (
+    <li className="stock-row">
+      <div className="stock-who">
+        <div className="staff-name">
+          {carName(p.car.model)}
+          <span className="stock-badge stock-used">{usedTag(p.car)}</span>
+        </div>
+        <div className="staff-meta">From {p.sellerName}</div>
+      </div>
+      <div className="staff-wage price">{formatMoney(p.price)}</div>
+      <div className="stock-actions">
+        <WholesaleButton carId={p.id} />
+      </div>
+    </li>
+  )
+}
+
 function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: number }) {
   const short = cash < car.cost
   const rate = useGame(levelTuning).interest
@@ -164,6 +220,8 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
           )}
           {car.used && <span className="stock-badge stock-used">{usedTag(car.used)}</span>}
           {car.status === 'recon' && <span className="stock-badge">In the shop</span>}
+          {car.status === 'auction' && <span className="stock-badge">At the auction</span>}
+          <ToAuction carId={car.id} />
           {isStale(car, day) && (
             <span
               className="stock-badge stock-stale"
@@ -196,6 +254,11 @@ function StockRow({ car, day, cash }: { car: InventoryCar; day: number; cash: nu
           >
             Pay off
           </button>
+        </div>
+      )}
+      {car.used && car.status !== 'auction' && (
+        <div className="stock-actions">
+          <WholesaleButton carId={car.id} />
         </div>
       )}
     </li>
@@ -367,6 +430,16 @@ function StockTab() {
             <OrderRow key={o.id} o={o} />
           ))}
         </ul>
+      )}
+      {purchases.length > 0 && (
+        <>
+          <h3>Bought today</h3>
+          <ul className="staff-list">
+            {purchases.map((p) => (
+              <BoughtRow key={p.id} p={p} />
+            ))}
+          </ul>
+        </>
       )}
       <h3>In stock ({stock.length})</h3>
       {stock.length === 0 ? (

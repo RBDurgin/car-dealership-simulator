@@ -33,6 +33,7 @@ import { daysLeft, quotaLine } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { boughtSpend } from '../sim/sellers'
 import { auctionSpend, surpriseNotice } from '../sim/auction'
+import type { WholesaleStats } from '../sim/wholesale'
 import { levelTuning, useGame } from '../state/store'
 import { SatisfactionChip } from './ClientsTab'
 import { formatMoney } from './format'
@@ -412,6 +413,7 @@ function SummaryPanel() {
               </dd>
             </>
           )}
+          <WholesaleLine wholesale={stats.wholesale} gross={split.wholesale} />
           {stats.drives.taken > 0 && (
             <>
               <dt>Test drives</dt>
@@ -714,5 +716,44 @@ function SummaryPanel() {
         </button>
       </div>
     </div>
+  )
+}
+
+/** Our cars run at the auction today: what sold (price, fee, gross) and what's coming back. */
+function WholesaleLine({ wholesale, gross }: { wholesale: WholesaleStats; gross: number }) {
+  const { sold, returned } = wholesale
+  if (sold.length === 0 && returned.length === 0) return null
+  return (
+    <>
+      <dt>Wholesale</dt>
+      <dd>
+        {sold.length} sold, gross{' '}
+        <span className={gross < 0 ? 'price margin-loss' : 'price'}>{formatMoney(gross)}</span>
+        <ul className="summary-bought">
+          {sold.map((w, i) => (
+            <li key={i}>
+              {w.year} {carName(w.model)} to {w.buyer} for {formatMoney(w.price)}{' '}
+              <span className="muted">
+                (−{formatMoney(w.fee)} fee, cost {formatMoney(w.cost)})
+              </span>
+            </li>
+          ))}
+          {returned.map((r, i) => (
+            <li key={`back-${i}`}>
+              {r.year} {carName(r.model)} back on the lot tomorrow{' '}
+              <span className="muted">
+                (
+                {r.fee === 0
+                  ? 'the run closed before it came up'
+                  : r.high > 0 && r.high < r.floor
+                    ? `stopped at ${formatMoney(r.high)}, under the ${formatMoney(r.floor)} floor; −${formatMoney(r.fee)} run fee`
+                    : `no bids; −${formatMoney(r.fee)} run fee`}
+                )
+              </span>
+            </li>
+          ))}
+        </ul>
+      </dd>
+    </>
   )
 }

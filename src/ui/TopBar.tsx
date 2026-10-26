@@ -7,7 +7,7 @@ import { RANK_IDS, rankProgress } from '../sim/progression'
 import { daysLeft, QUOTA_STATUS_LABELS, quotaLine, quotaStatus } from '../sim/quota'
 import { reputationLabel } from '../sim/reputation'
 import { WEATHER_HINTS, WEATHER_ICONS, WEATHER_LABELS } from '../sim/weather'
-import { runListFor } from '../state/selectors'
+import { auctionLotsFor } from '../state/selectors'
 import { levelTuning, useGame } from '../state/store'
 import { formatMoney } from './format'
 import { GoalBanner } from './GoalBanner'
@@ -104,7 +104,7 @@ function RivalChip() {
 function AuctionChip() {
   const lotIndex = useGame((s) => (s.auction && !s.auction.over ? s.auction.lotIndex : -1))
   const call = useGame((s) => s.auction?.call ?? 'open')
-  const lots = useGame((s) => runListFor(s).length)
+  const lots = useGame((s) => auctionLotsFor(s).length)
   if (lotIndex < 0) return null
   const text = `The auction is on: lot ${lotIndex + 1} of ${lots} (${CALL_TEXT[call]}). Open the Auction tab (J).`
   return (

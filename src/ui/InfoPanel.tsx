@@ -16,6 +16,7 @@ const STATUS_LABELS: Record<CarStatus, string> = {
   sold: 'Sold',
   recon: 'In the shop',
   out: 'Out on a test drive',
+  auction: 'At the dealer auction',
 }
 
 function Panel({ children }: { children: ReactNode }) {

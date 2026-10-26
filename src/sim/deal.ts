@@ -1,5 +1,6 @@
 import { ARCHETYPES } from './archetypes'
 import { emptyAuctionStats, type AuctionStats } from './auction'
+import { emptyWholesaleStats, wholesaleGross, type WholesaleStats } from './wholesale'
 import {
   PLAYER_ID,
   reduceCustomers,
@@ -422,6 +423,8 @@ export interface DayStats {
   bought: BoughtCar[]
   /** What the dealer auction sold us today (see `sim/auction.ts`): stock too, so off `netIncome`. */
   auction: AuctionStats
+  /** Our used cars run at the auction today (see `sim/wholesale.ts`): their gross counts in `totalGross`. */
+  wholesale: WholesaleStats
   /** Cars the player washed themselves today. */
   washes: number
   /** The rank reached when the day was settled, or null if it didn't change. */
@@ -504,6 +507,7 @@ export function emptyStats(): DayStats {
     bailout: 0,
     bought: [],
     auction: emptyAuctionStats(),
+    wholesale: emptyWholesaleStats(),
     washes: 0,
     rankUp: null,
     rival: null,
@@ -551,14 +555,29 @@ export function serviceGross(stats: DayStats): number {
   return s.labor + s.parts - s.partsCost + s.warranty + s.contract - s.overtime
 }
 
-/** Gross profit on car sales, F&I and service together, for the career and the owner. */
+/** Gross profit on car sales, F&I, service and wholesale together, for the career and the owner. */
 export function totalGross(stats: DayStats): number {
-  return grossProfit(stats) + fiDayGross(stats.fi) + serviceGross(stats)
+  return (
+    grossProfit(stats) +
+    fiDayGross(stats.fi) +
+    serviceGross(stats) +
+    wholesaleGross(stats.wholesale)
+  )
 }
 
-/** Gross profit on new cars and on used ones, apart, and the F&I on top of them. */
-export function grossSplit(stats: DayStats): { new: number; used: number; fi: number } {
-  const split = { new: 0, used: 0, fi: fiDayGross(stats.fi) }
+/** Gross profit on new cars and on used ones, apart, the F&I on top of them, and wholesale. */
+export function grossSplit(stats: DayStats): {
+  new: number
+  used: number
+  fi: number
+  wholesale: number
+} {
+  const split = {
+    new: 0,
+    used: 0,
+    fi: fiDayGross(stats.fi),
+    wholesale: wholesaleGross(stats.wholesale),
+  }
   for (const s of stats.sales) split[s.used ? 'used' : 'new'] += s.price - s.cost
   return split
 }

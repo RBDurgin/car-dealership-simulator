@@ -603,6 +603,18 @@ export const UPDATES: readonly Update[] = [
       'Set a max bid on any lot on the Auction tab: they go to the auction and bid it for you while you work the floor.',
     ],
   },
+  {
+    id: 55,
+    phase: '22',
+    title: 'Wholesale',
+    items: [
+      'Send a used car you’d rather not keep to the next dealer auction: Wholesale on the car, or in the Stock tab.',
+      'It stays for sale until auction morning, then the other dealers bid on it. You get the price less a seller fee.',
+      'Set a floor on the Auction tab: under it the car comes back the next morning, for a small run fee.',
+      'A used car you bought today can go straight to the auction from the Stock tab.',
+      'Your used-car manager suggests stale cars, and can send long-held ones on their own.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

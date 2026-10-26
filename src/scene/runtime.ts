@@ -33,6 +33,7 @@ import {
   type Rect,
 } from '../sim/layout'
 import { vehicleOwnerId } from '../sim/sellers'
+import { consignmentOf } from '../sim/wholesale'
 import { bayCount, RECON_MAX } from '../sim/service'
 import { POSTS } from '../sim/staff'
 import { groundUp, upNow as upToday } from '../state/selectors'
@@ -387,6 +388,12 @@ function canRecondition(game: ReturnType<typeof useGame.getState>, id: string): 
   return !!car?.used && car.used.condition < RECON_MAX && bayCount(expansionsUp(game)) > 0
 }
 
+/** Whether car `id` is a used one that could go to the dealer auction and isn't marked yet. */
+function canWholesale(game: ReturnType<typeof useGame.getState>, id: string): boolean {
+  const car = game.inventory.find((c) => c.id === id)
+  return !!car?.used && auctionOpen(game.career) && !consignmentOf(game.consigned, id)
+}
+
 /**
  * An action target by id: a prop or car, a seller's parked car, or a customer, employee or Nazma approached
  * from where they're standing right now. Undefined if it's gone.
@@ -401,10 +408,12 @@ export function findInteractable(id: string): Interactable | undefined {
   if (it?.kind === 'car') {
     const recon = canRecondition(game, id)
     const ding = game.inventory.some((c) => c.id === id && c.ding)
-    if (recon || ding) {
+    const wholesale = canWholesale(game, id)
+    if (recon || ding || wholesale) {
       const extra: ActionId[] = []
       if (recon) extra.push('recondition')
       if (ding) extra.push('fixDing')
+      if (wholesale) extra.push('wholesale')
       return { ...it, actions: [...it.actions, ...extra] }
     }
   }

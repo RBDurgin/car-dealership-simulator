@@ -31,6 +31,7 @@ export type ActionId =
   | 'call'
   | 'recondition'
   | 'fixDing'
+  | 'wholesale'
   | 'confront'
   | 'testDrive'
   | 'ride'
@@ -158,6 +159,13 @@ export const ACTIONS: Record<ActionId, ActionDef> = {
     id: 'fixDing',
     label: 'Fix dent',
     verb: 'Sending it to the shop',
+    mode: 'instant',
+  },
+  // A used car in stock: marked for the next dealer auction (see `sim/wholesale.ts`).
+  wholesale: {
+    id: 'wholesale',
+    label: 'Wholesale',
+    verb: 'Sending it to auction',
     mode: 'instant',
   },
   // A shopper the player is talking to: off to the car for a test drive (see `sim/testDrive.ts`).

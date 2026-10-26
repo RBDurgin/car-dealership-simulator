@@ -28,8 +28,9 @@ import type { MonthSales } from '../sim/quota'
 import type { FranchiseTier } from '../sim/franchise'
 import type { Rival } from '../sim/rival'
 import type { SaveData } from '../sim/save'
-import type { AuctionBid, AuctionWin, Inspection } from '../sim/auction'
+import type { AuctionBid, AuctionWin, Inspection, Lot } from '../sim/auction'
 import type { AuctionState } from '../sim/bidding'
+import type { Consignment } from '../sim/wholesale'
 import type { Purchase } from '../sim/sellers'
 import type {
   Comeback,
@@ -144,6 +145,15 @@ export interface GameState {
    * auction day, then the lot on the block and the results. Never saved.
    */
   auction: AuctionState | null
+  /**
+   * Used cars marked for the next auction (see `sim/wholesale.ts`). Saved;
+   * on auction morning they leave the lot and become `wholesaleLots`.
+   */
+  consigned: Consignment[]
+  /** Whether the used-car manager consigns long-held used cars on their own. Saved. */
+  autoWholesale: boolean
+  /** Our cars in today's run, after the week's run list. Never saved. */
+  wholesaleLots: Lot[]
   /** The service department's jobs today, in the bays or waiting for one. Never saved. */
   serviceJobs: ServiceJob[]
   /** Today's service visits and how many have driven in. */
@@ -325,6 +335,17 @@ export interface GameState {
   auctionBid: () => boolean
   /** The player passes on the lot on the block: the dealers bid it out at once. */
   auctionPass: () => void
+  /**
+   * Marks used car `carId` (in stock, or bought today) for the next auction.
+   * False, with a notice, when it can't go.
+   */
+  consign: (carId: string) => boolean
+  /** Takes car `carId` off the next auction. */
+  unconsign: (carId: string) => void
+  /** Sets the least consigned car `carId` may sell for (0 for no floor). */
+  setFloor: (carId: string, floor: number) => void
+  /** Turns the used-car manager's auto-wholesale on or off. */
+  setAutoWholesale: (on: boolean) => void
   /** Dev cheat: `n` customers turn up at once (for crowd checks). */
   devSpawnCustomers: (n: number) => void
   /** Dev cheat: someone from the client book who isn't on the lot turns up. */

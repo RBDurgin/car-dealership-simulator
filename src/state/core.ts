@@ -297,6 +297,8 @@ export function dispatch(k: Kit, ev: ActionEvent): void {
       return void get().recondition(finished.targetId)
     case 'fixDing':
       return void get().fixDing(finished.targetId)
+    case 'wholesale':
+      return void get().consign(finished.targetId)
     case 'confront':
       return get().nazmaRunOff('player')
     case 'praise':

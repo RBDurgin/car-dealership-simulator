@@ -15,9 +15,10 @@ import type { UsedInfo } from './usedCars'
 
 /**
  * For sale, sold (gone overnight), in the service garage being
- * reconditioned, or out on a test drive (see `sim/testDrive.ts`).
+ * reconditioned, out on a test drive (see `sim/testDrive.ts`), or away at
+ * the dealer auction to be wholesaled (see `sim/wholesale.ts`).
  */
-export type CarStatus = 'available' | 'sold' | 'recon' | 'out'
+export type CarStatus = 'available' | 'sold' | 'recon' | 'out' | 'auction'
 export type CarLocation = 'showroom' | 'lot'
 
 export interface InventoryCar {

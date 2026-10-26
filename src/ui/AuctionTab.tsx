@@ -11,6 +11,7 @@ import {
   maxBidBlocker,
   maxBidFor,
   nextAuction,
+  wholesaleValue,
   type Inspection,
   type Lot,
 } from '../sim/auction'
@@ -32,7 +33,16 @@ import { rankById } from '../sim/progression'
 import { NO_CASH } from '../sim/sellers'
 import { usedCarManager } from '../sim/staff'
 import { BUYER_LEAVE } from '../sim/staffAi'
-import { auctionBidBlocker, lotRoom, runListFor } from '../state/selectors'
+import { DAILY_DEPRECIATION } from '../sim/usedCars'
+import {
+  AUTO_WHOLESALE_DAYS,
+  MAX_CONSIGNED,
+  RUN_FEE,
+  SELLER_FEE,
+  wholesaleSuggestions,
+  type Consignment,
+} from '../sim/wholesale'
+import { auctionBidBlocker, auctionLotsFor, lotRoom } from '../state/selectors'
 import { useGame } from '../state/store'
 import { formatMoney } from './format'
 
@@ -140,6 +150,7 @@ function LotRow({
 }) {
   const inspection = useInspection(lot)
   const { low, high } = lotEstimate(lot, day, inspection)
+  if (lot.consigned) return <YoursRow lot={lot} low={low} high={high} />
   return (
     <li className={won ? 'auction-won' : undefined}>
       <span className="muted">{lot.order}</span>
@@ -157,9 +168,28 @@ function LotRow({
   )
 }
 
+/** One of our consigned cars in the run: no bidding, just its estimate and floor. */
+function YoursRow({ lot, low, high }: { lot: Lot; low: number; high: number }) {
+  const floor = lot.consigned?.floor ?? 0
+  return (
+    <li className="auction-yours">
+      <span className="muted">{lot.order}</span>
+      <span>
+        {lot.car.year} {carName(lot.car.model)} <span className="stock-badge">Yours</span>
+      </span>
+      <span>{lot.grade}</span>
+      <span className="muted auction-miles">{Math.round(lot.car.miles / 1000)}k mi</span>
+      <span className="price">
+        {formatMoney(low)}–{formatMoney(high).replace('$', '')}
+      </span>
+      <span className="muted">{floor > 0 ? `Floor ${formatMoney(floor)}` : 'No floor'}</span>
+    </li>
+  )
+}
+
 /** The week's run list, once it's posted on the Monday before the auction. */
 function RunList({ day }: { day: number }) {
-  const lots = useGame(runListFor)
+  const lots = useGame(auctionLotsFor)
   const wins = useGame((s) => s.auctionWins)
   const room = useGame(lotRoom)
   const manager = useGame((s) => !!usedCarManager(s.roster))
@@ -205,6 +235,7 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
   const sold = run.call === 'sold'
   const mine = run.high === PLAYER_ID
   const bid = nextBid(run)
+  const floor = lot.consigned?.floor ?? 0
   return (
     <div className={mine ? 'auction-block auction-mine' : 'auction-block'}>
       <div className="auction-car">
@@ -221,25 +252,32 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
         <span>{highText(run)}</span>
         <span className={`auction-call auction-call-${run.call}`}>{CALL_TEXT[run.call]}</span>
       </div>
-      <div className="auction-actions">
-        <button
-          className="btn btn-primary"
-          disabled={sold || mine || !!blocker}
-          title={blocker ?? undefined}
-          onClick={() => useGame.getState().auctionBid()}
-        >
-          Bid {formatMoney(bid)}
-        </button>
-        <button
-          className="btn"
-          disabled={sold || mine}
-          title="Let the dealers bid it out and move to the next lot"
-          onClick={() => useGame.getState().auctionPass()}
-        >
-          Pass
-        </button>
-        {blocker && !sold && !mine && <span className="muted">{blocker}</span>}
-      </div>
+      {lot.consigned ? (
+        <div className="auction-actions muted">
+          Your car: the dealers bid it out.{' '}
+          {floor > 0 ? `It sells only at ${formatMoney(floor)} or more.` : 'No floor.'}
+        </div>
+      ) : (
+        <div className="auction-actions">
+          <button
+            className="btn btn-primary"
+            disabled={sold || mine || !!blocker}
+            title={blocker ?? undefined}
+            onClick={() => useGame.getState().auctionBid()}
+          >
+            Bid {formatMoney(bid)}
+          </button>
+          <button
+            className="btn"
+            disabled={sold || mine}
+            title="Let the dealers bid it out and move to the next lot"
+            onClick={() => useGame.getState().auctionPass()}
+          >
+            Pass
+          </button>
+          {blocker && !sold && !mine && <span className="muted">{blocker}</span>}
+        </div>
+      )}
     </div>
   )
 }
@@ -252,11 +290,14 @@ function ResultRow({ r, lots }: { r: LotResult; lots: readonly Lot[] }) {
 function ResultLine({ r, lot }: { r: LotResult; lot: Lot }) {
   const inspection = useInspection(lot)
   return (
-    <li className={r.buyer === PLAYER_ID && !r.fell ? 'auction-yours' : undefined}>
+    <li
+      className={(r.buyer === PLAYER_ID && !r.fell) || lot.consigned ? 'auction-yours' : undefined}
+    >
       <span className="muted">{lot.order}</span>
       <span>
         {lot.car.year} {carName(lot.car.model)}{' '}
         <span className="muted">· {lotReading(lot, inspection).grade}</span>
+        {lot.consigned && <span className="stock-badge">Yours</span>}
       </span>
       <span className="price">{resultLine(r, formatMoney)}</span>
     </li>
@@ -281,7 +322,7 @@ function Results({ results, lots }: { results: readonly LotResult[]; lots: reado
 /** The run under way: the lot on the block, what's sold and what's still to come. */
 function LiveAuction({ day }: { day: number }) {
   const run = useGame((s) => s.auction)!
-  const lots = useGame(runListFor)
+  const lots = useGame(auctionLotsFor)
   const room = useGame(lotRoom)
   const manager = useGame((s) => !!usedCarManager(s.roster))
   const lot = lotOnBlock(run, lots)
@@ -311,7 +352,7 @@ const NO_RESULTS: LotResult[] = []
 /** After the run: what each lot went for. */
 function RunResults() {
   const results = useGame((s) => s.auction?.results ?? NO_RESULTS)
-  const lots = useGame(runListFor)
+  const lots = useGame(auctionLotsFor)
   return (
     <>
       <p className="cal-intro">The run is over. Next week&apos;s list goes up on Monday.</p>
@@ -353,6 +394,182 @@ function ManagerNote() {
       {formatTime(BUYER_LEAVE)} until the run is over, bids for any lot with a max bid whenever
       you&apos;re outbid, up to that max. Bid yourself to go higher.
     </p>
+  )
+}
+
+/** When the auction a car consigned today runs: "tomorrow", "in 3 days", or "next week" on auction day. */
+function whichAuction(day: number): string {
+  return isAuctionDay(day) ? 'next week' : untilText(nextAuction(day) - day)
+}
+
+/** A consigned car's floor, set with − and + by the auction's increment. */
+function Floor({ c, value }: { c: Consignment; value: number }) {
+  const set = (n: number) => useGame.getState().setFloor(c.carId, n)
+  const start = Math.floor(value / bidStep(value)) * bidStep(value)
+  return (
+    <span className="auction-max">
+      <span className="muted">Floor</span>
+      {c.floor === 0 ? (
+        <button
+          className="btn btn-small"
+          title={`Under the floor it isn't sold, and comes back for the ${formatMoney(RUN_FEE)} run fee`}
+          onClick={() => set(start)}
+        >
+          Set
+        </button>
+      ) : (
+        <>
+          <button
+            className="btn btn-small"
+            aria-label="Lower the floor"
+            onClick={() => set(c.floor - bidStep(c.floor - 1))}
+          >
+            −
+          </button>
+          <b>{formatMoney(c.floor)}</b>
+          <button
+            className="btn btn-small"
+            aria-label="Raise the floor"
+            onClick={() => set(c.floor + bidStep(c.floor))}
+          >
+            +
+          </button>
+          <button className="btn btn-small" title="No floor" onClick={() => set(0)}>
+            ✕
+          </button>
+        </>
+      )}
+    </span>
+  )
+}
+
+/** A car marked for the next auction: what the trade may pay, its floor, and Keep. */
+function ConsignedRow({ c, day }: { c: Consignment; day: number }) {
+  const car = useGame(
+    (s) =>
+      s.inventory.find((x) => x.id === c.carId) ??
+      s.purchases.find((p) => p.id === c.carId) ??
+      null,
+  )
+  if (!car) return null
+  const info = 'used' in car ? car.used : car.car
+  const model = 'used' in car ? car.model : car.car.model
+  const cost = 'used' in car ? car.cost : car.price
+  if (!info) return null
+  // Its value on auction day, a few more days' depreciation off.
+  const auctionDay = nextAuction(day)
+  const value = wholesaleValue(model, info, auctionDay)
+  return (
+    <li>
+      <span>
+        {info.year} {carName(model)}{' '}
+        <span className="muted">· {Math.round(info.miles / 1000)}k mi</span>
+      </span>
+      <span className="price" title="What the trade pays for it on auction day, about">
+        ~{formatMoney(value)}
+      </span>
+      <span className="muted">cost {formatMoney(cost)}</span>
+      <button
+        className="btn btn-small"
+        title="Keep it on the lot"
+        onClick={() => useGame.getState().unconsign(c.carId)}
+      >
+        Keep
+      </button>
+      <Floor c={c} value={value} />
+    </li>
+  )
+}
+
+/** The used-car manager's stale picks to wholesale. */
+function Suggestions({ day, name }: { day: number; name: string }) {
+  const inventory = useGame((s) => s.inventory)
+  const consigned = useGame((s) => s.consigned)
+  const picks = wholesaleSuggestions(inventory, consigned, day)
+  if (picks.length === 0) return null
+  const full = consigned.length >= MAX_CONSIGNED
+  return (
+    <>
+      <h3>
+        {name} suggests <span className="muted">· stale used cars</span>
+      </h3>
+      <ul className="auction-lots auction-consigned">
+        {picks.map((car) => (
+          <li key={car.id}>
+            <span>
+              {car.used!.year} {carName(car.model)}{' '}
+              <span className="muted">· {day - car.used!.acquiredDay} days in stock</span>
+            </span>
+            <span className="price">~{formatMoney(wholesaleValue(car.model, car.used!, day))}</span>
+            <span className="muted">cost {formatMoney(car.cost)}</span>
+            <button
+              className="btn btn-small"
+              disabled={full}
+              title={
+                full ? `The auction takes up to ${MAX_CONSIGNED} of your cars a week.` : undefined
+              }
+              onClick={() => useGame.getState().consign(car.id)}
+            >
+              Wholesale
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
+/**
+ * Wholesale: our cars marked for the next auction, the used-car manager's
+ * picks and their auto-wholesale toggle.
+ */
+function Wholesale({ day }: { day: number }) {
+  const consigned = useGame((s) => s.consigned)
+  const manager = useGame((s) => usedCarManager(s.roster)?.name ?? null)
+  const auto = useGame((s) => s.autoWholesale)
+  return (
+    <>
+      <h3>
+        Wholesale{' '}
+        <span className="muted">
+          · {consigned.length} of {MAX_CONSIGNED} for the auction {whichAuction(day)}
+        </span>
+      </h3>
+      {consigned.length === 0 ? (
+        <p className="muted cal-intro">
+          Nothing consigned. Send a used car you&apos;d rather not keep with <b>Wholesale</b> on the
+          car or in the Stock tab.
+        </p>
+      ) : (
+        <ul className="auction-lots auction-consigned">
+          {consigned.map((c) => (
+            <ConsignedRow key={c.carId} c={c} day={day} />
+          ))}
+        </ul>
+      )}
+      {manager && <Suggestions day={day} name={manager} />}
+      {manager && (
+        <p className="cal-intro">
+          <label>
+            <input
+              type="checkbox"
+              checked={auto}
+              onChange={(e) => useGame.getState().setAutoWholesale(e.target.checked)}
+            />{' '}
+            Auto-wholesale: {manager} sends used cars held {AUTO_WHOLESALE_DAYS}+ days the morning
+            before each auction (no floor).
+          </label>
+        </p>
+      )}
+      <p className="muted cal-intro">
+        A consigned car stays for sale until auction morning, then runs after the list as a lot
+        badged Yours. It goes to the highest dealer, less the seller fee (
+        {formatMoney(SELLER_FEE.flat)} and {(SELLER_FEE.share * 100).toFixed(1)}% of the price). Set
+        a floor and it won&apos;t sell under it: it comes back the next morning, less a{' '}
+        {formatMoney(RUN_FEE)} run fee. Holding a used car costs about{' '}
+        {(DAILY_DEPRECIATION * 100).toFixed(1)}% of its value a day.
+      </p>
+    </>
   )
 }
 
@@ -404,6 +621,7 @@ export function AuctionTab() {
             it closer and tightens the estimate.
           </p>
           <ManagerNote />
+          <Wholesale day={day} />
         </>
       )}
     </>

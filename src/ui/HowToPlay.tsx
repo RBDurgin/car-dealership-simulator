@@ -32,6 +32,7 @@ import { DING_BASE, DRIVE_DIRT, DRIVE_MILES } from '../sim/testDrive'
 import { WALK_IN_CHANCE } from '../sim/pedestrians'
 import { INCENTIVE_DISCOUNT } from '../sim/ordering'
 import { AUCTION_RANK, BUYER_FEE, INSPECT_FEE, WHOLESALE_FACTOR } from '../sim/auction'
+import { AUTO_WHOLESALE_DAYS, MAX_CONSIGNED, RUN_FEE, SELLER_FEE } from '../sim/wholesale'
 import { AUCTION_START } from '../sim/bidding'
 import { FIRST_THEFT_DAY } from '../sim/nazma'
 import {
@@ -660,6 +661,19 @@ function BusinessTab({ touch, click }: TabProps) {
           <b>Max bid</b>: they bid it for you at the auction, so you don&apos;t have to watch the
           run. Bidding yourself still goes higher than the max.
         </p>
+        <p>
+          <b>Wholesale</b> is the way out for a used car you&apos;d rather not keep. Click it and
+          pick Wholesale (or use the button in the Stock tab, where a car you bought today can go
+          straight to the auction too). Up to {MAX_CONSIGNED} cars a week go; each stays for sale
+          until auction morning, then runs after the list, badged Yours. You can&apos;t bid on your
+          own car: it goes to the highest dealer, and you get the price less the seller fee (
+          {formatMoney(SELLER_FEE.flat)} and {(SELLER_FEE.share * 100).toFixed(1)}% of the price).
+          Set a <b>floor</b> on the Auction tab and it won&apos;t sell under it: it comes back the
+          next morning, less a {formatMoney(RUN_FEE)} run fee. What it made over (or under) its cost
+          counts in the day&apos;s gross. Your used-car manager suggests stale cars, and with{' '}
+          <b>Auto-wholesale</b> ticked sends those held {AUTO_WHOLESALE_DAYS}+ days on their own the
+          morning before each auction.
+        </p>
       </section>
       <section>
         <h3>Progress</h3>
@@ -1057,7 +1071,9 @@ function PeopleTab({ touch, click }: TabProps) {
             skilled the closer. Set a <b>max bid</b> on any lot on the Auction tab, and on auction
             day they leave at {formatTime(BUYER_LEAVE)} and bid it for you whenever you&apos;re
             outbid, up to that max, while you work the floor. What they win is yours, like any lot.
-            The schedule never gives them Tuesday or Wednesday off.
+            They also suggest stale used cars to wholesale, and with <b>Auto-wholesale</b> on (the
+            Auction tab) send long-held ones to the auction themselves. The schedule never gives
+            them Tuesday or Wednesday off.
           </li>
         </ul>
       </section>

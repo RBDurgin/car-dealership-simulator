@@ -11,6 +11,8 @@ import { PLAYER_ID } from '../../sim/customers'
 import { huddleBlocker, praiseBlocker } from '../../sim/morale'
 import { confrontBlocker } from '../../sim/nazma'
 import { dingBlocker, reconBlocker } from '../../sim/service'
+import { consignBlocker } from '../../sim/wholesale'
+import { auctionOpen } from '../../sim/auction'
 import { vehicleOwnerId } from '../../sim/sellers'
 import { playerRiding } from '../../sim/testDrive'
 import { WALL_MODES } from '../../sim/walls'
@@ -147,14 +149,16 @@ export function uiSlice(k: Kit): Pick<GameState, UiKeys> {
                 ? reconBlocker(reconBook(s), targetId)
                 : action === 'fixDing'
                   ? dingBlocker(reconBook(s), targetId)
-                  : actionBlocker(
-                      action,
-                      targetId,
-                      s.customers,
-                      s.roster,
-                      s.inventory,
-                      s.serviceJobs,
-                    )
+                  : action === 'wholesale'
+                    ? consignBlocker({ ...s, open: auctionOpen(s.career) }, targetId)
+                    : actionBlocker(
+                        action,
+                        targetId,
+                        s.customers,
+                        s.roster,
+                        s.inventory,
+                        s.serviceJobs,
+                      )
       if (blocker) {
         set({ menu: null })
         return notify(k, blocker)

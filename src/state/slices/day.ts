@@ -133,7 +133,9 @@ import {
   type AuctionBid,
   type AuctionWin,
   type Inspection,
+  type Lot,
 } from '../../sim/auction'
+import type { Consignment } from '../../sim/wholesale'
 import { auctionNotice, type AuctionState } from '../../sim/bidding'
 import {
   addDay as addToLifetime,
@@ -152,6 +154,7 @@ import { bailoutNotice, deliveryNotice, theftNotice } from '../notices'
 import { DELIVERY_SEED, OWNER_SEED, resetRng, RIVAL_SEED, rng, seedDay } from '../rng'
 import { runListFor } from '../selectors'
 import type { GameState, ReceptionCall } from '../types'
+import { returnUnsold, wholesaleMorning } from './economy'
 import { autoRecon, closeShop } from './service'
 import { tallyNazma } from './world'
 
@@ -188,6 +191,9 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     inspected: [] as Inspection[],
     auctionBids: [] as AuctionBid[],
     auction: null as AuctionState | null,
+    consigned: [] as Consignment[],
+    autoWholesale: false,
+    wholesaleLots: [] as Lot[],
     // Day 1 has no garage.
     serviceJobs: [] as ServiceJob[],
     serviceVisits: emptySchedule(),
@@ -275,6 +281,8 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           chargebacks: save.chargebacks,
           eotm: save.eotm,
           auctionBids: save.auctionBids,
+          consigned: save.consigned,
+          autoWholesale: save.autoWholesale,
         })
         beginDay(k, save.day + 1)
       }),
@@ -289,8 +297,9 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
  * pays the holdback on the month's sales (scaled by the franchise tier), and
  * the month's result moves the tier. The day's gross goes on the
  * career, which may earn a new rank. Nazma's lot across the road takes in
- * the day (see `rivalDay`). Used cars bought today and auction wins go into stock, in the lot
- * spaces held for them, so the save keeps them. Chargebacks due today take
+ * the day (see `rivalDay`). Consigned cars the auction didn't sell come
+ * back (less the run fee). Used cars bought today and auction wins go into
+ * stock, in the lot spaces held for them, so the save keeps them. Chargebacks due today take
  * back F&I gross, and the finance manager who signed the deal gives back his
  * share of it out of the day's commissions; a client charged back within
  * `EARLY_CHARGEBACK_DAYS` of buying starts their next visit sour.
@@ -298,8 +307,11 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
  * Only `commit`'s last step calls this.
  */
 export function settleDay(k: Kit): void {
+  const before = k.get()
+  if (!isClosed(before.clock) || before.customers.length > 0 || before.dayStats.settled) return
+  // Our cars the auction didn't sell are back on the lot.
+  returnUnsold(k)
   const s = k.get()
-  if (!isClosed(s.clock) || s.customers.length > 0 || s.dayStats.settled) return
   const pay = payroll(s.roster, s.dayStats.sales, s.dayStats.off, s.dayStats.quitWages)
   // Chargebacks due take back F&I gross, and the finance manager's share of it.
   const { due, later } = dueChargebacks(s.chargebacks, s.clock.day)
@@ -555,7 +567,9 @@ function morning(k: Kit, day: number): void {
   // The shop hands every car back at closing, and every test drive is back
   // by then; this is in case one wasn't.
   const kept = dropSold(s.inventory).map((c) =>
-    c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' as const } : c,
+    c.status === 'recon' || c.status === 'out' || c.status === 'auction'
+      ? { ...c, status: 'available' as const }
+      : c,
   )
   const level = tuning(k)
   // A guard keeps thieves off overnight, and Nazma away only on a day he works.
@@ -682,6 +696,7 @@ function morning(k: Kit, day: number): void {
     inspected: s.inspected.filter((i) => i.auctionDay >= day),
     auctionBids: liveBids(s.auctionBids, day),
     auction: null,
+    wholesaleLots: [],
     serviceJobs: [],
     serviceAway: [],
     serviceComebacks: [],
@@ -743,6 +758,8 @@ function morning(k: Kit, day: number): void {
     setRoster(k, roster)
     set({ dayStats: { ...get().dayStats, resigned: resigning.map((e) => e.id) } })
   }
+  // Consigned cars leave for the auction before the shop takes any.
+  const wholesale = wholesaleMorning(k, day)
   const shop = autoRecon(k, day)
   const notices = [
     s.dayStats.rankUp && rankUpNotice(rankById(s.dayStats.rankUp)),
@@ -773,6 +790,7 @@ function morning(k: Kit, day: number): void {
     appointmentsNotice(clients, day),
     appreciationNotice(s.appreciation, day),
     isAuctionDay(day) && auctionOpen(get().career) && auctionNotice(runListFor(get()).length),
+    wholesale,
     shop > 0 && `${shop === 1 ? 'A used car' : `${shop} used cars`} went to the shop.`,
   ].filter((t): t is string => !!t)
   if (notices.length > 0) notify(k, notices.join(' '))

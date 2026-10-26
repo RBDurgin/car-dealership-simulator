@@ -12,12 +12,14 @@ import {
   maxBidFor,
   winLot,
   withMaxBid,
+  type Lot,
 } from '../../sim/auction'
 import {
   AUCTION_END,
   AUCTION_START,
   AUCTION_STARTING,
   biddingOpen,
+  lotOnBlock,
   newResults,
   nextBid,
   passLot,
@@ -25,6 +27,7 @@ import {
   startAuction,
   stepAuction,
   type AuctionState,
+  type LotResult,
   type RunContext,
 } from '../../sim/bidding'
 import { PLAYER_ID } from '../../sim/customers'
@@ -45,10 +48,23 @@ import { usedCarManager } from '../../sim/staff'
 import { proxyBuyer } from '../../sim/staffAi'
 import { PLAYER_SKILL } from '../../sim/usedCars'
 import { nextUsedId, rollUsedCar, stockValue, usedStockCar } from '../../sim/usedCars'
+import {
+  autoConsign,
+  consign,
+  consignBlocker,
+  consignedLots,
+  liveConsigned,
+  returnRecord,
+  sellerFee,
+  unconsign,
+  unsoldLine,
+  wholesaleRecord,
+  withFloor,
+} from '../../sim/wholesale'
 import { dispatch, notify, tallyWork, type Kit } from '../core'
 import { orderInvoice } from '../derived'
 import { INVENTORY_SEED, rng } from '../rng'
-import { runListFor } from '../selectors'
+import { auctionLotsFor, runListFor } from '../selectors'
 import type { GameState } from '../types'
 import { amendLog } from './career'
 
@@ -72,6 +88,10 @@ type EconomyKeys =
   | 'tickAuction'
   | 'auctionBid'
   | 'auctionPass'
+  | 'consign'
+  | 'unconsign'
+  | 'setFloor'
+  | 'setAutoWholesale'
 
 /**
  * Cash, stock, orders, the floor plan, ads and the month's sales. (Cash,
@@ -92,8 +112,10 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       // The car is gone: drop anything that still points at it.
       if (s.activeAction?.targetId === id) dispatch(k, { type: 'cancel' })
       // The bank takes back what it lent on a floored car; the rest is ours.
+      // Sold off the lot, it isn't going to the auction.
       set({
         inventory,
+        consigned: unconsign(s.consigned, id),
         cash: s.cash + (price ?? car.msrp) - payoffOnSale(car),
         menu: s.menu?.targetId === id ? null : s.menu,
         hoveredId: s.hoveredId === id ? null : s.hoveredId,
@@ -285,13 +307,17 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       const s = get()
       const run = s.auction
       if (!biddingOpen(run)) return false
-      const blocker =
-        run.high === PLAYER_ID ? 'You have the high bid.' : bidBlocker(s, nextBid(run))
+      const lots = auctionLotsFor(s)
+      const blocker = lotOnBlock(run, lots)?.consigned
+        ? 'That’s your own car.'
+        : run.high === PLAYER_ID
+          ? 'You have the high bid.'
+          : bidBlocker(s, nextBid(run))
       if (blocker) {
         notify(k, blocker)
         return false
       }
-      set({ auction: playerBid(run) })
+      set({ auction: playerBid(run, lots) })
       return true
     },
     auctionPass: () => {
@@ -300,6 +326,28 @@ export function economySlice(k: Kit): Pick<GameState, EconomyKeys> {
       const next = run && passLot(run, runContext(k))
       if (next) k.batch(() => afterBeats(k, run, next))
     },
+    consign: (carId) => {
+      const s = get()
+      const blocker = consignBlocker({ ...s, open: auctionOpen(s.career) }, carId)
+      if (blocker) {
+        notify(k, blocker)
+        return false
+      }
+      set({ consigned: consign(s.consigned, carId) })
+      const car =
+        s.inventory.find((c) => c.id === carId) ?? s.purchases.find((p) => p.id === carId)?.car
+      notify(
+        k,
+        `The ${car ? carName(car.model) : 'car'} goes to the next auction (J to set a floor). It stays for sale until then.`,
+      )
+      return true
+    },
+    unconsign: (carId) => {
+      const consigned = unconsign(get().consigned, carId)
+      if (consigned !== get().consigned) set({ consigned })
+    },
+    setFloor: (carId, floor) => set({ consigned: withFloor(get().consigned, carId, floor) }),
+    setAutoWholesale: (autoWholesale) => set({ autoWholesale }),
   }
 }
 
@@ -313,7 +361,7 @@ function runContext(k: Kit, minute?: number): RunContext {
   const manager =
     minute !== undefined && proxyBuyer(s.roster, s.clock.day, minute, !!s.auction?.over)
   return {
-    lots: runListFor(s),
+    lots: auctionLotsFor(s),
     taken: s.auctionWins.map((w) => w.lotId),
     day: s.clock.day,
     rng: rng.auction,
@@ -351,8 +399,14 @@ export function runAuction(k: Kit, minute: number): void {
  */
 function afterBeats(k: Kit, prev: AuctionState, next: AuctionState): void {
   k.set({ auction: next })
+  const results = newResults(prev, next)
+  const lots = auctionLotsFor(k.get())
+  for (const r of results) {
+    const lot = lots.find((l) => l.id === r.lotId)
+    if (lot?.consigned) wholesaled(k, lot, r)
+  }
   const by = (proxy?: true) => (proxy ? usedCarManager(k.get().roster)?.id : undefined)
-  const fell = newResults(prev, next).filter(
+  const fell = results.filter(
     (r) => r.buyer === PLAYER_ID && !k.get().buyLot(r.lotId, r.price, by(r.proxy)),
   )
   if (fell.length === 0) return
@@ -361,6 +415,105 @@ function afterBeats(k: Kit, prev: AuctionState, next: AuctionState): void {
     auction: {
       ...run,
       results: run.results.map((r) => (fell.includes(r) ? { ...r, fell: true } : r)),
+    },
+  })
+}
+
+/**
+ * Our consigned `lot` hammered with result `r`: sold, the car is gone and the
+ * price less the seller fee (and anything the bank is owed on it) is cash;
+ * otherwise it comes back when the day is settled (`returnUnsold`).
+ */
+function wholesaled(k: Kit, lot: Lot, r: LotResult): void {
+  const s = k.get()
+  const name = carName(lot.car.model)
+  if (r.buyer === null) return notify(k, unsoldLine(lot, r, name, formatMoney))
+  const car = s.inventory.find((c) => c.id === lot.consigned!.carId && c.status === 'auction')
+  if (!car) return
+  const sale = wholesaleRecord(car, r.price, r.buyer)
+  k.set({
+    inventory: s.inventory.map((c) => (c === car ? { ...c, status: 'sold' } : c)),
+    cash: s.cash + r.price - sale.fee - payoffOnSale(car),
+    dayStats: {
+      ...s.dayStats,
+      wholesale: { ...s.dayStats.wholesale, sold: [...s.dayStats.wholesale.sold, sale] },
+    },
+  })
+  notify(
+    k,
+    `${r.buyer} bought your ${lot.car.year} ${name} for ${formatMoney(r.price)} (−${formatMoney(sellerFee(r.price))} seller fee).`,
+  )
+}
+
+/**
+ * The morning's wholesale: consignments whose car has gone are dropped; the
+ * morning before an auction, with auto-wholesale on, the used-car manager
+ * consigns long-held used cars; and on auction morning the consigned cars
+ * leave the lot for the run, after the week's list. Returns the notice, if any.
+ */
+export function wholesaleMorning(k: Kit, day: number): string | null {
+  const s = k.get()
+  if (!auctionOpen(s.career)) return null
+  let consigned = liveConsigned(s.consigned, s.inventory)
+  const notices: string[] = []
+  const manager = usedCarManager(s.roster)
+  if (manager && s.autoWholesale && isAuctionDay(day + 1)) {
+    const more = autoConsign(consigned, s.inventory, day)
+    const n = more.length - consigned.length
+    if (n > 0) {
+      notices.push(
+        `${manager.name} is sending ${n === 1 ? 'a used car' : `${n} used cars`} to tomorrow's auction.`,
+      )
+    }
+    consigned = more
+  }
+  if (!isAuctionDay(day)) {
+    if (consigned !== s.consigned) k.set({ consigned })
+    return notices.join(' ') || null
+  }
+  const { lots, rest } = consignedLots(consigned, s.inventory, runListFor(s).length, day)
+  const going = new Set(lots.map((l) => l.consigned!.carId))
+  k.set({
+    consigned: rest,
+    wholesaleLots: lots,
+    ...(lots.length > 0 && {
+      inventory: s.inventory.map((c) => (going.has(c.id) ? { ...c, status: 'auction' } : c)),
+    }),
+  })
+  if (lots.length > 0) {
+    notices.push(
+      `${lots.length === 1 ? 'Your consigned car runs' : `Your ${lots.length} consigned cars run`} at today's auction.`,
+    )
+  }
+  return notices.join(' ') || null
+}
+
+/**
+ * When the day is settled: our cars that ran today and didn't sell (or that
+ * the run never reached) are back for sale, those that ran less `RUN_FEE`.
+ */
+export function returnUnsold(k: Kit): void {
+  const s = k.get()
+  const back = s.wholesaleLots.filter((l) =>
+    s.inventory.some((c) => c.id === l.consigned!.carId && c.status === 'auction'),
+  )
+  if (back.length === 0) return
+  const returned = back.map((l) =>
+    returnRecord(
+      l,
+      s.auction?.results.find((r) => r.lotId === l.id),
+    ),
+  )
+  const ids = new Set(back.map((l) => l.consigned!.carId))
+  k.set({
+    inventory: s.inventory.map((c) => (ids.has(c.id) ? { ...c, status: 'available' } : c)),
+    cash: s.cash - returned.reduce((sum, r) => sum + r.fee, 0),
+    dayStats: {
+      ...s.dayStats,
+      wholesale: {
+        ...s.dayStats.wholesale,
+        returned: [...s.dayStats.wholesale.returned, ...returned],
+      },
     },
   })
 }

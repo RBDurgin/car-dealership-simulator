@@ -121,6 +121,8 @@ const source = () => ({
   achievements: [] as EarnedAchievement[],
   eotm: [],
   auctionBids: [],
+  consigned: [],
+  autoWholesale: false,
   // As a v27 save upgrades.
   dealershipName: DEFAULT_DEALERSHIP_NAME,
 })
@@ -851,6 +853,44 @@ describe('save data', () => {
       ...emptyEmployeeTotal(),
       days: 12,
     })
+    expect(parseSave({ ...old })).toBeNull()
+  })
+
+  it('keeps consigned cars and auto-wholesale, drops one sold since, and upgrades a version 39 save with none', () => {
+    const inventory = buildInventory(createRng(1))
+    const [kept, sold] = inventory
+    const consigned = [
+      { carId: kept.id, floor: 9_000 },
+      { carId: sold.id, floor: 0 },
+    ]
+    const save = createSave(
+      {
+        ...source(),
+        inventory: inventory.map((c) =>
+          c === sold
+            ? { ...c, status: 'sold' as const }
+            : c === kept
+              ? { ...c, status: 'auction' as const }
+              : c,
+        ),
+        consigned,
+        autoWholesale: true,
+      },
+      123,
+    )
+    expect(save.consigned).toEqual([consigned[0]])
+    expect(save.autoWholesale).toBe(true)
+    // A car still away at the auction is saved as back on the lot.
+    expect(save.inventory.find((c) => c.id === kept.id)?.status).toBe('available')
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save)
+    expect(parseSave({ ...save, consigned: [{ carId: kept.id, floor: -1 }] })).toBeNull()
+    expect(parseSave({ ...save, autoWholesale: 'yes' })).toBeNull()
+
+    const { consigned: _, autoWholesale: __, ...old } = save
+    const upgraded = parseSave(JSON.parse(JSON.stringify({ ...old, version: 39 })))
+    expect(upgraded?.version).toBe(SAVE_VERSION)
+    expect(upgraded?.consigned).toEqual([])
+    expect(upgraded?.autoWholesale).toBe(false)
     expect(parseSave({ ...old })).toBeNull()
   })
 

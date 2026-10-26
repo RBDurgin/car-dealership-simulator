@@ -1,5 +1,6 @@
 import { ARCHETYPES } from './archetypes'
 import { liveBids, type AuctionBid } from './auction'
+import { liveConsigned, MAX_CONSIGNED, type Consignment } from './wholesale'
 import { calendarOf, DAYS_PER_WEEK } from './calendar'
 import { CUSTOMER_VARIANTS } from './characters'
 import {
@@ -64,7 +65,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 39
+export const SAVE_VERSION = 40
 
 export interface SaveData {
   version: number
@@ -139,6 +140,10 @@ export interface SaveData {
   eotm: EotmWin[]
   /** Max bids on coming auctions' lots, for the used-car manager (see `sim/auction.ts`). */
   auctionBids: AuctionBid[]
+  /** Used cars marked for the next auction (see `sim/wholesale.ts`). */
+  consigned: Consignment[]
+  /** Whether the used-car manager consigns long-held used cars on their own. */
+  autoWholesale: boolean
 }
 
 export interface SaveSource {
@@ -176,6 +181,8 @@ export interface SaveSource {
   achievements: EarnedAchievement[]
   eotm: EotmWin[]
   auctionBids: AuctionBid[]
+  consigned: Consignment[]
+  autoWholesale: boolean
 }
 
 /**
@@ -191,9 +198,12 @@ export function createSave(s: SaveSource, now: number): SaveData {
     day: s.clock.day,
     cash: s.cash,
     // The shop hands every car back at closing; this is in case one wasn't.
-    // A car in the shop or out on a test drive is saved as back on the lot.
+    // A car in the shop, out on a test drive or still away at the auction is
+    // saved as back on the lot.
     inventory: s.inventory.map((c) =>
-      c.status === 'recon' || c.status === 'out' ? { ...c, status: 'available' } : c,
+      c.status === 'recon' || c.status === 'out' || c.status === 'auction'
+        ? { ...c, status: 'available' }
+        : c,
     ),
     roster: s.roster.filter((e) => !e.fired).map((e) => ({ ...e, status: 'off', quitting: false })),
     orders: s.orders,
@@ -229,6 +239,9 @@ export function createSave(s: SaveSource, now: number): SaveData {
     eotm: s.eotm,
     // Bids on today's auction have had their run.
     auctionBids: liveBids(s.auctionBids, s.clock.day + 1),
+    // A consigned car sold or stolen meanwhile isn't going.
+    consigned: liveConsigned(s.consigned, s.inventory),
+    autoWholesale: s.autoWholesale,
   }
 }
 
@@ -509,6 +522,8 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
           }
         : raw.lifetime,
   }),
+  // v40: wholesale. Nothing consigned yet, and auto-wholesale off.
+  39: (raw) => ({ ...raw, consigned: [], autoWholesale: false }),
 }
 
 /** Employee records for an older save, from each salesperson's sales (the player's left out). */
@@ -593,6 +608,9 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Array.isArray(raw.achievements) || !raw.achievements.every(isEarned)) return null
   if (!Array.isArray(raw.eotm) || raw.eotm.length > MAX_EOTM || !raw.eotm.every(isEotm)) return null
   if (!Array.isArray(raw.auctionBids) || !raw.auctionBids.every(isAuctionBid)) return null
+  if (!Array.isArray(raw.consigned) || raw.consigned.length > MAX_CONSIGNED) return null
+  if (!raw.consigned.every(isConsignment)) return null
+  if (typeof raw.autoWholesale !== 'boolean') return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
@@ -658,6 +676,10 @@ function isAuctionBid(v: unknown): boolean {
     isNumber(v.max) &&
     (v.max as number) > 0
   )
+}
+
+function isConsignment(v: unknown): boolean {
+  return isObject(v) && typeof v.carId === 'string' && isNumber(v.floor) && (v.floor as number) >= 0
 }
 
 function isEotm(v: unknown): boolean {

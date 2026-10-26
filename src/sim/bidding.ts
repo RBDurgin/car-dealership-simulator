@@ -57,6 +57,8 @@ export interface LotResult {
   fell?: true
   /** Won on the used-car manager's bid (the player's max bid). */
   proxy?: true
+  /** One of our consigned cars stopped under its floor: not sold, `price` the high bid. */
+  short?: true
 }
 
 /** The run on auction day. */
@@ -192,19 +194,26 @@ const NEXT_CALL: Record<Exclude<Call, 'sold'>, Call> = {
   twice: 'sold',
 }
 
-/** The lot on the block sells to its high bidder, or is passed with nobody bidding. */
+/**
+ * The lot on the block sells to its high bidder, or is passed with nobody
+ * bidding. A consigned car of ours under its floor isn't sold.
+ */
 function hammer(state: AuctionState, lots: readonly Lot[]): AuctionState {
+  const lot = lots[state.lotIndex]
+  const floor = lot.consigned?.floor ?? 0
+  const short = state.high !== null && state.price < floor
   const buyer =
-    state.high === null
+    state.high === null || short
       ? null
       : state.high === PLAYER_ID
         ? PLAYER_ID
         : (state.bidders.find((b) => b.id === state.high)?.name ?? null)
   const result: LotResult = {
-    lotId: lots[state.lotIndex].id,
+    lotId: lot.id,
     price: state.high === null ? 0 : state.price,
     buyer,
     ...(buyer === PLAYER_ID && state.proxy && { proxy: true as const }),
+    ...(short && { short: true as const }),
   }
   return { ...state, call: 'sold', quiet: 0, results: [...state.results, result] }
 }
@@ -259,8 +268,10 @@ export function stepAuction(state: AuctionState, minute: number, ctx: RunContext
  * Null when they can't: the lot is sold, they already hold the high bid, or
  * the run is over. The caller checks `bidBlocker` at `nextBid` first.
  */
-export function playerBid(state: AuctionState): AuctionState | null {
+export function playerBid(state: AuctionState, lots?: readonly Lot[]): AuctionState | null {
   if (!biddingOpen(state) || state.high === PLAYER_ID) return null
+  // Our own consigned car isn't ours to bid on.
+  if (lots?.[state.lotIndex]?.consigned) return null
   return { ...state, price: nextBid(state), high: PLAYER_ID, proxy: false, call: 'open', quiet: 0 }
 }
 
@@ -284,9 +295,13 @@ export function newResults(prev: AuctionState | null, next: AuctionState | null)
   return next.results.slice(prev?.results.length ?? 0)
 }
 
-/** "Lakeside Auto, $9,250", "Yours for $9,250" (with "(manager)" on a max bid), "No bids". */
+/**
+ * "Lakeside Auto, $9,250", "Yours for $9,250" (with "(manager)" on a max
+ * bid), "No bids", or "Under your floor at $8,200".
+ */
 export function resultLine(r: LotResult, money: (n: number) => string): string {
   if (r.fell) return 'Fell through'
+  if (r.short) return `Under your floor at ${money(r.price)}`
   if (r.buyer === null) return 'No bids'
   if (r.buyer === PLAYER_ID) return `Yours for ${money(r.price)}${r.proxy ? ' (manager)' : ''}`
   return `${r.buyer}, ${money(r.price)}`

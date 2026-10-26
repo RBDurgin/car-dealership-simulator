@@ -2,7 +2,7 @@
 export const CONTROLS: [string, string][] = [
   [
     'Click',
-    'Move / interact / greet / buy / appraise / call / recondition / praise / huddle / confront Nazma',
+    'Move / interact / greet / buy / appraise / call / recondition / wholesale / praise / huddle / confront Nazma',
   ],
   ['WASD', 'Walk'],
   ['Q / E', 'Rotate view'],
@@ -40,7 +40,7 @@ export const CONTROLS: [string, string][] = [
 export const TOUCH_CONTROLS: [string, string][] = [
   [
     'Tap',
-    'Move / interact / greet / buy / appraise / call / recondition / praise / huddle / confront Nazma',
+    'Move / interact / greet / buy / appraise / call / recondition / wholesale / praise / huddle / confront Nazma',
   ],
   ['Pinch', 'Zoom'],
   ['Twist', 'Rotate view (two fingers)'],

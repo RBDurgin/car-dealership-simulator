@@ -167,6 +167,13 @@ const runListOf = memoLast((week: number, rank: RankId, tier: FranchiseTier) =>
 export const runListFor = (s: GameState): Lot[] =>
   runListOf(weekStart(s.clock.day), s.career.rank, s.franchise)
 
+const auctionLotsOf = memoLast((listed: Lot[], ours: Lot[]) =>
+  ours.length === 0 ? listed : [...listed, ...ours],
+)
+
+/** Today's run: the week's run list, then our consigned cars (`wholesaleLots`). */
+export const auctionLotsFor = (s: GameState): Lot[] => auctionLotsOf(runListFor(s), s.wholesaleLots)
+
 const bidBlockerOf = memoLast(
   (
     cash: number,

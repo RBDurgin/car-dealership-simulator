@@ -17,6 +17,7 @@ import {
   type Grade,
   type UsedInfo,
 } from './usedCars'
+import type { Consignment } from './wholesale'
 
 /**
  * The dealer auction: every Wednesday a run list of used cars is sold to the
@@ -75,6 +76,8 @@ export interface Lot {
   grade: Grade
   /** Its place in the run, from 1. */
   order: number
+  /** One of our cars, consigned to the run (see `sim/wholesale.ts`): we can't bid on it. */
+  consigned?: Consignment
 }
 
 /** A lot looked over before the auction: a closer reading of its condition. */
