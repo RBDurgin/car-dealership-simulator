@@ -6,6 +6,8 @@ import type { Employee } from './staff'
 import type { Customer } from './customers'
 import {
   catchUpList,
+  MARKETING_DAY,
+  ONBOARDING,
   coachEnds,
   coachShows,
   isTutorialId,
@@ -17,6 +19,7 @@ import {
   tutorialFor,
   wordingFor,
   type CoachState,
+  type TutorialId,
 } from './tutorials'
 
 /** An auction day (a Wednesday) past the onboarding's days. */
@@ -38,6 +41,11 @@ const state = (over: Partial<CoachState> = {}): CoachState => ({
   auction: null,
   auctionWins: [],
   roster: [],
+  purchases: [],
+  clients: [],
+  callsTried: [],
+  playerCall: null,
+  campaigns: [],
   ...over,
 })
 
@@ -84,12 +92,14 @@ describe('tutorialFor', () => {
   it('stays away before Main Street, on other days, on the title screen and once seen', () => {
     const prev = state()
     const next = state({ clock: at(WEDNESDAY) })
-    expect(tutorialFor(prev, { ...next, career: { rank: 'corner-lot' } }, [])).toBeNull()
+    // Marketing's morning has passed.
+    const seen: TutorialId[] = ['marketing']
+    expect(tutorialFor(prev, { ...next, career: { rank: 'corner-lot' } }, seen)).toBeNull()
     expect(
-      tutorialFor(state({ clock: at(WEDNESDAY) }), state({ clock: at(WEDNESDAY + 1) }), []),
+      tutorialFor(state({ clock: at(WEDNESDAY) }), state({ clock: at(WEDNESDAY + 1) }), seen),
     ).toBeNull()
-    expect(tutorialFor(prev, { ...next, screen: 'title' }, [])).toBeNull()
-    expect(tutorialFor(prev, next, ['auction'])).toBeNull()
+    expect(tutorialFor(prev, { ...next, screen: 'title' }, seen)).toBeNull()
+    expect(tutorialFor(prev, next, ['auction', ...seen])).toBeNull()
   })
 })
 
@@ -117,9 +127,13 @@ describe('the auction walkthrough’s steps', () => {
 
 describe('catchUpList', () => {
   it('lists the unlocked walkthroughs not yet seen', () => {
-    expect(catchUpList(state({ career: { rank: 'corner-lot' } }), [])).toEqual([])
-    expect(catchUpList(state(), [])).toEqual(['auction'])
-    expect(catchUpList(state(), ['auction'])).toEqual([])
+    const encounters = ['usedCars', 'testDrive', 'fiMenu', 'clientBook', 'marketing']
+    expect(catchUpList(state({ career: { rank: 'corner-lot' } }), [])).toEqual(encounters)
+    expect(catchUpList(state({ career: { rank: 'corner-lot' }, clock: at(3) }), [])).toEqual(
+      encounters.filter((id) => id !== 'marketing'),
+    )
+    expect(catchUpList(state(), encounters as TutorialId[])).toEqual(['auction'])
+    expect(catchUpList(state(), ['auction', ...(encounters as TutorialId[])])).toEqual([])
   })
 })
 
@@ -135,9 +149,8 @@ describe('the onboarding', () => {
   it('starts a new game with the first sale, and nothing on a later resume', () => {
     const title = state({ screen: 'title', clock: at(1) })
     expect(tutorialFor(title, state({ clock: at(1) }), [])).toBe('firstSale')
-    expect(tutorialFor(title, state({ clock: at(5), career: { rank: 'corner-lot' } }), [])).toBe(
-      null,
-    )
+    const resumed = state({ clock: at(5), career: { rank: 'corner-lot' } })
+    expect(tutorialFor(title, resumed, ['marketing'])).toBeNull()
   })
 
   it('explains the first evening as the day ends, in the first days only', () => {
@@ -154,7 +167,9 @@ describe('the onboarding', () => {
       tutorialFor(state({ ...corner, clock: at(1) }), state({ ...corner, clock: at(2) }), []),
     ).toBe('runningThePlace')
     expect(
-      tutorialFor(state({ ...corner, clock: at(4) }), state({ ...corner, clock: at(5) }), []),
+      tutorialFor(state({ ...corner, clock: at(4) }), state({ ...corner, clock: at(5) }), [
+        'marketing',
+      ]),
     ).toBeNull()
   })
 
@@ -207,5 +222,166 @@ describe('the onboarding', () => {
     expect(coachShows('firstEvening', state())).toBe(false)
     expect(coachShows('firstSale', closing(1))).toBe(false)
     expect(coachShows('auction', state())).toBe(true)
+  })
+})
+
+/** A customer with what the triggers and steps read. */
+const cust = (over: Partial<Customer> = {}) =>
+  ({
+    id: 'c1',
+    handlerId: null,
+    phase: 'waiting',
+    offer: null,
+    haggle: null,
+    selling: null,
+    trade: null,
+    vehicle: null,
+    wantsDrive: false,
+    drive: null,
+    patience: 1,
+    ...over,
+  }) as Customer
+
+const look = (appraised = false) => ({ hope: 1, estimate: { estimate: 1 }, appraised })
+const car = (parked: boolean) => ({ car: {}, spot: 0, parked }) as unknown as Customer['vehicle']
+
+/** A mid-day change from `before` to `after` customers, past the onboarding. */
+const change = (before: Customer[], after: Customer[], seen: TutorialId[] = []) =>
+  tutorialFor(state({ customers: before }), state({ customers: after }), seen)
+
+describe('the early encounters', () => {
+  it('brings up used cars when a seller or a trade-in parks', () => {
+    const seller = (parked: boolean) =>
+      cust({ selling: look() as Customer['selling'], vehicle: car(parked), phase: 'arriving' })
+    expect(change([seller(false)], [seller(true)])).toBe('usedCars')
+    const trader = (parked: boolean) =>
+      cust({ trade: look() as Customer['trade'], vehicle: car(parked), phase: 'arriving' })
+    expect(change([trader(false)], [trader(true)])).toBe('usedCars')
+    expect(change([seller(true)], [seller(true)])).toBeNull()
+    expect(change([seller(false)], [seller(true)], ['usedCars'])).toBeNull()
+    expect(TUTORIALS.usedCars.covers).toEqual(['seller', 'tradeIn'])
+  })
+
+  it('keeps used cars while a car waits to be appraised', () => {
+    const parked = cust({ selling: look() as Customer['selling'], vehicle: car(true) })
+    const relevant = TUTORIALS.usedCars.relevant!
+    expect(relevant(state({ customers: [parked] }))).toBe(true)
+    const done = { ...parked, selling: look(true) as Customer['selling'] }
+    expect(relevant(state({ customers: [done] }))).toBe(false)
+    expect(relevant(state({ customers: [{ ...parked, phase: 'leaving' }] }))).toBe(false)
+  })
+
+  it('walks used cars through appraising, an offer and an allowance', () => {
+    const seller = cust({ selling: look(true) as Customer['selling'], vehicle: car(true) })
+    expect(stepDone('usedCars', 0, state({ customers: [cust()] }))).toBe(false)
+    expect(stepDone('usedCars', 0, state({ customers: [seller] }))).toBe(true)
+    // The seller's step only with a seller about, the trade's only with a trade.
+    expect(stepsOf('usedCars', state({ customers: [seller] }))).toHaveLength(3)
+    const offered = { ...seller, handlerId: PLAYER_ID, phase: 'considering' as const }
+    expect(stepDone('usedCars', 1, state({ customers: [{ ...offered }] }))).toBe(false)
+    const asked = { ...offered, offer: { carId: 'x', price: 1 } } as Customer
+    expect(stepDone('usedCars', 1, state({ customers: [asked] }))).toBe(true)
+    expect(
+      stepDone('usedCars', 1, state({ customers: [seller], purchases: [{ customerId: 'c1' }] })),
+    ).toBe(true)
+    const trader = cust({
+      trade: look(true) as Customer['trade'],
+      handlerId: PLAYER_ID,
+      phase: 'considering',
+      offer: { carId: 'x', price: 1 } as Customer['offer'],
+    })
+    expect(stepsOf('usedCars', state({ customers: [trader] }))).toHaveLength(3)
+    expect(stepDone('usedCars', 2, state({ customers: [trader] }))).toBe(false)
+    const allowed = { ...trader, offer: { carId: 'x', price: 1, allowance: 500 } } as Customer
+    expect(stepDone('usedCars', 2, state({ customers: [allowed] }))).toBe(true)
+  })
+
+  it('brings up test drives when a 🔑 shows, even mid-deal', () => {
+    expect(change([cust()], [cust({ wantsDrive: true })])).toBe('testDrive')
+    expect(change([], [cust({ wantsDrive: true })])).toBe('testDrive')
+    expect(change([cust({ wantsDrive: true })], [cust({ wantsDrive: true })])).toBeNull()
+    expect(TUTORIALS.testDrive.inDeal).toBe(true)
+    expect(TUTORIALS.testDrive.covers).toEqual(['testDrive'])
+  })
+
+  it('moves the test drive on as the drive does', () => {
+    const drive = (over = {}) =>
+      ({
+        carId: 'x',
+        by: PLAYER_ID,
+        points: [],
+        offered: null,
+        back: false,
+        ...over,
+      }) as unknown as Customer['drive']
+    const mine = (over: Partial<Customer>) =>
+      state({ customers: [cust({ handlerId: PLAYER_ID, phase: 'talking', ...over })] })
+    expect(stepDone('testDrive', 0, mine({ wantsDrive: true }))).toBe(false)
+    expect(stepDone('testDrive', 0, mine({ drive: drive() }))).toBe(true)
+    expect(stepDone('testDrive', 1, mine({ drive: drive() }))).toBe(false)
+    expect(stepDone('testDrive', 1, mine({ phase: 'driving', drive: drive() }))).toBe(true)
+    const pointed = drive({ points: [{ topic: 'comfort', fit: 'good' }] })
+    expect(stepDone('testDrive', 2, mine({ phase: 'driving', drive: pointed }))).toBe(true)
+    const back = drive({ back: true })
+    expect(stepDone('testDrive', 3, mine({ drive: back }))).toBe(false)
+    const asked = { carId: 'x', price: 1 } as Customer['offer']
+    expect(stepDone('testDrive', 3, mine({ drive: back, offer: asked }))).toBe(true)
+    // A salesperson's drive isn't the player's.
+    const theirs = drive({ by: 'staff-1-1' })
+    expect(stepDone('testDrive', 0, mine({ drive: theirs }))).toBe(false)
+    const seller = { id: 's', role: 'sales', fired: false } as Employee
+    expect(stepsOf('testDrive', state())).toHaveLength(4)
+    expect(stepsOf('testDrive', state({ roster: [seller] }))).toHaveLength(5)
+  })
+
+  it('brings up the F&I menu for the player’s financed buyer, but not a cash one', () => {
+    const fi = { lender: 'x', markup: 0, down: 0, products: [], presented: 0 }
+    const credit = (finance: boolean) =>
+      ({ tier: 'A', finance, down: 0.2 }) as unknown as Customer['credit']
+    const buyer = (phase: Customer['phase'], finance = true) =>
+      cust({
+        handlerId: PLAYER_ID,
+        phase,
+        credit: credit(finance),
+        budget: 99_999,
+        archetype: 'regular',
+        offer: { carId: 'x', price: 20_000 } as Customer['offer'],
+        fi: phase === 'menu' ? (fi as Customer['fi']) : null,
+      })
+    expect(change([buyer('signing')], [buyer('menu')])).toBe('fiMenu')
+    expect(change([buyer('signing', false)], [buyer('menu', false)])).toBeNull()
+    expect(TUTORIALS.fiMenu.relevant!(state({ customers: [buyer('menu')] }))).toBe(true)
+    expect(TUTORIALS.fiMenu.relevant!(state({ customers: [buyer('following')] }))).toBe(false)
+    const at = (c: Customer) => state({ customers: [c] })
+    expect(stepDone('fiMenu', 2, at(buyer('menu')))).toBe(false)
+    const shown = { ...buyer('menu'), fi: { ...fi, presented: 1 } as Customer['fi'] }
+    expect(stepDone('fiMenu', 2, at(shown))).toBe(true)
+    expect(stepDone('fiMenu', 3, at(shown))).toBe(false)
+    expect(stepDone('fiMenu', 3, state())).toBe(true)
+  })
+
+  it('brings up the client book with its first entry, then a call', () => {
+    const book = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `k${i}` })) as never[]
+    expect(tutorialFor(state(), state({ clients: book(1) }), [])).toBe('clientBook')
+    expect(tutorialFor(state({ clients: book(1) }), state({ clients: book(1) }), [])).toBeNull()
+    expect(TUTORIALS.clientBook.covers).toEqual(['clientBook', 'followUp'])
+    expect(stepDone('clientBook', 0, state({ stockOpen: true, computerTab: 'clients' }))).toBe(true)
+    expect(stepDone('clientBook', 2, state())).toBe(false)
+    expect(stepDone('clientBook', 2, state({ playerCall: 'k0' }))).toBe(true)
+    expect(stepDone('clientBook', 2, state({ callsTried: ['k0'] }))).toBe(true)
+  })
+
+  it('brings up marketing on day four’s morning, or the first morning after', () => {
+    const corner = { career: { rank: 'corner-lot' as const } }
+    const morning = (from: number, to: number) =>
+      tutorialFor(state({ ...corner, clock: at(from) }), state({ ...corner, clock: at(to) }), [
+        ...ONBOARDING,
+      ])
+    expect(morning(2, 3)).toBeNull()
+    expect(morning(3, MARKETING_DAY)).toBe('marketing')
+    expect(morning(9, 10)).toBe('marketing')
+    const booked = state({ ...corner, clock: at(4), campaigns: [{ startDay: 5 }] })
+    expect(stepDone('marketing', 1, state({ ...corner, clock: at(4) }))).toBe(false)
+    expect(stepDone('marketing', 1, booked)).toBe(true)
   })
 })

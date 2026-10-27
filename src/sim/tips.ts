@@ -207,15 +207,59 @@ const clientCount = (s: TipState) => s.clients.filter((c) => c.status === 'clien
 export const APPRECIATION_TIP_CLIENTS = 10
 
 /** The player's buyer at the F&I menu who wasn't there before, matching `test`. */
-function newToMenu(prev: TipState, next: TipState, test: (c: Customer) => boolean): boolean {
-  if (next.customers === prev.customers) return false
-  return next.customers.some(
+function newToMenu(
+  prev: readonly Customer[],
+  next: readonly Customer[],
+  test: (c: Customer) => boolean,
+): boolean {
+  if (next === prev) return false
+  return next.some(
     (c) =>
       c.phase === 'menu' &&
       c.handlerId === PLAYER_ID &&
-      prev.customers.find((p) => p.id === c.id)?.phase !== 'menu' &&
+      prev.find((p) => p.id === c.id)?.phase !== 'menu' &&
       test(c),
   )
+}
+
+/**
+ * Trigger helpers shared with the walkthroughs (`sim/tutorials.ts`), each
+ * diffing the store's lists from `prev` to `next`.
+ */
+
+/** A seller's car (`'seller'`) or a trade-in (`'trade'`) has just parked. */
+export function newlyParked(
+  prev: readonly Customer[],
+  next: readonly Customer[],
+  kind: 'seller' | 'trade',
+): boolean {
+  if (next === prev) return false
+  return next.some(
+    (c) =>
+      (kind === 'seller' ? c.selling : c.trade) &&
+      c.vehicle?.parked &&
+      !prev.find((p) => p.id === c.id)?.vehicle?.parked,
+  )
+}
+
+/** A shopper's 🔑 has just shown: they want a test drive. */
+export function newDriveBubble(prev: readonly Customer[], next: readonly Customer[]): boolean {
+  if (next === prev) return false
+  return next.some((c) => {
+    if (bubbleOf(c) !== 'drive') return false
+    const before = prev.find((p) => p.id === c.id)
+    return !before || bubbleOf(before) !== 'drive'
+  })
+}
+
+/** The player's buyer has just come to the F&I menu financing, with a lender to take them. */
+export function financedAtMenu(prev: readonly Customer[], next: readonly Customer[]): boolean {
+  return newToMenu(prev, next, (c) => financing(c) && !!c.fi && !loanDeclined(c, c.fi))
+}
+
+/** Someone has just gone in the client book. */
+export function bookGrew(prev: readonly Client[], next: readonly Client[]): boolean {
+  return next !== prev && next.length > prev.length
 }
 
 const fiCount = (s: TipState, key: 'financed' | 'declined' | 'chargebackCount') =>
@@ -288,15 +332,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     case 'missed':
       return missedCount(next) > missedCount(prev)
     case 'seller':
-    case 'tradeIn': {
-      if (next.customers === prev.customers) return false
-      return next.customers.some(
-        (c) =>
-          (id === 'seller' ? c.selling : c.trade) &&
-          c.vehicle?.parked &&
-          !prev.customers.find((p) => p.id === c.id)?.vehicle?.parked,
-      )
-    }
+    case 'tradeIn':
+      return newlyParked(prev.customers, next.customers, id === 'seller' ? 'seller' : 'trade')
     case 'rivalQuote': {
       if (next.customers === prev.customers) return false
       // Once the player is talking with them about a car his quote is on.
@@ -369,7 +406,7 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
       )
     }
     case 'clientBook':
-      return next.clients !== prev.clients && next.clients.length > prev.clients.length
+      return bookGrew(prev.clients, next.clients)
     case 'followUp':
       return next.clients !== prev.clients && prospects(next) > prospects(prev)
     case 'appointment':
@@ -397,10 +434,10 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
     case 'declinedCredit':
       return (
         fiCount(next, 'declined') > fiCount(prev, 'declined') ||
-        newToMenu(prev, next, (c) => !!c.fi && loanDeclined(c, c.fi))
+        newToMenu(prev.customers, next.customers, (c) => !!c.fi && loanDeclined(c, c.fi))
       )
     case 'fiMenu':
-      return newToMenu(prev, next, (c) => financing(c) && !!c.fi && !loanDeclined(c, c.fi))
+      return financedAtMenu(prev.customers, next.customers)
     case 'chargeback':
       return fiCount(next, 'chargebackCount') > fiCount(prev, 'chargebackCount')
     case 'financeManager':
@@ -409,14 +446,8 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
         fiCount(prev, 'financed') < FINANCE_TIP_DEALS &&
         !next.roster?.some((e) => e.role === 'finance' && !e.fired)
       )
-    case 'testDrive': {
-      if (next.customers === prev.customers) return false
-      return next.customers.some((c) => {
-        if (bubbleOf(c) !== 'drive') return false
-        const before = prev.customers.find((p) => p.id === c.id)
-        return !before || bubbleOf(before) !== 'drive'
-      })
-    }
+    case 'testDrive':
+      return newDriveBubble(prev.customers, next.customers)
     case 'ding':
       return (next.dayStats.drives?.dings ?? 0) > (prev.dayStats.drives?.dings ?? 0)
     case 'driveStaff':

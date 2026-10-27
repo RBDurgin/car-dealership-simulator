@@ -650,6 +650,16 @@ export const UPDATES: readonly Update[] = [
       'Each can be skipped, or replayed from How to play’s Tutorials tab.',
     ],
   },
+  {
+    id: 59,
+    phase: '23',
+    title: 'Walkthroughs for the first encounters',
+    items: [
+      'New walkthroughs the first time you meet them: used cars, test drives, the F&I menu and your client book.',
+      'On day four, a walkthrough of marketing and the Upgrades tab.',
+      'A walkthrough about the deal in hand comes up mid-deal, and Easy’s tips don’t repeat what one has shown.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

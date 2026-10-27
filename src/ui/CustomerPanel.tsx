@@ -186,7 +186,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
         </div>
       )}
       {trading && (
-        <div className="haggle-stepper">
+        <div className="haggle-stepper" data-coach="deal-allowance">
           <button
             className="btn"
             aria-label="Lower allowance"
@@ -270,7 +270,7 @@ function BuyHaggle({ c }: { c: Customer }) {
         <div className="customer-status">{blocker}</div>
       ) : (
         <>
-          <div className="customer-actions">
+          <div className="customer-actions" data-coach="seller-offer">
             {h ? (
               <>
                 <button className="btn" onClick={() => offer(h.lastAsk)}>
@@ -437,7 +437,7 @@ function TestDrive({ c }: { c: Customer }) {
   }
   if (drivePending(c)) {
     return (
-      <div className="customer-status">
+      <div className="customer-status" data-coach="deal-drive">
         Walking to the {carModel ? carName(carModel) : 'car'} for a test drive…
         <div className="customer-actions">
           <button
@@ -454,7 +454,7 @@ function TestDrive({ c }: { c: Customer }) {
     )
   }
   return (
-    <div className="customer-actions test-drive">
+    <div className="customer-actions test-drive" data-coach="deal-drive">
       <button
         className={c.wantsDrive ? 'btn btn-primary' : 'btn'}
         disabled={!!blocker}

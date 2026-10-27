@@ -36,7 +36,7 @@ function ChannelRow({
         <div className="staff-blurb muted">{info.reaches}</div>
       </div>
       <div className="staff-wage price">{formatMoney(info.cost)}</div>
-      <div className="stock-actions">
+      <div className="stock-actions" data-coach="marketing-launch">
         <button
           className="btn btn-small btn-primary"
           disabled={short}

@@ -16,7 +16,7 @@ export function DrivePrompt({ c }: { c: Customer }) {
   if (drive.offered) {
     const best = hint ? bestTopic(c, car, drive.offered) : null
     return (
-      <div className="drive-prompt" role="group" aria-label="Point out">
+      <div className="drive-prompt" role="group" aria-label="Point out" data-coach="drive-prompt">
         <div className="drive-prompt-title">Point out…</div>
         <div className="drive-topics">
           {drive.offered.map((topic, i) => {

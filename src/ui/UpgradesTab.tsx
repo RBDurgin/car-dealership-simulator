@@ -62,7 +62,7 @@ function UpgradeRow({
       </div>
       <div className="staff-wage price">{formatMoney(info.cost)}</div>
       {!bought && (
-        <div className="stock-actions">
+        <div className="stock-actions" data-coach="upgrades-buy">
           <button
             className="btn btn-small btn-primary"
             disabled={!!blocker}

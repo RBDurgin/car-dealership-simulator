@@ -248,9 +248,13 @@ function BasicsTab({ touch, click }: TabProps) {
           over something in the world) and moves on as you do it, while the game runs; skip a step
           or stop at any time. <b>Later</b> keeps it in the <b>Tutorials</b> tab here, where every
           walkthrough you&apos;ve unlocked can be replayed. A new game starts with three: your first
-          sale, your first evening&apos;s summary, and ordering stock and hiring on day two.
-          They&apos;re on for Easy and Medium and off on Hard unless you choose otherwise at New
-          game, and the sound and settings panel turns them on or off for the game.
+          sale, your first evening&apos;s summary, and ordering stock and hiring on day two. More
+          come up the first time you meet something new: a car to appraise, a shopper who wants a
+          test drive, a financed buyer at the F&amp;I menu and your first client in the book, and on
+          day four, marketing and upgrades. One about the deal in hand comes up mid-deal;
+          Easy&apos;s tips don&apos;t repeat what a walkthrough has shown. They&apos;re on for Easy
+          and Medium and off on Hard unless you choose otherwise at New game, and the sound and
+          settings panel turns them on or off for the game.
         </p>
         <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent

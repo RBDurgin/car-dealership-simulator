@@ -108,6 +108,7 @@ function ClientRow({
       <div className="stock-actions">
         <button
           className="btn btn-small"
+          data-coach={call ? 'clients-call' : undefined}
           disabled={!call}
           title={call ? CALL_TITLES[call] : 'Not one to call right now'}
           onClick={() => useGame.getState().phoneClient(c.id)}
@@ -188,7 +189,7 @@ export function ClientsTab() {
           )}
         </dd>
       </dl>
-      <label className="service-auto">
+      <label className="service-auto" data-coach="clients-reception">
         <input
           type="checkbox"
           checked={receptionCalls}
@@ -255,7 +256,7 @@ export function ClientsTab() {
       {rows.length === 0 ? (
         <p className="muted staff-empty">{EMPTY[filter]}</p>
       ) : (
-        <ul className="staff-list">
+        <ul className="staff-list" data-coach="clients-book">
           {rows.slice(0, shown).map((c) => (
             <ClientRow key={c.id} c={c} day={day} rival={rival} call={calls.get(c.id) ?? null} />
           ))}

@@ -118,7 +118,7 @@ function Loan({ c, deal, net }: { c: Customer; deal: FiDeal; net: number }) {
         </dd>
       </dl>
       {open ? (
-        <div className="fi-lenders" role="radiogroup" aria-label="Lender">
+        <div className="fi-lenders" role="radiogroup" aria-label="Lender" data-coach="fi-lenders">
           {LENDERS.map((l) => {
             const reason = declineReason(l, { ...c.credit!, down: deal.down }, amount)
             const picked = l.id === lender.id
@@ -143,7 +143,7 @@ function Loan({ c, deal, net }: { c: Customer; deal: FiDeal; net: number }) {
         <div className="status-hint">The loan is set with {lender.name}.</div>
       )}
       {open && (
-        <div className="haggle-stepper">
+        <div className="haggle-stepper" data-coach="fi-markup">
           <button
             className="btn"
             aria-label="Lower markup"
@@ -274,9 +274,11 @@ export function FinancePanel({ c }: { c: Customer }) {
             Products
             {pressure > 0 && <span className="fi-pressure"> · pressure {pressure.toFixed(1)}</span>}
           </h3>
-          {productsFor(c).map((p) => (
-            <ProductRow key={p.id} c={c} deal={deal} product={p} />
-          ))}
+          <div data-coach="fi-products">
+            {productsFor(c).map((p) => (
+              <ProductRow key={p.id} c={c} deal={deal} product={p} />
+            ))}
+          </div>
           <dl className="haggle-figures">
             <dt>F&amp;I gross</dt>
             <dd className="price">{formatMoney(fiGross(deal, amount, c.credit))}</dd>

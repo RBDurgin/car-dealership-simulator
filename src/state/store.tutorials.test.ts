@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { isAuctionDay } from '../sim/auction'
 import { CLOSE_MINUTE } from '../sim/clock'
+import type { Client } from '../sim/clients'
+import { PLAYER_ID, type Customer } from '../sim/customers'
 import { createSave, parseSave } from '../sim/save'
-import { ONBOARDING } from '../sim/tutorials'
+import { ONBOARDING, TUTORIAL_IDS } from '../sim/tutorials'
 import { isPaused, useGame } from './store'
+import { startTips } from './tips'
 import { startTutorials } from './tutorials'
 
 const initial = useGame.getState()
@@ -19,8 +22,8 @@ function endDay() {
 /** Plays a Main Street game (guide closed) through to the evening before the first auction. */
 function toAuctionEve(level: 'easy' | 'medium' | 'hard' = 'medium', tutorialsOn?: boolean) {
   game().newGame(level, undefined, tutorialsOn)
-  // Past the onboarding, which would otherwise come up as the guide closes.
-  useGame.setState({ tutorialsSeen: [...ONBOARDING] })
+  // Past the others (the onboarding would come up as the guide closes).
+  useGame.setState({ tutorialsSeen: TUTORIAL_IDS.filter((id) => id !== 'auction') })
   game().toggleHelp(false)
   useGame.setState({ career: { ...game().career, rank: 'main-street' } })
   while (!isAuctionDay(game().clock.day + 1)) {
@@ -224,5 +227,100 @@ describe('the walkthrough watcher', () => {
     expect(game().tutorialCard).toBeNull()
     endDay()
     expect(game().tutorialCard).toBeNull()
+  })
+})
+
+describe('the early encounters', () => {
+  let stop: () => void
+  beforeEach(() => {
+    useGame.setState(initial, true)
+    // In the order the game starts them.
+    const stopTutorials = startTutorials()
+    const stopTips = startTips()
+    stop = () => {
+      stopTutorials()
+      stopTips()
+    }
+  })
+  afterEach(() => stop())
+
+  /** An Easy game on day 2 with the onboarding seen, the guide closed and no notice up. */
+  function play() {
+    game().newGame('easy')
+    useGame.setState({ tutorialsSeen: [...ONBOARDING, 'marketing'] })
+    game().toggleHelp(false)
+    useGame.setState({ notice: null })
+  }
+
+  /** The first shopper of the day, as `over` says. */
+  function shopper(over: Partial<Customer> = {}): Customer {
+    let minute = game().clock.minute
+    while (game().customers.length === 0) {
+      minute += 5
+      game().tickClock({ day: game().clock.day, minute })
+    }
+    return { ...game().customers[0], ...over }
+  }
+
+  const tipShown = () => game().notice?.text.startsWith('Tip:') ?? false
+
+  it('shows the client book’s card, and not the tips it covers', () => {
+    play()
+    useGame.setState({ clients: [{ id: 'client-1-1', status: 'prospect' } as Client] })
+    expect(game().tutorialCard).toBe('clientBook')
+    expect(game().tipsSeen).toEqual(expect.arrayContaining(['clientBook', 'followUp']))
+    expect(tipShown()).toBe(false)
+  })
+
+  it('brings up test drives in the middle of the player’s deal', () => {
+    play()
+    const c = shopper({ handlerId: PLAYER_ID, phase: 'talking', wantsDrive: true, drive: null })
+    useGame.setState({ customers: [c] })
+    expect(game().tutorialCard).toBe('testDrive')
+    expect(tipShown()).toBe(false)
+  })
+
+  it('keeps the tip back while the card waits, and drops a card that’s past', () => {
+    play()
+    game().startTutorial('clientBook')
+    const c = shopper({ phase: 'waiting', handlerId: null, wantsDrive: true, drive: null })
+    useGame.setState({ customers: [c] })
+    // The steps are up: the card waits, and so does its tip.
+    expect(game().tutorialCard).toBeNull()
+    expect(tipShown()).toBe(false)
+    expect(game().tipsSeen).toContain('testDrive')
+    // They gave up on the drive: nothing to show any more.
+    useGame.setState({ customers: [{ ...c, wantsDrive: false }] })
+    game().endTutorial()
+    expect(game().tutorialCard).toBeNull()
+    expect(game().tutorialsSeen).not.toContain('testDrive')
+    // The next 🔑 brings it up.
+    useGame.setState({ customers: [{ ...c, id: 'another' }] })
+    expect(game().tutorialCard).toBe('testDrive')
+  })
+
+  it('shows Easy’s tip as before with walkthroughs off', () => {
+    play()
+    game().setTutorialsOn(false)
+    useGame.setState({ clients: [{ id: 'client-1-1', status: 'prospect' } as Client] })
+    expect(game().tutorialCard).toBeNull()
+    expect(tipShown()).toBe(true)
+  })
+
+  it('brings up marketing on day four’s morning', () => {
+    game().newGame('medium')
+    useGame.setState({ tutorialsSeen: [...ONBOARDING] })
+    game().toggleHelp(false)
+    for (let day = 1; day < 4; day++) {
+      endDay()
+      game().startNextDay()
+      if (day < 3) expect(game().tutorialCard).toBeNull()
+    }
+    expect(game().tutorialCard).toBe('marketing')
+    game().startTutorial('marketing')
+    game().toggleStockPanel(true, 'marketing')
+    expect(game().coach?.step).toBe(1)
+    game().launchCampaign('newspaper')
+    expect(game().coach?.step).toBe(2)
   })
 })

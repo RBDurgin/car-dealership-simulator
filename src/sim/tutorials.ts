@@ -1,10 +1,12 @@
 import { auctionOpen, isAuctionDay } from './auction'
+import type { Client } from './clients'
 import { dayOver, type GameTime } from './clock'
-import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
+import { bubbleOf, PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import { dealCustomer, type Sale } from './deal'
+import { financing } from './fi'
 import type { RankId } from './progression'
 import { usedCarManager, type Employee } from './staff'
-import type { TipId } from './tips'
+import { bookGrew, financedAtMenu, newDriveBubble, newlyParked, type TipId } from './tips'
 
 /**
  * Walkthroughs: a card when a feature first comes up, then, if the player
@@ -13,7 +15,16 @@ import type { TipId } from './tips'
  * states like `tipFor`, and `state/tutorials.ts` shows the card and runs the
  * steps.
  */
-export type TutorialId = 'firstSale' | 'firstEvening' | 'runningThePlace' | 'auction'
+export type TutorialId =
+  | 'firstSale'
+  | 'firstEvening'
+  | 'runningThePlace'
+  | 'auction'
+  | 'usedCars'
+  | 'testDrive'
+  | 'fiMenu'
+  | 'clientBook'
+  | 'marketing'
 
 /** Text that names a key, worded for a keyboard and for touch (see `COARSE`). */
 export type Wording = string | { keys: string; touch: string }
@@ -33,7 +44,19 @@ export type CoachAnchor =
   | 'auction-maxbid'
   | 'deal-ask'
   | 'deal-haggle'
+  | 'deal-allowance'
+  | 'deal-drive'
+  | 'seller-offer'
+  | 'drive-prompt'
+  | 'fi-lenders'
+  | 'fi-markup'
+  | 'fi-products'
   | 'fi-sign'
+  | 'clients-book'
+  | 'clients-call'
+  | 'clients-reception'
+  | 'marketing-launch'
+  | 'upgrades-buy'
   | 'summary-gross'
   | 'summary-net'
   | 'summary-reputation'
@@ -43,9 +66,27 @@ export type CoachAnchor =
 
 /**
  * A thing in the world a step points an arrow at: a prop found in the live
- * layout's props, or (`customer`) the nearest customer waiting to be greeted.
+ * layout's props (`computer`, `kiosk`, `desk`, `phone`), or the nearest of a
+ * kind of customer: one waiting to be greeted (`customer`), a seller waiting
+ * by their car (`seller`), a shopper with a 🔑 (`driveShopper`), or a car in
+ * customer parking still to be appraised (`vehicle`).
  */
-export type WorldTarget = 'computer' | 'kiosk' | 'desk' | 'customer'
+export type WorldTarget =
+  'computer' | 'kiosk' | 'desk' | 'phone' | 'customer' | 'seller' | 'driveShopper' | 'vehicle'
+
+/** A seller's car or a trade-in parked and not yet appraised: the `vehicle` target. */
+export const toAppraise = (c: Customer) =>
+  c.phase !== 'leaving' &&
+  !!c.vehicle?.parked &&
+  !!(c.selling ?? c.trade) &&
+  !(c.selling ?? c.trade)!.appraised
+
+/** A seller waiting by their car for someone to make an offer: the `seller` target. */
+export const sellerWaiting = (c: Customer) =>
+  !!c.selling && c.phase === 'waiting' && c.handlerId === null
+
+/** A shopper with a 🔑 over them: the `driveShopper` target. */
+export const wantsDriveNow = (c: Customer) => bubbleOf(c) === 'drive'
 
 /** The slice of the store the triggers and the steps read. */
 export interface CoachState {
@@ -62,6 +103,13 @@ export interface CoachState {
   auction: { high: string | null } | null
   auctionWins: readonly unknown[]
   roster: readonly Employee[]
+  /** Cars bought today, by the customer who sold them (a seller, or a buyer's trade). */
+  purchases: readonly { customerId: string }[]
+  clients: readonly Client[]
+  /** Clients phoned today, and who the player is on the phone to. */
+  callsTried: readonly string[]
+  playerCall: string | null
+  campaigns: readonly { startDay: number }[]
 }
 
 export interface Step {
@@ -100,10 +148,20 @@ export interface Tutorial {
    * starts. Unset: they run till done, hidden while the day is over.
    */
   lasts?: 'day' | 'evening'
+  /** Its card may come up in the middle of the player's deal (it's about the deal). */
+  inDeal?: boolean
+  /**
+   * While its card waits to come up, whether it still has something to show:
+   * once this is false it's dropped unseen, to come up the next time.
+   */
+  relevant?: (s: CoachState) => boolean
 }
 
 /** Days of a new game whose evening and morning walkthroughs still teach the basics. */
 export const ONBOARDING_DAYS = 3
+
+/** The morning marketing and upgrades are introduced, once the basics have settled in. */
+export const MARKETING_DAY = 4
 
 /** The player's deal in hand, if any. */
 const playerDeal = (s: CoachState) => dealCustomer(s.customers, PLAYER_ID)
@@ -116,6 +174,21 @@ function dealIn(s: CoachState, phases: readonly CustomerPhase[]): boolean {
 
 /** Whether the player has sold a car today (the summary's sales the player made). */
 const playerSold = (s: CoachState) => s.dayStats.sales.some((x) => !x.soldBy)
+
+/** The player's buyer at the F&I menu, if any. */
+const atMenu = (s: CoachState) => {
+  const c = playerDeal(s)
+  return c?.phase === 'menu' ? c : null
+}
+
+/** The player's shopper's test drive, if they're on one (or back from it). */
+const playerDrive = (s: CoachState) => {
+  const d = playerDeal(s)?.drive
+  return d?.by === PLAYER_ID ? d : null
+}
+
+const hasRole = (s: CoachState, role: Employee['role']) =>
+  s.roster.some((e) => e.role === role && !e.fired)
 
 /** Past the asking: they agreed, or are signing. */
 const AGREED: readonly CustomerPhase[] = ['following', 'signing', 'menu']
@@ -300,6 +373,248 @@ export const TUTORIALS: Record<TutorialId, Tutorial> = {
     },
     unlocked: (s) => auctionOpen(s.career),
     covers: ['auction'],
+  },
+  usedCars: {
+    title: 'Used cars',
+    card: [
+      'Some drivers park in customer parking with a car to sell for cash, and some shoppers bring one to trade in.',
+      'Appraise the car before you name a number: at a glance you can be well off what it’s worth.',
+      'Buy it under what it’ll sell for: it goes on your lot tomorrow as used stock, and loses a little value every day.',
+      'With a trade, set an allowance as you ask: they weigh what they pay after it, and a lowball allowance offends them.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Walk to the car in customer parking (the arrow), click the car itself and choose Appraise.',
+          touch:
+            'Walk to the car in customer parking (the arrow), tap the car itself and choose Appraise.',
+        },
+        world: 'vehicle',
+        done: (s) => s.customers.some((c) => !!(c.selling ?? c.trade)?.appraised),
+      },
+      {
+        text: {
+          keys: 'A seller waits by their car. Click them and choose Make offer, then offer under the estimate: the panel shows your margin.',
+          touch:
+            'A seller waits by their car. Tap them and choose Make offer, then offer under the estimate: the panel shows your margin.',
+        },
+        ui: ['seller-offer'],
+        world: 'seller',
+        only: (s) => s.customers.some((c) => !!c.selling && c.phase !== 'leaving'),
+        done: (s) => {
+          const c = playerDeal(s)
+          const sellers = new Set(s.customers.filter((x) => x.selling).map((x) => x.id))
+          return (
+            (!!c?.selling && (!!c.offer || !!c.haggle)) ||
+            s.purchases.some((p) => sellers.has(p.customerId))
+          )
+        },
+      },
+      {
+        text: 'Greet the buyer with the trade-in and ask your price: the second stepper sets what you allow for their car. What they pay after it is what they weigh.',
+        ui: ['deal-allowance', 'deal-ask'],
+        only: (s) => s.customers.some((c) => !!c.trade && c.phase !== 'leaving'),
+        done: (s) => {
+          const c = playerDeal(s)
+          return (!!c?.trade && (c.offer?.allowance !== undefined || !!c.haggle)) || playerSold(s)
+        },
+      },
+      {
+        text: 'Cars you buy go on the lot tomorrow, priced for what they’re worth. Every day they sit they’re worth a little less, so don’t hold out for too much.',
+      },
+    ],
+    trigger: {
+      when: 'event',
+      applies: (prev, next) =>
+        newlyParked(prev.customers, next.customers, 'seller') ||
+        newlyParked(prev.customers, next.customers, 'trade'),
+    },
+    unlocked: () => true,
+    covers: ['seller', 'tradeIn'],
+    inDeal: true,
+    relevant: (s) => s.customers.some(toAppraise),
+  },
+  testDrive: {
+    title: 'Test drives',
+    card: [
+      'A shopper with a 🔑 over them wants to drive the car before they talk price.',
+      'Ride along: on the road they ask about the car, and pointing out what suits them makes a yes likelier and a smaller discount.',
+      'Give them a price without the drive and they’re cooler on it.',
+      'A salesperson can take the drive for you while you stay on the floor.',
+    ],
+    steps: [
+      {
+        text: 'Greet the shopper with the 🔑, then choose 🔑 Test drive in their panel.',
+        ui: ['deal-drive'],
+        world: 'driveShopper',
+        done: (s) => !!playerDrive(s) || playerSold(s),
+      },
+      {
+        text: {
+          keys: 'They walk to the car. Choose Get in on their panel (or click the car) to set off.',
+          touch: 'They walk to the car. Choose Get in on their panel (or tap the car) to set off.',
+        },
+        ui: ['deal-drive'],
+        done: (s) => dealIn(s, ['driving']) || !!playerDrive(s)?.back || playerSold(s),
+      },
+      {
+        text: {
+          keys: 'On the road they ask about the car. Point out what suits them (press 1–3 or click): their kind of shopper is in their panel.',
+          touch:
+            'On the road they ask about the car. Tap what suits them: their kind of shopper is in their panel.',
+        },
+        ui: ['drive-prompt'],
+        done: (s) => {
+          const d = playerDrive(s)
+          return !!d?.points.some((p) => p.topic) || !!d?.back || playerSold(s)
+        },
+      },
+      {
+        text: 'Back on the lot, ask your price: a good drive makes them warmer to it.',
+        ui: ['deal-ask'],
+        done: (s) => {
+          const c = playerDeal(s)
+          return (!!c?.drive?.back && (!!c.offer || !!c.haggle)) || playerSold(s)
+        },
+      },
+      {
+        text: 'With a salesperson free, Send with … in the shopper’s panel hands them the drive, and they carry on with the sale.',
+        only: (s) => hasRole(s, 'sales'),
+      },
+    ],
+    trigger: {
+      when: 'event',
+      applies: (prev, next) => newDriveBubble(prev.customers, next.customers),
+    },
+    unlocked: () => true,
+    covers: ['testDrive'],
+    inDeal: true,
+    relevant: (s) => s.customers.some(wantsDriveNow),
+  },
+  fiMenu: {
+    title: 'The F&I menu',
+    card: [
+      'This buyer is financing: you arrange the loan, and can sell them products on top.',
+      'Each lender takes some credit tiers and not others. The markup over the lender’s buy rate earns you a reserve.',
+      'Present products one at a time: each is answered at once.',
+      'Every product shown and every point of markup makes the next yes harder, and a buyer pushed hard is less happy and likelier to cancel later.',
+    ],
+    steps: [
+      {
+        text: 'Pick a lender. The greyed-out ones won’t take this buyer, and say why.',
+        ui: ['fi-lenders'],
+      },
+      {
+        text: 'Set the markup: each point earns a reserve, but pushes their payment up.',
+        ui: ['fi-markup'],
+      },
+      {
+        text: 'Present a product at a price: they say yes or no at once. Turned down, it can be presented again for less.',
+        ui: ['fi-products'],
+        done: (s) => {
+          const c = atMenu(s)
+          return !c || (c.fi?.presented ?? 0) > 0
+        },
+      },
+      {
+        text: 'Sign the contracts when you’re done: the loan’s reserve and the products add to the deal’s gross.',
+        ui: ['fi-sign'],
+        done: (s) => !atMenu(s),
+      },
+    ],
+    trigger: {
+      when: 'event',
+      applies: (prev, next) => financedAtMenu(prev.customers, next.customers),
+    },
+    unlocked: () => true,
+    covers: ['fiMenu'],
+    inDeal: true,
+    relevant: (s) => {
+      const c = atMenu(s)
+      return !!c && financing(c)
+    },
+  },
+  clientBook: {
+    title: 'Your client book',
+    card: [
+      'Buyers go in your client book, and shoppers who talked to you but didn’t buy stay as prospects for two weeks.',
+      'Each visit leaves them more or less happy: waits, haggling and the price all count.',
+      'Happy clients come back to trade up, send friends and take your calls.',
+      'Call a prospect back from the desk phone, and a be-back who books comes in ready to deal.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Clients tab: press L, use the Office button, or walk to the computer in the office.',
+          touch:
+            'Open the office computer’s Clients tab: tap Office, or walk to the computer in the office.',
+        },
+        ui: ['tab-clients', 'office'],
+        world: 'computer',
+        done: (s) => s.stockOpen && s.computerTab === 'clients',
+      },
+      {
+        text: 'Each row is someone from the book: client or prospect, how happy their last visit left them and why. A ★ over a waiting customer means they’ve been here before.',
+        ui: ['clients-book'],
+      },
+      {
+        text: {
+          keys: 'Call someone: Call on their row, or walk to the desk phone in the office, click it and choose Call.',
+          touch:
+            'Call someone: Call on their row, or walk to the desk phone in the office, tap it and choose Call.',
+        },
+        ui: ['clients-call'],
+        world: 'phone',
+        done: (s) => !!s.playerCall || s.callsTried.length > 0,
+      },
+      {
+        text: 'Your receptionist can work the list between customers: tick it here.',
+        ui: ['clients-reception'],
+        only: (s) => hasRole(s, 'receptionist'),
+      },
+    ],
+    trigger: { when: 'event', applies: (prev, next) => bookGrew(prev.clients, next.clients) },
+    unlocked: () => true,
+    covers: ['clientBook', 'followUp'],
+  },
+  marketing: {
+    title: 'Marketing and upgrades',
+    card: [
+      'Ads bring more people in: each channel reaches a different crowd, for a few days, paid up front.',
+      'Running the same channel again brings less each time.',
+      'Upgrades last: a bigger sign, a tube man out front, a nicer showroom. Each goes up overnight.',
+      'Spend what the extra sales will pay back.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Marketing tab: press M, or use the Office button.',
+          touch: 'Open the office computer’s Marketing tab: tap Office.',
+        },
+        ui: ['tab-marketing', 'office'],
+        done: (s) => s.stockOpen && s.computerTab === 'marketing',
+      },
+      {
+        text: 'Book a campaign if you can spare the cash: it’s paid now and brings people in from tomorrow.',
+        ui: ['marketing-launch'],
+        done: (s) => s.campaigns.some((c) => c.startDay > s.clock.day),
+      },
+      {
+        text: {
+          keys: 'Now the Upgrades tab (U).',
+          touch: 'Now the Upgrades tab.',
+        },
+        ui: ['tab-upgrades'],
+        done: (s) => s.stockOpen && s.computerTab === 'upgrades',
+      },
+      {
+        text: 'Each upgrade says what it does. It goes up overnight and works from then on; a better one in the same spot replaces it.',
+        ui: ['upgrades-buy'],
+      },
+    ],
+    trigger: { when: 'morning', applies: (s) => s.clock.day >= MARKETING_DAY },
+    unlocked: (s) => s.clock.day >= MARKETING_DAY,
+    covers: [],
   },
 }
 

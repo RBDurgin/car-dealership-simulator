@@ -132,6 +132,7 @@ Tips covered (shown as seen once the walkthrough is): `haggle`, `restock`, `sell
 
 - `usedCars`, `testDrive`, `fiMenu`, `clientBook` and `marketing`, and `covers` for their tips.
 - What's new entry. Tests: each trigger, and a covered tip no longer shows.
+- Built (2026-10-26): `usedCars` (a seller or trade-in parks; covers `seller`, `tradeIn`), `testDrive` (a 🔑 shows; covers `testDrive`), `fiMenu` (the player's financed buyer at the menu; covers `fiMenu`), `clientBook` (the book grows; covers `clientBook`, `followUp`) and `marketing` (from `MARKETING_DAY`'s morning; covers nothing, as no tip does). Their triggers are tip helpers lifted into `sim/tips.ts` (`newlyParked`, `newDriveBubble`, `financedAtMenu`, `bookGrew`). A `Tutorial.inDeal` card may come up mid-deal (the first three are about the deal in hand), and a queued walkthrough that's no longer `relevant` (the car appraised, the 🔑 gone, the buyer off the menu) is dropped unseen, to come up next time. The watcher marks covered tips seen as soon as a walkthrough is queued, so a tip never shows while its card waits. World targets `phone`, `seller`, `driveShopper` and `vehicle` (a parked car `toAppraise`, through `runtime.vehiclePos`). All five are `unlocked` from the start (marketing from `MARKETING_DAY`), so the catch-up will list them. No save change.
 
 ### 23d: Rank unlocks and the team
 
