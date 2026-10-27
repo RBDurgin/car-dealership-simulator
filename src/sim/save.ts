@@ -18,6 +18,7 @@ import type { GameTime } from './clock'
 import type { Chargeback } from './chargebacks'
 import { liveContracts, MAX_CONTRACTS, type Contract } from './contracts'
 import { isAchievementId, type EarnedAchievement } from './achievements'
+import { isTutorialId, type TutorialId } from './tutorials'
 import { cleanName, DEFAULT_DEALERSHIP_NAME } from './dealershipName'
 import { isDifficulty, TUNING, type Difficulty } from './difficulty'
 import { isExpansionId, type OwnedExpansion } from './expansions'
@@ -65,7 +66,7 @@ import { LATEST_NEWS, legacyNews } from './whatsNew'
  * delivered on the morning the save resumes, ad campaigns that haven't
  * finished carry on, and improvements bought that day are up by then.
  */
-export const SAVE_VERSION = 41
+export const SAVE_VERSION = 42
 
 export interface SaveData {
   version: number
@@ -144,6 +145,14 @@ export interface SaveData {
   consigned: Consignment[]
   /** Whether the used-car manager consigns long-held used cars on their own. */
   autoWholesale: boolean
+  /** Walkthroughs come up as features unlock (see `sim/tutorials.ts`). */
+  tutorialsOn: boolean
+  /** Walkthroughs whose card has been shown. */
+  tutorialsSeen: TutorialId[]
+  /** Walkthroughs put off with Later. */
+  tutorialsLater: TutorialId[]
+  /** From before walkthroughs: owed one offer of those it missed. */
+  catchUp: boolean
 }
 
 export interface SaveSource {
@@ -183,6 +192,10 @@ export interface SaveSource {
   auctionBids: AuctionBid[]
   consigned: Consignment[]
   autoWholesale: boolean
+  tutorialsOn: boolean
+  tutorialsSeen: TutorialId[]
+  tutorialsLater: TutorialId[]
+  catchUp: boolean
 }
 
 /**
@@ -242,6 +255,10 @@ export function createSave(s: SaveSource, now: number): SaveData {
     // A consigned car sold or stolen meanwhile isn't going.
     consigned: liveConsigned(s.consigned, s.inventory),
     autoWholesale: s.autoWholesale,
+    tutorialsOn: s.tutorialsOn,
+    tutorialsSeen: s.tutorialsSeen,
+    tutorialsLater: s.tutorialsLater,
+    catchUp: s.catchUp,
   }
 }
 
@@ -536,6 +553,15 @@ const UPGRADES: Record<number, (raw: RawSave, from: number) => RawSave> = {
           }))(raw.rival)
         : raw.rival,
   }),
+  // v42: walkthroughs, on as the level has them, none seen yet, and one
+  // catch-up offer owed for the features already unlocked.
+  41: (raw) => ({
+    ...raw,
+    tutorialsOn: TUNING[isDifficulty(raw.difficulty) ? raw.difficulty : 'medium'].tutorials,
+    tutorialsSeen: [],
+    tutorialsLater: [],
+    catchUp: true,
+  }),
 }
 
 /** Employee records for an older save, from each salesperson's sales (the player's left out). */
@@ -623,6 +649,8 @@ export function parseSave(input: unknown): SaveData | null {
   if (!Array.isArray(raw.consigned) || raw.consigned.length > MAX_CONSIGNED) return null
   if (!raw.consigned.every(isConsignment)) return null
   if (typeof raw.autoWholesale !== 'boolean') return null
+  if (typeof raw.tutorialsOn !== 'boolean' || typeof raw.catchUp !== 'boolean') return null
+  if (!Array.isArray(raw.tutorialsSeen) || !Array.isArray(raw.tutorialsLater)) return null
   // Older saves may have a dropped model (female-a), or the police uniform off a guard.
   for (const e of roster as Employee[]) e.variant = dressFor(e.role, e.variant)
   // A newer build has more updates than this one knows of.
@@ -633,6 +661,9 @@ export function parseSave(input: unknown): SaveData | null {
     dealershipName: cleanName(raw.dealershipName),
     // One this build no longer has is dropped.
     achievements: (raw.achievements as EarnedAchievement[]).filter((a) => isAchievementId(a.id)),
+    // So are walkthroughs it no longer has.
+    tutorialsSeen: raw.tutorialsSeen.filter(isTutorialId),
+    tutorialsLater: raw.tutorialsLater.filter(isTutorialId),
   } as unknown as SaveData
 }
 

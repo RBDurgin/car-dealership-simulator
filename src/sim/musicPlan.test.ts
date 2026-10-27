@@ -47,8 +47,10 @@ describe('trackFor', () => {
 })
 
 describe('isMuffled', () => {
-  it('muffles behind the guide and the rotate prompt only', () => {
+  it('muffles behind the guide, a walkthrough’s card and the rotate prompt only', () => {
     expect(isMuffled(base)).toBe(false)
+    expect(isMuffled({ ...base, tutorialCard: 'auction' })).toBe(true)
+    expect(isMuffled({ ...base, tutorialCard: null })).toBe(false)
     expect(isMuffled({ ...base, helpOpen: true })).toBe(true)
     expect(isMuffled({ ...base, rotatePrompt: true })).toBe(true)
   })

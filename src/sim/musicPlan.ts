@@ -28,6 +28,8 @@ export interface MusicState {
   customers: readonly unknown[]
   helpOpen: boolean
   rotatePrompt: boolean
+  /** A walkthrough's card that's up, or null. */
+  tutorialCard?: string | null
 }
 
 /**
@@ -45,10 +47,13 @@ export function trackFor(s: MusicState): TrackId {
 
 /**
  * The music sounds muffled, as if from the next room, while something covers
- * the whole game: the how-to-play guide or the rotate-your-device prompt.
+ * the whole game: the how-to-play guide, a walkthrough's card or the
+ * rotate-your-device prompt.
  */
-export function isMuffled(s: Pick<MusicState, 'helpOpen' | 'rotatePrompt'>): boolean {
-  return s.helpOpen || s.rotatePrompt
+export function isMuffled(
+  s: Pick<MusicState, 'helpOpen' | 'rotatePrompt' | 'tutorialCard'>,
+): boolean {
+  return s.helpOpen || s.rotatePrompt || !!s.tutorialCard
 }
 
 /** The rain loop plays under the music on a rainy day, once the game is under way. */

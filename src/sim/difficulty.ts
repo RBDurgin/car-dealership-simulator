@@ -91,6 +91,8 @@ export interface Tuning {
   safetyNet: boolean
   /** Guided tips the first time things happen. */
   tips: boolean
+  /** Walkthroughs as features unlock, unless the player picks otherwise at New game. */
+  tutorials: boolean
 }
 
 export const TUNING: Record<Difficulty, Tuning> = {
@@ -135,6 +137,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     dealHint: true,
     safetyNet: true,
     tips: true,
+    tutorials: true,
   },
   medium: {
     startingCash: 25_000,
@@ -177,6 +180,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     dealHint: false,
     safetyNet: false,
     tips: false,
+    tutorials: true,
   },
   hard: {
     startingCash: 15_000,
@@ -219,6 +223,7 @@ export const TUNING: Record<Difficulty, Tuning> = {
     dealHint: false,
     safetyNet: false,
     tips: false,
+    tutorials: false,
   },
 }
 

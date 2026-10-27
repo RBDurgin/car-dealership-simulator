@@ -10,7 +10,8 @@ import { ControlsHint } from './ControlsHint'
 import { DrivePrompt } from './DrivePrompt'
 import { CustomerPanel } from './CustomerPanel'
 import { InfoPanel } from './InfoPanel'
-import { AudioPanel, DaySummary, HowToPlay, StockPanel } from './lazyPanels'
+import { AudioPanel, DaySummary, HowToPlay, StockPanel, TutorialCard } from './lazyPanels'
+import { Coach } from './Coach'
 import { prefetchPanels } from './panelChunks'
 import { RotatePrompt } from './RotatePrompt'
 import { StaffPanel } from './StaffPanel'
@@ -164,6 +165,11 @@ export function HUD() {
         if (e.code === 'Escape') game.toggleAudioPanel(false)
         return
       }
+      // A walkthrough's card waits for an answer; Esc is Later.
+      if (game.tutorialCard) {
+        if (e.code === 'Escape') game.laterTutorial()
+        return
+      }
       if (game.screen === 'title') return
       // The win screen waits for Keep playing.
       if (winShowing(game)) return
@@ -206,6 +212,7 @@ export function HUD() {
       <ActionStatus />
       <DriveStatus />
       <NoticeToast />
+      <Coach />
       <InfoPanel />
       <CustomerPanel />
       <StaffPanel />
@@ -217,6 +224,7 @@ export function HUD() {
       <TitleScreen />
       <HowToPlay />
       <AudioPanel />
+      <TutorialCard />
       <RotatePrompt />
     </div>
   )

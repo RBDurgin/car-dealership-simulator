@@ -44,6 +44,7 @@ import type { EotmWin } from '../sim/growth'
 import type { CourseKind, Employee, StaffEvent } from '../sim/staff'
 import type { DayRecord, Lifetime, Records } from '../sim/stats'
 import type { TipId } from '../sim/tips'
+import type { TutorialId } from '../sim/tutorials'
 import type { WallMode } from '../sim/walls'
 import type { Weather } from '../sim/weather'
 
@@ -220,6 +221,18 @@ export interface GameState {
   won: boolean
   /** Guided tips already shown (Easy). Saved, so a resumed game doesn't repeat them. */
   tipsSeen: TipId[]
+  /** Walkthroughs come up as features unlock (see `sim/tutorials.ts`). Saved, per game. */
+  tutorialsOn: boolean
+  /** Walkthroughs whose card has been shown. Saved, so they don't come up again. */
+  tutorialsSeen: TutorialId[]
+  /** Walkthroughs put off with Later, first in the guide's Tutorials tab. Saved. */
+  tutorialsLater: TutorialId[]
+  /** A save from before walkthroughs, owed one offer of those it missed (23e). Saved. */
+  catchUp: boolean
+  /** The walkthrough whose card is up (the game waits while it is), or null. Mid-day. */
+  tutorialCard: TutorialId | null
+  /** The walkthrough being stepped through, and its step (an index into its steps). Mid-day. */
+  coach: { id: TutorialId; step: number } | null
   /** Achievements earned this game, each once (see `sim/achievements.ts`). Saved. */
   achievements: EarnedAchievement[]
   /** Nazma's lot across the road. Moves each morning (opening) and when the day is settled. Saved. */
@@ -291,6 +304,18 @@ export interface GameState {
   clearNotice: (id: number) => void
   /** Guided tip `id` was shown; it won't be again this game. */
   markTipSeen: (id: TipId) => void
+  /** Shows walkthrough `id`'s card, marking it and the tips it covers seen. */
+  offerTutorial: (id: TutorialId) => void
+  /** Starts walkthrough `id`'s steps, closing its card (or the guide). */
+  startTutorial: (id: TutorialId) => void
+  /** Closes the card, keeping its walkthrough for the guide's Tutorials tab. */
+  laterTutorial: () => void
+  /** Moves the walkthrough on to its next step that applies, or ends it after the last. */
+  advanceCoach: () => void
+  /** Ends the walkthrough being stepped through. */
+  endTutorial: () => void
+  /** Turns walkthroughs on or off for this game; off closes a card that's up. */
+  setTutorialsOn: (on: boolean) => void
   /**
    * Earns achievements `ids` today at the game's level, those not already
    * earned, and returns them (`state/achievements.ts` shows their notice).
@@ -508,9 +533,10 @@ export interface GameState {
   cycleTimeScale: () => void
   /**
    * From the title screen: plays a fresh day 1 at `difficulty` (Medium if not
-   * given) as the dealership `name` (tidied by `cleanName`).
+   * given) as the dealership `name` (tidied by `cleanName`), with walkthroughs
+   * on or off (the level's `Tuning.tutorials` if not given).
    */
-  newGame: (difficulty?: Difficulty, name?: string) => void
+  newGame: (difficulty?: Difficulty, name?: string, tutorialsOn?: boolean) => void
   /** From the title screen: resumes a saved game on the morning after its last day. */
   loadGame: (save: SaveData) => void
   /** From the win screen: play goes on, and the win screen won't show again. */

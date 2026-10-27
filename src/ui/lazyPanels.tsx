@@ -7,6 +7,7 @@ const LazyHowToPlay = lazy(panelChunks.howToPlay)
 const LazyAudioPanel = lazy(panelChunks.audio)
 const LazyStockPanel = lazy(panelChunks.stock)
 const LazyDaySummary = lazy(panelChunks.summary)
+const LazyTutorialCard = lazy(panelChunks.tutorialCard)
 
 const Loading = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={null}>{children}</Suspense>
@@ -37,6 +38,15 @@ export function StockPanel() {
   return open ? (
     <Loading>
       <LazyStockPanel />
+    </Loading>
+  ) : null
+}
+
+export function TutorialCard() {
+  const open = useGame((s) => s.tutorialCard !== null)
+  return open ? (
+    <Loading>
+      <LazyTutorialCard />
     </Loading>
   ) : null
 }

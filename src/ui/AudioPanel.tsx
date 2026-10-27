@@ -20,6 +20,8 @@ export function AudioPanel() {
   const open = useGame((s) => s.audioOpen)
   const audio = useGame((s) => s.audio)
   const graphics = useGame((s) => s.graphics)
+  const playing = useGame((s) => s.screen === 'playing')
+  const tutorialsOn = useGame((s) => s.tutorialsOn)
   const touch = useMediaQuery(COARSE)
   if (!open) return null
   const game = useGame.getState()
@@ -80,6 +82,30 @@ export function AudioPanel() {
           Auto lowers the detail when the game stutters, and raises it again when it runs smoothly.
           Kept on this device, apart from your save.
         </p>
+        {playing && (
+          <>
+            <div className="graphics-setting">
+              <span>Walkthroughs</span>
+              <div className="graphics-options" role="radiogroup" aria-label="Walkthroughs">
+                {[true, false].map((on) => (
+                  <button
+                    key={String(on)}
+                    role="radio"
+                    aria-checked={tutorialsOn === on}
+                    className={tutorialsOn === on ? 'btn btn-primary' : 'btn'}
+                    onClick={() => game.setTutorialsOn(on)}
+                  >
+                    {on ? 'On' : 'Off'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="audio-note">
+              A short guide as each feature opens up. Kept with this game&apos;s save; How to play
+              lists them to replay.
+            </p>
+          </>
+        )}
         <button className="btn btn-primary" autoFocus onClick={() => game.toggleAudioPanel(false)}>
           Done
         </button>

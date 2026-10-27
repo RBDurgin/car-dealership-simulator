@@ -146,6 +146,7 @@ import {
   updateRecords,
   type DayRecord,
 } from '../../sim/stats'
+import type { TutorialId } from '../../sim/tutorials'
 import type { TipId } from '../../sim/tips'
 import { WEATHER_EFFECTS, weatherOn } from '../../sim/weather'
 import { commit, notify, setRoster, tuning, upEffects, type Kit } from '../core'
@@ -165,7 +166,11 @@ type DayKeys = 'dayStats' | 'missedYesterday' | 'startNextDay' | 'newGame' | 'lo
  * `name`. The day's rng streams start afresh, so day 1 plays out the same
  * however often it's built.
  */
-export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP_NAME) {
+export function dayOne(
+  difficulty: Difficulty,
+  name: string = DEFAULT_DEALERSHIP_NAME,
+  tutorialsOn: boolean = TUNING[difficulty].tutorials,
+) {
   seedDay(1)
   const tuning = TUNING[difficulty]
   return {
@@ -183,6 +188,12 @@ export function dayOne(difficulty: Difficulty, name: string = DEFAULT_DEALERSHIP
     rival: emptyRival(),
     expansions: [] as OwnedExpansion[],
     tipsSeen: [] as TipId[],
+    tutorialsOn,
+    tutorialsSeen: [] as TutorialId[],
+    tutorialsLater: [] as TutorialId[],
+    catchUp: false,
+    tutorialCard: null as TutorialId | null,
+    coach: null as GameState['coach'],
     achievements: [] as EarnedAchievement[],
     eotm: [] as EotmWin[],
     onBreak: [] as string[],
@@ -237,9 +248,9 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
         beginDay(k, s.clock.day + 1)
       }),
     // A new player gets the guide before day 1 starts.
-    newGame: (difficulty = DEFAULT_DIFFICULTY, name) => {
+    newGame: (difficulty = DEFAULT_DIFFICULTY, name, tutorialsOn) => {
       resetRng()
-      set({ screen: 'playing', helpOpen: true, ...dayOne(difficulty, name) })
+      set({ screen: 'playing', helpOpen: true, ...dayOne(difficulty, name, tutorialsOn) })
     },
     loadGame: (save) =>
       k.batch(() => {
@@ -270,6 +281,12 @@ export function daySlice(k: Kit): Pick<GameState, DayKeys> & ReturnType<typeof d
           won: save.won,
           rival: save.rival,
           tipsSeen: save.tipsSeen,
+          tutorialsOn: save.tutorialsOn,
+          tutorialsSeen: save.tutorialsSeen,
+          tutorialsLater: save.tutorialsLater,
+          catchUp: save.catchUp,
+          tutorialCard: null,
+          coach: null,
           achievements: save.achievements,
           service: save.service,
           clients: save.clients,

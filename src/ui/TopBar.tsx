@@ -227,6 +227,7 @@ export function TopBar() {
       <button
         className={stockOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
         aria-pressed={stockOpen}
+        data-coach="office"
         onClick={() => useGame.getState().toggleStockPanel()}
       >
         Office
@@ -235,6 +236,7 @@ export function TopBar() {
       <button
         className={staffOpen ? 'btn btn-small btn-primary' : 'btn btn-small'}
         aria-pressed={staffOpen}
+        data-coach="staff"
         onClick={() => useGame.getState().toggleStaffPanel()}
       >
         Staff

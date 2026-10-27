@@ -8,6 +8,7 @@ import { daySlice } from './slices/day'
 import { economySlice } from './slices/economy'
 import { serviceSlice } from './slices/service'
 import { staffSlice } from './slices/staff'
+import { tutorialsSlice } from './slices/tutorials'
 import { uiSlice } from './slices/ui'
 import { worldSlice } from './slices/world'
 import type { GameState } from './types'
@@ -53,6 +54,7 @@ export const useGame = create<GameState>((rawSet, rawGet) => {
     ...clientsSlice(k),
     ...worldSlice(k),
     ...careerSlice(k),
+    ...tutorialsSlice(k),
     ...daySlice(k),
   }
 })

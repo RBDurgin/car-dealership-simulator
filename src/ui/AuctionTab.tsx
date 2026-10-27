@@ -78,6 +78,7 @@ function InspectButton({ lot }: { lot: Lot }) {
     <button
       className="btn btn-small"
       disabled={!!blocker}
+      data-coach="auction-inspect"
       title={
         blocker ??
         `Have the car looked over for ${formatMoney(INSPECT_FEE)}: a truer grade and a tighter estimate`
@@ -101,7 +102,7 @@ function MaxBid({ lot, day }: { lot: Lot; day: number }) {
   const value = lotValue(lot, day, inspection)
   const start = Math.floor(value / bidStep(value)) * bidStep(value)
   return (
-    <span className="auction-max">
+    <span className="auction-max" data-coach="auction-maxbid">
       <span className="muted">Max bid</span>
       {max === 0 ? (
         <button
@@ -273,6 +274,7 @@ function OnBlock({ lot, run, day }: { lot: Lot; run: AuctionState; day: number }
             className="btn btn-primary"
             disabled={sold || mine || !!blocker}
             title={blocker ?? undefined}
+            data-coach="auction-bid"
             onClick={() => useGame.getState().auctionBid()}
           >
             Bid {formatMoney(bid)}

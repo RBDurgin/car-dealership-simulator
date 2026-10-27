@@ -80,6 +80,10 @@ export interface SfxState {
   achievements?: readonly unknown[]
   /** The dealer auction's run: each lot sold brings the gavel down. */
   auction?: AuctionState | null
+  /** A walkthrough's card that's up: one opening pops. */
+  tutorialCard?: string | null
+  /** A walkthrough's steps: each step moved on to chimes. */
+  coach?: { id: string; step: number } | null
 }
 
 /**
@@ -135,6 +139,8 @@ export function sfxFor(prev: SfxState, next: SfxState): SfxEvent[] {
   if ((next.achievements?.length ?? 0) > (prev.achievements?.length ?? 0)) {
     out.push({ cue: 'trophy' })
   }
+  if (next.tutorialCard && next.tutorialCard !== prev.tutorialCard) out.push({ cue: 'pop' })
+  if (next.coach && prev.coach && next.coach !== prev.coach) out.push({ cue: 'chime' })
   if (next.auction !== prev.auction) {
     const sold = newResults(prev.auction ?? null, next.auction ?? null)
     if (sold.some((r) => r.buyer !== null)) out.push({ cue: 'gavel' })

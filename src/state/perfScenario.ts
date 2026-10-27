@@ -58,6 +58,8 @@ export function busyDay(): void {
     expansions: EXPANSION_IDS.map((id) => ({ id, day: 0 })),
     roster,
     helpOpen: false,
+    // A walkthrough's card would pause the bench.
+    tutorialsOn: false,
   })
   // Fill every space the expansions open, then end the day so it's delivered.
   for (let i = 0; g().orderCar(CAR_MODELS[i % CAR_MODELS.length], 'cash'); i++);

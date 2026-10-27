@@ -29,10 +29,12 @@ export const DEV_TIME_SCALES = [1, 4, 16] as const
 
 /**
  * Time stands still and the player can't move behind the title screen, the
- * guide or the rotate-your-device prompt.
+ * guide, a walkthrough's card or the rotate-your-device prompt.
  */
-export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt'>): boolean {
-  return s.screen === 'title' || s.helpOpen || s.rotatePrompt
+export function isPaused(
+  s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt' | 'tutorialCard'>,
+): boolean {
+  return s.screen === 'title' || s.helpOpen || s.rotatePrompt || s.tutorialCard !== null
 }
 
 /**
@@ -40,7 +42,10 @@ export function isPaused(s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePromp
  * The canvas draws only on demand then, and Auto graphics stop measuring.
  */
 export function sceneIdle(
-  s: Pick<GameState, 'screen' | 'helpOpen' | 'rotatePrompt' | 'clock' | 'customers'>,
+  s: Pick<
+    GameState,
+    'screen' | 'helpOpen' | 'rotatePrompt' | 'tutorialCard' | 'clock' | 'customers'
+  >,
 ): boolean {
   return isPaused(s) || dayOver(s)
 }

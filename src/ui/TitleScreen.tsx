@@ -23,6 +23,15 @@ import { formatMoney } from './format'
 import { TrophyCase } from './TrophyCase'
 import { WhatsNew } from './WhatsNew'
 
+/** Walkthroughs for the new game: as its level has them, or on or off whatever the level. */
+type Walkthroughs = 'level' | 'on' | 'off'
+
+const WALKTHROUGH_CHOICES: [Walkthroughs, string][] = [
+  ['level', 'By level'],
+  ['on', 'On'],
+  ['off', 'Off'],
+]
+
 /**
  * Shown on load: continue the saved game, if there is one, or start a new one
  * named and at a level picked in a second step. A save from before the latest
@@ -33,6 +42,7 @@ export function TitleScreen() {
   const [save] = useState(readSave)
   const [picking, setPicking] = useState(false)
   const [name, setName] = useState(DEFAULT_DEALERSHIP_NAME)
+  const [walkthroughs, setWalkthroughs] = useState<Walkthroughs>('level')
   const [newsOpen, setNewsOpen] = useState(() => !!save && updatesSince(save.news).length > 0)
   const closeNews = useCallback(() => {
     setNewsOpen(false)
@@ -61,7 +71,9 @@ export function TitleScreen() {
   const newGame = (difficulty: Difficulty) => {
     if (save && !window.confirm(`Start over? Your day ${save.day + 1} save will be lost.`)) return
     clearSave()
-    useGame.getState().newGame(difficulty, name)
+    useGame
+      .getState()
+      .newGame(difficulty, name, walkthroughs === 'level' ? undefined : walkthroughs === 'on')
   }
 
   return (
@@ -96,6 +108,28 @@ export function TitleScreen() {
                 <span className="title-save">{difficultyBlurb(d)}</span>
               </button>
             ))}
+            <div className="title-walkthroughs">
+              <div className="graphics-setting">
+                <span>Walkthroughs</span>
+                <div className="graphics-options" role="radiogroup" aria-label="Walkthroughs">
+                  {WALKTHROUGH_CHOICES.map(([w, label]) => (
+                    <button
+                      key={w}
+                      role="radio"
+                      aria-checked={walkthroughs === w}
+                      className={walkthroughs === w ? 'btn btn-small btn-primary' : 'btn btn-small'}
+                      onClick={() => setWalkthroughs(w)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span className="audio-note">
+                A short guide as each feature opens up. By level: on for Easy and Medium, off on
+                Hard.
+              </span>
+            </div>
             <button className="btn" onClick={() => setPicking(false)}>
               Back
             </button>

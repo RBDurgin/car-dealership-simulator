@@ -299,6 +299,7 @@ export function StockPanel() {
             role="tab"
             aria-selected={tab === t}
             className={tab === t ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            data-coach={`tab-${t}`}
             onClick={() => show(t)}
           >
             {label}

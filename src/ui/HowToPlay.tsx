@@ -2,6 +2,7 @@ import { CSI_FACTORS, CSI_FLOOR, CSI_PAR, CSI_TIER_MIN, CSI_TOP } from '../sim/c
 import { CHARGEBACK_DAYS } from '../sim/chargebacks'
 import { CLAIM_EVERY, WARRANTY_DAYS } from '../sim/contracts'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
 import { TUNING } from '../sim/difficulty'
 import { CALL_GAP_DAYS, CALL_MINUTES, MAX_CALLS, THANKS_DAYS } from '../sim/calls'
@@ -116,12 +117,13 @@ import { formatTime } from '../sim/clock'
 import { HUDDLE_MINUTES } from '../sim/interactables'
 import { BREAK_MINUTES, BUYER_LEAVE, MAX_ON_BREAK } from '../sim/staffAi'
 import { MAX_POINTS, RECENT_DAYS } from '../sim/stats'
+import { TUTORIAL_IDS, TUTORIALS, wordingFor } from '../sim/tutorials'
 import { levelTuning, useGame } from '../state/store'
 import { CONTROLS, TOUCH_CONTROLS } from './controls'
 import { formatMoney } from './format'
 import { effectLabel } from './improvementText'
 
-type GuideTab = 'basics' | 'selling' | 'business' | 'people' | 'controls'
+type GuideTab = 'basics' | 'selling' | 'business' | 'people' | 'controls' | 'tutorials'
 
 const TABS: [GuideTab, string][] = [
   ['basics', 'Basics'],
@@ -129,6 +131,7 @@ const TABS: [GuideTab, string][] = [
   ['business', 'Business'],
   ['people', 'People'],
   ['controls', 'Controls'],
+  ['tutorials', 'Tutorials'],
 ]
 
 /** What every tab needs to word itself for mouse or touch. */
@@ -238,6 +241,15 @@ function BasicsTab({ touch, click }: TabProps) {
           with a medal for the level you earned each on. <b>Trophies</b> on the title screen keeps
           every achievement earned on this device across games, at the hardest level, with your
           best-ever records; a new game doesn&apos;t clear it.
+        </p>
+        <p>
+          <b>Walkthroughs</b> help as features open up: a card says what&apos;s new and pauses the
+          game. <b>Walk me through it</b> points out each step (a ring around a button, an arrow
+          over something in the world) and moves on as you do it, while the game runs; skip a step
+          or stop at any time. <b>Later</b> keeps it in the <b>Tutorials</b> tab here, where every
+          walkthrough you&apos;ve unlocked can be replayed. They&apos;re on for Easy and Medium and
+          off on Hard unless you choose otherwise at New game, and the sound and settings panel
+          turns them on or off for the game.
         </p>
         <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent
@@ -1323,12 +1335,55 @@ function ControlsTab({ touch }: TabProps) {
   )
 }
 
+/** Every walkthrough the game has unlocked, Later ones first, to start again. */
+function TutorialsTab({ touch }: TabProps) {
+  const playing = useGame((s) => s.screen === 'playing')
+  const later = useGame((s) => s.tutorialsLater)
+  const unlocked = useGame(
+    useShallow((s) => TUTORIAL_IDS.filter((id) => TUTORIALS[id].unlocked(s))),
+  )
+  const ids = [...unlocked].sort((a, b) => Number(later.includes(b)) - Number(later.includes(a)))
+  return (
+    <section>
+      <h3>Walkthroughs</h3>
+      {ids.length === 0 ? (
+        <p>
+          {playing
+            ? 'Nothing unlocked has a walkthrough yet. They come up as features open.'
+            : 'Start or continue a game to replay its walkthroughs.'}
+        </p>
+      ) : (
+        <ul className="tutorial-list">
+          {ids.map((id) => (
+            <li key={id}>
+              <span>
+                <b>{TUTORIALS[id].title}</b>
+                {later.includes(id) && <span className="muted"> · saved for later</span>}
+                <br />
+                <span className="muted">{wordingFor(TUTORIALS[id].card[0], touch)}</span>
+              </span>
+              <button
+                className="btn btn-small"
+                disabled={!playing}
+                onClick={() => useGame.getState().startTutorial(id)}
+              >
+                Start
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 const TAB_BODIES: Record<GuideTab, (p: TabProps) => ReactNode> = {
   basics: BasicsTab,
   selling: SellingTab,
   business: BusinessTab,
   people: PeopleTab,
   controls: ControlsTab,
+  tutorials: TutorialsTab,
 }
 
 /**

@@ -3,6 +3,7 @@ import { PERF } from '../state/perf'
 import { CameraRig } from './CameraRig'
 import { Chatter } from './Chatter'
 import { ClickMarker } from './ClickMarker'
+import { CoachMarker } from './CoachMarker'
 import { Customers } from './Customers'
 import { DebugGrid } from './DebugGrid'
 import { DrivenCars } from './DrivenCar'
@@ -45,6 +46,7 @@ export function Scene() {
       <Appreciation />
       <DebugGrid />
       <ClickMarker />
+      <CoachMarker />
       <Player />
       <Customers />
       <DrivenCars />

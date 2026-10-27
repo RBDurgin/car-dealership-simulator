@@ -143,6 +143,16 @@ describe('sfxFor', () => {
     expect(cues({ career: top }, { career: top })).toEqual([])
   })
 
+  it('pops as a walkthrough’s card opens, and chimes on each step moved on to', () => {
+    expect(cues({ tutorialCard: 'auction' }, { tutorialCard: null })).toEqual(['pop'])
+    expect(cues({ tutorialCard: null }, { tutorialCard: 'auction' })).toEqual([])
+    const step = (n: number) => ({ id: 'auction', step: n })
+    expect(cues({ coach: step(1) }, { coach: step(0) })).toEqual(['chime'])
+    // Starting or ending the steps is quiet.
+    expect(cues({ coach: step(0) }, { coach: null })).toEqual([])
+    expect(cues({ coach: null }, { coach: step(2) })).toEqual([])
+  })
+
   it('plays the trophy when an achievement is earned', () => {
     expect(cues({ achievements: [1, 2] }, { achievements: [1] })).toEqual(['trophy'])
     expect(cues({ achievements: [1] }, { achievements: [1] })).toEqual([])

@@ -21,6 +21,7 @@ import { useGame } from './state/store'
 import { startAchievements } from './state/achievements'
 import { instrumentStore, PERF, PERF_BUSY } from './state/perf'
 import { startTips } from './state/tips'
+import { startTutorials } from './state/tutorials'
 
 // Before anything subscribes, so every listener is timed.
 if (PERF) instrumentStore(useGame)
@@ -32,6 +33,8 @@ startControlsPref(!smallScreen)
 startAudioPref()
 // Auto graphics start a step down there.
 startGraphicsPref(smallScreen)
+// Before the tips, so a walkthrough's card marks the tips it covers seen first.
+startTutorials()
 startTips()
 // After the tips, so neither shows over the other's notice.
 startAchievements()

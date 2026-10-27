@@ -628,6 +628,18 @@ export const UPDATES: readonly Update[] = [
       'Easy’s dealers bid a little less and its grades are closer to the truth; Hard’s the other way.',
     ],
   },
+  {
+    id: 57,
+    phase: '23',
+    title: 'Walkthroughs',
+    items: [
+      'Walkthroughs: when a feature opens up, a card says what it is.',
+      'Walk me through it rings each button or points at the spot, and moves on as you do it.',
+      'Later keeps it in How to play’s new Tutorials tab, where you can replay any you’ve unlocked.',
+      'On for Easy and Medium, off on Hard: pick at New game, or switch them in the sound panel.',
+      'The first one is the dealer auction’s, on your first auction morning at Main Street.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

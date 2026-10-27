@@ -42,6 +42,7 @@ import {
   type Records,
 } from './stats'
 import type { TipId } from './tips'
+import type { TutorialId } from './tutorials'
 import { LATEST_NEWS, legacyNews } from './whatsNew'
 import { potentialFromId } from './growth'
 import type { Employee } from './staff'
@@ -126,6 +127,11 @@ const source = () => ({
   autoWholesale: false,
   // As a v27 save upgrades.
   dealershipName: DEFAULT_DEALERSHIP_NAME,
+  // As a v41 save (on Medium) upgrades.
+  tutorialsOn: true,
+  tutorialsSeen: [] as TutorialId[],
+  tutorialsLater: [] as TutorialId[],
+  catchUp: true,
 })
 
 const record = (day: number, extra: Partial<DayRecord> = {}): DayRecord => ({
@@ -892,6 +898,43 @@ describe('save data', () => {
     expect(upgraded?.version).toBe(SAVE_VERSION)
     expect(upgraded?.consigned).toEqual([])
     expect(upgraded?.autoWholesale).toBe(false)
+    expect(parseSave({ ...old })).toBeNull()
+  })
+
+  it('keeps the walkthroughs, and upgrades a version 41 save with them on by its level and a catch-up owed', () => {
+    const save = createSave(
+      {
+        ...source(),
+        tutorialsOn: false,
+        tutorialsSeen: ['auction'],
+        tutorialsLater: ['auction'],
+        catchUp: false,
+      },
+      123,
+    )
+    expect(parseSave(JSON.parse(JSON.stringify(save)))).toEqual(save)
+    expect(parseSave({ ...save, tutorialsOn: 'yes' })).toBeNull()
+    expect(parseSave({ ...save, tutorialsSeen: 'auction' })).toBeNull()
+    // One this build no longer has is dropped.
+    expect(parseSave({ ...save, tutorialsSeen: ['auction', 'gone'] })?.tutorialsSeen).toEqual([
+      'auction',
+    ])
+
+    const { tutorialsOn: _, tutorialsSeen: __, tutorialsLater: ___, catchUp: ____, ...old } = save
+    for (const [difficulty, on] of [
+      ['medium', true],
+      ['easy', true],
+      ['hard', false],
+    ] as const) {
+      const upgraded = parseSave(JSON.parse(JSON.stringify({ ...old, difficulty, version: 41 })))
+      expect(upgraded?.version).toBe(SAVE_VERSION)
+      expect(upgraded).toMatchObject({
+        tutorialsOn: on,
+        tutorialsSeen: [],
+        tutorialsLater: [],
+        catchUp: true,
+      })
+    }
     expect(parseSave({ ...old })).toBeNull()
   })
 
