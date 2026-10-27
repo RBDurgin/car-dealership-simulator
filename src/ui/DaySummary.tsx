@@ -165,7 +165,7 @@ function SummaryPanel() {
           <dd className="price">{formatMoney(revenue(stats))}</dd>
           <dt>Cost of cars sold</dt>
           <dd className="price">{formatMoney(-costOfSales(stats) || 0)}</dd>
-          <dt>Gross profit</dt>
+          <dt data-coach="summary-gross">Gross profit</dt>
           <dd className="price">{formatMoney(grossProfit(stats))}</dd>
           {stats.sales.some((s) => s.used) && (
             <>
@@ -352,7 +352,7 @@ function SummaryPanel() {
               <dd className="price">{formatMoney(stats.owner.bonus)}</dd>
             </>
           )}
-          <dt>Net</dt>
+          <dt data-coach="summary-net">Net</dt>
           <dd className="price">{formatMoney(netIncome(stats))}</dd>
           {stats.bought.length > 0 && (
             <>
@@ -525,7 +525,7 @@ function SummaryPanel() {
               </span>
             )}
           </dd>
-          <dt>Reputation</dt>
+          <dt data-coach="summary-reputation">Reputation</dt>
           <dd>
             {reputation} <span className="muted">({reputationLabel(reputation)})</span>{' '}
             <span
@@ -711,6 +711,7 @@ function SummaryPanel() {
         <button
           className="btn btn-primary"
           ref={focusOnce}
+          data-coach="summary-next"
           onClick={() => useGame.getState().startNextDay()}
         >
           Start day {day + 1}

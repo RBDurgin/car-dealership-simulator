@@ -2267,6 +2267,12 @@ kbd {
   padding: 10px 36px 10px 14px;
   pointer-events: auto;
   border-color: rgba(253, 224, 71, 0.5);
+  /* Over the day summary's backdrop. */
+  z-index: 15;
+}
+.coach-top {
+  top: var(--edge-t);
+  bottom: auto;
 }
 .coach-text {
   margin: 6px 0 8px;

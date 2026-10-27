@@ -107,7 +107,7 @@ function CatalogRow({
         {missed && <div className="stock-missed">{missed}</div>}
       </div>
       <div className="staff-wage price">{formatMoney(cost)}</div>
-      <div className="stock-actions">
+      <div className="stock-actions" data-coach={locked ? undefined : 'stock-order'}>
         <button
           className="btn btn-small btn-primary"
           disabled={!!blockers.cash}

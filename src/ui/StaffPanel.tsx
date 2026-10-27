@@ -460,6 +460,7 @@ function StaffList() {
                       className="btn btn-small btn-primary"
                       disabled={!!blocker}
                       title={blocker ?? undefined}
+                      data-coach="staff-hire"
                       onClick={() => game.hire(c.id)}
                     >
                       Hire

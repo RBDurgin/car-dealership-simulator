@@ -140,7 +140,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
           No room on the lot for their trade, so they&apos;re less keen.
         </div>
       )}
-      <div className="customer-actions">
+      <div className="customer-actions" data-coach={h ? 'deal-haggle' : undefined}>
         {h ? (
           <>
             <button className="btn" onClick={() => ask(h.lastAsk + (net ? add : 0))}>
@@ -167,7 +167,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
         )}
       </div>
       {hint && <WarmthChip c={c} car={car} price={price} allowance={allow} />}
-      <div className="haggle-stepper">
+      <div className="haggle-stepper" data-coach="deal-ask">
         <button className="btn" aria-label="Lower" onClick={() => step(-ASK_STEP)}>
           −
         </button>

@@ -640,6 +640,16 @@ export const UPDATES: readonly Update[] = [
       'The first one is the dealer auction’s, on your first auction morning at Main Street.',
     ],
   },
+  {
+    id: 58,
+    phase: '23',
+    title: 'Your first days',
+    items: [
+      'A new game walks you through your first sale: greet, ask a price, haggle and close the deal at your desk.',
+      'Your first evening explains the day summary, and day two shows you how to order stock and hire staff.',
+      'Each can be skipped, or replayed from How to play’s Tutorials tab.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

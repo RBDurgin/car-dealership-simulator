@@ -282,7 +282,7 @@ export function FinancePanel({ c }: { c: Customer }) {
             <dd className="price">{formatMoney(fiGross(deal, amount, c.credit))}</dd>
           </dl>
           <div className="customer-actions">
-            <button className="btn btn-primary" onClick={() => game.fiSign()}>
+            <button className="btn btn-primary" data-coach="fi-sign" onClick={() => game.fiSign()}>
               Sign the contracts
             </button>
           </div>

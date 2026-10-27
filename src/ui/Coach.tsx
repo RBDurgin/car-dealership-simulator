@@ -1,27 +1,29 @@
 import { COARSE, useMediaQuery } from '../input/useMediaQuery'
-import { dayOver } from '../sim/clock'
-import { stepsOf, TUTORIALS, wordingFor } from '../sim/tutorials'
+import { coachShows, stepsOf, TUTORIALS, wordingFor } from '../sim/tutorials'
 import { isPaused, useGame } from '../state/store'
 import { CoachHighlight } from './CoachHighlight'
 
 /**
  * A walkthrough's guided steps: the step's text, how far along it is, Next
  * (or Skip step, for one that waits for the player) and ✕ to end it. The
- * game runs on; hidden while it's paused or the day is over, keeping its place.
+ * game runs on; hidden while it's paused or the day is over (or, for one about
+ * the day summary, until it is), keeping its place.
  */
 export function Coach() {
   const coach = useGame((s) => s.coach)
-  const hidden = useGame((s) => isPaused(s) || dayOver(s))
+  const hidden = useGame((s) => !!s.coach && (isPaused(s) || !coachShows(s.coach.id, s)))
   const touch = useMediaQuery(COARSE)
   if (!coach || hidden) return null
   const game = useGame.getState()
   const step = TUTORIALS[coach.id].steps[coach.step]
   const steps = stepsOf(coach.id, game)
   const at = steps.indexOf(step) + 1
+  // Over the day summary it sits at the top, clear of the Start button.
+  const evening = TUTORIALS[coach.id].lasts === 'evening'
   return (
     <>
       <div
-        className="panel coach"
+        className={evening ? 'panel coach coach-top' : 'panel coach'}
         role="dialog"
         aria-label="Walkthrough"
         onPointerDown={(e) => e.stopPropagation()}

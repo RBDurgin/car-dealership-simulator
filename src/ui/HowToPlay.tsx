@@ -247,9 +247,10 @@ function BasicsTab({ touch, click }: TabProps) {
           game. <b>Walk me through it</b> points out each step (a ring around a button, an arrow
           over something in the world) and moves on as you do it, while the game runs; skip a step
           or stop at any time. <b>Later</b> keeps it in the <b>Tutorials</b> tab here, where every
-          walkthrough you&apos;ve unlocked can be replayed. They&apos;re on for Easy and Medium and
-          off on Hard unless you choose otherwise at New game, and the sound and settings panel
-          turns them on or off for the game.
+          walkthrough you&apos;ve unlocked can be replayed. A new game starts with three: your first
+          sale, your first evening&apos;s summary, and ordering stock and hiring on day two.
+          They&apos;re on for Easy and Medium and off on Hard unless you choose otherwise at New
+          game, and the sound and settings panel turns them on or off for the game.
         </p>
         <p>
           The game keeps changing. <b>What&apos;s new</b> on the title screen lists the recent

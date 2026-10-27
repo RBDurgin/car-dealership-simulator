@@ -126,6 +126,7 @@ Tips covered (shown as seen once the walkthrough is): `haggle`, `restock`, `sell
 - `firstSale`, `firstEvening` and `runningThePlace`, with the customer and desk world targets.
 - The e2e smoke tests turn walkthroughs off (or skip onboarding) so they don't change.
 - What's new entry. Tests: onboarding's steps advance on the store changes they wait for.
+- Built (2026-10-26): `firstEvening` and `runningThePlace` come up only within `ONBOARDING_DAYS` (3), so turning walkthroughs on later doesn't bring them back; `ONBOARDING` is left out of `catchUpList`. A walkthrough's `lasts` (`day`, `evening`) ends its steps at closing or the next morning, so `firstSale` never holds up the evening's card. `firstSale` covers tips `haggle` and `restock`. No save change.
 
 ### 23c: Early encounters
 

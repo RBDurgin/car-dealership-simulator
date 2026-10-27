@@ -20,7 +20,7 @@ export function watchErrors(page: Page): string[] {
 
 /**
  * Opens the game (at `path`, e.g. `/?perf`) and starts a new one at `level`,
- * past the how-to-play guide.
+ * past the how-to-play guide, with walkthroughs off (day one's would pause it).
  */
 export async function startGame(
   page: Page,
@@ -29,6 +29,7 @@ export async function startGame(
 ): Promise<void> {
   await page.goto(path)
   await page.getByText('New game').click()
+  await page.getByRole('radio', { name: 'Off' }).click()
   const label = level[0].toUpperCase() + level.slice(1)
   // Not exact: the button holds the level's blurb too.
   await page.getByText(label).first().click()

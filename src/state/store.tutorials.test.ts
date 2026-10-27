@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { isAuctionDay } from '../sim/auction'
 import { CLOSE_MINUTE } from '../sim/clock'
 import { createSave, parseSave } from '../sim/save'
+import { ONBOARDING } from '../sim/tutorials'
 import { isPaused, useGame } from './store'
 import { startTutorials } from './tutorials'
 
@@ -18,6 +19,8 @@ function endDay() {
 /** Plays a Main Street game (guide closed) through to the evening before the first auction. */
 function toAuctionEve(level: 'easy' | 'medium' | 'hard' = 'medium', tutorialsOn?: boolean) {
   game().newGame(level, undefined, tutorialsOn)
+  // Past the onboarding, which would otherwise come up as the guide closes.
+  useGame.setState({ tutorialsSeen: [...ONBOARDING] })
   game().toggleHelp(false)
   useGame.setState({ career: { ...game().career, rank: 'main-street' } })
   while (!isAuctionDay(game().clock.day + 1)) {
@@ -133,6 +136,7 @@ describe('the walkthrough watcher', () => {
 
   it('advances at once past a step already done', () => {
     game().newGame('medium')
+    useGame.setState({ tutorialsSeen: [...ONBOARDING] })
     game().toggleHelp(false)
     game().toggleStockPanel(true, 'auction')
     game().startTutorial('auction')
@@ -166,6 +170,59 @@ describe('the walkthrough watcher', () => {
       game().startNextDay()
     }
     expect(isAuctionDay(game().clock.day)).toBe(true)
+    expect(game().tutorialCard).toBeNull()
+  })
+
+  it('opens a new game with the first sale once the guide closes', () => {
+    game().newGame('medium')
+    expect(game().tutorialCard).toBeNull()
+    game().toggleHelp(false)
+    expect(game().tutorialCard).toBe('firstSale')
+    expect(game().tipsSeen).toEqual(expect.arrayContaining(['haggle', 'restock']))
+    game().startTutorial('firstSale')
+    expect(game().coach).toEqual({ id: 'firstSale', step: 0 })
+  })
+
+  it('ends the first sale at closing for the evening’s, then day two’s next morning', () => {
+    game().newGame('medium')
+    game().toggleHelp(false)
+    game().startTutorial('firstSale')
+    game().advanceCoach()
+    endDay()
+    expect(game().coach).toBeNull()
+    expect(game().tutorialCard).toBe('firstEvening')
+    game().startTutorial('firstEvening')
+    expect(game().coach).toEqual({ id: 'firstEvening', step: 0 })
+    game().advanceCoach()
+    game().startNextDay()
+    expect(game().coach).toBeNull()
+    expect(game().tutorialCard).toBe('runningThePlace')
+  })
+
+  it('walks day two through ordering and hiring', () => {
+    game().newGame('medium')
+    useGame.setState({ tutorialsSeen: ['firstSale', 'firstEvening'] })
+    game().toggleHelp(false)
+    endDay()
+    game().startNextDay()
+    expect(game().tutorialCard).toBe('runningThePlace')
+    game().startTutorial('runningThePlace')
+    game().toggleStockPanel(true, 'stock')
+    expect(game().coach?.step).toBe(1)
+    expect(game().orderCar('sedan', 'floor')).toBeTruthy()
+    expect(game().coach?.step).toBe(2)
+    game().toggleStockPanel(false)
+    game().toggleStaffPanel(true)
+    expect(game().coach?.step).toBe(3)
+    game().hire(game().candidates[0].id)
+    expect(game().coach).toBeNull()
+  })
+
+  it('leaves the onboarding out with walkthroughs off', () => {
+    game().newGame('hard')
+    game().toggleHelp(false)
+    expect(game().tutorialCard).toBeNull()
+    endDay()
     expect(game().tutorialCard).toBeNull()
   })
 })

@@ -1,5 +1,7 @@
 import { auctionOpen, isAuctionDay } from './auction'
-import { PLAYER_ID } from './customers'
+import { dayOver, type GameTime } from './clock'
+import { PLAYER_ID, type Customer, type CustomerPhase } from './customers'
+import { dealCustomer, type Sale } from './deal'
 import type { RankId } from './progression'
 import { usedCarManager, type Employee } from './staff'
 import type { TipId } from './tips'
@@ -11,7 +13,7 @@ import type { TipId } from './tips'
  * states like `tipFor`, and `state/tutorials.ts` shows the card and runs the
  * steps.
  */
-export type TutorialId = 'auction'
+export type TutorialId = 'firstSale' | 'firstEvening' | 'runningThePlace' | 'auction'
 
 /** Text that names a key, worded for a keyboard and for touch (see `COARSE`). */
 export type Wording = string | { keys: string; touch: string }
@@ -23,17 +25,38 @@ export function wordingFor(w: Wording, touch: boolean): string {
 
 /** A HUD element a step rings: whatever carries `data-coach="<anchor>"`. */
 export type CoachAnchor =
-  'office' | 'staff' | `tab-${string}` | 'auction-inspect' | 'auction-bid' | 'auction-maxbid'
+  | 'office'
+  | 'staff'
+  | `tab-${string}`
+  | 'auction-inspect'
+  | 'auction-bid'
+  | 'auction-maxbid'
+  | 'deal-ask'
+  | 'deal-haggle'
+  | 'fi-sign'
+  | 'summary-gross'
+  | 'summary-net'
+  | 'summary-reputation'
+  | 'summary-next'
+  | 'stock-order'
+  | 'staff-hire'
 
-/** A thing in the world a step points an arrow at, found in the live layout's props. */
-export type WorldTarget = 'computer' | 'kiosk'
+/**
+ * A thing in the world a step points an arrow at: a prop found in the live
+ * layout's props, or (`customer`) the nearest customer waiting to be greeted.
+ */
+export type WorldTarget = 'computer' | 'kiosk' | 'desk' | 'customer'
 
 /** The slice of the store the triggers and the steps read. */
 export interface CoachState {
   screen: 'title' | 'playing'
-  clock: { day: number }
+  clock: GameTime
   career: { rank: RankId }
+  customers: readonly Customer[]
+  dayStats: { sales: readonly Pick<Sale, 'soldBy'>[] }
+  orders: readonly unknown[]
   stockOpen: boolean
+  staffOpen: boolean
   computerTab: string
   /** Today's run at the dealer auction, null until it starts. */
   auction: { high: string | null } | null
@@ -71,9 +94,171 @@ export interface Tutorial {
   unlocked: (s: CoachState) => boolean
   /** Easy's tips it replaces: marked seen when its card shows. */
   covers: readonly TipId[]
+  /**
+   * How long its steps last. `day`: they end when the day closes. `evening`:
+   * they run over the day summary (hidden till then) and end when the next day
+   * starts. Unset: they run till done, hidden while the day is over.
+   */
+  lasts?: 'day' | 'evening'
 }
 
+/** Days of a new game whose evening and morning walkthroughs still teach the basics. */
+export const ONBOARDING_DAYS = 3
+
+/** The player's deal in hand, if any. */
+const playerDeal = (s: CoachState) => dealCustomer(s.customers, PLAYER_ID)
+
+/** Whether the player's deal is in one of `phases`. */
+function dealIn(s: CoachState, phases: readonly CustomerPhase[]): boolean {
+  const c = playerDeal(s)
+  return !!c && phases.includes(c.phase)
+}
+
+/** Whether the player has sold a car today (the summary's sales the player made). */
+const playerSold = (s: CoachState) => s.dayStats.sales.some((x) => !x.soldBy)
+
+/** Past the asking: they agreed, or are signing. */
+const AGREED: readonly CustomerPhase[] = ['following', 'signing', 'menu']
+
 export const TUTORIALS: Record<TutorialId, Tutorial> = {
+  firstSale: {
+    title: 'Your first sale',
+    card: [
+      'Customers come in, look over the cars and wait for someone to greet them.',
+      'Greet one, ask a price for the car they want, and haggle until they say yes.',
+      'Close the deal at your desk and sign the paperwork: what the car sold for over what it cost you is your gross.',
+      'Each sale frees a space on the lot, to fill from the office computer.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Click the floor to walk there, or use WASD. Q and E turn the view, and the wheel zooms.',
+          touch:
+            'Tap the floor to walk there. Pinch to zoom, and twist two fingers to turn the view.',
+        },
+      },
+      {
+        text: {
+          keys: 'A customer waiting for you has a bubble over their head. Click them and choose Greet.',
+          touch:
+            'A customer waiting for you has a bubble over their head. Tap them and choose Greet.',
+        },
+        world: 'customer',
+        done: (s) => !!playerDeal(s) || playerSold(s),
+      },
+      {
+        text: 'Their panel shows the car they want, its MSRP, what it cost you and roughly what they hope to spend. Ask MSRP, or set a price with − and + and Ask.',
+        ui: ['deal-ask'],
+        done: (s) => {
+          const c = playerDeal(s)
+          return !!c?.offer || !!c?.haggle || dealIn(s, AGREED) || playerSold(s)
+        },
+      },
+      {
+        text: 'They say yes, counter or walk. On a counter, hold your price, split the difference or take theirs: they come up a little each round, but push too hard and they leave.',
+        ui: ['deal-haggle', 'deal-ask'],
+        done: (s) => dealIn(s, AGREED) || playerSold(s),
+      },
+      {
+        text: {
+          keys: 'They agreed, and follow you. Walk to your desk by the office door, click it and choose Close deal.',
+          touch:
+            'They agreed, and follow you. Walk to your desk by the office door, tap it and choose Close deal.',
+        },
+        world: 'desk',
+        done: (s) => dealIn(s, ['signing', 'menu']) || playerSold(s),
+      },
+      {
+        text: 'At the F&I menu, pick a lender if they’re financing, offer a product or two if you like, then sign the contracts.',
+        ui: ['fi-sign'],
+        done: playerSold,
+      },
+    ],
+    trigger: { when: 'morning', applies: (s) => s.clock.day === 1 },
+    unlocked: () => true,
+    covers: ['haggle', 'restock'],
+    lasts: 'day',
+  },
+  firstEvening: {
+    title: 'The end of the day',
+    card: [
+      'At closing the doors shut, the last customers leave and the day summary comes up.',
+      'It adds up the day: what you sold, what it cost you, and what you paid out.',
+      'Your reputation moves with every customer: the higher it is, the more come in.',
+      'The game saves at the end of each day, and carries on from the next morning.',
+    ],
+    steps: [
+      {
+        text: 'Gross profit is what your cars sold for over what you paid for them. F&I, and later service, add to it.',
+        ui: ['summary-gross'],
+      },
+      {
+        text: 'Wages and commissions are paid at closing, with any interest, ads and upgrades. What’s left is the Net.',
+        ui: ['summary-net'],
+      },
+      {
+        text: 'Reputation goes up with sales, and down for customers who left unhappy or found nothing they wanted.',
+        ui: ['summary-reputation'],
+      },
+      {
+        text: 'Start the next day when you’re ready.',
+        ui: ['summary-next'],
+        done: (s) => !dayOver(s),
+      },
+    ],
+    trigger: {
+      when: 'event',
+      applies: (prev, next) => next.clock.day <= ONBOARDING_DAYS && dayOver(next) && !dayOver(prev),
+    },
+    unlocked: () => true,
+    covers: [],
+    lasts: 'evening',
+  },
+  runningThePlace: {
+    title: 'Running the place',
+    card: [
+      'Cars you sell leave spaces on the lot. Order more on the office computer: they arrive the next morning.',
+      'Pay cash, or put a car on the floor plan: the bank pays, and you pay a little interest each day until it sells.',
+      'Hire staff from the Staff panel. A salesperson sells beside you; others greet, wash cars or run the finance desk.',
+      'Wages are paid at closing whether they sell or not, so grow the team as sales grow.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Stock tab: press I, use the Office button, or walk to the computer in the office.',
+          touch:
+            'Open the office computer’s Stock tab: tap Office, or walk to the computer in the office.',
+        },
+        ui: ['tab-stock', 'office'],
+        world: 'computer',
+        done: (s) => s.stockOpen && s.computerTab === 'stock',
+      },
+      {
+        text: 'Pick a model and choose Buy (cash) or Floor plan. It goes in the first free space tomorrow morning.',
+        ui: ['stock-order'],
+        done: (s) => s.orders.length > 0,
+      },
+      {
+        text: {
+          keys: 'Now open the Staff panel: press H or use the Staff button.',
+          touch: 'Now tap Staff.',
+        },
+        ui: ['staff'],
+        done: (s) => s.staffOpen,
+      },
+      {
+        text: 'Today’s applicants are at the bottom, with their skill and wage. Hire one if the wage pays for itself; you can let them go any time.',
+        ui: ['staff-hire'],
+        done: (s) => s.roster.some((e) => e.hiredDay === s.clock.day && !e.fired),
+      },
+    ],
+    trigger: {
+      when: 'morning',
+      applies: (s) => s.clock.day >= 2 && s.clock.day <= ONBOARDING_DAYS,
+    },
+    unlocked: () => true,
+    covers: [],
+  },
   auction: {
     title: 'The dealer auction',
     card: [
@@ -152,6 +337,22 @@ export function tutorialFor(
   )
 }
 
+/**
+ * Whether walkthrough `id`'s steps end with the change from `prev` to `next`:
+ * as the day closes (`lasts: 'day'`) or the next one starts (`'evening'`).
+ */
+export function coachEnds(id: TutorialId, prev: CoachState, next: CoachState): boolean {
+  const lasts = TUTORIALS[id].lasts
+  if (lasts === 'day') return dayOver(next) && !dayOver(prev)
+  if (lasts === 'evening') return dayOver(prev) && !dayOver(next)
+  return false
+}
+
+/** Whether walkthrough `id`'s steps show in `s`: an evening one over the summary, the rest during the day. */
+export function coachShows(id: TutorialId, s: CoachState): boolean {
+  return dayOver(s) === (TUTORIALS[id].lasts === 'evening')
+}
+
 const shows = (step: Step, s: CoachState) => !step.only || step.only(s)
 
 /** Walkthrough `id`'s steps that apply in `s`. */
@@ -172,7 +373,15 @@ export function stepDone(id: TutorialId, step: number, s: CoachState): boolean {
   return !!done && done(s)
 }
 
-/** Walkthroughs whose feature is open in `s` that haven't been seen. */
+/** The walkthroughs a new game opens with, on its first days. */
+export const ONBOARDING: readonly TutorialId[] = ['firstSale', 'firstEvening', 'runningThePlace']
+
+/**
+ * Walkthroughs whose feature is open in `s` that haven't been seen, leaving
+ * out the onboarding (a game already under way is past it).
+ */
 export function catchUpList(s: CoachState, seen: readonly TutorialId[]): TutorialId[] {
-  return TUTORIAL_IDS.filter((id) => !seen.includes(id) && TUTORIALS[id].unlocked(s))
+  return TUTORIAL_IDS.filter(
+    (id) => !ONBOARDING.includes(id) && !seen.includes(id) && TUTORIALS[id].unlocked(s),
+  )
 }
