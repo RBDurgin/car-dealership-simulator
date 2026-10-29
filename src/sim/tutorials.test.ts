@@ -46,6 +46,8 @@ const state = (over: Partial<CoachState> = {}): CoachState => ({
   callsTried: [],
   playerCall: null,
   campaigns: [],
+  rival: { status: 'unopened' },
+  expansions: [],
   ...over,
 })
 
@@ -73,12 +75,12 @@ describe('the walkthrough catalogue', () => {
 describe('tutorialFor', () => {
   it('brings up the auction as an auction day starts at Main Street', () => {
     const prev = state()
-    expect(tutorialFor(prev, state({ clock: at(WEDNESDAY) }), [])).toBe('auction')
+    expect(tutorialFor(prev, state({ clock: at(WEDNESDAY) }), ['mainStreet'])).toBe('auction')
   })
 
   it('brings it up on resuming a save onto an auction morning', () => {
     const title = state({ screen: 'title', clock: at(1), career: { rank: 'corner-lot' } })
-    expect(tutorialFor(title, state({ clock: at(WEDNESDAY) }), [])).toBe('auction')
+    expect(tutorialFor(title, state({ clock: at(WEDNESDAY) }), ['mainStreet'])).toBe('auction')
   })
 
   it('waits for the morning: nothing mid-day, even on an auction day', () => {
@@ -93,7 +95,7 @@ describe('tutorialFor', () => {
     const prev = state()
     const next = state({ clock: at(WEDNESDAY) })
     // Marketing's morning has passed.
-    const seen: TutorialId[] = ['marketing']
+    const seen: TutorialId[] = ['marketing', 'mainStreet']
     expect(tutorialFor(prev, { ...next, career: { rank: 'corner-lot' } }, seen)).toBeNull()
     expect(
       tutorialFor(state({ clock: at(WEDNESDAY) }), state({ clock: at(WEDNESDAY + 1) }), seen),
@@ -132,8 +134,10 @@ describe('catchUpList', () => {
     expect(catchUpList(state({ career: { rank: 'corner-lot' }, clock: at(3) }), [])).toEqual(
       encounters.filter((id) => id !== 'marketing'),
     )
-    expect(catchUpList(state(), encounters as TutorialId[])).toEqual(['auction'])
-    expect(catchUpList(state(), ['auction', ...(encounters as TutorialId[])])).toEqual([])
+    expect(catchUpList(state(), encounters as TutorialId[])).toEqual(['mainStreet', 'auction'])
+    expect(
+      catchUpList(state(), ['mainStreet', 'auction', ...(encounters as TutorialId[])]),
+    ).toEqual([])
   })
 })
 
@@ -383,5 +387,123 @@ describe('the early encounters', () => {
     const booked = state({ ...corner, clock: at(4), campaigns: [{ startDay: 5 }] })
     expect(stepDone('marketing', 1, state({ ...corner, clock: at(4) }))).toBe(false)
     expect(stepDone('marketing', 1, booked)).toBe(true)
+  })
+})
+
+/** Walkthroughs other than the one under test that a morning in these tests might call for. */
+const PAST: TutorialId[] = [...ONBOARDING, 'marketing', 'auction']
+
+/** The morning of day `day` after the day before, both as `over` says. */
+const morningOf = (day: number, over: Partial<CoachState> = {}, seen: TutorialId[] = PAST) =>
+  tutorialFor(state({ ...over, clock: at(day - 1) }), state({ ...over, clock: at(day) }), seen)
+
+/** The same day, mid-day, from `before` to `after`. */
+const midDay = (day: number, before: Partial<CoachState>, after: Partial<CoachState>) =>
+  tutorialFor(state({ ...before, clock: at(day) }), state({ ...after, clock: at(day) }), PAST)
+
+describe('the rank unlocks', () => {
+  const corner = { career: { rank: 'corner-lot' as const } }
+
+  it('brings up Main Street the morning after reaching it, before the auction', () => {
+    expect(morningOf(10)).toBe('mainStreet')
+    expect(morningOf(10, corner)).toBeNull()
+    // A rank-up settles in the evening; nothing until the morning.
+    expect(midDay(10, corner, {})).toBeNull()
+    expect(tutorialFor(state(), state({ clock: at(WEDNESDAY) }), [])).toBe('mainStreet')
+    expect(TUTORIAL_IDS.indexOf('mainStreet')).toBeLessThan(TUTORIAL_IDS.indexOf('auction'))
+    expect(TUTORIALS.mainStreet.covers).toEqual(['expansion'])
+    const seen: TutorialId[] = [...PAST, 'mainStreet']
+    expect(morningOf(10, {}, seen)).toBeNull()
+  })
+
+  it('brings up Nazma’s lot the morning it’s open, not while he’s building', () => {
+    const seen: TutorialId[] = [...PAST, 'mainStreet']
+    expect(morningOf(10, { rival: { status: 'open' } }, seen)).toBe('rival')
+    expect(morningOf(10, { rival: { status: 'announced' } }, seen)).toBeNull()
+    expect(midDay(10, { rival: { status: 'announced' } }, { rival: { status: 'open' } })).toBeNull()
+    expect(TUTORIALS.rival.covers).toEqual(['rivalOpens'])
+    // Gone bust, he was still open once.
+    expect(TUTORIALS.rival.unlocked(state({ rival: { status: 'closed' } }))).toBe(true)
+    expect(TUTORIALS.rival.unlocked(state({ rival: { status: 'announced' } }))).toBe(false)
+    expect(stepDone('rival', 0, state({ stockOpen: true, computerTab: 'rival' }))).toBe(true)
+  })
+
+  it('brings up the garage the morning after it’s bought', () => {
+    const bought = (day: number) => ({
+      ...corner,
+      expansions: [{ id: 'service-bay' as const, day }],
+    })
+    expect(morningOf(10, bought(9))).toBe('garage')
+    expect(morningOf(10, bought(10))).toBeNull()
+    expect(midDay(10, corner, bought(9))).toBeNull()
+    expect(TUTORIALS.garage.covers).toEqual(['serviceBay', 'serviceClient'])
+    expect(TUTORIALS.garage.unlocked(state(bought(9)))).toBe(false)
+    expect(TUTORIALS.garage.unlocked(state({ ...bought(9), clock: at(10) }))).toBe(true)
+  })
+
+  it('walks the garage through a mechanic, the Service tab and a check-in', () => {
+    const mechanic = { id: 'm', role: 'mechanic', fired: false } as Employee
+    expect(stepDone('garage', 0, state())).toBe(false)
+    expect(stepDone('garage', 0, state({ roster: [mechanic] }))).toBe(true)
+    expect(stepDone('garage', 1, state({ stockOpen: true, computerTab: 'service' }))).toBe(true)
+    expect(stepDone('garage', 2, state())).toBe(false)
+    const client = (handlerId: string | null) =>
+      cust({ handlerId, service: { kind: 'oil' } as Customer['service'] })
+    expect(stepDone('garage', 3, state({ customers: [client(null)] }))).toBe(false)
+    expect(stepDone('garage', 3, state({ customers: [client('staff-1-1')] }))).toBe(false)
+    expect(stepDone('garage', 3, state({ customers: [client(PLAYER_ID)] }))).toBe(true)
+    expect(TUTORIALS.garage.steps[3].world).toBe('counter')
+  })
+
+  it('brings up the showroom wing the morning after it’s bought', () => {
+    const wing = { ...corner, expansions: [{ id: 'showroom-wing' as const, day: 9 }] }
+    expect(morningOf(10, wing)).toBe('showroomWing')
+    expect(morningOf(10, { ...corner, expansions: [{ id: 'east-lot', day: 9 }] })).toBeNull()
+    expect(stepDone('showroomWing', 2, state({ staffOpen: true }))).toBe(true)
+  })
+})
+
+describe('running a team', () => {
+  const asking = (raise: boolean) =>
+    ({
+      id: 'e',
+      role: 'sales',
+      fired: false,
+      raiseAsk: raise ? { wage: 200, day: 9 } : null,
+    }) as Employee
+
+  it('brings up staff growth with the first raise ask', () => {
+    const corner = { career: { rank: 'corner-lot' as const } }
+    const before = state({ ...corner, roster: [asking(false)] })
+    const after = state({ ...corner, roster: [asking(true)] })
+    expect(tutorialFor(before, after, [])).toBe('staffGrowth')
+    expect(tutorialFor(after, { ...after, roster: [asking(true)] }, [])).toBeNull()
+    expect(tutorialFor(after, before, [])).toBeNull()
+    expect(TUTORIALS.staffGrowth.covers).toEqual(['levelUp'])
+  })
+
+  it('moves staff growth on as the panel opens and the raise is answered', () => {
+    expect(stepDone('staffGrowth', 0, state({ staffOpen: true }))).toBe(true)
+    expect(stepDone('staffGrowth', 1, state({ roster: [asking(true)] }))).toBe(false)
+    expect(stepDone('staffGrowth', 1, state({ roster: [asking(false)] }))).toBe(true)
+    // The schedule and training only explain.
+    expect(stepDone('staffGrowth', 2, state({ staffOpen: true }))).toBe(false)
+  })
+
+  it('waits for the morning to show staff growth’s steps', () => {
+    expect(coachShows('staffGrowth', closing(9))).toBe(false)
+    expect(coachShows('staffGrowth', state())).toBe(true)
+  })
+
+  it('brings up the month’s end on its last morning', () => {
+    const corner = { career: { rank: 'corner-lot' as const } }
+    expect(morningOf(28, corner)).toBe('monthEnd')
+    expect(morningOf(27, corner)).toBeNull()
+    expect(morningOf(29, corner)).toBeNull()
+    expect(morningOf(56, corner)).toBe('monthEnd')
+    expect(TUTORIALS.monthEnd.covers).toEqual(['franchise'])
+    expect(TUTORIALS.monthEnd.unlocked(state({ clock: at(27) }))).toBe(false)
+    expect(TUTORIALS.monthEnd.unlocked(state({ clock: at(28) }))).toBe(true)
+    expect(stepDone('monthEnd', 0, state({ stockOpen: true, computerTab: 'calendar' }))).toBe(true)
   })
 })

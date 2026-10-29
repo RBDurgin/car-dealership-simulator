@@ -1,12 +1,24 @@
 import { auctionOpen, isAuctionDay } from './auction'
+import { calendarOf, DAYS_PER_MONTH } from './calendar'
 import type { Client } from './clients'
 import { dayOver, type GameTime } from './clock'
 import { bubbleOf, PLAYER_ID, type Customer, type CustomerPhase } from './customers'
 import { dealCustomer, type Sale } from './deal'
+import { installedExpansions, type OwnedExpansion } from './expansions'
 import { financing } from './fi'
-import type { RankId } from './progression'
+import type { ExpansionId } from './layout'
+import { RANK_IDS, type RankId } from './progression'
+import type { RivalStatus } from './rival'
 import { usedCarManager, type Employee } from './staff'
-import { bookGrew, financedAtMenu, newDriveBubble, newlyParked, type TipId } from './tips'
+import {
+  bookGrew,
+  financedAtMenu,
+  garageUp,
+  newDriveBubble,
+  newlyParked,
+  newRaiseAsk,
+  type TipId,
+} from './tips'
 
 /**
  * Walkthroughs: a card when a feature first comes up, then, if the player
@@ -19,12 +31,18 @@ export type TutorialId =
   | 'firstSale'
   | 'firstEvening'
   | 'runningThePlace'
+  | 'mainStreet'
   | 'auction'
   | 'usedCars'
   | 'testDrive'
   | 'fiMenu'
   | 'clientBook'
   | 'marketing'
+  | 'rival'
+  | 'garage'
+  | 'showroomWing'
+  | 'staffGrowth'
+  | 'monthEnd'
 
 /** Text that names a key, worded for a keyboard and for touch (see `COARSE`). */
 export type Wording = string | { keys: string; touch: string }
@@ -63,16 +81,35 @@ export type CoachAnchor =
   | 'summary-next'
   | 'stock-order'
   | 'staff-hire'
+  | 'staff-raise'
+  | 'staff-schedule'
+  | 'staff-train'
+  | 'upgrades-expansion'
+  | 'rival-prices'
+  | 'rival-chip'
+  | 'deal-match'
+  | 'service-rate'
+  | 'calendar-quota'
+  | 'calendar-csi'
+  | 'calendar-franchise'
 
 /**
  * A thing in the world a step points an arrow at: a prop found in the live
- * layout's props (`computer`, `kiosk`, `desk`, `phone`), or the nearest of a
+ * layout's props (`computer`, `kiosk`, `desk`, `phone`, the service `counter`), or the nearest of a
  * kind of customer: one waiting to be greeted (`customer`), a seller waiting
  * by their car (`seller`), a shopper with a 🔑 (`driveShopper`), or a car in
  * customer parking still to be appraised (`vehicle`).
  */
 export type WorldTarget =
-  'computer' | 'kiosk' | 'desk' | 'phone' | 'customer' | 'seller' | 'driveShopper' | 'vehicle'
+  | 'computer'
+  | 'kiosk'
+  | 'desk'
+  | 'phone'
+  | 'counter'
+  | 'customer'
+  | 'seller'
+  | 'driveShopper'
+  | 'vehicle'
 
 /** A seller's car or a trade-in parked and not yet appraised: the `vehicle` target. */
 export const toAppraise = (c: Customer) =>
@@ -110,6 +147,8 @@ export interface CoachState {
   callsTried: readonly string[]
   playerCall: string | null
   campaigns: readonly { startDay: number }[]
+  rival: { status: RivalStatus }
+  expansions: readonly OwnedExpansion[]
 }
 
 export interface Step {
@@ -189,6 +228,23 @@ const playerDrive = (s: CoachState) => {
 
 const hasRole = (s: CoachState, role: Employee['role']) =>
   s.roster.some((e) => e.role === role && !e.fired)
+
+/** Whether the office computer is open on `tab`. */
+const onTab = (s: CoachState, tab: string) => s.stockOpen && s.computerTab === tab
+
+/** Whether the dealership has reached rank `rank`. */
+const reached = (s: CoachState, rank: RankId) =>
+  RANK_IDS.indexOf(s.career.rank) >= RANK_IDS.indexOf(rank)
+
+/** Whether expansion `id` is up today. */
+const isUp = (s: CoachState, id: ExpansionId) =>
+  installedExpansions(s.expansions, s.clock.day).includes(id)
+
+/** Whether Nazma's lot has opened (it may have gone bust since). */
+const rivalOpened = (s: CoachState) => s.rival.status === 'open' || s.rival.status === 'closed'
+
+/** Whether it's the month's last day, when the quota is settled at closing. */
+const monthsLastDay = (s: CoachState) => calendarOf(s.clock.day).dayOfMonth === DAYS_PER_MONTH
 
 /** Past the asking: they agreed, or are signing. */
 const AGREED: readonly CustomerPhase[] = ['following', 'signing', 'menu']
@@ -331,6 +387,46 @@ export const TUTORIALS: Record<TutorialId, Tutorial> = {
     },
     unlocked: () => true,
     covers: [],
+  },
+  mainStreet: {
+    title: 'Main Street',
+    card: [
+      'You’ve made Main Street: the dealership is a name in town now, and there’s more to grow into.',
+      'The east lot next door is for sale: 12 more spaces for stock, bought on the Upgrades tab and paved overnight.',
+      'Every Wednesday you can buy used cars at the dealer auction, and hire a used-car manager to run it for you.',
+      'Not everyone’s pleased: Nazma has bought the lot across the road, and will open his own dealership in a week or two.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Upgrades tab: press U, use the Office button, or walk to the computer in the office.',
+          touch:
+            'Open the office computer’s Upgrades tab: tap Office, or walk to the computer in the office.',
+        },
+        ui: ['tab-upgrades', 'office'],
+        world: 'computer',
+        done: (s) => onTab(s, 'upgrades'),
+      },
+      {
+        text: 'Expansions are at the bottom. The east lot comes first: the garage and the showroom wing are built on it, as your rank grows.',
+        ui: ['upgrades-expansion'],
+      },
+      {
+        text: {
+          keys: 'A new role is open: the used-car manager. Open the Staff panel (H) to see who’s applying.',
+          touch: 'A new role is open: the used-car manager. Tap Staff to see who’s applying.',
+        },
+        ui: ['staff'],
+        done: (s) => s.staffOpen,
+      },
+      {
+        text: 'They inspect the auction’s run list and bid for you up to the max bids you set, while you stay on the floor.',
+        ui: ['staff-hire'],
+      },
+    ],
+    trigger: { when: 'morning', applies: (s) => reached(s, 'main-street') },
+    unlocked: (s) => reached(s, 'main-street'),
+    covers: ['expansion'],
   },
   auction: {
     title: 'The dealer auction',
@@ -615,6 +711,193 @@ export const TUTORIALS: Record<TutorialId, Tutorial> = {
     trigger: { when: 'morning', applies: (s) => s.clock.day >= MARKETING_DAY },
     unlocked: (s) => s.clock.day >= MARKETING_DAY,
     covers: [],
+  },
+  rival: {
+    title: 'Nazma’s lot',
+    card: [
+      'Nazma’s dealership across the road is open, and some of the town’s buyers go to him instead.',
+      'He sells new cars under MSRP. Shoppers who’ve seen his price may walk if you ask much more.',
+      'A good reputation and ads running win buyers back; each Monday he tries something new.',
+      'Losing ground makes him desperate: expect more visits, poaching and thefts. A security guard keeps him off the lot.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Rival tab: press K, use the Office button, or walk to the computer in the office.',
+          touch:
+            'Open the office computer’s Rival tab: tap Office, or walk to the computer in the office.',
+        },
+        ui: ['tab-rival', 'office'],
+        world: 'computer',
+        done: (s) => onTab(s, 'rival'),
+      },
+      {
+        text: 'His move this week, his strength and his prices: what a shopper who’s been across the road will hold you to.',
+        ui: ['rival-prices'],
+      },
+      {
+        text: 'The ⚔ in the top bar is his share of today’s buyers. Keep it down, and if it stays low for weeks he goes bust.',
+        ui: ['rival-chip', 'office'],
+      },
+      {
+        text: 'A shopper who’s seen his price says so in their panel. Match his price sets your ask to his: at or under it they’re keener.',
+        ui: ['deal-match'],
+      },
+    ],
+    trigger: { when: 'morning', applies: (s) => s.rival.status === 'open' },
+    unlocked: rivalOpened,
+    covers: ['rivalOpens'],
+  },
+  garage: {
+    title: 'The service garage',
+    card: [
+      'Your service garage is open: two bays, a counter and a waiting area in the corner of the east lot.',
+      'Each bay needs a mechanic. They recondition your used cars, and fix clients’ cars for labor and parts.',
+      'Service clients drive in, park by the garage and wait at the counter to be checked in and quoted.',
+      'A service advisor checks clients in for you, and offers them extra work the mechanics find.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Hire a mechanic: open the Staff panel (H) and pick one from today’s applicants.',
+          touch: 'Hire a mechanic: tap Staff and pick one from today’s applicants.',
+        },
+        ui: ['staff-hire', 'staff'],
+        done: (s) => hasRole(s, 'mechanic'),
+      },
+      {
+        text: {
+          keys: 'Open the office computer’s Service tab: press B, or use the Office button.',
+          touch: 'Open the office computer’s Service tab: tap Office.',
+        },
+        ui: ['tab-service', 'office'],
+        done: (s) => onTab(s, 'service'),
+      },
+      {
+        text: 'The shop rate is what an hour of labor costs clients: higher earns more a job, lower brings more in and gets more yeses.',
+        ui: ['service-rate'],
+      },
+      {
+        text: {
+          keys: 'When a service client drives in, meet them at the counter (the arrow), click them and choose Check in to quote the job.',
+          touch:
+            'When a service client drives in, meet them at the counter (the arrow), tap them and choose Check in to quote the job.',
+        },
+        world: 'counter',
+        done: (s) => s.customers.some((c) => !!c.service && c.handlerId === PLAYER_ID),
+      },
+    ],
+    trigger: { when: 'morning', applies: garageUp },
+    unlocked: garageUp,
+    covers: ['serviceBay', 'serviceClient'],
+  },
+  showroomWing: {
+    title: 'The showroom wing',
+    card: [
+      'The showroom wing is open, off the lounge: two more display platforms, sales desks 3 and 4 and a second sofa.',
+      'New orders go on the showroom’s platforms before the lot, so the wing fills first.',
+      'You can now hire up to 4 salespeople and 2 lot porters.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Stock tab: press I, use the Office button, or walk to the computer in the office.',
+          touch:
+            'Open the office computer’s Stock tab: tap Office, or walk to the computer in the office.',
+        },
+        ui: ['tab-stock', 'office'],
+        world: 'computer',
+        done: (s) => onTab(s, 'stock'),
+      },
+      {
+        text: 'Order a car or two for the new platforms: they’re on display from tomorrow.',
+        ui: ['stock-order'],
+      },
+      {
+        text: {
+          keys: 'Then the Staff panel (H): the wing’s desks are ready for more salespeople.',
+          touch: 'Then tap Staff: the wing’s desks are ready for more salespeople.',
+        },
+        ui: ['staff'],
+        done: (s) => s.staffOpen,
+      },
+      {
+        text: 'Hire for the busy days: each salesperson works their own desk, and a second porter keeps a bigger lot clean.',
+        ui: ['staff-hire'],
+      },
+    ],
+    trigger: { when: 'morning', applies: (s) => isUp(s, 'showroom-wing') },
+    unlocked: (s) => isUp(s, 'showroom-wing'),
+    covers: [],
+  },
+  staffGrowth: {
+    title: 'Growing your team',
+    card: [
+      'Your staff learn from the work they do. Someone has grown a skill level, and asks to be paid for it.',
+      'Morale moves with pay, wins, praise and days off. Unhappy staff work slower, and may quit or go to Nazma.',
+      'Everyone gets a day off a week; the Schedule shows who’s off and where a role is short.',
+      'Courses speed up the learning, and a top-skill employee can be promoted to senior.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the Staff panel: press H or use the Staff button.',
+          touch: 'Tap Staff.',
+        },
+        ui: ['staff'],
+        done: (s) => s.staffOpen,
+      },
+      {
+        text: 'Grant the raise, or decline it. Declined, or left for three days, it costs them morale.',
+        ui: ['staff-raise'],
+        done: (s) => !s.roster.some((e) => !e.fired && e.raiseAsk),
+      },
+      {
+        text: 'The Schedule view sets everyone’s days off. Changes start tomorrow, and days off aren’t paid.',
+        ui: ['staff-schedule'],
+      },
+      {
+        text: 'Train books a course on their next working day: a day away (paid) for about two weeks’ experience.',
+        ui: ['staff-train'],
+      },
+    ],
+    trigger: { when: 'event', applies: (prev, next) => newRaiseAsk(prev.roster, next.roster) },
+    unlocked: (s) => s.roster.some((e) => !e.fired),
+    covers: ['levelUp'],
+  },
+  monthEnd: {
+    title: 'The month’s end',
+    card: [
+      'Tonight the month closes, and the manufacturer settles up.',
+      'Meet the month’s quota of cars sold for a holdback on every car’s sticker price; miss it badly and there’s none.',
+      'New-car buyers’ satisfaction (CSI) scales the holdback, up or down.',
+      'Meeting the quota moves your franchise up a tier, for cheaper stock and the top models; falling well short moves it down.',
+    ],
+    steps: [
+      {
+        text: {
+          keys: 'Open the office computer’s Calendar tab: press C, or use the Office button.',
+          touch: 'Open the office computer’s Calendar tab: tap Office.',
+        },
+        ui: ['tab-calendar', 'office'],
+        done: (s) => onTab(s, 'calendar'),
+      },
+      {
+        text: 'The month’s sales against the quota, and what the holdback pays as things stand. The ⚑ in the top bar keeps the count.',
+        ui: ['calendar-quota'],
+      },
+      {
+        text: 'CSI is the month’s average satisfaction of new-car buyers: short waits, little haggling and a fair price keep it up.',
+        ui: ['calendar-csi'],
+      },
+      {
+        text: 'Your franchise tier and what each gives. The summary tonight says if it moved.',
+        ui: ['calendar-franchise'],
+      },
+    ],
+    trigger: { when: 'morning', applies: monthsLastDay },
+    unlocked: (s) => s.clock.day >= DAYS_PER_MONTH,
+    covers: ['franchise'],
   },
 }
 

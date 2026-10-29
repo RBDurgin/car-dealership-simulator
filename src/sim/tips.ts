@@ -262,6 +262,17 @@ export function bookGrew(prev: readonly Client[], next: readonly Client[]): bool
   return next !== prev && next.length > prev.length
 }
 
+/** Someone on the roster has just asked for a raise (they grew a skill level). */
+export function newRaiseAsk(
+  prev: readonly Employee[] | undefined,
+  next: readonly Employee[] | undefined,
+): boolean {
+  if (!next || next === prev) return false
+  const asking = (e: Employee) => !e.fired && !!e.raiseAsk
+  const was = new Set(prev?.filter(asking).map((e) => e.id))
+  return next.some((e) => !was.has(e.id) && asking(e))
+}
+
 const fiCount = (s: TipState, key: 'financed' | 'declined' | 'chargebackCount') =>
   s.dayStats.fi?.[key] ?? 0
 
@@ -295,7 +306,9 @@ function newlyStaff(
   return next.roster.some((e) => !was.has(e.id) && test(e, next))
 }
 
-const garageUp = (s: TipState) => bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
+/** Whether the service garage is up in `s`. */
+export const garageUp = (s: Pick<TipState, 'expansions' | 'clock'>) =>
+  bayCount(installedExpansions(s.expansions, s.clock.day)) > 0
 
 const missedCount = (s: TipState) =>
   Object.values(s.dayStats.missed).reduce((sum, n) => sum + (n ?? 0), 0)
@@ -457,7 +470,7 @@ function applies(id: TipId, prev: TipState, next: TipState): boolean {
         idleSalesperson(next)
       )
     case 'levelUp':
-      return newlyStaff(prev, next, (e) => !e.fired && !!e.raiseAsk)
+      return newRaiseAsk(prev.roster, next.roster)
     case 'lowMorale':
       return newlyStaff(prev, next, (e) => !e.fired && e.morale < LOW_MORALE)
     case 'rota': {

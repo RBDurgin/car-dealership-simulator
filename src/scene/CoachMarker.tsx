@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import type { Group } from 'three'
 import type { Customer } from '../sim/customers'
-import { DESK_PHONE_ID, KIOSK_ID, OFFICE_COMPUTER_ID } from '../sim/layout'
+import { DESK_PHONE_ID, KIOSK_ID, OFFICE_COMPUTER_ID, SERVICE_COUNTER_ID } from '../sim/layout'
 import {
   sellerWaiting,
   toAppraise,
@@ -13,7 +13,7 @@ import {
 import { useGame } from '../state/store'
 import { customerPos, grid, layout, playerPos, vehiclePos } from './runtime'
 
-type PropTarget = 'computer' | 'kiosk' | 'desk' | 'phone'
+type PropTarget = 'computer' | 'kiosk' | 'desk' | 'phone' | 'counter'
 
 /** Each prop target's prop, found in the live layout (it moves with the expansions). */
 const PROP_IDS: Record<PropTarget, string> = {
@@ -21,6 +21,7 @@ const PROP_IDS: Record<PropTarget, string> = {
   kiosk: KIOSK_ID,
   desk: 'manager-desk',
   phone: DESK_PHONE_ID,
+  counter: SERVICE_COUNTER_ID,
 }
 
 /** A customer the player could greet: waiting, nobody with them, here to buy. */

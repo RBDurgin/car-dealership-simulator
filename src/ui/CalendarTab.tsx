@@ -164,7 +164,7 @@ function MonthQuota({ day }: { day: number }) {
       <h3>
         Manufacturer&apos;s quota <span className="muted">· {QUOTA_STATUS_LABELS[status]}</span>
       </h3>
-      <div className={`cal-quota quota-${status}`}>
+      <div className={`cal-quota quota-${status}`} data-coach="calendar-quota">
         <span className="cal-bar" aria-hidden>
           <span
             className="cal-fill"
@@ -185,7 +185,7 @@ function MonthQuota({ day }: { day: number }) {
         )}
         . As things stand: <b className="price">{formatMoney(payout)}</b>.
       </p>
-      <h3>
+      <h3 data-coach="calendar-csi">
         Customer satisfaction (CSI){' '}
         <span className="muted">· {csi === null ? 'no new-car buyers yet' : csi}</span>
       </h3>
@@ -228,7 +228,7 @@ function Franchise() {
       <h3>
         Franchise <span className="muted">· {tierName(tier)}</span>
       </h3>
-      <ul className="cal-tiers">
+      <ul className="cal-tiers" data-coach="calendar-franchise">
         {TIERS.map((t) => (
           <li key={t} className={t === tier ? 'cal-tier-now' : undefined}>
             <b>{tierName(t)}</b>: {perkLine(t)}

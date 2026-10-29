@@ -218,6 +218,7 @@ function Develop({ e, roster, day }: { e: Employee; roster: Employee[]; day: num
           blocker ??
           `${what} ${formatMoney(trainingFee(e.role, kind))}, paid on their next working day, which they spend away.`
         }
+        data-coach={kind === 'basic' ? 'staff-train' : undefined}
         onClick={() => game.bookTraining(e.id, kind)}
       >
         {kind === 'advanced' ? 'Advanced' : 'Train'}
@@ -368,6 +369,7 @@ function StaffList() {
             role="tab"
             aria-selected={view === v}
             className={view === v ? 'btn btn-small btn-primary' : 'btn btn-small'}
+            data-coach={v === 'schedule' ? 'staff-schedule' : undefined}
             onClick={() => setView(v)}
           >
             {label}
@@ -415,6 +417,7 @@ function StaffList() {
                         <button
                           className="btn btn-small btn-primary"
                           title="Pay the wage for their new skill."
+                          data-coach="staff-raise"
                           onClick={() => game.answerRaise(e.id, true)}
                         >
                           Grant

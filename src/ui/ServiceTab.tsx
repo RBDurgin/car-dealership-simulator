@@ -169,7 +169,12 @@ function RatePicker() {
   return (
     <>
       <h3>Shop rate</h3>
-      <div className="service-rates" role="radiogroup" aria-label="Shop rate">
+      <div
+        className="service-rates"
+        role="radiogroup"
+        aria-label="Shop rate"
+        data-coach="service-rate"
+      >
         {RATE_IDS.map((id) => (
           <button
             key={id}

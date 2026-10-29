@@ -138,6 +138,7 @@ Tips covered (shown as seen once the walkthrough is): `haggle`, `restock`, `sell
 
 - `mainStreet`, `rival`, `garage`, `showroomWing`, `staffGrowth` and `monthEnd`.
 - What's new entry. Tests: each trigger, and morning walkthroughs wait for `beginDay`.
+- Built (2026-10-27): `mainStreet` (covers `expansion`; it introduces the east lot, the used-car manager and Nazma's announcement, and comes before `auction`), `rival` (mornings while his lot is open, so a resumed save gets it too; covers `rivalOpens`), `garage` (covers `serviceBay`, `serviceClient`; world target `counter`), `showroomWing`, `staffGrowth` (the first raise ask, an event at settle through the lifted `newRaiseAsk`; covers `levelUp`) and `monthEnd` (the morning of the month's last day rather than the evening, so the Calendar tab can be opened; covers `franchise`). The watcher now queues every walkthrough one change calls for, and holds a card until its steps would show, so an event at closing waits for the morning instead of coming up over the summary. `CoachHighlight` skips an anchor that isn't laid out (the rival chip on `COMPACT`). No save change.
 
 ### 23e: Catch-up, an achievement and polish
 

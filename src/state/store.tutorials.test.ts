@@ -324,3 +324,82 @@ describe('the early encounters', () => {
     expect(game().coach?.step).toBe(2)
   })
 })
+
+describe('the rank unlocks and the team', () => {
+  let stop: () => void
+  beforeEach(() => {
+    useGame.setState(initial, true)
+    const stopTutorials = startTutorials()
+    const stopTips = startTips()
+    stop = () => {
+      stopTutorials()
+      stopTips()
+    }
+  })
+  afterEach(() => stop())
+
+  /** An Easy game with the early walkthroughs seen, the guide closed and no notice up. */
+  function play(seen = TUTORIAL_IDS.filter((id) => !LATER.includes(id))) {
+    game().newGame('easy')
+    useGame.setState({ tutorialsSeen: seen })
+    game().toggleHelp(false)
+    useGame.setState({ notice: null })
+  }
+  const LATER = ['mainStreet', 'auction', 'rival', 'garage', 'showroomWing', 'staffGrowth']
+
+  it('shows Main Street, then the auction, on a rank-up’s auction morning', () => {
+    play()
+    useGame.setState({ career: { ...game().career, rank: 'main-street' } })
+    while (!isAuctionDay(game().clock.day + 1)) {
+      endDay()
+      game().startNextDay()
+      game().laterTutorial()
+    }
+    // Main Street came up on the first morning; put back, it waits in the Tutorials tab.
+    expect(game().tutorialsSeen).toContain('mainStreet')
+    expect(game().tutorialsLater).toContain('mainStreet')
+    expect(game().tipsSeen).toContain('expansion')
+    endDay()
+    game().startNextDay()
+    expect(game().tutorialCard).toBe('auction')
+  })
+
+  it('brings up both the same morning, one after the other', () => {
+    toAuctionEve()
+    useGame.setState({ tutorialsSeen: game().tutorialsSeen.filter((id) => id !== 'mainStreet') })
+    game().startNextDay()
+    expect(game().tutorialCard).toBe('mainStreet')
+    game().laterTutorial()
+    expect(game().tutorialCard).toBe('auction')
+  })
+
+  it('holds the first raise ask’s card for the morning, and not the tip', () => {
+    play()
+    game().hire(game().candidates[0].id)
+    endDay()
+    const roster = game().roster.map((e) => ({ ...e, raiseAsk: { wage: e.wage + 20, day: 1 } }))
+    useGame.setState({ roster })
+    expect(game().tipsSeen).toContain('levelUp')
+    expect(game().tutorialCard).toBeNull()
+    expect(game().notice?.text.startsWith('Tip:') ?? false).toBe(false)
+    game().startNextDay()
+    expect(game().tutorialCard).toBe('staffGrowth')
+    game().startTutorial('staffGrowth')
+    game().toggleStaffPanel(true)
+    expect(game().coach?.step).toBe(1)
+    game().answerRaise(game().roster[0].id, true)
+    expect(game().coach?.step).toBe(2)
+  })
+
+  it('brings up the garage the morning after it’s bought, and waits for a mechanic', () => {
+    play()
+    useGame.setState({ expansions: [{ id: 'service-bay', day: game().clock.day }] })
+    expect(game().tutorialCard).toBeNull()
+    endDay()
+    game().startNextDay()
+    expect(game().tutorialCard).toBe('garage')
+    expect(game().tipsSeen).toEqual(expect.arrayContaining(['serviceBay', 'serviceClient']))
+    game().startTutorial('garage')
+    expect(game().coach).toEqual({ id: 'garage', step: 0 })
+  })
+})

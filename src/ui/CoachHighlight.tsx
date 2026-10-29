@@ -35,17 +35,20 @@ export function CoachHighlight({ anchors }: { anchors: readonly CoachAnchor[] })
     let frame = requestAnimationFrame(function draw() {
       const el = ring.current
       if (el) {
+        // The first one laid out: one hidden on this screen (e.g. by `COMPACT`) passes to the next.
         let target: Element | null = null
+        let box: DOMRect | null = null
         for (const a of anchors) {
           target = document.querySelector(`[data-coach="${a}"]`)
-          if (target) break
+          box = target?.getBoundingClientRect() ?? null
+          if (box && box.width > 0) break
+          target = null
         }
         if (target && target !== shown) {
           shown = target
           scrollIntoPanel(target)
         }
-        const box = target?.getBoundingClientRect()
-        if (box && box.width > 0) {
+        if (target && box) {
           el.style.display = 'block'
           el.style.left = `${box.left - PAD}px`
           el.style.top = `${box.top - PAD}px`

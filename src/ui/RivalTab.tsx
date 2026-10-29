@@ -45,7 +45,7 @@ function ShareSparkline({ shares, today }: { shares: readonly number[]; today: n
 /** His sticker against his price on each model. */
 function PriceList({ rival }: { rival: Rival }) {
   return (
-    <ul className="rival-prices">
+    <ul className="rival-prices" data-coach="rival-prices">
       {CAR_MODELS.map((model) => (
         <li key={model}>
           <span>{carName(model)}</span>

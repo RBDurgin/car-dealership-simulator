@@ -660,6 +660,16 @@ export const UPDATES: readonly Update[] = [
       'A walkthrough about the deal in hand comes up mid-deal, and Easy’s tips don’t repeat what one has shown.',
     ],
   },
+  {
+    id: 60,
+    phase: '23',
+    title: 'Walkthroughs as the dealership grows',
+    items: [
+      'Walkthroughs the morning you reach Main Street, Nazma opens, or your garage or showroom wing goes up.',
+      'One for your first raise request, and one on the month’s last day: the quota, CSI and your tier.',
+      'A walkthrough that comes up as the day ends waits for the next morning.',
+    ],
+  },
 ]
 
 /** The id of the latest update: what a save written by this build has seen. */

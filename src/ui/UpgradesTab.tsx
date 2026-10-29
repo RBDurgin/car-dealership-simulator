@@ -146,7 +146,7 @@ export function UpgradesTab() {
           <p className="muted staff-blurb">{AREA_NOTES[area]}</p>
         </section>
       ))}
-      <section>
+      <section data-coach="upgrades-expansion">
         <h3>Expansion</h3>
         <ul className="staff-list">
           {EXPANSION_IDS.map((id) => (

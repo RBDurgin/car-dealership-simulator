@@ -91,7 +91,7 @@ function RivalChip() {
   if (share === undefined) return null
   const text = `${name} takes ${Math.round(share * 100)}% of today's buyers. See the Rival tab (K).`
   return (
-    <span className="rival-chip" title={text} aria-label={text}>
+    <span className="rival-chip" title={text} aria-label={text} data-coach="rival-chip">
       <span className="rival-icon" aria-hidden>
         ⚔
       </span>

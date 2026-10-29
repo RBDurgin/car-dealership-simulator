@@ -180,7 +180,7 @@ function Haggle({ c, car }: { c: Customer; car: InventoryCar }) {
       </div>
       {match !== null && (
         <div className="customer-actions">
-          <button className="btn btn-small" onClick={() => setPrice(match)}>
+          <button className="btn btn-small" data-coach="deal-match" onClick={() => setPrice(match)}>
             Match his price
           </button>
         </div>
